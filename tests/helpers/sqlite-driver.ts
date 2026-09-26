@@ -7,12 +7,12 @@ declare const Bun: unknown;
  * `DatabaseSync`.
  */
 type RawDb = {
-  exec(sql: string): void;
-  prepare(sql: string): {
-    run(...params: SqlValue[]): { changes: number | bigint };
-    all(...params: SqlValue[]): unknown[];
+  exec: (sql: string) => void;
+  prepare: (sql: string) => {
+    run: (...params: SqlValue[]) => { changes: number | bigint };
+    all: (...params: SqlValue[]) => unknown[];
   };
-  close(): void;
+  close: () => void;
 };
 
 /**
@@ -27,7 +27,7 @@ type RawDb = {
 export class SqliteTestDriver implements SqlDriver {
   readonly #db: RawDb;
   #txTail: Promise<void> = Promise.resolve();
-  #injected: { pattern: RegExp | null; error: Error; skip: number } | undefined;
+  #injected: { pattern: RegExp | undefined; error: Error; skip: number } | undefined;
 
   private constructor(db: RawDb) {
     this.#db = db;
@@ -36,6 +36,7 @@ export class SqliteTestDriver implements SqlDriver {
   static async open(): Promise<SqliteTestDriver> {
     if (Bun !== undefined) {
       const specifier = "bun:sqlite";
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- bun:sqlite has no importable types; this is the RawDb contract
       const mod = (await import(specifier)) as {
         Database: new (path: string) => RawDb;
       };
@@ -52,7 +53,7 @@ export class SqliteTestDriver implements SqlDriver {
    */
   failOn(pattern?: RegExp, opts?: { error?: Error; skip?: number }): void {
     this.#injected = {
-      pattern: pattern ?? null,
+      pattern,
       error: opts?.error ?? new Error("injected sqlite failure"),
       skip: opts?.skip ?? 0,
     };
@@ -70,30 +71,46 @@ export class SqliteTestDriver implements SqlDriver {
     throw injected.error;
   }
 
+  // oxlint-disable-next-line typescript/require-await -- implements the async SqlDriver interface
   async exec(sql: string): Promise<void> {
     this.#guard(sql);
     this.#db.exec(sql);
   }
 
+  // oxlint-disable-next-line typescript/require-await -- implements the async SqlDriver interface
   async run(sql: string, params: ReadonlyArray<SqlValue> = []): Promise<{ changes: number }> {
     this.#guard(sql);
     const result = this.#db.prepare(sql).run(...params);
     return { changes: Number(result.changes) };
   }
 
+  // oxlint-disable-next-line typescript/require-await -- implements the async SqlDriver interface
   async all<Row>(sql: string, params: ReadonlyArray<SqlValue> = []): Promise<Row[]> {
     this.#guard(sql);
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- row shape is the caller-declared Row, same as SqlDriver.all
     return this.#db.prepare(sql).all(...params) as Row[];
   }
 
   async transaction<T>(fn: (tx: SqlDriver) => Promise<T>): Promise<T> {
+    // oxlint-disable-next-line promise/prefer-await-to-then -- the tail chain is the serialization primitive
     const task = this.#txTail.then(async (): Promise<T> => {
       this.#db.exec("BEGIN IMMEDIATE");
       const tx: SqlDriver = {
-        exec:  async (sql) => this.exec(sql),
-        run:  async (sql, params) => this.run(sql, params),
-        all:  async (sql, params) => this.all(sql, params),
-        transaction:  async (inner) => inner(tx),
+        exec: async (sql) => {
+          await this.exec(sql);
+        },
+        run: async (sql, params) => {
+          const result = await this.run(sql, params);
+          return result;
+        },
+        all: async <Row>(sql: string, params?: ReadonlyArray<SqlValue>) => {
+          const rows = await this.all<Row>(sql, params);
+          return rows;
+        },
+        transaction: async (inner) => {
+          const value = await inner(tx);
+          return value;
+        },
       };
       try {
         const value = await fn(tx);
@@ -109,6 +126,7 @@ export class SqliteTestDriver implements SqlDriver {
         throw error;
       }
     });
+    // oxlint-disable-next-line promise/prefer-await-to-then -- the tail chain is the serialization primitive
     this.#txTail = task.then(
       () => undefined,
       () => undefined,

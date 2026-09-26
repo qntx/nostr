@@ -36,10 +36,10 @@ export type FakeNip46Signer = {
   readonly bunkerPubkey: string;
   readonly userPublicKey: string;
   /** Also answer RPCs on another relay of the same network (e.g. after switch_relays). */
-  attach(relayUrl: string): void;
+  attach: (relayUrl: string) => void
   /** Publish the nostrconnect handshake secret confirmation as the bunker. */
-  confirmHandshake(secret: string): void;
-  close(): void;
+  confirmHandshake: (secret: string) => void
+  close: () => void
 }
 
 type SocketMessage = { data: unknown };
@@ -57,7 +57,7 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
   const authMethods = new Set(opts.authUrlMethods ?? ["connect"]);
   let closed = false;
 
-  const sockets = new Set<{ close(): void }>();
+  const sockets = new Set<{ close: () => void }>();
   const listen = (relayUrl: string): void => {
     const ws = new opts.network.websocketImplementation(relayUrl);
     ws.addEventListener("open", () => {
@@ -73,7 +73,7 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
     sockets.add(ws);
   };
 
-  const onMessage = (ev: unknown, ws: { send(data: string): void }): void => {
+  const onMessage = (ev: unknown, ws: { send: (data: string) => void }): void => {
     const {data} = (ev as SocketMessage);
     let msg: unknown;
     try {
@@ -151,7 +151,7 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
   };
 
   const reply = (
-    ws: { send(data: string): void },
+    ws: { send: (data: string) => void },
     clientPubkey: string,
     id: string,
     result?: string,

@@ -4,7 +4,7 @@ import type { FakeRelay, FakeRelayOptions, RelayTransport } from './relay-core.t
 export type ServedFakeRelay = {
   url: string;
   relay: FakeRelay;
-  close(): Promise<void>;
+  close: () => Promise<void>
 };
 
 /**

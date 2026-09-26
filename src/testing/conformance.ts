@@ -1,11 +1,11 @@
-import type { Filter } from "../core/filter.ts";
+export { type Filter } from '../core/filter.ts';
 import { EventBuilder, Keys } from '../core/index.ts';
 import type { Event } from '../core/index.ts';
 import type { EventStore } from "../storage/types.ts";
 
 export type EventStoreConformanceCase = {
   name: string;
-  run(store: EventStore): Promise<void>;
+  run: (store: EventStore) => Promise<void>
 };
 
 const ALICE_SK = "0000000000000000000000000000000000000000000000000000000000000101";
@@ -281,4 +281,4 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
   },
 ];
 
-export type { Filter };
+

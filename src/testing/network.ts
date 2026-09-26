@@ -1,14 +1,14 @@
 import { normalizeURL } from "../core/util.ts";
 import type { WebSocketConstructor } from "../relay/websocket.ts";
 import { FakeRelayCore } from './relay-core.ts';
-import type { FakeRelay, FakeRelayOptions, RelayTransport } from './relay-core.ts';
-
+import type {FakeRelay, FakeRelayOptions, RelayTransport} from './relay-core.ts';
+export { type FakeRelay, type FakeRelayOptions } from './relay-core.ts';
 export type FakeRelayNetwork = {
   /** Pass to `Client` / `Pool` / `useWebSocketImplementation`. */
   readonly websocketImplementation: WebSocketConstructor;
   /** Get-or-create a relay handle by normalized URL. */
-  relay(url: string, opts?: FakeRelayOptions): FakeRelay;
-  close(): void;
+  relay: (url: string, opts?: FakeRelayOptions) => FakeRelay
+  close: () => void
 }
 
 type Listener = (ev: unknown) => void;
@@ -120,4 +120,4 @@ export function createFakeRelayNetwork(defaults: FakeRelayOptions = {}): FakeRel
   };
 }
 
-export type { FakeRelay, FakeRelayOptions, FakeRelayCore };
+
