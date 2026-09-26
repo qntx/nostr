@@ -18,7 +18,7 @@ export function isTag(value: unknown): value is Tag {
 
 /** First element of a tag (its name). */
 export function tagName(tag: Tag): string {
-  return tag[0]!;
+  return tag[0] ?? "";
 }
 
 /** Second element of a tag (its primary value), or undefined for a bare name tag. */

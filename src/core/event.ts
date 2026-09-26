@@ -28,10 +28,10 @@ export type Event = UnsignedEvent & {
 };
 
 /** Cache of events whose signatures have been verified successfully. */
-const verifiedEvents = new WeakSet<object>();
+const verifiedEvents = new WeakSet<Event>();
 
 /** Cache of events known to fail verification. */
-const failedEvents = new WeakSet<object>();
+const failedEvents = new WeakSet<Event>();
 
 export function markVerified(event: Event): void {
   verifiedEvents.add(event);
@@ -58,18 +58,18 @@ const isRecord = (obj: unknown): obj is Record<string, unknown> =>
 export function validateEvent(event: unknown): event is UnsignedEvent {
   if (!isRecord(event)) {return false;}
   if (
-    typeof event.kind !== "number" ||
-    !Number.isInteger(event.kind) ||
-    event.kind < 0 ||
-    event.kind > 65535
+    typeof event["kind"] !== "number" ||
+    !Number.isInteger(event["kind"]) ||
+    event["kind"] < 0 ||
+    event["kind"] > 65535
   ) {
     return false;
   }
-  if (typeof event.content !== "string") {return false;}
-  if (typeof event.created_at !== "number" || !Number.isInteger(event.created_at)) {return false;}
-  if (typeof event.pubkey !== "string" || !isHex32(event.pubkey)) {return false;}
-  if (!Array.isArray(event.tags)) {return false;}
-  for (const tag of event.tags) {
+  if (typeof event["content"] !== "string") {return false;}
+  if (typeof event["created_at"] !== "number" || !Number.isInteger(event["created_at"])) {return false;}
+  if (typeof event["pubkey"] !== "string" || !isHex32(event["pubkey"])) {return false;}
+  if (!Array.isArray(event["tags"])) {return false;}
+  for (const tag of event["tags"]) {
     if (!isTag(tag)) {return false;}
   }
   return true;
@@ -79,8 +79,8 @@ export function validateEvent(event: unknown): event is UnsignedEvent {
 export function validateSignedEvent(event: unknown): event is Event {
   if (!validateEvent(event)) {return false;}
   const e = event as Record<string, unknown>;
-  if (typeof e.id !== "string" || !isHex32(e.id)) {return false;}
-  if (typeof e.sig !== "string" || !isHex64(e.sig)) {return false;}
+  if (typeof e["id"] !== "string" || !isHex32(e["id"])) {return false;}
+  if (typeof e["sig"] !== "string" || !isHex64(e["sig"])) {return false;}
   return true;
 }
 
@@ -120,12 +120,13 @@ export function compareEventsDesc(
  * returns the array.
  */
 export function sortEvents(events: Event[]): Event[] {
+  // oxlint-disable-next-line unicorn/no-array-sort -- in-place mutation is this function's contract
   return events.sort(compareEventsDesc);
 }
 
 /** Non-mutating sort; returns a new array. */
 export function sortedEvents(events: ReadonlyArray<Event>): Event[] {
-  return [...events].sort(compareEventsDesc);
+  return [...events].toSorted(compareEventsDesc);
 }
 
 /**

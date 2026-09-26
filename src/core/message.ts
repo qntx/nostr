@@ -73,9 +73,9 @@ export function mergeCountHll(hexes: ReadonlyArray<string>): string {
       throw new MessageError("invalid NIP-45 HLL sketch: expected 512-char hex");
     }
     const bytes = hexToBytes(hex);
-    for (let i = 0; i < HLL_BYTES; i++) {
-      const b = bytes[i]!;
-      if (b > merged[i]!) {merged[i] = b;}
+    for (const [i, b] of bytes.entries()) {
+      const m = merged[i];
+      if (m !== undefined && b > m) {merged[i] = b;}
     }
   }
   return bytesToHex(merged);
@@ -102,7 +102,8 @@ export function parseClientMessage(raw: string): ClientMessage {
   if (!Array.isArray(data) || data.length === 0 || typeof data[0] !== "string") {
     throw new MessageError("client message must be a non-empty JSON array");
   }
-  const type = data[0];
+  const items: unknown[] = data;
+  const [type] = items;
   switch (type) {
     case "EVENT": 
       if (data.length !== 2 || !validateSignedEvent(data[1])) {
@@ -114,7 +115,7 @@ export function parseClientMessage(raw: string): ClientMessage {
       if (data.length < 3 || typeof data[1] !== "string") {
         throw new MessageError("invalid REQ client message");
       }
-      return ["REQ", data[1], ...(data.slice(2) as Filter[])];
+      return ["REQ", data[1], ...parseWireFilters(data.slice(2), "REQ")];
     
     case "CLOSE": 
       if (data.length !== 2 || typeof data[1] !== "string") {
@@ -132,7 +133,7 @@ export function parseClientMessage(raw: string): ClientMessage {
       if (data.length < 3 || typeof data[1] !== "string") {
         throw new MessageError("invalid COUNT client message");
       }
-      return ["COUNT", data[1], ...(data.slice(2) as Filter[])];
+      return ["COUNT", data[1], ...parseWireFilters(data.slice(2), "COUNT")];
     
     case "NEG-OPEN": 
       if (data.length === 5) {
@@ -161,7 +162,7 @@ export function parseClientMessage(raw: string): ClientMessage {
       return ["NEG-CLOSE", data[1]];
     
     default:
-      throw new MessageError(`unknown client message type: ${type}`);
+      throw new MessageError(`unknown client message type: ${String(type)}`);
   }
 }
 
@@ -176,7 +177,8 @@ export function parseRelayMessage(raw: string): RelayMessage {
   if (!Array.isArray(data) || data.length === 0 || typeof data[0] !== "string") {
     throw new MessageError("relay message must be a non-empty JSON array");
   }
-  const type = data[0];
+  const items: unknown[] = data;
+  const [type] = items;
   switch (type) {
     case "EVENT": 
       if (data.length !== 3 || typeof data[1] !== "string" || !validateSignedEvent(data[2])) {
@@ -220,19 +222,20 @@ export function parseRelayMessage(raw: string): RelayMessage {
       return ["AUTH", data[1]];
     
     case "COUNT": {
+      const payload = items.at(2);
       if (
         data.length !== 3 ||
         typeof data[1] !== "string" ||
-        typeof data[2] !== "object" ||
-        data[2] === null ||
-        typeof (data[2] as { count?: unknown }).count !== "number"
+        !isWireRecord(payload) ||
+        typeof payload["count"] !== "number"
       ) {
         throw new MessageError("invalid COUNT relay message");
       }
-      const payload = data[2] as { count: number; approximate?: unknown; hll?: unknown };
-      const result: CountResult = { count: payload.count };
-      if (typeof payload.approximate === "boolean") {result.approximate = payload.approximate;}
-      const hll = parseCountHll(payload.hll);
+      const result: CountResult = { count: payload["count"] };
+      if (typeof payload["approximate"] === "boolean") {
+        result.approximate = payload["approximate"];
+      }
+      const hll = parseCountHll(payload["hll"]);
       if (hll !== undefined) {result.hll = hll;}
       return ["COUNT", data[1], result];
     }
@@ -253,7 +256,7 @@ export function parseRelayMessage(raw: string): RelayMessage {
       return ["NEG-ERR", data[1], data[2]];
     
     default:
-      throw new MessageError(`unknown relay message type: ${type}`);
+      throw new MessageError(`unknown relay message type: ${String(type)}`);
   }
 }
 
@@ -264,8 +267,21 @@ function parseCountHll(value: unknown): string | undefined {
   return value.toLowerCase();
 }
 
-function isFilterObject(value: unknown): value is Filter {
+function parseWireFilters(items: unknown[], kind: string): Filter[] {
+  const filters: Filter[] = [];
+  for (const item of items) {
+    if (!isFilterObject(item)) {throw new MessageError(`invalid ${kind} filter`);}
+    filters.push(item);
+  }
+  return filters;
+}
+
+function isWireRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFilterObject(value: unknown): value is Filter {
+  return isWireRecord(value);
 }
 
 function isNegHex(value: unknown): value is string {

@@ -6,7 +6,7 @@ export function abortReason(signal: AbortSignal): unknown {
 }
 
 export function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {throw abortReason(signal);}
+  if (signal?.aborted === true) {throw abortReason(signal);}
 }
 
 /**
@@ -16,24 +16,22 @@ export function throwIfAborted(signal: AbortSignal | undefined): void {
  */
 export async function raceSignal<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
   if (!signal) {return promise;}
-  if (signal.aborted) {return Promise.reject(abortReason(signal));}
+  if (signal.aborted) {throw abortReason(signal);}
   return new Promise<T>((resolve, reject) => {
     const onAbort = (): void => {
+      // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the rejection is the caller's signal.reason verbatim
       reject(abortReason(signal));
     };
-    const done = (): void => {
-      signal.removeEventListener("abort", onAbort);
-    };
-    promise.then(
-      (value) => {
-        done();
-        resolve(value);
-      },
-      (error: unknown) => {
-        done();
-        reject(error);
-      },
-    );
     signal.addEventListener("abort", onAbort, { once: true });
+    void (async (): Promise<void> => {
+      try {
+        resolve(await promise);
+      } catch (error) {
+        // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- forwards the raced promise's own rejection
+        reject(error);
+      } finally {
+        signal.removeEventListener("abort", onAbort);
+      }
+    })();
   });
 }

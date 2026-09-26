@@ -5,12 +5,15 @@
  * throw.
  */
 export function reportError(error: unknown): void {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- reads an optional host global
   const report = (globalThis as { reportError?: (error: unknown) => void }).reportError;
-  if (typeof report === "function") {report(error);}
-  else
-    {queueMicrotask(() => {
-      throw error;
-    });}
+  if (typeof report === "function") {
+    report(error);
+    return;
+  }
+  queueMicrotask(() => {
+    throw error;
+  });
 }
 
 /**

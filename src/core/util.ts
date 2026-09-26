@@ -84,7 +84,7 @@ export function normalizeURL(url: string): string {
     p.hash = "";
     return p.toString();
   } catch (error) {
-    if (error instanceof UrlError) throw error;
+    if (error instanceof UrlError) {throw error;}
     throw new UrlError(`invalid URL: ${url}`, {
       cause: error instanceof Error ? error : undefined,
     });

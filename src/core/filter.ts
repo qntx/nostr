@@ -31,11 +31,12 @@ export function matchFilter(filter: Filter, event: Event): boolean {
     if (!values) {continue;}
     const hexTag = tagName === "e" || tagName === "p";
     const hit = event.tags.some((tag) => {
-      if (tag[0] !== tagName || tag[1] === undefined) {return false;}
+      const [tagKey, tagValue] = tag;
+      if (tagKey !== tagName || tagValue === undefined) {return false;}
       if (hexTag) {
-        return values.some((v) => v.toLowerCase() === tag[1]!.toLowerCase());
+        return values.some((v) => v.toLowerCase() === tagValue.toLowerCase());
       }
-      return values.includes(tag[1]);
+      return values.includes(tagValue);
     });
     if (!hit) {return false;}
   }
@@ -57,37 +58,40 @@ export function matchFilters(filters: ReadonlyArray<Filter>, event: Event): bool
 /** Merge filters by unioning list fields; returns a new plain object. */
 export function mergeFilters(...filters: Filter[]): Filter {
   const result: Record<string, unknown> = {};
+  const mergeList = (property: string, values: ReadonlyArray<unknown> | undefined): void => {
+    if (values === undefined) {return;}
+    const existing = result[property];
+    const list: unknown[] = Array.isArray(existing) ? [...(existing as unknown[])] : [];
+    for (const value of values) {
+      if (!list.includes(value)) {list.push(value);}
+    }
+    result[property] = list;
+  };
+  const mergeMax = (property: "limit" | "until", value: number | undefined): void => {
+    if (value === undefined) {return;}
+    const prev = result[property];
+    if (typeof prev !== "number" || value > prev) {result[property] = value;}
+  };
   for (const filter of filters) {
-    for (const [property, values] of Object.entries(filter)) {
-      if (
-        property === "kinds" ||
-        property === "ids" ||
-        property === "authors" ||
-        property.startsWith("#")
-      ) {
-        const list = (result[property] as Array<string | number> | undefined) ?? [];
-        for (const value of values as ReadonlyArray<string | number>) {
-          if (!list.includes(value)) {list.push(value);}
-        }
-        result[property] = list;
-      }
+    mergeList("ids", filter.ids);
+    mergeList("authors", filter.authors);
+    mergeList("kinds", filter.kinds);
+    for (const key of Object.keys(filter)) {
+      if (!key.startsWith("#")) {continue;}
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- startsWith("#") above guarantees the template key
+      mergeList(key, filter[key as `#${string}`]);
     }
-    if (filter.limit !== undefined) {
-      const prev = result.limit as number | undefined;
-      if (prev === undefined || filter.limit > prev) {result.limit = filter.limit;}
-    }
-    if (filter.until !== undefined) {
-      const prev = result.until as number | undefined;
-      if (prev === undefined || filter.until > prev) {result.until = filter.until;}
-    }
+    mergeMax("limit", filter.limit);
+    mergeMax("until", filter.until);
     if (filter.since !== undefined) {
-      const prev = result.since as number | undefined;
-      if (prev === undefined || filter.since < prev) {result.since = filter.since;}
+      const prev = result["since"];
+      if (typeof prev !== "number" || filter.since < prev) {result["since"] = filter.since;}
     }
     if (filter.search !== undefined) {
-      result.search = filter.search;
+      result["search"] = filter.search;
     }
   }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built key by key above; the record is filter-shaped by construction
   return result as Filter;
 }
 
@@ -122,22 +126,23 @@ const HEX_LIST_KEYS = new Set(["ids", "authors", "#e", "#p"]);
 export function canonicalizeFilter(filter: Filter): Filter {
   const raw = filter as Record<string, unknown>;
   const out: Record<string, unknown> = {};
-  for (const key of Object.keys(raw).sort()) {
+  for (const key of Object.keys(raw).toSorted()) {
     const value = raw[key];
     // omit undefined so a missing key is not `[]` / null
     if (value === undefined) {continue;}
     if (Array.isArray(value)) {
       if (HEX_LIST_KEYS.has(key)) {
-        out[key] = value.map((v) => String(v).toLowerCase()).sort();
+        out[key] = value.map((v) => String(v).toLowerCase()).toSorted();
       } else if (key === "kinds") {
-        out[key] = value.map((v) => Number(v)).sort((a, b) => a - b);
+        out[key] = value.map(Number).toSorted((a, b) => a - b);
       } else {
-        out[key] = value.map((v) => String(v)).sort();
+        out[key] = value.map(String).toSorted();
       }
     } else {
       out[key] = value;
     }
   }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built key by key above; the record is filter-shaped by construction
   return out as Filter;
 }
 

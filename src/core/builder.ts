@@ -1,6 +1,7 @@
 import { EventValidationError } from "./error.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "./event.ts";
 import { Keys, finalizeEvent } from "./key.ts";
+import type { SecretKey } from "./key.ts";
 import { Kind, isAddressableKind, isReplaceableKind } from "./kind.ts";
 import { Tag, formatEventAddress, getDTag, parseEventAddress } from "./tag.ts";
 import { normalizeURL } from "./util.ts";
@@ -14,7 +15,7 @@ function hasProtectedTag(event: Event): boolean {
 
 /** NIP-18 e third entry MUST be a relay URL; empty string is not one. */
 function requireRelayUrl(relayHint: string | undefined): string {
-  if (!relayHint) {
+  if (relayHint === undefined || relayHint === "") {
     throw new EventValidationError("relayHint must be a relay URL");
   }
   return normalizeURL(relayHint);
@@ -223,12 +224,12 @@ export class EventBuilder {
    * the signer module.
    */
   async sign(signer: {
-    getPublicKey(): Promise<string>;
-    signEvent(unsigned: UnsignedEvent): Promise<Event>;
+    getPublicKey: () => Promise<string>
+    signEvent: (unsigned: UnsignedEvent) => Promise<Event>
   }): Promise<Event> {
     const pubkey = await signer.getPublicKey();
     return signer.signEvent(this.buildUnsigned(pubkey));
   }
 }
 
-type SecretKeyLike = import("./key.ts").SecretKey | Uint8Array | string;
+type SecretKeyLike = SecretKey | Uint8Array | string;

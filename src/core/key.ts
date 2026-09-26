@@ -7,7 +7,7 @@ import { assertHex32, assertSecretKeyBytes, bytesToHex, hexToBytes } from "./uti
 
 /** 32-byte secret key held as bytes; prefer zeroize when done. */
 export class SecretKey {
-  #bytes: Uint8Array | null;
+  #bytes: Uint8Array | undefined;
 
   private constructor(bytes: Uint8Array) {
     assertSecretKeyBytes(bytes);
@@ -39,7 +39,7 @@ export class SecretKey {
   zeroize(): void {
     if (this.#bytes) {
       this.#bytes.fill(0);
-      this.#bytes = null;
+      this.#bytes = undefined;
     }
   }
 }
