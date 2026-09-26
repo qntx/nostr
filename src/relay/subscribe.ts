@@ -1,12 +1,12 @@
 import { abortReason, throwIfAborted } from "../core/abort.ts";
 /** REQ subscription runtime: exclusive one-shot, live coalescing, dispatch, reconnect replay. */
 import type { Event } from "../core/event.ts";
-import { filterFingerprint } from '../core/filter.ts';
-import type { Filter } from '../core/filter.ts';
+import { filterFingerprint } from "../core/filter.ts";
+import type { Filter } from "../core/filter.ts";
 import type { ClientMessage, SubscriptionId } from "../core/message.ts";
 import { invokeSafely } from "../core/report.ts";
-import { Subscription, subscriptionToAsyncIterable } from './subscription.ts';
-import type { SubscribeOptions } from './subscription.ts';
+import { Subscription, subscriptionToAsyncIterable } from "./subscription.ts";
+import type { SubscribeOptions } from "./subscription.ts";
 
 export type LiveGroup = {
   fp: string;
@@ -34,7 +34,9 @@ export function openExclusive(
   const sub = new Subscription(filters, opts, (id) => {
     ctx.subs.delete(id);
     try {
-      if (ctx.connected()) {ctx.send(["CLOSE", id]);}
+      if (ctx.connected()) {
+        ctx.send(["CLOSE", id]);
+      }
     } catch {
       // ignore
     }
@@ -47,7 +49,9 @@ export function openExclusive(
     ctx.scheduleReconnect();
   }
 
-  if (opts.eoseTimeoutMs !== undefined) {ctx.armEoseTimeout(sub, opts.eoseTimeoutMs);}
+  if (opts.eoseTimeoutMs !== undefined) {
+    ctx.armEoseTimeout(sub, opts.eoseTimeoutMs);
+  }
   return sub;
 }
 
@@ -74,7 +78,9 @@ export function subscribeLive(
   const handle = new Subscription(filters, { ...opts, id: group.sub.id }, () => {
     // constructor may close on an already-aborted signal before `handle` is assigned
     const current = slot.handle;
-    if (!current) {return;}
+    if (!current) {
+      return;
+    }
     detachLive(ctx, fp, current);
   });
   slot.handle = handle;
@@ -96,11 +102,15 @@ export function subscribeLive(
     }
   }
 
-  if (opts.eoseTimeoutMs !== undefined) {ctx.armEoseTimeout(handle, opts.eoseTimeoutMs);}
+  if (opts.eoseTimeoutMs !== undefined) {
+    ctx.armEoseTimeout(handle, opts.eoseTimeoutMs);
+  }
 
   if (group.sub.eosed) {
     queueMicrotask(() => {
-      if (handle.closed || handle.eosed) {return;}
+      if (handle.closed || handle.eosed) {
+        return;
+      }
       handle.eosed = true;
       invokeSafely(() => handle.handlers.oneose?.());
     });
@@ -118,9 +128,15 @@ export function forgetLiveGroup(ctx: LiveCtx, group: LiveGroup): void {
 
 export function detachLive(ctx: LiveCtx, fp: string, handle: Subscription): void {
   const group = ctx.liveByFp.get(fp);
-  if (!group) {return;}
-  if (!group.attachments.delete(handle)) {return;}
-  if (group.attachments.size > 0) {return;}
+  if (!group) {
+    return;
+  }
+  if (!group.attachments.delete(handle)) {
+    return;
+  }
+  if (group.attachments.size > 0) {
+    return;
+  }
   endLiveGroup(ctx, fp, { sendClose: true, reason: "closed by client" });
 }
 
@@ -130,14 +146,18 @@ export function endLiveGroup(
   opts: { sendClose: boolean; reason: string },
 ): void {
   const group = ctx.liveByFp.get(fp);
-  if (!group) {return;}
-  const {id} = group.sub;
+  if (!group) {
+    return;
+  }
+  const { id } = group.sub;
   const remaining = [...group.attachments];
   group.attachments.clear();
   forgetLiveGroup(ctx, group);
   if (opts.sendClose) {
     try {
-      if (ctx.connected()) {ctx.send(["CLOSE", id]);}
+      if (ctx.connected()) {
+        ctx.send(["CLOSE", id]);
+      }
     } catch {
       // ignore
     }
@@ -150,29 +170,41 @@ export function endLiveGroup(
 }
 
 export function deliverLiveEvent(ctx: LiveCtx, group: LiveGroup, event: Event): void {
-  const {sub} = group;
+  const { sub } = group;
   const attachments = [...group.attachments];
   for (const att of attachments) {
     invokeSafely(() => {
       att.handlers.receivedEvent?.(event.id);
     });
   }
-  if (sub.idsAtWatermark.has(event.id)) {return;}
+  if (sub.idsAtWatermark.has(event.id)) {
+    return;
+  }
 
   const recipients: Subscription[] = [];
   for (const att of attachments) {
-    if (att.closed) {continue;}
+    if (att.closed) {
+      continue;
+    }
     let skip = false;
     invokeSafely(() => {
       skip = Boolean(att.handlers.alreadyHaveEvent?.(event.id));
     });
-    if (!skip) {recipients.push(att);}
+    if (!skip) {
+      recipients.push(att);
+    }
   }
-  if (recipients.length === 0) {return;}
-  if (!ctx.acceptEvent(event)) {return;}
+  if (recipients.length === 0) {
+    return;
+  }
+  if (!ctx.acceptEvent(event)) {
+    return;
+  }
 
   sub.noteVerified(event);
-  for (const att of recipients) {att.noteVerified(event);}
+  for (const att of recipients) {
+    att.noteVerified(event);
+  }
   for (const att of recipients) {
     invokeSafely(() => {
       att.handlers.onevent?.(event);
@@ -183,7 +215,9 @@ export function deliverLiveEvent(ctx: LiveCtx, group: LiveGroup, event: Event): 
 export function deliverLiveEose(group: LiveGroup): void {
   const attachments = [...group.attachments];
   for (const att of attachments) {
-    if (att.closed || att.eosed) {continue;}
+    if (att.closed || att.eosed) {
+      continue;
+    }
     att.eosed = true;
     invokeSafely(() => {
       att.handlers.oneose?.();
@@ -226,7 +260,9 @@ export function dropSubscription(ctx: LiveCtx, sub: Subscription, reason: string
 
 export function onSubEvent(ctx: LiveCtx, subId: string, event: Event): void {
   const sub = ctx.subs.get(subId);
-  if (!sub || sub.closed) {return;}
+  if (!sub || sub.closed) {
+    return;
+  }
   const group = ctx.liveBySubId.get(subId);
   if (group) {
     deliverLiveEvent(ctx, group, event);
@@ -235,13 +271,19 @@ export function onSubEvent(ctx: LiveCtx, subId: string, event: Event): void {
   invokeSafely(() => {
     sub.handlers.receivedEvent?.(event.id);
   });
-  if (sub.idsAtWatermark.has(event.id)) {return;}
+  if (sub.idsAtWatermark.has(event.id)) {
+    return;
+  }
   let have = false;
   invokeSafely(() => {
     have = Boolean(sub.handlers.alreadyHaveEvent?.(event.id));
   });
-  if (have) {return;}
-  if (!ctx.acceptEvent(event)) {return;}
+  if (have) {
+    return;
+  }
+  if (!ctx.acceptEvent(event)) {
+    return;
+  }
   sub.noteVerified(event);
   invokeSafely(() => {
     sub.handlers.onevent?.(event);
@@ -250,8 +292,12 @@ export function onSubEvent(ctx: LiveCtx, subId: string, event: Event): void {
 
 export function onSubEose(ctx: LiveCtx, subId: string): void {
   const sub = ctx.subs.get(subId);
-  if (!sub || sub.closed) {return;}
-  if (sub.eosed) {return;}
+  if (!sub || sub.closed) {
+    return;
+  }
+  if (sub.eosed) {
+    return;
+  }
   sub.eosed = true;
   const group = ctx.liveBySubId.get(subId);
   if (group) {
@@ -260,18 +306,24 @@ export function onSubEose(ctx: LiveCtx, subId: string): void {
     invokeSafely(() => {
       sub.handlers.oneose?.();
     });
-    if (sub.closeOnEose) {sub.close("eose");}
+    if (sub.closeOnEose) {
+      sub.close("eose");
+    }
   }
 }
 
 export function resubscribeAll(ctx: LiveCtx): boolean {
   for (const sub of ctx.subs.values()) {
-    if (sub.closed) {continue;}
+    if (sub.closed) {
+      continue;
+    }
     sub.eosed = false;
     sub.authRetried = false;
     const group = ctx.liveBySubId.get(sub.id);
     if (group) {
-      for (const att of group.attachments) {att.eosed = false;}
+      for (const att of group.attachments) {
+        att.eosed = false;
+      }
     }
     try {
       ctx.send(["REQ", sub.id, ...sub.replayFilters()]);
@@ -285,7 +337,7 @@ export function resubscribeAll(ctx: LiveCtx): boolean {
 export function streamFilters(
   subscribe: (filters: Filter[], opts: SubscribeOptions) => Subscription,
   filters: Filter[],
-  opts?: { signal?: AbortSignal; id?: string },
+  opts?: { signal?: AbortSignal | undefined; id?: string | undefined },
 ): AsyncIterable<Event> & { close: (reason?: string) => void } {
   return subscriptionToAsyncIterable(
     (handlers) => subscribe(filters, { ...handlers, id: opts?.id, signal: opts?.signal }),
@@ -296,7 +348,12 @@ export function streamFilters(
 export async function fetchFilters(
   subscribe: (filters: Filter[], opts: SubscribeOptions) => Subscription,
   filters: Filter[],
-  opts: { timeoutMs: number; signal?: AbortSignal; id?: string; url: string },
+  opts: {
+    timeoutMs: number;
+    signal?: AbortSignal | undefined;
+    id?: string | undefined;
+    url: string;
+  },
 ): Promise<Event[]> {
   throwIfAborted(opts.signal);
   const events: Event[] = [];
@@ -305,14 +362,20 @@ export async function fetchFilters(
   await new Promise<void>((resolve, reject) => {
     let settled = false;
     const done = (err?: unknown) => {
-      if (settled) {return;}
+      if (settled) {
+        return;
+      }
       settled = true;
       clearTimeout(timer);
       sub.close(
-        err instanceof Error ? err.message : (err === undefined ? "fetch complete" : "aborted"),
+        err instanceof Error ? err.message : err === undefined ? "fetch complete" : "aborted",
       );
-      if (err === undefined) {resolve();}
-      else {reject(err);}
+      if (err === undefined) {
+        resolve();
+      } else {
+        // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- forwards abort/signal reasons verbatim
+        reject(err);
+      }
     };
 
     const timer = setTimeout(() => done(), opts.timeoutMs);
@@ -322,7 +385,9 @@ export async function fetchFilters(
       signal: opts.signal,
       closeOnEose: true,
       onevent(event) {
-        if (seen.has(event.id)) {return;}
+        if (seen.has(event.id)) {
+          return;
+        }
         seen.add(event.id);
         events.push(event);
       },
@@ -332,7 +397,9 @@ export async function fetchFilters(
       onclose() {
         // The Subscription's own abort listener may close it before ours runs;
         // an aborted signal still rejects the fetch with the signal's reason.
-        if (!settled) {done(opts.signal?.aborted ? abortReason(opts.signal) : undefined);}
+        if (!settled) {
+          done(opts.signal?.aborted === true ? abortReason(opts.signal) : undefined);
+        }
       },
     });
 
@@ -348,13 +415,16 @@ export async function fetchFilters(
 
 export function armEoseTimeout(sub: Subscription, eoseTimeoutMs: number): void {
   const timer = setTimeout(() => {
-    if (sub.eosed || sub.closed) {return;}
+    if (sub.eosed || sub.closed) {
+      return;
+    }
     sub.eosed = true;
     invokeSafely(() => {
       sub.handlers.oneose?.();
     });
   }, eoseTimeoutMs);
   const prevClose = sub.handlers.onclose;
+  // oxlint-disable-next-line unicorn/prefer-add-event-listener -- SubscriptionHandlers is a callback record, not an EventTarget
   sub.handlers.onclose = (reason) => {
     clearTimeout(timer);
     prevClose?.(reason);

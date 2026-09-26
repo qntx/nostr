@@ -1,51 +1,53 @@
 import { abortReason, throwIfAborted } from "../core/abort.ts";
 import { MessageError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
-import { canonicalizeFilters } from '../core/filter.ts';
-import type { Filter } from '../core/filter.ts';
-import { assertSubscriptionId } from '../core/message.ts';
-import type { CountResult } from '../core/message.ts';
+import { canonicalizeFilters } from "../core/filter.ts";
+import type { Filter } from "../core/filter.ts";
+import { assertSubscriptionId } from "../core/message.ts";
+import type { CountResult } from "../core/message.ts";
 import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
 import { RelayConnectionError, RelayPublishError } from "./error.ts";
 import { fanIn, fetchRouted } from "./fan-in.ts";
-import { Relay, RelayStatus } from './relay.ts';
-import type { PublishResult, RelayOptions, SubscribeOptions } from './relay.ts';
+import { Relay, RelayStatus } from "./relay.ts";
+import type { PublishResult, RelayOptions, SubscribeOptions } from "./relay.ts";
 import { isInsecureRelayUrl } from "./url.ts";
 import type { WebSocketConstructor } from "./websocket.ts";
 
 /** Pool-wide options applied to every managed relay. */
 export type PoolOptions = {
-  websocketImplementation?: WebSocketConstructor;
+  websocketImplementation?: WebSocketConstructor | undefined;
   verifyEvent?: RelayOptions["verifyEvent"];
-  publishTimeoutMs?: number;
-  connectTimeoutMs?: number;
-  enableReconnect?: boolean;
-  reconnectBackoffMs?: number[];
-  enablePing?: boolean;
-  pingIntervalMs?: number;
-  pingTimeoutMs?: number;
+  publishTimeoutMs?: number | undefined;
+  connectTimeoutMs?: number | undefined;
+  enableReconnect?: boolean | undefined;
+  reconnectBackoffMs?: number[] | undefined;
+  enablePing?: boolean | undefined;
+  pingIntervalMs?: number | undefined;
+  pingTimeoutMs?: number | undefined;
   /**
-   * When set, automatically answer NIP-42 AUTH challenges for relays that send them. Return null to
-   * skip a given relay URL.
+   * When set, automatically answer NIP-42 AUTH challenges for relays that send them. Return
+   * undefined to skip a given relay URL.
    */
-  automaticallyAuth?: (relayURL: string) => null | ((event: EventTemplate) => Promise<Event>);
+  automaticallyAuth?:
+    | ((relayURL: string) => ((event: EventTemplate) => Promise<Event>) | undefined)
+    | undefined;
   /** When false (default), ensureRelay rejects isInsecureRelayUrl unless trusted. */
-  allowInsecure?: boolean;
-  trustedInsecureUrls?: ReadonlyArray<string>;
+  allowInsecure?: boolean | undefined;
+  trustedInsecureUrls?: ReadonlyArray<string> | undefined;
   /** Close unused relays. Unset/0 = disabled. */
-  idleTimeoutMs?: number;
-  idleCleanupIntervalMs?: number;
-  onIdleRelaysClosed?: (urls: string[]) => void;
+  idleTimeoutMs?: number | undefined;
+  idleCleanupIntervalMs?: number | undefined;
+  onIdleRelaysClosed?: ((urls: string[]) => void) | undefined;
   /**
    * Soft cap on connected non-pinned relays. When `ensureRelay` would create a new non-pinned relay
    * at the cap, the least-recently-used idle one is closed first (idle = no subscriptions and no
    * in-flight requests). If none is idle the connect proceeds anyway — the cap never fails a
    * request.
    */
-  maxRelays?: number;
+  maxRelays?: number | undefined;
   /** Normalized URLs never closed by idle cleanup or `maxRelays` eviction. */
-  pinnedUrls?: ReadonlyArray<string>;
+  pinnedUrls?: ReadonlyArray<string> | undefined;
 };
 
 /** Per-relay publish outcome: the relay's OK reply or an error string. */
@@ -120,24 +122,34 @@ export class Pool {
    * `setSigner` takes effect without reconnect.
    */
   resetAuth(): void {
-    for (const relay of this.#relays.values()) {relay.resetAuth();}
+    for (const relay of this.#relays.values()) {
+      relay.resetAuth();
+    }
   }
 
   cleanIdleRelays(): void {
-    if (this.#idleTimeoutMs <= 0) {return;}
+    if (this.#idleTimeoutMs <= 0) {
+      return;
+    }
     const now = Date.now();
     const idle: string[] = [];
     for (const [url, relay] of this.#relays) {
-      if (this.#pinned.has(url) || !isIdle(relay)) {continue;}
+      if (this.#pinned.has(url) || !isIdle(relay)) {
+        continue;
+      }
       const last = this.#lastActivity.get(url) ?? 0;
       if (!relay.connected || now - last >= this.#idleTimeoutMs) {
         idle.push(url);
       }
     }
     for (const url of this.#lastActivity.keys()) {
-      if (!this.#relays.has(url)) {this.#lastActivity.delete(url);}
+      if (!this.#relays.has(url)) {
+        this.#lastActivity.delete(url);
+      }
     }
-    if (idle.length === 0) {return;}
+    if (idle.length === 0) {
+      return;
+    }
     this.close(idle);
     invokeSafely(() => this.#opts.onIdleRelaysClosed?.(idle));
   }
@@ -147,14 +159,22 @@ export class Pool {
   }
 
   #rejectInsecure(url: string, norm: string): void {
-    if (this.#allowInsecure) {return;}
-    if (!isInsecureRelayUrl(url)) {return;}
-    if (this.#trustedInsecure.has(norm)) {return;}
+    if (this.#allowInsecure) {
+      return;
+    }
+    if (!isInsecureRelayUrl(url)) {
+      return;
+    }
+    if (this.#trustedInsecure.has(norm)) {
+      return;
+    }
     throw new RelayConnectionError("insecure relay connection blocked", norm);
   }
 
   #stopIdleCleanup(): void {
-    if (this.#idleTimer === undefined) {return;}
+    if (this.#idleTimer === undefined) {
+      return;
+    }
     clearInterval(this.#idleTimer);
     this.#idleTimer = undefined;
   }
@@ -166,26 +186,34 @@ export class Pool {
    */
   #enforceMaxRelays(incoming: string): void {
     const cap = this.#opts.maxRelays;
-    if (cap === undefined || this.#pinned.has(incoming)) {return;}
+    if (cap === undefined || this.#pinned.has(incoming)) {
+      return;
+    }
     let count = 0;
     let oldestUrl: string | undefined;
     let oldestAt = Number.POSITIVE_INFINITY;
     for (const [url, relay] of this.#relays) {
-      if (this.#pinned.has(url)) {continue;}
+      if (this.#pinned.has(url)) {
+        continue;
+      }
       count += 1;
-      if (!isIdle(relay)) {continue;}
+      if (!isIdle(relay)) {
+        continue;
+      }
       const at = this.#lastActivity.get(url) ?? 0;
       if (at < oldestAt) {
         oldestAt = at;
         oldestUrl = url;
       }
     }
-    if (count >= cap && oldestUrl !== undefined) {this.close([oldestUrl]);}
+    if (count >= cap && oldestUrl !== undefined) {
+      this.close([oldestUrl]);
+    }
   }
 
   async ensureRelay(
     url: string,
-    opts?: { signal?: AbortSignal; timeoutMs?: number },
+    opts?: { signal?: AbortSignal | undefined; timeoutMs?: number | undefined },
   ): Promise<Relay> {
     const norm = normalizeURL(url);
     this.#rejectInsecure(url, norm);
@@ -206,15 +234,20 @@ export class Pool {
         authSigner: signFn,
       });
       // Only drop from the pool on terminal close (reconnect keeps the entry).
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- Relay.onclose is a property callback, not an EventTarget
       created.onclose = () => {
         this.#relays.delete(norm);
         this.#lastActivity.delete(norm);
       };
       if (signFn) {
         created.onauth = () => {
-          void created.auth(signFn).catch(() => {
-            // auth failure surfaces on subsequent CLOSED/OK; avoid unhandled rejection
-          });
+          void (async (): Promise<void> => {
+            try {
+              await created.auth(signFn);
+            } catch {
+              // auth failure surfaces on subsequent CLOSED/OK; avoid unhandled rejection
+            }
+          })();
         };
       }
       this.#relays.set(norm, created);
@@ -229,7 +262,7 @@ export class Pool {
         });
       } catch (error) {
         // Keep the entry when reconnect is enabled so open subscriptions can recover.
-        if (!this.#opts.enableReconnect) {
+        if (this.#opts.enableReconnect !== true) {
           this.#relays.delete(norm);
           this.#lastActivity.delete(norm);
         }
@@ -242,7 +275,9 @@ export class Pool {
   close(urls?: string[]): void {
     if (!urls) {
       this.#stopIdleCleanup();
-      for (const relay of this.#relays.values()) {relay.close();}
+      for (const relay of this.#relays.values()) {
+        relay.close();
+      }
       this.#relays.clear();
       this.#lastActivity.clear();
       return;
@@ -264,10 +299,14 @@ export class Pool {
     filters: Filter[],
     opts: PoolSubscribeOptions = {},
   ): { close: (reason?: string) => void } {
-    if (filters.length === 0) {throw new MessageError("REQ requires at least one filter");}
-    if (opts.id !== undefined) {assertSubscriptionId(opts.id);}
-    filters = canonicalizeFilters(filters);
-    return fanIn(this, [{ urls: relays, filters, id: opts.id }], {
+    if (filters.length === 0) {
+      throw new MessageError("REQ requires at least one filter");
+    }
+    if (opts.id !== undefined) {
+      assertSubscriptionId(opts.id);
+    }
+    const canonical = canonicalizeFilters(filters);
+    return fanIn(this, [{ urls: relays, filters: canonical, id: opts.id }], {
       onevent: opts.onevent,
       oneose: opts.oneose,
       onclose: opts.onclose,
@@ -285,13 +324,15 @@ export class Pool {
     relays: string[],
     filters: Filter[],
     opts?: {
-      timeoutMs?: number;
-      signal?: AbortSignal;
+      timeoutMs?: number | undefined;
+      signal?: AbortSignal | undefined;
       /** Every event of every relay batch, including cross-relay duplicates. */
-      onevent?: (event: Event, relayUrl: string) => void;
+      onevent?: ((event: Event, relayUrl: string) => void) | undefined;
     },
   ): Promise<Event[]> {
-    if (filters.length === 0) {throw new MessageError("REQ requires at least one filter");}
+    if (filters.length === 0) {
+      throw new MessageError("REQ requires at least one filter");
+    }
     return fetchRouted(this, [{ urls: relays, filters: canonicalizeFilters(filters) }], {
       timeoutMs: opts?.timeoutMs,
       signal: opts?.signal,
@@ -304,7 +345,7 @@ export class Pool {
   async publish(
     relays: string[],
     event: Event,
-    opts?: { timeoutMs?: number },
+    opts?: { timeoutMs?: number | undefined },
   ): Promise<PoolPublishResult[]> {
     const results = await Promise.all(
       relays.map(async (url): Promise<PoolPublishResult> => {
@@ -327,7 +368,7 @@ export class Pool {
   async publishAny(
     relays: string[],
     event: Event,
-    opts?: { timeoutMs?: number },
+    opts?: { timeoutMs?: number | undefined },
   ): Promise<PoolPublishResult> {
     return Promise.any(
       relays.map(async (url) => {
@@ -336,7 +377,9 @@ export class Pool {
         });
         this.#touch(relay.url);
         const result = await relay.publish(event, { timeoutMs: opts?.timeoutMs });
-        if (!result.ok) {throw new RelayPublishError(result.message || "rejected", relay.url);}
+        if (!result.ok) {
+          throw new RelayPublishError(result.message || "rejected", relay.url);
+        }
         return { url: relay.url, result };
       }),
     );
@@ -349,10 +392,10 @@ export class Pool {
   async count(
     relays: string[],
     filters: Filter[],
-    opts?: { timeoutMs?: number; signal?: AbortSignal },
+    opts?: { timeoutMs?: number | undefined; signal?: AbortSignal | undefined },
   ): Promise<PoolCountResult[]> {
     throwIfAborted(opts?.signal);
-    filters = canonicalizeFilters(filters);
+    const canonical = canonicalizeFilters(filters);
     const results = await Promise.all(
       relays.map(async (url): Promise<PoolCountResult> => {
         try {
@@ -361,19 +404,23 @@ export class Pool {
             timeoutMs: this.#opts.connectTimeoutMs,
           });
           this.#touch(relay.url);
-          const payload: CountResult = await relay.count(filters, {
+          const payload: CountResult = await relay.count(canonical, {
             timeoutMs: opts?.timeoutMs,
             signal: opts?.signal,
           });
-          return {
-            url: relay.url,
-            count: payload.count,
-            approximate: payload.approximate,
-            hll: payload.hll,
-          };
+          const out: PoolCountResult = { url: relay.url, count: payload.count };
+          if (payload.approximate !== undefined) {
+            out.approximate = payload.approximate;
+          }
+          if (payload.hll !== undefined) {
+            out.hll = payload.hll;
+          }
+          return out;
         } catch (error) {
           // An abort rejects the whole call; per-relay failures are reported.
-          if (opts?.signal?.aborted) throw abortReason(opts.signal);
+          if (opts?.signal?.aborted === true) {
+            throw abortReason(opts.signal);
+          }
           return { url, error: error instanceof Error ? error.message : String(error) };
         }
       }),
@@ -398,7 +445,9 @@ export class Pool {
   connectedUrls(): string[] {
     const urls: string[] = [];
     for (const [url, relay] of this.#relays) {
-      if (relay.connected) {urls.push(url);}
+      if (relay.connected) {
+        urls.push(url);
+      }
     }
     return urls;
   }

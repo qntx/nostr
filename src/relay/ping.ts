@@ -63,7 +63,9 @@ export class PingLoop {
 
   finishDummyPing(id: string): boolean {
     const waiter = this.#waiters.get(id);
-    if (!waiter) {return false;}
+    if (!waiter) {
+      return false;
+    }
     this.#waiters.delete(id);
     waiter.resolve(true);
     try {
@@ -79,32 +81,46 @@ export class PingLoop {
     const native = this.#nativePing;
     this.#nativePing = undefined;
     native?.abort();
-    for (const waiter of this.#waiters.values()) {waiter.resolve(false);}
+    for (const waiter of this.#waiters.values()) {
+      waiter.resolve(false);
+    }
     this.#waiters.clear();
   }
 
   async #pingpong(): Promise<void> {
     const ws = this.#opts.getWs();
-    if (!ws || ws.readyState !== WS_OPEN) {return;}
-    if (this.#nativePing || this.#waiters.size > 0) {return;}
+    if (!ws || ws.readyState !== WS_OPEN) {
+      return;
+    }
+    if (this.#nativePing !== undefined || this.#waiters.size > 0) {
+      return;
+    }
 
     const gen = this.#gen;
     const ping = canNativePing(ws) ? this.#waitForNativePing(ws) : this.#waitForDummyPing();
     const ok = await new Promise<boolean>((resolve) => {
       let settled = false;
       const done = (alive: boolean) => {
-        if (settled) {return;}
+        if (settled) {
+          return;
+        }
         settled = true;
         clearTimeout(timer);
         resolve(alive);
       };
       const timer = setTimeout(() => {
-        if (this.#nativePing || this.#waiters.size > 0) {done(false);}
+        if (this.#nativePing !== undefined || this.#waiters.size > 0) {
+          done(false);
+        }
       }, this.#opts.pingTimeoutMs);
-      void ping.then(done);
+      void (async (): Promise<void> => {
+        done(await ping);
+      })();
     });
 
-    if (gen !== this.#gen) {return;}
+    if (gen !== this.#gen) {
+      return;
+    }
 
     if (!ok) {
       this.#abortCurrentPing();
@@ -112,11 +128,13 @@ export class PingLoop {
     }
   }
 
-   async #waitForNativePing(ws: WebSocketLike): Promise<boolean> {
+  async #waitForNativePing(ws: WebSocketLike): Promise<boolean> {
     return new Promise((resolve) => {
       let settled = false;
       const finish = (alive: boolean) => {
-        if (settled) {return;}
+        if (settled) {
+          return;
+        }
         settled = true;
         this.#nativePing = undefined;
         ws.off?.("pong", onPong);
@@ -131,17 +149,21 @@ export class PingLoop {
       } else if (typeof ws.once === "function") {
         ws.once("pong", onPong);
       } else {
-        ws.on!("pong", onPong);
+        ws.on?.("pong", onPong);
       }
       try {
-        ws.ping!();
+        if (typeof ws.ping === "function") {
+          ws.ping();
+        } else {
+          finish(false);
+        }
       } catch {
         finish(false);
       }
     });
   }
 
-   async #waitForDummyPing(): Promise<boolean> {
+  async #waitForDummyPing(): Promise<boolean> {
     return new Promise((resolve) => {
       const id = this.#opts.nextSubId("__ping__");
       this.#waiters.set(id, { resolve });

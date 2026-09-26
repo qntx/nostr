@@ -1,8 +1,8 @@
 import { abortReason } from "../core/abort.ts";
 import type { Filter } from "../core/filter.ts";
 import type { ClientMessage } from "../core/message.ts";
-import { Nip77Error, runNegSession } from '../nips/nip77.ts';
-import type { NegentropyStorageVector } from '../nips/nip77.ts';
+import { Nip77Error, runNegSession } from "../nips/nip77.ts";
+import type { NegentropyStorageVector } from "../nips/nip77.ts";
 import { RelayTimeoutError } from "./error.ts";
 
 export type NegSession = {
@@ -22,7 +22,7 @@ export function createNegSession(): NegSession {
 
 export function pushNegMsg(session: NegSession, hex: string): void {
   if (session.waiter) {
-    const {waiter} = session;
+    const { waiter } = session;
     session.waiter = undefined;
     waiter.resolve(hex);
   } else {
@@ -33,7 +33,7 @@ export function pushNegMsg(session: NegSession, hex: string): void {
 export function failNegSession(session: NegSession, err: Error): void {
   session.error = err;
   if (session.waiter) {
-    const {waiter} = session;
+    const { waiter } = session;
     session.waiter = undefined;
     waiter.reject(err);
   }
@@ -50,7 +50,7 @@ export async function runWiredNegSession(opts: {
   filter: Filter;
   id: string;
   timeoutMs: number;
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   send: (message: ClientMessage) => void;
   url: string;
 }): Promise<{ have: string[]; need: string[] }> {
@@ -61,11 +61,17 @@ export async function runWiredNegSession(opts: {
 
   const remainingMs = (): number => deadline - Date.now();
 
-  const next =  async (): Promise<string> => {
-    if (session.error) {return Promise.reject(session.error);}
-    if (remainingMs() <= 0) {return Promise.reject(timedOut());}
+  const next = async (): Promise<string> => {
+    if (session.error !== undefined) {
+      throw session.error;
+    }
+    if (remainingMs() <= 0) {
+      throw timedOut();
+    }
     const queued = session.queue.shift();
-    if (queued !== undefined) {return Promise.resolve(queued);}
+    if (queued !== undefined) {
+      return queued;
+    }
     return new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => {
         session.waiter = undefined;
@@ -74,10 +80,13 @@ export async function runWiredNegSession(opts: {
       const fail = (err: unknown): void => {
         clearTimeout(timer);
         session.waiter = undefined;
+        // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- forwards abort/signal reasons verbatim
         reject(err);
       };
       const onAbort = (): void => {
-        if (signal) {fail(abortReason(signal));}
+        if (signal) {
+          fail(abortReason(signal));
+        }
       };
       session.waiter = {
         resolve: (hex) => {
@@ -91,7 +100,7 @@ export async function runWiredNegSession(opts: {
     });
   };
 
-  return  runNegSession({
+  return runNegSession({
     storage,
     openingSend: (hex) => {
       send(["NEG-OPEN", id, filter, hex]);
