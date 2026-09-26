@@ -1,5 +1,5 @@
-import type { Event } from "../core/event.ts";
 import type { ProfileMetadata } from "../core/builder.ts";
+import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import { npubEncode } from "../nips/nip19.ts";
 import type { LoadStyle, ReplaceableLoader } from "./replaceable.ts";
@@ -52,7 +52,7 @@ export function createProfileLoader(replaceable: (kind: number) => ReplaceableLo
     async load(pubkey: string, opts?: { hints?: string[]; style?: LoadStyle }): Promise<NostrUser> {
       const base = bareNostrUser(pubkey);
       const { event, fresh } = await loader(pubkey, opts);
-      if (!event) return { ...base, fresh };
+      if (!event) {return { ...base, fresh };}
 
       const metadata = parseMetadata(event.content);
       const display = metadata.display_name || metadata.name;

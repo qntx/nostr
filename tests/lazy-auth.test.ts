@@ -1,26 +1,20 @@
 import { describe, expect, test } from "vite-plus/test";
-import {
-  Client,
-  EventBuilder,
-  Keys,
-  KeysSigner,
-  Pool,
-  finalizeEvent,
-  type NostrSigner,
-} from "../src/index.ts";
+
+import { Client, EventBuilder, Keys, KeysSigner, Pool, finalizeEvent } from '../src/index.ts';
+import type { NostrSigner } from '../src/index.ts';
 import { createFakeRelayNetwork } from "../src/testing/index.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const GATED = "wss://gated.example";
 
-function sleep(ms: number): Promise<void> {
+ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) return;
+    if (pred()) {return;}
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -38,7 +32,7 @@ function gatedClient(net: ReturnType<typeof createFakeRelayNetwork>, signer?: No
     .relays([GATED])
     .websocketImplementation(net.websocketImplementation)
     .enableReconnect(false);
-  if (signer) builder.signer(signer);
+  if (signer) {builder.signer(signer);}
   return builder.build();
 }
 
@@ -187,8 +181,8 @@ describe("lazy NIP-42 AUTH", () => {
       const keys = Keys.fromSecretKey(SK);
       // A signer whose AUTH tags the wrong relay URL: the relay answers OK false.
       const wrongRelaySigner: NostrSigner = {
-        getPublicKey: () => Promise.resolve(keys.publicKey),
-        signEvent: (unsigned) => {
+        getPublicKey:  async () => Promise.resolve(keys.publicKey),
+        signEvent:  async (unsigned) => {
           const challenge = unsigned.tags.find((t) => t[0] === "challenge")?.[1] ?? "";
           return Promise.resolve(
             finalizeEvent(

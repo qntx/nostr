@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vite-plus/test";
-import { bech32 } from "@scure/base";
 import { hexToBytes } from "@noble/hashes/utils.js";
+import { bech32 } from "@scure/base";
+import { describe, expect, test } from "vite-plus/test";
+
 import { bytesToHex } from "../src/core/util.ts";
 import {
   decodeNostrURI,
@@ -24,15 +25,15 @@ describe("nip19", () => {
     const decoded = nip19Decode(nsec);
     expect(decoded.type).toBe("nsec");
     if (decoded.type === "nsec") {
-      expect(Array.from(decoded.data)).toEqual(Array.from(sk.bytes));
+      expect([...decoded.data]).toStrictEqual([...sk.bytes]);
     }
 
     const pk = getPublicKey(sk);
     const npub = npubEncode(pk);
-    expect(nip19Decode(npub)).toEqual({ type: "npub", data: pk });
+    expect(nip19Decode(npub)).toStrictEqual({ type: "npub", data: pk });
 
     const note = noteEncode(pk);
-    expect(nip19Decode(note)).toEqual({ type: "note", data: pk });
+    expect(nip19Decode(note)).toStrictEqual({ type: "note", data: pk });
   });
 
   test("npub/note/nsec reject payloads that are not 32 bytes", () => {
@@ -49,7 +50,7 @@ describe("nip19", () => {
     expect(profile.type).toBe("nprofile");
     if (profile.type === "nprofile") {
       expect(profile.data.pubkey).toBe(pk);
-      expect(profile.data.relays).toEqual(expect.arrayContaining(relays));
+      expect(profile.data.relays).toStrictEqual(expect.arrayContaining(relays));
     }
 
     const nevent = neventEncode({ id: pk, relays, kind: 1, author: pk });
@@ -87,7 +88,7 @@ describe("nip19", () => {
   test("decodeNostrURI rejects nostr:nsec but bare nsec still decodes", () => {
     const sk = SecretKey.generate();
     const nsec = nsecEncode(sk.bytes);
-    expect(decodeNostrURI(`nostr:${nsec}`)).toEqual({ type: "invalid", data: null });
+    expect(decodeNostrURI(`nostr:${nsec}`)).toStrictEqual({ type: "invalid", data: null });
     const bare = nip19Decode(nsec);
     expect(bare.type).toBe("nsec");
   });
@@ -97,7 +98,7 @@ describe("nip19 spec examples", () => {
   test("npub / nsec examples decode and re-encode", () => {
     const npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg";
     const pk = "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e";
-    expect(nip19Decode(npub)).toEqual({ type: "npub", data: pk });
+    expect(nip19Decode(npub)).toStrictEqual({ type: "npub", data: pk });
     expect(npubEncode(pk)).toBe(npub);
 
     const nsec = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
@@ -119,7 +120,7 @@ describe("nip19 spec examples", () => {
       expect(decoded.data.pubkey).toBe(
         "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
       );
-      expect(decoded.data.relays).toEqual(["wss://r.x.com", "wss://djbas.sadkb.com"]);
+      expect(decoded.data.relays).toStrictEqual(["wss://r.x.com", "wss://djbas.sadkb.com"]);
     }
   });
 });
@@ -130,7 +131,7 @@ describe("issue #130 encoder validation", () => {
   test("hex inputs are validated and normalized to lowercase", () => {
     const decoded = nip19Decode(npubEncode(pk.toUpperCase()));
     expect(decoded.type).toBe("npub");
-    if (decoded.type === "npub") expect(decoded.data).toBe(pk);
+    if (decoded.type === "npub") {expect(decoded.data).toBe(pk);}
     expect(() => npubEncode("nothex")).toThrow();
     expect(() => noteEncode("ab")).toThrow();
     expect(() => nprofileEncode({ pubkey: "zz" })).toThrow();
@@ -151,7 +152,7 @@ describe("issue #130 encoder validation", () => {
     expect(() => naddrEncode({ kind: 2 ** 32, identifier: "x", pubkey: pk })).toThrow(Nip19Error);
     expect(() => naddrEncode({ kind: 1.5, identifier: "x", pubkey: pk })).toThrow(Nip19Error);
     expect(() => neventEncode({ id: pk, kind: 2 ** 32 })).toThrow(Nip19Error);
-    expect(naddrEncode({ kind: 0xffffffff, identifier: "x", pubkey: pk })).toMatch(/^naddr1/);
+    expect(naddrEncode({ kind: 0xFFFFFFFF, identifier: "x", pubkey: pk })).toMatch(/^naddr1/);
   });
 
   test("TLV values over 255 bytes throw Nip19Error", () => {

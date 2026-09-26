@@ -17,7 +17,7 @@ export class ClientBuilder {
     return this;
   }
 
-  relays(urls: readonly string[]): this {
+  relays(urls: ReadonlyArray<string>): this {
     this.#opts = { ...this.#opts, relays: [...urls] };
     return this;
   }
@@ -59,7 +59,7 @@ export class ClientBuilder {
   }
 
   /** `ws://` URLs allowed despite `allowInsecure` being off. */
-  trustedInsecureUrls(urls: readonly string[]): this {
+  trustedInsecureUrls(urls: ReadonlyArray<string>): this {
     this.#opts = { ...this.#opts, trustedInsecureUrls: urls };
     return this;
   }
@@ -77,7 +77,7 @@ export class ClientBuilder {
   }
 
   /** Relays never closed by idle cleanup or `maxRelays` eviction. */
-  pinnedUrls(urls: readonly string[]): this {
+  pinnedUrls(urls: ReadonlyArray<string>): this {
     this.#opts = { ...this.#opts, pinnedUrls: urls };
     return this;
   }
@@ -103,8 +103,8 @@ export class ClientBuilder {
   }
 
   /**
-   * Local event store. Defaults to {@link MemoryEventStore}.
-   * Browser apps that want persistence must pass {@link IndexedDbEventStore} and `await open()`.
+   * Local event store. Defaults to {@link MemoryEventStore}. Browser apps that want persistence must
+   * pass {@link IndexedDbEventStore} and `await open()`.
    */
   storage(store: EventStore): this {
     this.#opts = { ...this.#opts, storage: store };
@@ -112,8 +112,8 @@ export class ClientBuilder {
   }
 
   /**
-   * Synchronous reactive index mirroring ingested events.
-   * Defaults to a new {@link ReactiveEventStore}.
+   * Synchronous reactive index mirroring ingested events. Defaults to a new
+   * {@link ReactiveEventStore}.
    */
   index(index: ReactiveEventStore): this {
     this.#opts = { ...this.#opts, index };

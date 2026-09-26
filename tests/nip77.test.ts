@@ -1,22 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import {
-  Client,
-  EventBuilder,
-  Gossip,
-  Keys,
-  MemoryEventStore,
-  MessageError,
-  Relay,
-  RelayTimeoutError,
-  SyncDirection,
-  encodeClientMessage,
-  parseClientMessage,
-  parseRelayMessage,
-  type Event,
-  type EventStore,
-  type Filter,
-  type PutResult,
-} from "../src/index.ts";
+
+import { Client, EventBuilder, Gossip, Keys, MemoryEventStore, MessageError, Relay, RelayTimeoutError, SyncDirection, encodeClientMessage, parseClientMessage, parseRelayMessage } from '../src/index.ts';
+import type { Event, EventStore, Filter, PutResult } from '../src/index.ts';
 import {
   MAX_NEG_ROUNDS,
   Negentropy,
@@ -26,7 +11,8 @@ import {
   runNegSession,
   storageFromEvents,
 } from "../src/nips/nip77.ts";
-import { createFakeRelayNetwork, type FakeRelayNetwork } from "../src/testing/index.ts";
+import { createFakeRelayNetwork } from '../src/testing/index.ts';
+import type { FakeRelayNetwork } from '../src/testing/index.ts';
 
 const SK_A = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const SK_B = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -40,16 +26,16 @@ function wrapEventStore(
   overrides: Partial<Pick<EventStore, "get" | "query" | "putMany">> = {},
 ): EventStore {
   return {
-    put: (event) => inner.put(event),
-    putMany: overrides.putMany ?? ((events) => inner.putMany(events)),
-    get: overrides.get ?? ((id) => inner.get(id)),
-    query: overrides.query ?? ((filters) => inner.query(filters)),
-    count: (filters) => inner.count(filters),
-    negentropyItems: (filter) => inner.negentropyItems(filter),
-    remove: (ids) => inner.remove(ids),
-    clear: () => inner.clear(),
-    getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-    setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+    put:  async (event) => inner.put(event),
+    putMany: overrides.putMany ?? ( async (events) => inner.putMany(events)),
+    get: overrides.get ?? ( async (id) => inner.get(id)),
+    query: overrides.query ?? ( async (filters) => inner.query(filters)),
+    count:  async (filters) => inner.count(filters),
+    negentropyItems:  async (filter) => inner.negentropyItems(filter),
+    remove:  async (ids) => inner.remove(ids),
+    clear:  async () => inner.clear(),
+    getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+    setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
   };
 }
 
@@ -75,10 +61,10 @@ function runUntilDone(
   }
   for (;;) {
     const out = init.reconcile(incoming.nextMessage!);
-    for (const id of out.have) have.add(id);
-    for (const id of out.need) need.add(id);
+    for (const id of out.have) {have.add(id);}
+    for (const id of out.need) {need.add(id);}
     rounds += 1;
-    if (out.nextMessage === null) return { have: [...have], need: [...need], rounds };
+    if (out.nextMessage === null) {return { have: [...have], need: [...need], rounds };}
     incoming = responder.reconcile(out.nextMessage);
     if (incoming.nextMessage === null) {
       incoming = {
@@ -93,8 +79,8 @@ function runUntilDone(
 describe("NIP-77 message codec", () => {
   test("encodes and parses 4-element NEG-OPEN", () => {
     const wire = encodeClientMessage(["NEG-OPEN", "n1", { kinds: [1] }, "61"]);
-    expect(JSON.parse(wire)).toEqual(["NEG-OPEN", "n1", { kinds: [1] }, "61"]);
-    expect(parseClientMessage(wire)).toEqual(["NEG-OPEN", "n1", { kinds: [1] }, "61"]);
+    expect(JSON.parse(wire)).toStrictEqual(["NEG-OPEN", "n1", { kinds: [1] }, "61"]);
+    expect(parseClientMessage(wire)).toStrictEqual(["NEG-OPEN", "n1", { kinds: [1] }, "61"]);
   });
 
   test("rejects obsolete 5-element NEG-OPEN", () => {
@@ -107,18 +93,18 @@ describe("NIP-77 message codec", () => {
   });
 
   test("parses NEG-MSG / NEG-CLOSE / NEG-ERR", () => {
-    expect(parseClientMessage(JSON.stringify(["NEG-MSG", "n1", "61aa"]))).toEqual([
+    expect(parseClientMessage(JSON.stringify(["NEG-MSG", "n1", "61aa"]))).toStrictEqual([
       "NEG-MSG",
       "n1",
       "61aa",
     ]);
-    expect(parseClientMessage(JSON.stringify(["NEG-CLOSE", "n1"]))).toEqual(["NEG-CLOSE", "n1"]);
-    expect(parseRelayMessage(JSON.stringify(["NEG-MSG", "n1", "61"]))).toEqual([
+    expect(parseClientMessage(JSON.stringify(["NEG-CLOSE", "n1"]))).toStrictEqual(["NEG-CLOSE", "n1"]);
+    expect(parseRelayMessage(JSON.stringify(["NEG-MSG", "n1", "61"]))).toStrictEqual([
       "NEG-MSG",
       "n1",
       "61",
     ]);
-    expect(parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "blocked: too big"]))).toEqual([
+    expect(parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "blocked: too big"]))).toStrictEqual([
       "NEG-ERR",
       "n1",
       "blocked: too big",
@@ -126,12 +112,12 @@ describe("NIP-77 message codec", () => {
   });
 
   test("parses 3- or 4-element NEG-ERR and ignores the optional 4th", () => {
-    expect(parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "blocked: too big", 100]))).toEqual([
+    expect(parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "blocked: too big", 100]))).toStrictEqual([
       "NEG-ERR",
       "n1",
       "blocked: too big",
     ]);
-    expect(parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "error: boom", "ignored"]))).toEqual([
+    expect(parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "error: boom", "ignored"]))).toStrictEqual([
       "NEG-ERR",
       "n1",
       "error: boom",
@@ -156,8 +142,8 @@ describe("Negentropy algorithm", () => {
     const b = new NegentropyStorageVector();
     b.seal();
     const { have, need } = runUntilDone(new Negentropy(a), new Negentropy(b));
-    expect(have).toEqual([]);
-    expect(need).toEqual([]);
+    expect(have).toStrictEqual([]);
+    expect(need).toStrictEqual([]);
   });
 
   test("initiator learns local-only and remote-only ids", () => {
@@ -167,20 +153,20 @@ describe("Negentropy algorithm", () => {
     const init = new Negentropy(storageFromEvents([shared, onlyA]));
     const resp = new Negentropy(storageFromEvents([shared, onlyB]));
     const { have, need } = runUntilDone(init, resp);
-    expect(have).toEqual([onlyA.id]);
-    expect(need).toEqual([onlyB.id]);
+    expect(have).toStrictEqual([onlyA.id]);
+    expect(need).toStrictEqual([onlyB.id]);
   });
 
   test("fingerprint path with >32 items still finds the delta", () => {
     const keys = Keys.fromSecretKey(SK_A);
-    const alice: ReturnType<typeof note>[] = [];
-    const bob: ReturnType<typeof note>[] = [];
+    const alice: Array<ReturnType<typeof note>> = [];
+    const bob: Array<ReturnType<typeof note>> = [];
     for (let i = 0; i < 40; i++) {
       const ev = EventBuilder.textNote(`n${i}`)
         .createdAt(100 + i)
         .signWithKeys(keys);
       alice.push(ev);
-      if (i !== 7 && i !== 33) bob.push(ev);
+      if (i !== 7 && i !== 33) {bob.push(ev);}
     }
     const extra = EventBuilder.textNote("remote")
       .createdAt(999)
@@ -190,8 +176,8 @@ describe("Negentropy algorithm", () => {
       new Negentropy(storageFromEvents(alice)),
       new Negentropy(storageFromEvents(bob)),
     );
-    expect(have.sort()).toEqual([alice[7]!.id, alice[33]!.id].sort());
-    expect(need).toEqual([extra.id]);
+    expect(have.sort()).toStrictEqual([alice[7]!.id, alice[33]!.id].sort());
+    expect(need).toStrictEqual([extra.id]);
   });
 
   test("runNegSession collects have/need until nextMessage is null", async () => {
@@ -211,12 +197,12 @@ describe("Negentropy algorithm", () => {
         incoming = out.nextMessage ?? PROTOCOL_VERSION.toString(16);
       },
       next: async () => {
-        if (incoming === undefined) throw new Error("missing incoming");
+        if (incoming === undefined) {throw new Error("missing incoming");}
         return incoming;
       },
     });
-    expect(have).toEqual([onlyA.id]);
-    expect(need).toEqual([onlyB.id]);
+    expect(have).toStrictEqual([onlyA.id]);
+    expect(need).toStrictEqual([onlyB.id]);
   });
 
   test("runNegSession throws after MAX_NEG_ROUNDS", async () => {
@@ -236,7 +222,7 @@ describe("Negentropy algorithm", () => {
       () => {
         throw new Error("expected reject");
       },
-      (e: unknown) => e,
+      (error: unknown) => error,
     );
     expect(err).toBeInstanceOf(Nip77Error);
     expect((err as Nip77Error).message).toBe("negentropy exceeded max rounds");
@@ -251,8 +237,8 @@ describe("Negentropy algorithm", () => {
     for (const version of ["60", "62", "6f"]) {
       const out = neg.reconcile(version);
       expect(out.nextMessage).toBe("61");
-      expect(out.have).toEqual([]);
-      expect(out.need).toEqual([]);
+      expect(out.have).toStrictEqual([]);
+      expect(out.need).toStrictEqual([]);
     }
   });
 
@@ -291,8 +277,8 @@ describe("Relay.negReconcile + Client.sync", () => {
     });
     const storage = storageFromEvents([localOnly, shared]);
     const { have, need } = await relay.negReconcile({ kinds: [1] }, storage, { timeoutMs: 2000 });
-    expect(have).toEqual([localOnly.id]);
-    expect(need).toEqual([remoteOnly.id]);
+    expect(have).toStrictEqual([localOnly.id]);
+    expect(need).toStrictEqual([remoteOnly.id]);
     relay.close();
   });
 
@@ -306,11 +292,11 @@ describe("Relay.negReconcile + Client.sync", () => {
     const reply = new Promise<unknown>((resolve) => {
       ws.addEventListener("message", (ev) => resolve(JSON.parse(ev.data)));
       ws.addEventListener(
-        "open" as string,
-        (() => ws.send(JSON.stringify(["NEG-OPEN", "sub1", { kinds: [1] }, "62"]))) as never,
+        "open",
+        (() => ws.send(JSON.stringify(["NEG-OPEN", "sub1", { kinds: [1] }, "62"]))),
       );
     });
-    expect(await reply).toEqual(["NEG-MSG", "sub1", "61"]);
+    await expect(reply).resolves.toStrictEqual(["NEG-MSG", "sub1", "61"]);
     ws.close();
   });
 
@@ -329,10 +315,10 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Down, timeoutMs: 2000 },
     );
-    expect(summary.remote).toEqual([remote.id]);
-    expect(summary.received).toEqual([remote.id]);
-    expect(summary.persistFailures).toEqual({});
-    expect(await store.get(remote.id)).toBeDefined();
+    expect(summary.remote).toStrictEqual([remote.id]);
+    expect(summary.received).toStrictEqual([remote.id]);
+    expect(summary.persistFailures).toStrictEqual({});
+    await expect(store.get(remote.id)).resolves.toBeDefined();
     await client.shutdown();
   });
 
@@ -351,9 +337,9 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Up, timeoutMs: 2000 },
     );
-    expect(summary.local).toEqual([local.id]);
-    expect(summary.sent).toEqual([local.id]);
-    expect(summary.persistFailures).toEqual({});
+    expect(summary.local).toStrictEqual([local.id]);
+    expect(summary.sent).toStrictEqual([local.id]);
+    expect(summary.persistFailures).toStrictEqual({});
     expect(
       net
         .relay("wss://neg.example")
@@ -366,16 +352,16 @@ describe("Relay.negReconcile + Client.sync", () => {
   test("Client.syncToRelay up loads via query not get", async () => {
     const events = [note(SK_A, "a", 1), note(SK_A, "b", 2), note(SK_A, "c", 3)];
     const inner = new MemoryEventStore();
-    for (const event of events) await inner.put(event);
+    for (const event of events) {await inner.put(event);}
     let getCount = 0;
     let queryCount = 0;
     let queried: Filter[] | undefined;
     const store = wrapEventStore(inner, {
-      get: (id) => {
+      get:  async (id) => {
         getCount += 1;
         return inner.get(id);
       },
-      query: (filters) => {
+      query:  async (filters) => {
         queryCount += 1;
         queried = filters;
         return inner.query(filters);
@@ -400,9 +386,9 @@ describe("Relay.negReconcile + Client.sync", () => {
     expect(queried).toHaveLength(1);
     expect(queried![0]!.ids).toBeDefined();
     expect(queried![0]!.kinds).toBeUndefined();
-    expect(new Set(queried![0]!.ids)).toEqual(new Set(events.map((event) => event.id)));
-    expect(new Set(summary.sent)).toEqual(new Set(events.map((event) => event.id)));
-    expect(summary.persistFailures).toEqual({});
+    expect(new Set(queried![0]!.ids)).toStrictEqual(new Set(events.map((event) => event.id)));
+    expect(new Set(summary.sent)).toStrictEqual(new Set(events.map((event) => event.id)));
+    expect(summary.persistFailures).toStrictEqual({});
     await client.shutdown();
   });
 
@@ -414,11 +400,11 @@ describe("Relay.negReconcile + Client.sync", () => {
     let getCount = 0;
     let queryCount = 0;
     const store = wrapEventStore(inner, {
-      get: (id) => {
+      get:  async (id) => {
         getCount += 1;
         return inner.get(id);
       },
-      query: (filters) => {
+      query:  async (filters) => {
         queryCount += 1;
         return inner.query(filters);
       },
@@ -436,9 +422,9 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Up, timeoutMs: 2000 },
     );
-    expect(summary.local).toEqual([]);
-    expect(summary.sent).toEqual([]);
-    expect(summary.persistFailures).toEqual({});
+    expect(summary.local).toStrictEqual([]);
+    expect(summary.sent).toStrictEqual([]);
+    expect(summary.persistFailures).toStrictEqual({});
     expect(queryCount).toBe(0);
     expect(getCount).toBe(0);
     await client.shutdown();
@@ -479,8 +465,8 @@ describe("Relay.negReconcile + Client.sync", () => {
     );
     expect(maxInflight).toBeGreaterThan(1);
     expect(maxInflight).toBe(8);
-    expect(new Set(summary.sent)).toEqual(new Set(events.map((event) => event.id)));
-    expect(summary.persistFailures).toEqual({});
+    expect(new Set(summary.sent)).toStrictEqual(new Set(events.map((event) => event.id)));
+    expect(summary.persistFailures).toStrictEqual({});
     await client.shutdown();
   });
 
@@ -488,12 +474,12 @@ describe("Relay.negReconcile + Client.sync", () => {
     const events = [note(SK_A, "a", 1), note(SK_A, "b", 2), note(SK_A, "c", 3)];
     const missing = events[1]!;
     const inner = new MemoryEventStore();
-    for (const event of events) await inner.put(event);
+    for (const event of events) {await inner.put(event);}
     let getCount = 0;
     let queryCount = 0;
     let queried: Filter[] | undefined;
     const store = wrapEventStore(inner, {
-      get: (id) => {
+      get:  async (id) => {
         getCount += 1;
         return inner.get(id);
       },
@@ -523,11 +509,11 @@ describe("Relay.negReconcile + Client.sync", () => {
     expect(queried).toHaveLength(1);
     expect(queried![0]!.ids).toBeDefined();
     expect(queried![0]!.kinds).toBeUndefined();
-    expect(new Set(queried![0]!.ids)).toEqual(new Set(events.map((event) => event.id)));
+    expect(new Set(queried![0]!.ids)).toStrictEqual(new Set(events.map((event) => event.id)));
     expect(summary.sendFailures[missing.id]).toBe("event not found in local store");
-    expect(Object.keys(summary.sendFailures)).toEqual([missing.id]);
-    expect(summary.persistFailures).toEqual({});
-    expect(new Set(summary.sent)).toEqual(
+    expect(Object.keys(summary.sendFailures)).toStrictEqual([missing.id]);
+    expect(summary.persistFailures).toStrictEqual({});
+    expect(new Set(summary.sent)).toStrictEqual(
       new Set(events.filter((event) => event.id !== missing.id).map((event) => event.id)),
     );
     await client.shutdown();
@@ -537,7 +523,7 @@ describe("Relay.negReconcile + Client.sync", () => {
     const events = [note(SK_A, "a", 1), note(SK_A, "b", 2), note(SK_A, "c", 3)];
     const boom = events[1]!;
     const store = new MemoryEventStore();
-    for (const event of events) await store.put(event);
+    for (const event of events) {await store.put(event);}
     const client = Client.builder()
       .storage(store)
       .relays(["wss://neg.example"])
@@ -547,7 +533,7 @@ describe("Relay.negReconcile + Client.sync", () => {
     await client.connect();
     const origPublish = client.pool.publish.bind(client.pool);
     client.pool.publish = async (relays, event, opts) => {
-      if (event.id === boom.id) throw new Error("boom");
+      if (event.id === boom.id) {throw new Error("boom");}
       return origPublish(relays, event, opts);
     };
     const summary = await client.syncToRelay(
@@ -556,9 +542,9 @@ describe("Relay.negReconcile + Client.sync", () => {
       { direction: SyncDirection.Up, timeoutMs: 2000 },
     );
     expect(summary.sendFailures[boom.id]).toBe("boom");
-    expect(Object.keys(summary.sendFailures)).toEqual([boom.id]);
-    expect(summary.persistFailures).toEqual({});
-    expect(new Set(summary.sent)).toEqual(
+    expect(Object.keys(summary.sendFailures)).toStrictEqual([boom.id]);
+    expect(summary.persistFailures).toStrictEqual({});
+    expect(new Set(summary.sent)).toStrictEqual(
       new Set(events.filter((event) => event.id !== boom.id).map((event) => event.id)),
     );
     await client.shutdown();
@@ -579,10 +565,10 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Both, dryRun: true, timeoutMs: 2000 },
     );
-    expect(summary.remote).toEqual([remote.id]);
-    expect(summary.received).toEqual([]);
-    expect(summary.persistFailures).toEqual({});
-    expect(await store.get(remote.id)).toBeUndefined();
+    expect(summary.remote).toStrictEqual([remote.id]);
+    expect(summary.received).toStrictEqual([]);
+    expect(summary.persistFailures).toStrictEqual({});
+    await expect(store.get(remote.id)).resolves.toBeUndefined();
     await client.shutdown();
   });
 
@@ -593,22 +579,22 @@ describe("Relay.negReconcile + Client.sync", () => {
     const inner = new MemoryEventStore();
     await inner.put(local);
     const store: EventStore = {
-      put: (event) => inner.put(event),
+      put:  async (event) => inner.put(event),
       putMany: async (events) => {
         const out: PutResult[] = [];
-        for (const event of events) out.push(await inner.put(event));
+        for (const event of events) {out.push(await inner.put(event));}
         return out;
       },
-      get: (id) => inner.get(id),
+      get:  async (id) => inner.get(id),
       query: async () => {
         throw new Error("query should not be called");
       },
-      count: (filters) => inner.count(filters),
-      negentropyItems: (filter) => inner.negentropyItems(filter),
-      remove: (ids) => inner.remove(ids),
-      clear: () => inner.clear(),
-      getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+      count:  async (filters) => inner.count(filters),
+      negentropyItems:  async (filter) => inner.negentropyItems(filter),
+      remove:  async (ids) => inner.remove(ids),
+      clear:  async () => inner.clear(),
+      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
     const client = Client.builder()
       .storage(store)
@@ -623,11 +609,11 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Both, dryRun: true, timeoutMs: 2000 },
     );
-    expect(summary.local).toEqual([local.id]);
-    expect(summary.remote).toEqual([remote.id]);
-    expect(summary.sent).toEqual([]);
-    expect(summary.received).toEqual([]);
-    expect(summary.persistFailures).toEqual({});
+    expect(summary.local).toStrictEqual([local.id]);
+    expect(summary.remote).toStrictEqual([remote.id]);
+    expect(summary.sent).toStrictEqual([]);
+    expect(summary.received).toStrictEqual([]);
+    expect(summary.persistFailures).toStrictEqual({});
     await client.shutdown();
   });
 
@@ -640,7 +626,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         method = "put";
         throw new Error("disk full");
       },
-      async putMany(_events: readonly Event[]): Promise<PutResult[]> {
+      async putMany(_events: ReadonlyArray<Event>): Promise<PutResult[]> {
         method = "putMany";
         throw new Error("disk full");
       },
@@ -675,11 +661,11 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Down, timeoutMs: 2000, observe: false },
     );
-    expect(summary.remote).toEqual([remote.id]);
-    expect(summary.received).toEqual([remote.id]);
-    expect(summary.persistFailures).toEqual({});
+    expect(summary.remote).toStrictEqual([remote.id]);
+    expect(summary.received).toStrictEqual([remote.id]);
+    expect(summary.persistFailures).toStrictEqual({});
     expect(method).toBe("");
-    expect(await store.get(remote.id)).toBeUndefined();
+    await expect(store.get(remote.id)).resolves.toBeUndefined();
     await client.shutdown();
   });
 
@@ -692,7 +678,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         method = "put";
         throw new Error("disk full");
       },
-      async putMany(_events: readonly Event[]): Promise<PutResult[]> {
+      async putMany(_events: ReadonlyArray<Event>): Promise<PutResult[]> {
         method = "putMany";
         throw new Error("disk full");
       },
@@ -727,18 +713,18 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Down, timeoutMs: 2000 },
     );
-    expect(summary.remote).toEqual([remote.id]);
-    expect(summary.received).toEqual([]);
+    expect(summary.remote).toStrictEqual([remote.id]);
+    expect(summary.received).toStrictEqual([]);
     expect(summary.persistFailures[remote.id]).toBe("disk full");
-    expect(Object.keys(summary.persistFailures)).toEqual([remote.id]);
+    expect(Object.keys(summary.persistFailures)).toStrictEqual([remote.id]);
     expect(method).toBe("putMany");
-    expect(await store.get(remote.id)).toBeUndefined();
+    await expect(store.get(remote.id)).resolves.toBeUndefined();
     await client.shutdown();
   });
 
   test("Client.sync down putMany throw does not fetch remaining need batches", async () => {
     const remotes: Event[] = [];
-    for (let i = 0; i < 200; i++) remotes.push(note(SK_B, `batch-${i}`, 1000 + i));
+    for (let i = 0; i < 200; i++) {remotes.push(note(SK_B, `batch-${i}`, 1000 + i));}
     net.relay("wss://neg.example").seed(remotes);
     const inner = new MemoryEventStore();
     let putManyCalls = 0;
@@ -772,16 +758,16 @@ describe("Relay.negReconcile + Client.sync", () => {
     expect(fetchCalls).toBe(1);
     expect(putManyCalls).toBe(1);
     expect(fetchedIds).toHaveLength(100);
-    expect(summary.received).toEqual([]);
+    expect(summary.received).toStrictEqual([]);
     expect(summary.remote).toHaveLength(200);
-    expect(new Set(summary.remote)).toEqual(new Set(remotes.map((event) => event.id)));
-    expect(Object.keys(summary.persistFailures).sort()).toEqual([...fetchedIds].sort());
+    expect(new Set(summary.remote)).toStrictEqual(new Set(remotes.map((event) => event.id)));
+    expect(Object.keys(summary.persistFailures).sort()).toStrictEqual([...fetchedIds].sort());
     for (const id of fetchedIds) {
       expect(summary.persistFailures[id]).toBe("disk full");
     }
     const unfetched = summary.remote.filter((id) => !Object.hasOwn(summary.persistFailures, id));
     expect(unfetched).toHaveLength(100);
-    expect(new Set([...fetchedIds, ...unfetched])).toEqual(new Set(summary.remote));
+    expect(new Set([...fetchedIds, ...unfetched])).toStrictEqual(new Set(summary.remote));
     await client.shutdown();
   });
 
@@ -793,7 +779,7 @@ describe("Relay.negReconcile + Client.sync", () => {
     const inner = new MemoryEventStore();
     const store = wrapEventStore(inner, {
       putMany: async (events) => {
-        if (events.some((event) => event.id === failRemote.id)) throw new Error("disk full");
+        if (events.some((event) => event.id === failRemote.id)) {throw new Error("disk full");}
         return inner.putMany(events);
       },
     });
@@ -810,11 +796,11 @@ describe("Relay.negReconcile + Client.sync", () => {
       { direction: SyncDirection.Down, timeoutMs: 2000 },
     );
     expect(summary.persistFailures[failRemote.id]).toBe("disk full");
-    expect(Object.keys(summary.persistFailures)).toEqual([failRemote.id]);
-    expect(summary.received).toEqual([okRemote.id]);
-    expect(new Set(summary.remote)).toEqual(new Set([failRemote.id, okRemote.id]));
-    expect(await inner.get(okRemote.id)).toBeDefined();
-    expect(await inner.get(failRemote.id)).toBeUndefined();
+    expect(Object.keys(summary.persistFailures)).toStrictEqual([failRemote.id]);
+    expect(summary.received).toStrictEqual([okRemote.id]);
+    expect(new Set(summary.remote)).toStrictEqual(new Set([failRemote.id, okRemote.id]));
+    await expect(inner.get(okRemote.id)).resolves.toBeDefined();
+    await expect(inner.get(failRemote.id)).resolves.toBeUndefined();
     await client.shutdown();
   });
 
@@ -838,17 +824,17 @@ describe("Relay.negReconcile + Client.sync", () => {
       putMany: async (events) => {
         persistCalls.push(`putMany:${events.length}`);
         const out: PutResult[] = [];
-        for (const event of events) out.push(await inner.put(event));
+        for (const event of events) {out.push(await inner.put(event));}
         return out;
       },
-      get: (id) => inner.get(id),
-      query: (filters) => inner.query(filters),
-      count: (filters) => inner.count(filters),
-      negentropyItems: (filter) => inner.negentropyItems(filter),
-      remove: (ids) => inner.remove(ids),
-      clear: () => inner.clear(),
-      getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+      get:  async (id) => inner.get(id),
+      query:  async (filters) => inner.query(filters),
+      count:  async (filters) => inner.count(filters),
+      negentropyItems:  async (filter) => inner.negentropyItems(filter),
+      remove:  async (ids) => inner.remove(ids),
+      clear:  async () => inner.clear(),
+      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
     const client = Client.builder()
       .storage(store)
@@ -863,11 +849,11 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Down, timeoutMs: 2000 },
     );
-    expect(summary.received).toEqual([remote.id]);
-    expect(summary.persistFailures).toEqual({});
-    expect(persistCalls).toEqual([]);
+    expect(summary.received).toStrictEqual([remote.id]);
+    expect(summary.persistFailures).toStrictEqual({});
+    expect(persistCalls).toStrictEqual([]);
     expect(ingested).toBe(1);
-    expect(await inner.get(remote.id)).toBeUndefined();
+    await expect(inner.get(remote.id)).resolves.toBeUndefined();
     await client.shutdown();
   });
 
@@ -891,17 +877,17 @@ describe("Relay.negReconcile + Client.sync", () => {
       putMany: async (events) => {
         persistCalls.push(`putMany:${events.length}`);
         const out: PutResult[] = [];
-        for (const event of events) out.push(await inner.put(event));
+        for (const event of events) {out.push(await inner.put(event));}
         return out;
       },
-      get: (id) => inner.get(id),
-      query: (filters) => inner.query(filters),
-      count: (filters) => inner.count(filters),
-      negentropyItems: (filter) => inner.negentropyItems(filter),
-      remove: (ids) => inner.remove(ids),
-      clear: () => inner.clear(),
-      getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+      get:  async (id) => inner.get(id),
+      query:  async (filters) => inner.query(filters),
+      count:  async (filters) => inner.count(filters),
+      negentropyItems:  async (filter) => inner.negentropyItems(filter),
+      remove:  async (ids) => inner.remove(ids),
+      clear:  async () => inner.clear(),
+      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
     const client = Client.builder()
       .storage(store)
@@ -916,11 +902,11 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Down, timeoutMs: 2000 },
     );
-    expect(summary.received).toEqual([remote.id]);
-    expect(summary.persistFailures).toEqual({});
-    expect(persistCalls).toEqual([`putMany:1`]);
+    expect(summary.received).toStrictEqual([remote.id]);
+    expect(summary.persistFailures).toStrictEqual({});
+    expect(persistCalls).toStrictEqual([`putMany:1`]);
     expect(ingested).toBe(1);
-    expect(await inner.get(remote.id)).toBeDefined();
+    await expect(inner.get(remote.id)).resolves.toBeDefined();
     await client.shutdown();
   });
 
@@ -944,17 +930,17 @@ describe("Relay.negReconcile + Client.sync", () => {
       putMany: async (events) => {
         persistCalls.push(`putMany:${events.length}`);
         const out: PutResult[] = [];
-        for (const event of events) out.push(await inner.put(event));
+        for (const event of events) {out.push(await inner.put(event));}
         return out;
       },
-      get: (id) => inner.get(id),
-      query: (filters) => inner.query(filters),
-      count: (filters) => inner.count(filters),
-      negentropyItems: (filter) => inner.negentropyItems(filter),
-      remove: (ids) => inner.remove(ids),
-      clear: () => inner.clear(),
-      getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+      get:  async (id) => inner.get(id),
+      query:  async (filters) => inner.query(filters),
+      count:  async (filters) => inner.count(filters),
+      negentropyItems:  async (filter) => inner.negentropyItems(filter),
+      remove:  async (ids) => inner.remove(ids),
+      clear:  async () => inner.clear(),
+      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
     const client = Client.builder()
       .storage(store)
@@ -969,11 +955,11 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Down, timeoutMs: 2000, observe: false },
     );
-    expect(summary.received).toEqual([remote.id]);
-    expect(summary.persistFailures).toEqual({});
-    expect(persistCalls).toEqual([]);
+    expect(summary.received).toStrictEqual([remote.id]);
+    expect(summary.persistFailures).toStrictEqual({});
+    expect(persistCalls).toStrictEqual([]);
     expect(ingested).toBe(0);
-    expect(await inner.get(remote.id)).toBeUndefined();
+    await expect(inner.get(remote.id)).resolves.toBeUndefined();
     await client.shutdown();
   });
 
@@ -1025,9 +1011,9 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Down, timeoutMs: 2000 },
     );
-    expect(summary.remote).toEqual([remote.id]);
-    expect(summary.received).toEqual([]);
-    expect(summary.persistFailures).toEqual({});
+    expect(summary.remote).toStrictEqual([remote.id]);
+    expect(summary.received).toStrictEqual([]);
+    expect(summary.persistFailures).toStrictEqual({});
     expect(ingested).toBe(0);
     await client.shutdown();
   });
@@ -1038,7 +1024,7 @@ describe("Relay.negReconcile + Client.sync", () => {
 
     class SwallowSilent extends net.websocketImplementation {
       override send(data: string): void {
-        if ((this as { url?: string }).url?.includes("silent-neg.example")) return;
+        if ((this as { url?: string }).url?.includes("silent-neg.example")) {return;}
         super.send(data);
       }
     }
@@ -1055,10 +1041,10 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Down, timeoutMs: 150 },
     );
-    expect(summary.remote).toEqual([remote.id]);
-    expect(summary.received).toEqual([remote.id]);
-    expect(summary.persistFailures).toEqual({});
-    expect(await store.get(remote.id)).toBeDefined();
+    expect(summary.remote).toStrictEqual([remote.id]);
+    expect(summary.received).toStrictEqual([remote.id]);
+    expect(summary.persistFailures).toStrictEqual({});
+    await expect(store.get(remote.id)).resolves.toBeDefined();
     await client.shutdown();
   });
 });
@@ -1072,7 +1058,7 @@ describe("Negentropy session timeout", () => {
     return class extends FakeWS {
       override send(data: string): void {
         const msg = JSON.parse(data) as unknown[];
-        if (typeof msg[0] === "string" && msg[0].startsWith("NEG-")) return;
+        if (typeof msg[0] === "string" && msg[0].startsWith("NEG-")) {return;}
         super.send(data);
       }
     };
@@ -1117,7 +1103,7 @@ describe("Negentropy session timeout", () => {
       .sync({ kinds: [1] }, { direction: SyncDirection.Down, timeoutMs: 80 })
       .then(
         () => null,
-        (err: unknown) => err,
+        (error: unknown) => error,
       );
     expect(syncErr).toBeInstanceOf(RelayTimeoutError);
     expect((syncErr as Error).message).toMatch(
@@ -1152,8 +1138,8 @@ describe("issue #125", () => {
       { kinds: [1], limit: 1 },
       { direction: SyncDirection.Down, timeoutMs: 2000 },
     );
-    expect(summary.remote).toEqual([notes[2]!.id]);
-    expect(summary.received).toEqual([notes[2]!.id]);
+    expect(summary.remote).toStrictEqual([notes[2]!.id]);
+    expect(summary.received).toStrictEqual([notes[2]!.id]);
     await client.shutdown();
   });
 });

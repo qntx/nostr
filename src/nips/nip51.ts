@@ -1,8 +1,7 @@
 /**
- * NIP-51: Lists
- * Public tags plus NIP-44 private `.content` (author encrypts to self).
- * Crypto is injected; this module does not import signer. No NIP-04 sniff.
- * Kind 10063 Blossom servers live in blossom.ts.
+ * NIP-51: Lists Public tags plus NIP-44 private `.content` (author encrypts to self). Crypto is
+ * injected; this module does not import signer. No NIP-04 sniff. Kind 10063 Blossom servers live in
+ * blossom.ts.
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/51.md
  */
@@ -14,9 +13,8 @@ import { getDTag, isTag, Tag } from "../core/tag.ts";
 import { assertHex32, isHex32, normalizeURL } from "../core/util.ts";
 
 /**
- * Structural crypto used by NIP-51 private tags.
- * Satisfied by NostrSigner when nip44Encrypt/nip44Decrypt are present.
- * This module must not import src/signer/.
+ * Structural crypto used by NIP-51 private tags. Satisfied by NostrSigner when
+ * nip44Encrypt/nip44Decrypt are present. This module must not import src/signer/.
  */
 export type Nip51Crypto = {
   getPublicKey(): Promise<string>;
@@ -40,14 +38,14 @@ function collectRelays(tags: Event["tags"]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const tag of tags) {
-    if (tag[0] !== "relay" || !tag[1]) continue;
+    if (tag[0] !== "relay" || !tag[1]) {continue;}
     let url: string;
     try {
       url = normalizeURL(tag[1]);
     } catch {
       continue;
     }
-    if (seen.has(url)) continue;
+    if (seen.has(url)) {continue;}
     seen.add(url);
     out.push(url);
   }
@@ -57,10 +55,10 @@ function collectRelays(tags: Event["tags"]): string[] {
 function collectEmoji(tags: Event["tags"]): Array<{ shortcode: string; url: string }> {
   const out: Array<{ shortcode: string; url: string }> = [];
   for (const tag of tags) {
-    if (tag[0] !== "emoji") continue;
+    if (tag[0] !== "emoji") {continue;}
     const shortcode = tag[1];
     const url = tag[2];
-    if (!shortcode || !url) continue;
+    if (!shortcode || !url) {continue;}
     out.push({ shortcode, url });
   }
   return out;
@@ -68,7 +66,7 @@ function collectEmoji(tags: Event["tags"]): Array<{ shortcode: string; url: stri
 
 function firstTagValue(tags: Event["tags"], name: string): string | undefined {
   for (const tag of tags) {
-    if (tag[0] === name && tag[1]) return tag[1];
+    if (tag[0] === name && tag[1]) {return tag[1];}
   }
   return undefined;
 }
@@ -80,10 +78,10 @@ function identifier(tags: Event["tags"]): string {
 /** NIP-51 a-tag: `30002:<64-hex-pubkey>:<d>` with `d` possibly containing `:`. */
 function isRelaySetAddress(value: string): boolean {
   const kindSep = value.indexOf(":");
-  if (kindSep < 0) return false;
-  if (value.slice(0, kindSep) !== String(Kind.RelaySets)) return false;
+  if (kindSep === -1) {return false;}
+  if (value.slice(0, kindSep) !== String(Kind.RelaySets)) {return false;}
   const pkSep = value.indexOf(":", kindSep + 1);
-  if (pkSep < 0) return false;
+  if (pkSep === -1) {return false;}
   const pubkey = value.slice(kindSep + 1, pkSep);
   const d = value.slice(pkSep + 1);
   return isHex32(pubkey.toLowerCase()) && d.length > 0;
@@ -95,14 +93,14 @@ export function parseMuteList(event: Pick<Event, "kind" | "tags">): MuteItem[] {
   const items: MuteItem[] = [];
   for (const tag of event.tags) {
     const value = tag[1];
-    if (!value) continue;
+    if (!value) {continue;}
     switch (tag[0]) {
       case "p":
         if (isHex32(value.toLowerCase()))
-          items.push({ type: "pubkey", value: value.toLowerCase() });
+          {items.push({ type: "pubkey", value: value.toLowerCase() });}
         break;
       case "e":
-        if (isHex32(value.toLowerCase())) items.push({ type: "event", value: value.toLowerCase() });
+        if (isHex32(value.toLowerCase())) {items.push({ type: "event", value: value.toLowerCase() });}
         break;
       case "t":
         // NIP-51 does not require hashtag case-folding.
@@ -117,7 +115,7 @@ export function parseMuteList(event: Pick<Event, "kind" | "tags">): MuteItem[] {
 }
 
 /** Build an unsigned kind:10000 EventBuilder from public mute items. */
-export function muteListEventBuilder(items: readonly MuteItem[]): EventBuilder {
+export function muteListEventBuilder(items: ReadonlyArray<MuteItem>): EventBuilder {
   const b = new EventBuilder(Kind.MuteList, "");
   for (const item of items) {
     switch (item.type) {
@@ -128,10 +126,10 @@ export function muteListEventBuilder(items: readonly MuteItem[]): EventBuilder {
         b.tag(Tag.e(assertHex32(item.value, "event id")));
         break;
       case "hashtag":
-        if (item.value) b.tag(Tag.t(item.value));
+        if (item.value) {b.tag(Tag.t(item.value));}
         break;
       case "word":
-        if (item.value) b.tag(["word", item.value.toLowerCase()]);
+        if (item.value) {b.tag(["word", item.value.toLowerCase()]);}
         break;
     }
   }
@@ -153,7 +151,7 @@ export async function decryptPrivateTags(
   event: Pick<Event, "pubkey" | "content">,
 ): Promise<Event["tags"]> {
   // NIP-44 rejects empty plaintext; empty `.content` means no private items.
-  if (event.content === "") return [];
+  if (event.content === "") {return [];}
   const self = await crypto.getPublicKey();
   if (self.toLowerCase() !== event.pubkey.toLowerCase()) {
     throw new EventValidationError("NIP-51 private content is only for the author");
@@ -162,8 +160,8 @@ export async function decryptPrivateTags(
   let parsed: unknown;
   try {
     parsed = JSON.parse(plaintext);
-  } catch (cause) {
-    throw new EventValidationError("invalid NIP-51 private tags", { cause });
+  } catch (error) {
+    throw new EventValidationError("invalid NIP-51 private tags", { error });
   }
   if (!Array.isArray(parsed) || !parsed.every(isTag)) {
     throw new EventValidationError("invalid NIP-51 private tags");
@@ -189,16 +187,16 @@ export function parsePinList(event: Pick<Event, "kind" | "tags">): string[] {
   requireKind(event, Kind.PinList);
   const ids: string[] = [];
   for (const tag of event.tags) {
-    if (tag[0] !== "e" || !tag[1] || !isHex32(tag[1].toLowerCase())) continue;
+    if (tag[0] !== "e" || !tag[1] || !isHex32(tag[1].toLowerCase())) {continue;}
     ids.push(tag[1].toLowerCase());
   }
   return ids;
 }
 
 /** Build an unsigned kind:10001 EventBuilder from event ids. */
-export function pinListEventBuilder(ids: readonly string[]): EventBuilder {
+export function pinListEventBuilder(ids: ReadonlyArray<string>): EventBuilder {
   const b = new EventBuilder(Kind.PinList, "");
-  for (const id of ids) b.tag(Tag.e(assertHex32(id, "event id")));
+  for (const id of ids) {b.tag(Tag.e(assertHex32(id, "event id")));}
   return b;
 }
 
@@ -211,9 +209,9 @@ export function parseBookmarkList(event: Pick<Event, "kind" | "tags">): {
   const e: string[] = [];
   const a: string[] = [];
   for (const tag of event.tags) {
-    if (!tag[1]) continue;
+    if (!tag[1]) {continue;}
     if (tag[0] === "e") {
-      if (isHex32(tag[1].toLowerCase())) e.push(tag[1].toLowerCase());
+      if (isHex32(tag[1].toLowerCase())) {e.push(tag[1].toLowerCase());}
     } else if (tag[0] === "a") {
       a.push(tag[1]);
     }
@@ -223,16 +221,16 @@ export function parseBookmarkList(event: Pick<Event, "kind" | "tags">): {
 
 /** Build an unsigned kind:10003 EventBuilder from public bookmark pointers. */
 export function bookmarkListEventBuilder(items: {
-  e?: readonly string[];
-  a?: readonly string[];
+  e?: ReadonlyArray<string>;
+  a?: ReadonlyArray<string>;
 }): EventBuilder {
   const b = new EventBuilder(Kind.BookmarkList, "");
   if (items.e) {
-    for (const id of items.e) b.tag(Tag.e(assertHex32(id, "event id")));
+    for (const id of items.e) {b.tag(Tag.e(assertHex32(id, "event id")));}
   }
   if (items.a) {
     for (const coord of items.a) {
-      if (coord) b.tag(Tag.a(coord));
+      if (coord) {b.tag(Tag.a(coord));}
     }
   }
   return b;
@@ -246,7 +244,7 @@ export function parseUserEmojiList(event: Pick<Event, "kind" | "tags">): {
   requireKind(event, Kind.UserEmojiList);
   const sets: string[] = [];
   for (const tag of event.tags) {
-    if (tag[0] === "a" && tag[1]) sets.push(tag[1]);
+    if (tag[0] === "a" && tag[1]) {sets.push(tag[1]);}
   }
   return { emoji: collectEmoji(event.tags), sets };
 }
@@ -268,7 +266,7 @@ export function parseFavoriteRelays(event: Pick<Event, "kind" | "tags">): {
   requireKind(event, Kind.FavoriteRelays);
   const sets: string[] = [];
   for (const tag of event.tags) {
-    if (tag[0] !== "a" || !tag[1] || !isRelaySetAddress(tag[1])) continue;
+    if (tag[0] !== "a" || !tag[1] || !isRelaySetAddress(tag[1])) {continue;}
     sets.push(tag[1]);
   }
   return { relays: collectRelays(event.tags), sets };
@@ -296,7 +294,7 @@ export function parseFollowPack(event: Pick<Event, "kind" | "tags">): {
   requireKind(event, Kind.StarterPack);
   const pubkeys: string[] = [];
   for (const tag of event.tags) {
-    if (tag[0] !== "p" || !tag[1] || !isHex32(tag[1].toLowerCase())) continue;
+    if (tag[0] !== "p" || !tag[1] || !isHex32(tag[1].toLowerCase())) {continue;}
     pubkeys.push(tag[1].toLowerCase());
   }
   return { d: identifier(event.tags), pubkeys };

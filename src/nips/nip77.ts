@@ -1,10 +1,10 @@
 /**
- * NIP-77: Negentropy Syncing.
- * Transport-free V1 algorithm. Does not import relay or client.
+ * NIP-77: Negentropy Syncing. Transport-free V1 algorithm. Does not import relay or client.
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/77.md
  */
 import { sha256 } from "@noble/hashes/sha2.js";
+
 import { NostrError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { assertHex32, bytesToHex, hexToBytes } from "../core/util.ts";
@@ -84,7 +84,7 @@ class EncodedBuf {
   }
 
   shift(): number {
-    if (this.length === 0) throw new Nip77Error("parse ends prematurely");
+    if (this.length === 0) {throw new Nip77Error("parse ends prematurely");}
     const first = this.#raw[0]!;
     this.#raw = this.#raw.subarray(1);
     this.length -= 1;
@@ -92,7 +92,7 @@ class EncodedBuf {
   }
 
   shiftN(n: number): Uint8Array {
-    if (this.length < n) throw new Nip77Error("parse ends prematurely");
+    if (this.length < n) {throw new Nip77Error("parse ends prematurely");}
     const head = this.#raw.subarray(0, n);
     this.#raw = this.#raw.subarray(n);
     this.length -= n;
@@ -105,13 +105,13 @@ function decodeVarInt(buf: EncodedBuf): number {
   for (;;) {
     const byte = buf.shift();
     res = (res << 7) | (byte & 127);
-    if ((byte & 128) === 0) break;
+    if ((byte & 128) === 0) {break;}
   }
   return res;
 }
 
 function encodeVarInt(n: number): EncodedBuf {
-  if (n === 0) return new EncodedBuf(new Uint8Array([0]));
+  if (n === 0) {return new EncodedBuf(new Uint8Array([0]));}
   const digits: number[] = [];
   let value = n;
   while (value !== 0) {
@@ -119,7 +119,7 @@ function encodeVarInt(n: number): EncodedBuf {
     value >>>= 7;
   }
   digits.reverse();
-  for (let i = 0; i < digits.length - 1; i++) digits[i]! |= 128;
+  for (let i = 0; i < digits.length - 1; i++) {digits[i]! |= 128;}
   return new EncodedBuf(new Uint8Array(digits));
 }
 
@@ -128,7 +128,7 @@ function getBytes(buf: EncodedBuf, n: number): Uint8Array {
 }
 
 class Accumulator {
-  #buf: Uint8Array;
+  readonly #buf: Uint8Array;
 
   constructor() {
     this.#buf = new Uint8Array(ID_SIZE);
@@ -141,7 +141,7 @@ class Accumulator {
     for (let i = 0; i < 8; i++) {
       const offset = i * 4;
       const next = view.getUint32(offset, true) + carry + otherView.getUint32(offset, true);
-      carry = next > 0xffffffff ? 1 : 0;
+      carry = next > 0xFFFFFFFF ? 1 : 0;
       view.setUint32(offset, next >>> 0, true);
     }
   }
@@ -157,32 +157,32 @@ class Accumulator {
 function compareBytes(a: Uint8Array, b: Uint8Array): number {
   const n = Math.min(a.byteLength, b.byteLength);
   for (let i = 0; i < n; i++) {
-    if (a[i]! < b[i]!) return -1;
-    if (a[i]! > b[i]!) return 1;
+    if (a[i]! < b[i]!) {return -1;}
+    if (a[i]! > b[i]!) {return 1;}
   }
-  if (a.byteLength > b.byteLength) return 1;
-  if (a.byteLength < b.byteLength) return -1;
+  if (a.byteLength > b.byteLength) {return 1;}
+  if (a.byteLength < b.byteLength) {return -1;}
   return 0;
 }
 
 function compareNegItems(a: NegItem, b: NegItem): number {
-  if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+  if (a.timestamp !== b.timestamp) {return a.timestamp - b.timestamp;}
   return compareBytes(a.id, b.id);
 }
 
 export class NegentropyStorageVector {
-  #items: NegItem[] = [];
+  readonly #items: NegItem[] = [];
   #sealed = false;
 
   insert(timestamp: number, id: string): void {
-    if (this.#sealed) throw new Nip77Error("already sealed");
-    if (timestamp === INFINITY) throw new Nip77Error("timestamp is reserved infinity");
+    if (this.#sealed) {throw new Nip77Error("already sealed");}
+    if (timestamp === INFINITY) {throw new Nip77Error("timestamp is reserved infinity");}
     const idb = hexToBytes(assertHex32(id, "event id"));
     this.#items.push({ timestamp, id: idb });
   }
 
   seal(): void {
-    if (this.#sealed) throw new Nip77Error("already sealed");
+    if (this.#sealed) {throw new Nip77Error("already sealed");}
     this.#sealed = true;
     this.#items.sort(compareNegItems);
     for (let i = 1; i < this.#items.length; i++) {
@@ -201,7 +201,7 @@ export class NegentropyStorageVector {
     this.#checkSealed();
     this.#checkBounds(begin, end);
     for (let i = begin; i < end; i++) {
-      if (!cb(this.#items[i]!, i)) break;
+      if (!cb(this.#items[i]!, i)) {break;}
     }
   }
 
@@ -233,22 +233,22 @@ export class NegentropyStorageVector {
   }
 
   #checkSealed(): void {
-    if (!this.#sealed) throw new Nip77Error("not sealed");
+    if (!this.#sealed) {throw new Nip77Error("not sealed");}
   }
 
   #checkBounds(begin: number, end: number): void {
-    if (begin > end || end > this.#items.length) throw new Nip77Error("bad range");
+    if (begin > end || end > this.#items.length) {throw new Nip77Error("bad range");}
   }
 }
 
 export function storageFromItems(
-  items: readonly { id: string; created_at: number }[],
+  items: ReadonlyArray<{ id: string; created_at: number }>,
 ): NegentropyStorageVector {
   const storage = new NegentropyStorageVector();
   const seen = new Set<string>();
   for (const item of items) {
     const id = item.id.toLowerCase();
-    if (seen.has(id)) continue;
+    if (seen.has(id)) {continue;}
     seen.add(id);
     storage.insert(item.created_at, id);
   }
@@ -257,7 +257,7 @@ export function storageFromItems(
 }
 
 export function storageFromEvents(
-  events: readonly Pick<Event, "id" | "created_at">[],
+  events: ReadonlyArray<Pick<Event, "id" | "created_at">>,
 ): NegentropyStorageVector {
   return storageFromItems(events);
 }
@@ -299,7 +299,7 @@ export class Negentropy {
     fullOutput.extend(new Uint8Array([PROTOCOL_VERSION]));
 
     const protocolVersion = query.shift();
-    if (protocolVersion < 0x60 || protocolVersion > 0x6f) {
+    if (protocolVersion < 0x60 || protocolVersion > 0x6F) {
       throw new Nip77Error("invalid negentropy protocol version byte");
     }
     if (protocolVersion !== PROTOCOL_VERSION) {
@@ -312,10 +312,10 @@ export class Negentropy {
     let prevIndex = 0;
     let skip = false;
 
-    while (query.length !== 0) {
+    while (query.length > 0) {
       const o = new EncodedBuf();
       const doSkip = (): void => {
-        if (!skip) return;
+        if (!skip) {return;}
         skip = false;
         o.extend(this.#encodeBound(prevBound));
         o.extend(encodeVarInt(Mode.Skip));
@@ -331,11 +331,11 @@ export class Negentropy {
       } else if (mode === Mode.Fingerprint) {
         const theirFingerprint = getBytes(query, FINGERPRINT_SIZE);
         const ourFingerprint = this.#storage.fingerprint(lower, upper);
-        if (compareBytes(theirFingerprint, ourFingerprint) !== 0) {
+        if (compareBytes(theirFingerprint, ourFingerprint) === 0) {
+          skip = true;
+        } else {
           doSkip();
           this.#splitRange(lower, upper, currBound, o);
-        } else {
-          skip = true;
         }
       } else if (mode === Mode.IdList) {
         const numIds = decodeVarInt(query);
@@ -349,11 +349,11 @@ export class Negentropy {
           skip = true;
           this.#storage.iterate(lower, upper, (item) => {
             const id = bytesToHex(item.id);
-            if (!theirElems.has(id)) have.push(id);
-            else theirElems.delete(id);
+            if (theirElems.has(id)) {theirElems.delete(id);}
+            else {have.push(id);}
             return true;
           });
-          for (const id of theirElems.keys()) need.push(id);
+          for (const id of theirElems.keys()) {need.push(id);}
         } else {
           doSkip();
           o.extend(this.#encodeBound(currBound));
@@ -364,7 +364,7 @@ export class Negentropy {
             return true;
           });
           o.extend(encodeVarInt(ourIds.length));
-          for (const id of ourIds) o.extend(id);
+          for (const id of ourIds) {o.extend(id);}
         }
       } else {
         throw new Nip77Error("unexpected mode");
@@ -420,8 +420,8 @@ export class Negentropy {
         let prevItem: NegItem | undefined;
         let currItem: NegItem | undefined;
         this.#storage.iterate(curr - 1, curr + 1, (item, index) => {
-          if (index === curr - 1) prevItem = item;
-          else currItem = item;
+          if (index === curr - 1) {prevItem = item;}
+          else {currItem = item;}
           return true;
         });
         nextBound = this.#minimalBound(prevItem!, currItem!);
@@ -433,7 +433,7 @@ export class Negentropy {
   }
 
   #exceededFrameSizeLimit(n: number): boolean {
-    if (this.#frameSizeLimit === 0) return false;
+    if (this.#frameSizeLimit === 0) {return false;}
     return n > this.#frameSizeLimit - 200;
   }
 
@@ -452,7 +452,7 @@ export class Negentropy {
   #decodeBound(encoded: EncodedBuf): Bound {
     const timestamp = this.#decodeTimestampIn(encoded);
     const len = decodeVarInt(encoded);
-    if (len > ID_SIZE) throw new Nip77Error("bound key too long");
+    if (len > ID_SIZE) {throw new Nip77Error("bound key too long");}
     return { timestamp, id: getBytes(encoded, len) };
   }
 
@@ -476,10 +476,10 @@ export class Negentropy {
   }
 
   #minimalBound(prev: NegItem, curr: NegItem): Bound {
-    if (curr.timestamp !== prev.timestamp) return this.#bound(curr.timestamp);
+    if (curr.timestamp !== prev.timestamp) {return this.#bound(curr.timestamp);}
     let shared = 0;
     for (let i = 0; i < ID_SIZE; i++) {
-      if (curr.id[i] !== prev.id[i]) break;
+      if (curr.id[i] !== prev.id[i]) {break;}
       shared += 1;
     }
     return this.#bound(curr.timestamp, curr.id.subarray(0, shared + 1));
@@ -500,9 +500,9 @@ export async function runNegSession(opts: {
   opts.openingSend(neg.initiate());
   for (let round = 0; round < MAX_NEG_ROUNDS; round++) {
     const out = neg.reconcile(await opts.next());
-    for (const id of out.have) have.add(id);
-    for (const id of out.need) need.add(id);
-    if (out.nextMessage === null) return { have: [...have], need: [...need] };
+    for (const id of out.have) {have.add(id);}
+    for (const id of out.need) {need.add(id);}
+    if (out.nextMessage === null) {return { have: [...have], need: [...need] };}
     opts.msgSend(out.nextMessage);
   }
   throw new Nip77Error("negentropy exceeded max rounds");

@@ -1,10 +1,12 @@
 /**
- * NIP-27: Text Note References
- * Tokenizes note content into text, nostr: references, URLs, hashtags, media, relays, emoji.
+ * NIP-27: Text Note References Tokenizes note content into text, nostr: references, URLs, hashtags,
+ * media, relays, emoji.
+ *
  * @see https://github.com/nostr-protocol/nips/blob/master/27.md
  */
 import type { Event } from "../core/event.ts";
-import { decode, type AddressPointer, type EventPointer, type ProfilePointer } from "./nip19.ts";
+import { decode } from './nip19.ts';
+import type { AddressPointer, EventPointer, ProfilePointer } from './nip19.ts';
 
 export type ContentBlock =
   | { type: "text"; text: string }
@@ -22,13 +24,13 @@ const noURLCharacter = /[^\w/] |[^\w/]$|$|,| /m;
 const MAX_HASHTAG_LENGTH = 42;
 
 /**
- * Parse note content (or a full event, to pick up emoji tags) into blocks.
- * Generator — consume with `for…of` or `[...parseContent(s)]`.
+ * Parse note content (or a full event, to pick up emoji tags) into blocks. Generator — consume with
+ * `for…of` or `[...parseContent(s)]`.
  */
 export function* parseContent(
   content: string | Pick<Event, "content" | "tags">,
 ): Iterable<ContentBlock> {
-  let emojis: Array<{ type: "emoji"; shortcode: string; url: string }> = [];
+  const emojis: Array<{ type: "emoji"; shortcode: string; url: string }> = [];
   let text: string;
 
   if (typeof content === "string") {
@@ -49,26 +51,26 @@ export function* parseContent(
   mainloop: while (index < max) {
     const u = text.indexOf(":", index);
     const h = text.indexOf("#", index);
-    if (u === -1 && h === -1) break;
+    if (u === -1 && h === -1) {break;}
 
-    if (u === -1 || (h >= 0 && h < u)) {
+    if (u === -1 || (h !== -1 && h < u)) {
       // hashtag
-      if (h === 0 || (h > 0 && text[h - 1]!.match(noCharacter))) {
-        const m = text.slice(h + 1, h + MAX_HASHTAG_LENGTH).match(noCharacter);
+      if (h === 0 || (h > 0 && (noCharacter.exec((text[h - 1]!))))) {
+        const m = noCharacter.exec(text.slice(h + 1, h + MAX_HASHTAG_LENGTH));
         const end = m ? h + 1 + (m.index ?? 0) : max;
-        if (prevIndex !== h) yield { type: "text", text: text.slice(prevIndex, h) };
+        if (prevIndex !== h) {yield { type: "text", text: text.slice(prevIndex, h) };}
         yield { type: "hashtag", value: text.slice(h + 1, end) };
         index = end;
         prevIndex = index;
-        continue mainloop;
+        continue;
       }
       index = h + 1;
-      continue mainloop;
+      continue;
     }
 
     // nostr: references
     if (u >= 5 && text.slice(u - 5, u) === "nostr") {
-      const m = text.slice(u + 60).match(noCharacter);
+      const m = noCharacter.exec(text.slice(u + 60));
       const end = m ? u + 60 + (m.index ?? 0) : max;
       try {
         const { data, type } = decode(text.slice(u + 1, end));
@@ -83,7 +85,7 @@ export function* parseContent(
           case "nprofile":
           case "nevent":
           case "naddr":
-            pointer = data as ProfilePointer | EventPointer | AddressPointer;
+            pointer = data;
             break;
           case "nsec":
             index = end + 1;
@@ -92,14 +94,14 @@ export function* parseContent(
             index = u + 1;
             continue mainloop;
         }
-        if (prevIndex !== u - 5) yield { type: "text", text: text.slice(prevIndex, u - 5) };
+        if (prevIndex !== u - 5) {yield { type: "text", text: text.slice(prevIndex, u - 5) };}
         yield { type: "reference", pointer };
         index = end;
         prevIndex = index;
-        continue mainloop;
+        continue;
       } catch {
         index = u + 1;
-        continue mainloop;
+        continue;
       }
     }
 
@@ -108,12 +110,12 @@ export function* parseContent(
       (u >= 5 && text.slice(u - 5, u) === "https") ||
       (u >= 4 && text.slice(u - 4, u) === "http")
     ) {
-      const m = text.slice(u + 4).match(noURLCharacter);
+      const m = noURLCharacter.exec(text.slice(u + 4));
       const end = m ? u + 4 + (m.index ?? 0) : max;
       const prefixLen = text[u - 1] === "s" ? 5 : 4;
       try {
         const url = new URL(text.slice(u - prefixLen, end));
-        if (!url.hostname.includes(".")) throw new Error("invalid url");
+        if (!url.hostname.includes(".")) {throw new Error("invalid url");}
         if (prevIndex !== u - prefixLen) {
           yield { type: "text", text: text.slice(prevIndex, u - prefixLen) };
         }
@@ -129,31 +131,31 @@ export function* parseContent(
         }
         index = end;
         prevIndex = index;
-        continue mainloop;
+        continue;
       } catch {
         index = end + 1;
-        continue mainloop;
+        continue;
       }
     }
 
     // ws(s) relays
     if ((u >= 3 && text.slice(u - 3, u) === "wss") || (u >= 2 && text.slice(u - 2, u) === "ws")) {
-      const m = text.slice(u + 4).match(noURLCharacter);
+      const m = noURLCharacter.exec(text.slice(u + 4));
       const end = m ? u + 4 + (m.index ?? 0) : max;
       const prefixLen = text[u - 1] === "s" ? 3 : 2;
       try {
         const url = new URL(text.slice(u - prefixLen, end));
-        if (!url.hostname.includes(".")) throw new Error("invalid ws url");
+        if (!url.hostname.includes(".")) {throw new Error("invalid ws url");}
         if (prevIndex !== u - prefixLen) {
           yield { type: "text", text: text.slice(prevIndex, u - prefixLen) };
         }
         yield { type: "relay", url: url.toString() };
         index = end;
         prevIndex = index;
-        continue mainloop;
+        continue;
       } catch {
         index = end + 1;
-        continue mainloop;
+        continue;
       }
     }
 
@@ -161,7 +163,7 @@ export function* parseContent(
     for (const emoji of emojis) {
       const endColon = u + emoji.shortcode.length + 1;
       if (text[endColon] === ":" && text.slice(u + 1, endColon) === emoji.shortcode) {
-        if (prevIndex !== u) yield { type: "text", text: text.slice(prevIndex, u) };
+        if (prevIndex !== u) {yield { type: "text", text: text.slice(prevIndex, u) };}
         yield emoji;
         index = endColon + 1;
         prevIndex = index;

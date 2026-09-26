@@ -1,23 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import {
-  Client,
-  EventBuilder,
-  Kind,
-  Keys,
-  KeysSigner,
-  MemoryEventStore,
-  relayListEventBuilder,
-  finalizeEvent,
-  type Event,
-  type EventStore,
-  type Filter,
-  type PutResult,
-} from "../src/index.ts";
+
 import { normalizeURL } from "../src/core/util.ts";
+import { Client, EventBuilder, Kind, Keys, KeysSigner, MemoryEventStore, relayListEventBuilder, finalizeEvent } from '../src/index.ts';
+import type { Event, EventStore, Filter, PutResult } from '../src/index.ts';
 import { Nip17Error, dmRelayListEventBuilder } from "../src/nips/nip17.ts";
 import { encryptToPubkey } from "../src/nips/nip44.ts";
 import { createGiftWrap, createRumor, createSeal, eventToJson, wrap } from "../src/nips/nip59.ts";
-import { createFakeRelayNetwork, type FakeRelayNetwork } from "../src/testing/index.ts";
+import { createFakeRelayNetwork } from '../src/testing/index.ts';
+import type { FakeRelayNetwork } from '../src/testing/index.ts';
 
 const ALICE_SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const BOB_SK = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -46,7 +36,7 @@ function clientFrames(url: string): unknown[][] {
 function reqFilters(url: string): Filter[] {
   const filters: Filter[] = [];
   for (const msg of clientFrames(url)) {
-    if (msg[0] !== "REQ") continue;
+    if (msg[0] !== "REQ") {continue;}
     for (const item of msg.slice(2)) {
       if (!item || typeof item !== "object" || Array.isArray(item)) {
         throw new Error("REQ filter is not an object");
@@ -62,16 +52,16 @@ function giftWrapReqKinds(url: string, recipient: string): number[] {
     const p = f["#p"];
     return Array.isArray(p) && p.includes(recipient);
   });
-  if (hits.length === 0) throw new Error(`no REQ with #p ${recipient} on ${url}`);
-  const kinds = hits[hits.length - 1]!.kinds;
-  if (kinds === undefined) throw new Error("REQ kinds missing");
+  if (hits.length === 0) {throw new Error(`no REQ with #p ${recipient} on ${url}`);}
+  const {kinds} = hits[hits.length - 1]!;
+  if (kinds === undefined) {throw new Error("REQ kinds missing");}
   return [...kinds];
 }
 
 async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 2000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (await check()) return;
+    if (await check()) {return;}
     await new Promise((r) => setTimeout(r, 10));
   }
   throw new Error("timed out");
@@ -95,21 +85,21 @@ function trackingStore(inner = new MemoryEventStore()): {
 } {
   const persistIds: string[] = [];
   const store: EventStore = {
-    put: (event) => inner.put(event),
+    put:  async (event) => inner.put(event),
     putMany: async (events) => {
-      for (const event of events) persistIds.push(event.id);
+      for (const event of events) {persistIds.push(event.id);}
       const out: PutResult[] = [];
-      for (const event of events) out.push(await inner.put(event));
+      for (const event of events) {out.push(await inner.put(event));}
       return out;
     },
-    get: (id) => inner.get(id),
-    query: (filters) => inner.query(filters),
-    count: (filters) => inner.count(filters),
-    negentropyItems: (filter) => inner.negentropyItems(filter),
-    remove: (ids) => inner.remove(ids),
-    clear: () => inner.clear(),
-    getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-    setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+    get:  async (id) => inner.get(id),
+    query:  async (filters) => inner.query(filters),
+    count:  async (filters) => inner.count(filters),
+    negentropyItems:  async (filter) => inner.negentropyItems(filter),
+    remove:  async (ids) => inner.remove(ids),
+    clear:  async () => inner.clear(),
+    getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+    setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
   };
   return { store, persistIds };
 }
@@ -297,12 +287,12 @@ describe("Client NIP-17", () => {
     expect(inbox).toHaveLength(1);
     expect(inbox[0]!.rumor.content).toBe("hola");
     expect(inbox[0]!.rumor.pubkey).toBe(aliceKeys.publicKey);
-    expect(giftWrapReqKinds(BOB_DM, bobKeys.publicKey)).toEqual([Kind.GiftWrap]);
+    expect(giftWrapReqKinds(BOB_DM, bobKeys.publicKey)).toStrictEqual([Kind.GiftWrap]);
     await waitFor(() => persistIds.includes(gift.id));
-    expect(persistIds.includes(junk.id)).toBe(false);
-    expect(persistIds.includes(forged.id)).toBe(false);
-    expect(await store.get(junk.id)).toBeUndefined();
-    expect(await store.get(forged.id)).toBeUndefined();
+    expect(persistIds).not.toContain(junk.id);
+    expect(persistIds).not.toContain(forged.id);
+    await expect(store.get(junk.id)).resolves.toBeUndefined();
+    await expect(store.get(forged.id)).resolves.toBeUndefined();
 
     await bob.shutdown();
   });
@@ -342,7 +332,7 @@ describe("Client NIP-17", () => {
     await bob.connect();
 
     const inbox = await bob.fetchPrivateMessages({ timeoutMs: 2000 });
-    expect(giftWrapReqKinds(BOB_DM, bobKeys.publicKey)).toEqual([Kind.GiftWrap]);
+    expect(giftWrapReqKinds(BOB_DM, bobKeys.publicKey)).toStrictEqual([Kind.GiftWrap]);
     expect(inbox).toHaveLength(1);
     expect(inbox[0]!.wrap.kind).toBe(Kind.GiftWrap);
     expect(inbox[0]!.rumor.content).toBe("stored");
@@ -404,7 +394,7 @@ describe("Client NIP-17", () => {
 
     const sub = await bob.subscribePrivateMessages();
     await waitFor(() => reqFilters(BOB_DM).some((f) => Array.isArray(f["#p"])));
-    expect(giftWrapReqKinds(BOB_DM, bobKeys.publicKey)).toEqual([
+    expect(giftWrapReqKinds(BOB_DM, bobKeys.publicKey)).toStrictEqual([
       Kind.GiftWrap,
       Kind.GiftWrapEphemeral,
     ]);
@@ -455,14 +445,14 @@ describe("Client NIP-17", () => {
       },
     });
     await waitFor(() => eosed);
-    expect(giftWrapReqKinds(BOB_DM, bobKeys.publicKey)).toEqual([
+    expect(giftWrapReqKinds(BOB_DM, bobKeys.publicKey)).toStrictEqual([
       Kind.GiftWrap,
       Kind.GiftWrapEphemeral,
     ]);
 
     const sent = await alice.sendPrivateMessage(bobKeys.publicKey, "stored-1059");
     const wrap1059 = sent.wraps.find((w) => w.recipient === bobKeys.publicKey)?.wrap;
-    if (!wrap1059) throw new Error("missing 1059 wrap for bob");
+    if (!wrap1059) {throw new Error("missing 1059 wrap for bob");}
     expect(wrap1059.kind).toBe(Kind.GiftWrap);
 
     const { wrap: wrap21059, storedKind } = await wrapKind21059(
@@ -479,16 +469,16 @@ describe("Client NIP-17", () => {
     expect(got.some((m) => m.id === junk.id)).toBe(false);
 
     await waitFor(() => got.some((m) => m.content === "live-21059"));
-    expect(got.map((m) => m.content).sort()).toEqual(["live-21059", "stored-1059"]);
+    expect(got.map((m) => m.content).sort()).toStrictEqual(["live-21059", "stored-1059"]);
     expect(got.find((m) => m.content === "live-21059")!.kind).toBe(Kind.GiftWrapEphemeral);
     expect(got.find((m) => m.content === "stored-1059")!.kind).toBe(Kind.GiftWrap);
 
     await waitFor(async () => (await bob.queryLocal({ kinds: [Kind.GiftWrap] })).length > 0);
     const stored1059 = await bob.queryLocal({ kinds: [Kind.GiftWrap] });
     expect(stored1059.some((e) => e.id === wrap1059.id)).toBe(true);
-    expect(await bob.queryLocal({ kinds: [Kind.GiftWrapEphemeral] })).toEqual([]);
-    expect(await bob.storage.get(wrap21059.id)).toBeUndefined();
-    expect(await bob.storage.get(junk.id)).toBeUndefined();
+    await expect(bob.queryLocal({ kinds: [Kind.GiftWrapEphemeral] })).resolves.toStrictEqual([]);
+    await expect(bob.storage.get(wrap21059.id)).resolves.toBeUndefined();
+    await expect(bob.storage.get(junk.id)).resolves.toBeUndefined();
 
     sub.close();
     await alice.shutdown();
@@ -535,10 +525,10 @@ describe("Client NIP-17", () => {
     deliver(BOB_DM, gift);
     sub.close();
     await waitQuiet(() => got.length > 0 || persistIds.includes(gift.id) || decrypts > 0);
-    expect(got).toEqual([]);
-    expect(persistIds.includes(gift.id)).toBe(false);
+    expect(got).toStrictEqual([]);
+    expect(persistIds).not.toContain(gift.id);
     expect(decrypts).toBe(0);
-    expect(await store.get(gift.id)).toBeUndefined();
+    await expect(store.get(gift.id)).resolves.toBeUndefined();
     await bob.shutdown();
   });
 
@@ -568,7 +558,7 @@ describe("Client NIP-17", () => {
     });
     signer.nip44Decrypt = async (peer, payload) => {
       decryptEntered += 1;
-      if (decryptEntered === 1) await held;
+      if (decryptEntered === 1) {await held;}
       try {
         return await origDecrypt(peer, payload);
       } catch (error) {
@@ -599,9 +589,9 @@ describe("Client NIP-17", () => {
     release();
     await waitFor(() => decryptFinished === 2);
     expect(decryptErrors).toBe(0);
-    expect(got).toEqual([]);
-    expect(persistIds.includes(gift.id)).toBe(false);
-    expect(await store.get(gift.id)).toBeUndefined();
+    expect(got).toStrictEqual([]);
+    expect(persistIds).not.toContain(gift.id);
+    await expect(store.get(gift.id)).resolves.toBeUndefined();
     await bob.shutdown();
   });
 
@@ -631,7 +621,7 @@ describe("Client NIP-17", () => {
     });
     signer.nip44Decrypt = async (peer, payload) => {
       decryptEntered += 1;
-      if (decryptEntered === 1) await held;
+      if (decryptEntered === 1) {await held;}
       try {
         return await origDecrypt(peer, payload);
       } catch (error) {
@@ -664,9 +654,9 @@ describe("Client NIP-17", () => {
     release();
     await waitFor(() => decryptFinished === 2);
     expect(decryptErrors).toBe(0);
-    expect(got).toEqual([]);
-    expect(persistIds.includes(gift.id)).toBe(false);
-    expect(await store.get(gift.id)).toBeUndefined();
+    expect(got).toStrictEqual([]);
+    expect(persistIds).not.toContain(gift.id);
+    await expect(store.get(gift.id)).resolves.toBeUndefined();
     sub.close();
     await bob.shutdown();
   });
@@ -702,9 +692,9 @@ describe("Client NIP-17", () => {
     await waitFor(() => reqFilters(BOB_DM).some((f) => Array.isArray(f["#p"])));
     deliver(BOB_DM, junk);
     await waitQuiet(() => got.length > 0 || persistIds.includes(junk.id));
-    expect(got).toEqual([]);
-    expect(persistIds.includes(junk.id)).toBe(false);
-    expect(await store.get(junk.id)).toBeUndefined();
+    expect(got).toStrictEqual([]);
+    expect(persistIds).not.toContain(junk.id);
+    await expect(store.get(junk.id)).resolves.toBeUndefined();
     sub.close();
     await bob.shutdown();
   });
@@ -856,9 +846,9 @@ describe("issue #125", () => {
       .build();
     await syncClient.connect();
     const summary = await syncClient.sync({ kinds: [1] }, { timeoutMs: 2000 });
-    expect(summary.remote).toEqual([syncNote.id]);
+    expect(summary.remote).toStrictEqual([syncNote.id]);
     expect(syncClient.index.get(syncNote.id)?.id).toBe(syncNote.id);
-    expect(syncClient.index.seenOn(syncNote.id)).toEqual([normalizeURL("wss://sync-src.example")]);
+    expect(syncClient.index.seenOn(syncNote.id)).toStrictEqual([normalizeURL("wss://sync-src.example")]);
     await syncClient.shutdown();
 
     // (b) a Client.outbox live event is indexed with its relay
@@ -873,7 +863,7 @@ describe("issue #125", () => {
     const liveNote = EventBuilder.textNote("live outbox").createdAt(50).signWithKeys(aliceKeys);
     deliver("wss://out.example", liveNote);
     await waitFor(() => outClient.index.get(liveNote.id) !== undefined);
-    expect(outClient.index.seenOn(liveNote.id)).toEqual([normalizeURL("wss://out.example")]);
+    expect(outClient.index.seenOn(liveNote.id)).toStrictEqual([normalizeURL("wss://out.example")]);
     feed.close();
     await outClient.shutdown();
 
@@ -905,7 +895,7 @@ describe("issue #125", () => {
     expect(inbox).toHaveLength(1);
     expect(bob.index.get(wrap1.id)?.id).toBe(wrap1.id);
     const wantUrls = [normalizeURL(BOB_DM), normalizeURL(BOB_DM2)].sort();
-    expect([...bob.index.seenOn(wrap1.id)].sort()).toEqual(wantUrls);
+    expect([...bob.index.seenOn(wrap1.id)].sort()).toStrictEqual(wantUrls);
 
     // (d) subscribePrivateMessages records every relay that delivered the same wrap
     const wrap2 = await wrap(
@@ -927,7 +917,7 @@ describe("issue #125", () => {
     await waitFor(() => bob.index.get(wrap2.id) !== undefined);
     await waitQuiet(() => bob.index.seenOn(wrap2.id).length === 2, 100);
     expect(got).toContain("two");
-    expect([...bob.index.seenOn(wrap2.id)].sort()).toEqual(wantUrls);
+    expect([...bob.index.seenOn(wrap2.id)].sort()).toStrictEqual(wantUrls);
     sub.close();
     await bob.shutdown();
   });

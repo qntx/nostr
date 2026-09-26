@@ -1,20 +1,19 @@
 /// <reference types="node" />
 /**
- * Bundle tests/hermes/smoke.ts into a single classic script and run it on the
- * Hermes CLI (`HERMES` env var). Pass = stdout contains `HERMES_SMOKE_OK`;
- * Hermes exits 0 on unhandled async rejections, so the marker is the only
- * contract. The full Hermes output is printed either way.
+ * Bundle tests/hermes/smoke.ts into a single classic script and run it on the Hermes CLI (`HERMES`
+ * env var). Pass = stdout contains `HERMES_SMOKE_OK`; Hermes exits 0 on unhandled async rejections,
+ * so the marker is the only contract. The full Hermes output is printed either way.
  */
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // The repo does not depend on @types/bun; declare the used surface.
-interface BunBuildOutput {
+type BunBuildOutput = {
   success: boolean;
   logs: readonly { toString(): string }[];
   outputs: readonly { kind: string }[];
 }
-interface BunResolver {
+type BunResolver = {
   onResolve(args: { filter: RegExp }, callback: () => { path: string }): void;
 }
 declare const Bun: {
@@ -22,11 +21,11 @@ declare const Bun: {
     entrypoints: string[];
     target: "browser";
     format: "iife";
-    plugins?: { name: string; setup(build: BunResolver): void }[];
+    plugins?: Array<{ name: string; setup(build: BunResolver): void }>;
   }): Promise<BunBuildOutput>;
   write(path: string, data: unknown): Promise<unknown>;
   spawnSync(
-    cmd: readonly string[],
+    cmd: ReadonlyArray<string>,
     options: { stdout: "pipe"; stderr: "pipe" },
   ): { exitCode: number; stdout: { toString(): string }; stderr: { toString(): string } };
 };
@@ -60,7 +59,7 @@ const result = await Bun.build({
   ],
 });
 if (!result.success) {
-  for (const log of result.logs) console.error(String(log));
+  for (const log of result.logs) {console.error(String(log));}
   process.exit(1);
 }
 const bundle = result.outputs.find((o: { kind: string }) => o.kind === "entry-point");

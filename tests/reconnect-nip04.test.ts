@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+
 import { EventBuilder, Keys, KeysSigner, Relay, useWebSocketImplementation } from "../src/index.ts";
 import { decrypt as nip04Decrypt, encrypt as nip04Encrypt } from "../src/nips/nip04.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
@@ -6,14 +7,14 @@ import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const SK2 = "0000000000000000000000000000000000000000000000000000000000000001";
 
-function sleep(ms: number): Promise<void> {
+ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) return;
+    if (pred()) {return;}
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -23,9 +24,9 @@ function sentMessages(ws: MockWebSocket): unknown[][] {
   return ws.sent.map((s) => JSON.parse(s) as unknown[]);
 }
 
-function reqFilters(ws: MockWebSocket): Array<[string, string, ...Record<string, unknown>[]]> {
+function reqFilters(ws: MockWebSocket): Array<[string, string, ...Array<Record<string, unknown>>]> {
   return sentMessages(ws).filter((m) => m[0] === "REQ") as Array<
-    [string, string, ...Record<string, unknown>[]]
+    [string, string, ...Array<Record<string, unknown>>]
   >;
 }
 
@@ -66,7 +67,7 @@ describe("Relay reconnect", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("after reconnect").createdAt(1).signWithKeys(keys);
 
-    const events: (typeof note)[] = [];
+    const events: Array<typeof note> = [];
     let reconnected = false;
     relay.onreconnect = () => {
       reconnected = true;
@@ -93,7 +94,7 @@ describe("Relay reconnect", () => {
     expect(relay.connected).toBe(true);
     expect(MockWebSocket.instances.length).toBeGreaterThanOrEqual(2);
 
-    const second = MockWebSocket.instances[MockWebSocket.instances.length - 1]!;
+    const second = MockWebSocket.instances.at(-1)!;
     const reReq = second.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [
       string,
       string,
@@ -151,12 +152,12 @@ describe("Relay reconnect", () => {
     const second = MockWebSocket.last();
     expect(second).not.toBe(MockWebSocket.instances[0]);
     const reReq = reqFilters(second)[0];
-    if (!reReq) throw new Error("expected REQ on socket 2");
+    if (!reReq) {throw new Error("expected REQ on socket 2");}
     expect(reReq[0]).toBe("REQ");
     expect(reReq[1]).toBe(sub.id);
 
     second.receive(JSON.stringify(["EVENT", sub.id, note]));
-    expect(events).toEqual([note.id]);
+    expect(events).toStrictEqual([note.id]);
     second.receive(JSON.stringify(["EOSE", sub.id]));
     expect(eose).toBe(1);
     relay.close();
@@ -193,7 +194,7 @@ describe("Relay reconnect", () => {
     const second = MockWebSocket.last();
     expect(second).not.toBe(MockWebSocket.instances[0]);
     const reReq = reqFilters(second)[0];
-    if (!reReq) throw new Error("expected REQ on socket 2");
+    if (!reReq) {throw new Error("expected REQ on socket 2");}
     expect(reReq[1]).toBe(sub.id);
     second.receive(JSON.stringify(["EOSE", sub.id]));
     expect(eose).toBe(1);
@@ -248,7 +249,7 @@ describe("Relay reconnect", () => {
     const before = MockWebSocket.instances.length;
     relay.close();
     await new Promise((r) => setTimeout(r, 30));
-    expect(MockWebSocket.instances.length).toBe(before);
+    expect(MockWebSocket.instances).toHaveLength(before);
   });
 
   test("reconnect REQ since is lastCreatedAt inclusive, not +1", async () => {
@@ -269,7 +270,7 @@ describe("Relay reconnect", () => {
     const first = MockWebSocket.last();
     first.receive(JSON.stringify(["EVENT", sub.id, note]));
     expect(sub.lastCreatedAt).toBe(50);
-    expect(sub.filters).toEqual([{ kinds: [1] }]);
+    expect(sub.filters).toStrictEqual([{ kinds: [1] }]);
     expect(sub.replayFilters()[0]!.since).toBe(50);
 
     first.close();
@@ -281,7 +282,7 @@ describe("Relay reconnect", () => {
     expect(reReq[2]!.since).not.toBe(51);
 
     second.receive(JSON.stringify(["EVENT", sub.id, later]));
-    expect(events).toEqual([note.id, later.id]);
+    expect(events).toStrictEqual([note.id, later.id]);
     relay.close();
   });
 
@@ -307,7 +308,7 @@ describe("Relay reconnect", () => {
     const first = MockWebSocket.last();
     first.receive(JSON.stringify(["EVENT", sub.id, a]));
     first.receive(JSON.stringify(["EVENT", sub.id, b]));
-    expect(events).toEqual([a.id, b.id]);
+    expect(events).toStrictEqual([a.id, b.id]);
     expect(sub.lastCreatedAt).toBe(t);
     expect(sub.idsAtWatermark.has(a.id)).toBe(true);
     expect(sub.idsAtWatermark.has(b.id)).toBe(true);
@@ -319,11 +320,11 @@ describe("Relay reconnect", () => {
 
     second.receive(JSON.stringify(["EVENT", sub.id, a]));
     second.receive(JSON.stringify(["EVENT", sub.id, b]));
-    expect(events).toEqual([a.id, b.id]);
-    expect(received).toEqual([a.id, b.id, a.id, b.id]);
+    expect(events).toStrictEqual([a.id, b.id]);
+    expect(received).toStrictEqual([a.id, b.id, a.id, b.id]);
 
     second.receive(JSON.stringify(["EVENT", sub.id, c]));
-    expect(events).toEqual([a.id, b.id, c.id]);
+    expect(events).toStrictEqual([a.id, b.id, c.id]);
     expect(sub.idsAtWatermark.has(c.id)).toBe(true);
     relay.close();
   });
@@ -341,11 +342,11 @@ describe("Relay reconnect", () => {
     expect(sub1.id).not.toBe(sub2.id);
     expect(MockWebSocket.instances).toHaveLength(0);
 
-    await waitUntil(() => MockWebSocket.instances.length >= 1, 200);
+    await waitUntil(() => MockWebSocket.instances.length > 0, 200);
     await waitUntil(() => relay.connected && reqFilters(MockWebSocket.last()).length >= 2);
     const reqs = reqFilters(MockWebSocket.last());
-    expect(reqs.map((m) => m[1])).toEqual(expect.arrayContaining([sub1.id, sub2.id]));
-    expect(reqs.map((m) => m[2]!.kinds)).toEqual(expect.arrayContaining([[1], [2]]));
+    expect(reqs.map((m) => m[1])).toStrictEqual(expect.arrayContaining([sub1.id, sub2.id]));
+    expect(reqs.map((m) => m[2]!.kinds)).toStrictEqual(expect.arrayContaining([[1], [2]]));
     expect(MockWebSocket.instances).toHaveLength(1);
     relay.close();
   });
@@ -363,10 +364,10 @@ describe("Relay reconnect", () => {
     expect(live.id).not.toBe(once.id);
     expect(MockWebSocket.instances).toHaveLength(0);
 
-    await waitUntil(() => MockWebSocket.instances.length >= 1, 200);
+    await waitUntil(() => MockWebSocket.instances.length > 0, 200);
     await waitUntil(() => relay.connected && reqFilters(MockWebSocket.last()).length >= 2);
     const reqs = reqFilters(MockWebSocket.last());
-    expect(reqs.map((m) => m[1])).toEqual(expect.arrayContaining([live.id, once.id]));
+    expect(reqs.map((m) => m[1])).toStrictEqual(expect.arrayContaining([live.id, once.id]));
     expect(MockWebSocket.instances).toHaveLength(1);
     relay.close();
   });
@@ -467,7 +468,7 @@ describe("nip04", () => {
     const b = new KeysSigner(SK2);
     const pkB = await b.getPublicKey();
     const pkA = await a.getPublicKey();
-    const cipher = await a.nip04Encrypt!(pkB, "via signer");
-    expect(await b.nip04Decrypt!(pkA, cipher)).toBe("via signer");
+    const cipher = await a.nip04Encrypt(pkB, "via signer");
+    await expect(b.nip04Decrypt(pkA, cipher)).resolves.toBe("via signer");
   });
 });

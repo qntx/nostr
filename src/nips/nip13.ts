@@ -1,14 +1,15 @@
 /**
- * NIP-13: Proof of Work.
- * Does not import signer, relay, or client. Does not sign.
+ * NIP-13: Proof of Work. Does not import signer, relay, or client. Does not sign.
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/13.md
  */
 import { sha256 } from "@noble/hashes/sha2.js";
-import { NostrError } from "../core/error.ts";
-import { serializeEvent, type UnsignedEvent } from "../core/event.ts";
-import { bytesToHex, isHex32, utf8Encoder } from "../core/util.ts";
+
 import { abortReason } from "../core/abort.ts";
+import { NostrError } from "../core/error.ts";
+import { serializeEvent } from '../core/event.ts';
+import type { UnsignedEvent } from '../core/event.ts';
+import { bytesToHex, isHex32, utf8Encoder } from "../core/util.ts";
 
 export class Nip13Error extends NostrError {
   constructor(message: string, options?: ErrorOptions) {
@@ -55,8 +56,8 @@ export function getPow(idOrHash: string | Uint8Array): number {
 }
 
 /**
- * Returns a new unsigned event with nonce tag and computed id.
- * Does not mutate input. Yields every `yieldEvery` hashes.
+ * Returns a new unsigned event with nonce tag and computed id. Does not mutate input. Yields every
+ * `yieldEvery` hashes.
  */
 export async function minePow(
   unsigned: UnsignedEvent,
@@ -99,7 +100,7 @@ export async function minePow(
     if (iterations >= yieldEvery) {
       iterations = 0;
       await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0);
+        setTimeout(resolve);
       });
     }
   }

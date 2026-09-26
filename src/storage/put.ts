@@ -2,12 +2,8 @@ import type { Event } from "../core/event.ts";
 import { isReplaceableWinner, validateSignedEvent } from "../core/event.ts";
 import { isEphemeralKind, Kind } from "../core/kind.ts";
 import { eventAddress } from "../core/tag.ts";
-import {
-  coordinateRemovals,
-  planDeletion,
-  type DeletionPlan,
-  type DeletionState,
-} from "./deletion.ts";
+import { coordinateRemovals, planDeletion } from './deletion.ts';
+import type { DeletionPlan, DeletionState } from './deletion.ts';
 import type { PutResult } from "./types.ts";
 
 export function outboxBoundKey(pubkey: string, kind: number): string {
@@ -32,10 +28,9 @@ export type PutLookup = {
     id: string,
   ) => Pick<Event, "id" | "pubkey" | "kind" | "created_at" | "tags"> | undefined;
   /**
-   * Current replaceable winner for an address. `evicted: true` marks an
-   * eviction watermark: the winning event body was dropped, but its
-   * id/created_at still reject older versions, and a re-put of the
-   * watermarked id re-inserts it.
+   * Current replaceable winner for an address. `evicted: true` marks an eviction watermark: the
+   * winning event body was dropped, but its id/created_at still reject older versions, and a re-put
+   * of the watermarked id re-inserts it.
    */
   getReplaceable: (
     address: string,
@@ -56,8 +51,8 @@ export function decidePut(raw: Event, lookup: PutLookup): PutDecision {
     const coordIds = coordinateRemovals(plan.coordinates, lookup.getReplaceable);
     return { action: "delete", result: "deleted", event, plan, coordIds };
   }
-  if (lookup.deletion.covers(event)) return { action: "tombstone", result: "duplicate", event };
-  if (isEphemeralKind(event.kind)) return { action: "skip", result: "ephemeral", event };
+  if (lookup.deletion.covers(event)) {return { action: "tombstone", result: "duplicate", event };}
+  if (isEphemeralKind(event.kind)) {return { action: "skip", result: "ephemeral", event };}
   const address = eventAddress(event);
   if (address) {
     const prev = lookup.getReplaceable(address);
@@ -96,7 +91,7 @@ export function applyPutMemory(
     case "delete":
       s.deletion.pending.delete(d.event.id);
       s.deletion.absorb(d.plan);
-      for (const id of d.plan.removeIds) s.indexRemove(id);
+      for (const id of d.plan.removeIds) {s.indexRemove(id);}
       for (const id of d.coordIds) {
         s.deletion.ids.add(id);
         s.indexRemove(id);
@@ -104,7 +99,7 @@ export function applyPutMemory(
       s.indexInsert(d.event);
       return "deleted";
     case "insert":
-      if (d.replaceId) s.indexRemove(d.replaceId);
+      if (d.replaceId) {s.indexRemove(d.replaceId);}
       s.indexInsert(d.event);
       return d.result;
   }

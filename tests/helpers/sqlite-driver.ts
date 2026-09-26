@@ -3,8 +3,8 @@ import type { SqlDriver, SqlValue } from "../../src/storage/sqlite.ts";
 declare const Bun: unknown;
 
 /**
- * Minimal synchronous database shape shared by `bun:sqlite`'s `Database` and
- * `node:sqlite`'s `DatabaseSync`.
+ * Minimal synchronous database shape shared by `bun:sqlite`'s `Database` and `node:sqlite`'s
+ * `DatabaseSync`.
  */
 type RawDb = {
   exec(sql: string): void;
@@ -16,14 +16,13 @@ type RawDb = {
 };
 
 /**
- * In-memory {@link SqlDriver} for tests: `bun:sqlite` under `bun test`,
- * `node:sqlite` (`DatabaseSync`) elsewhere, same async surface under both.
+ * In-memory {@link SqlDriver} for tests: `bun:sqlite` under `bun test`, `node:sqlite`
+ * (`DatabaseSync`) elsewhere, same async surface under both.
  *
- * `transaction` serializes callbacks on a promise-chain mutex and wraps each
- * in `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`. Statements issued outside a
- * transaction run in autocommit and, per same-connection SQLite semantics,
- * join an already-open transaction — the {@link SqlDriver} contract requires
- * only that *transactions* never interleave.
+ * `transaction` serializes callbacks on a promise-chain mutex and wraps each in `BEGIN IMMEDIATE` /
+ * `COMMIT` / `ROLLBACK`. Statements issued outside a transaction run in autocommit and, per
+ * same-connection SQLite semantics, join an already-open transaction — the {@link SqlDriver}
+ * contract requires only that _transactions_ never interleave.
  */
 export class SqliteTestDriver implements SqlDriver {
   readonly #db: RawDb;
@@ -35,7 +34,7 @@ export class SqliteTestDriver implements SqlDriver {
   }
 
   static async open(): Promise<SqliteTestDriver> {
-    if (typeof Bun !== "undefined") {
+    if (Bun !== undefined) {
       const specifier = "bun:sqlite";
       const mod = (await import(specifier)) as {
         Database: new (path: string) => RawDb;
@@ -47,10 +46,9 @@ export class SqliteTestDriver implements SqlDriver {
   }
 
   /**
-   * Inject a one-shot failure: the next statement whose SQL matches `pattern`
-   * (every statement when omitted) throws `error`. `skip` first lets that many
-   * matching statements pass — e.g. `failOn(/^INSERT INTO events/, {skip: 1})`
-   * fails a batch's second event insert.
+   * Inject a one-shot failure: the next statement whose SQL matches `pattern` (every statement when
+   * omitted) throws `error`. `skip` first lets that many matching statements pass — e.g.
+   * `failOn(/^INSERT INTO events/, {skip: 1})` fails a batch's second event insert.
    */
   failOn(pattern?: RegExp, opts?: { error?: Error; skip?: number }): void {
     this.#injected = {
@@ -62,8 +60,8 @@ export class SqliteTestDriver implements SqlDriver {
 
   #guard(sql: string): void {
     const injected = this.#injected;
-    if (!injected) return;
-    if (injected.pattern && !injected.pattern.test(sql)) return;
+    if (!injected) {return;}
+    if (injected.pattern && !injected.pattern.test(sql)) {return;}
     if (injected.skip > 0) {
       injected.skip -= 1;
       return;
@@ -77,13 +75,13 @@ export class SqliteTestDriver implements SqlDriver {
     this.#db.exec(sql);
   }
 
-  async run(sql: string, params: readonly SqlValue[] = []): Promise<{ changes: number }> {
+  async run(sql: string, params: ReadonlyArray<SqlValue> = []): Promise<{ changes: number }> {
     this.#guard(sql);
     const result = this.#db.prepare(sql).run(...params);
     return { changes: Number(result.changes) };
   }
 
-  async all<Row>(sql: string, params: readonly SqlValue[] = []): Promise<Row[]> {
+  async all<Row>(sql: string, params: ReadonlyArray<SqlValue> = []): Promise<Row[]> {
     this.#guard(sql);
     return this.#db.prepare(sql).all(...params) as Row[];
   }
@@ -92,23 +90,23 @@ export class SqliteTestDriver implements SqlDriver {
     const task = this.#txTail.then(async (): Promise<T> => {
       this.#db.exec("BEGIN IMMEDIATE");
       const tx: SqlDriver = {
-        exec: (sql) => this.exec(sql),
-        run: (sql, params) => this.run(sql, params),
-        all: (sql, params) => this.all(sql, params),
-        transaction: (inner) => inner(tx),
+        exec:  async (sql) => this.exec(sql),
+        run:  async (sql, params) => this.run(sql, params),
+        all:  async (sql, params) => this.all(sql, params),
+        transaction:  async (inner) => inner(tx),
       };
       try {
         const value = await fn(tx);
         this.#db.exec("COMMIT");
         return value;
-      } catch (err) {
+      } catch (error) {
         try {
           this.#db.exec("ROLLBACK");
         } catch {
           // The engine already rolled back (e.g. a fatal error); surface the
           // original failure.
         }
-        throw err;
+        throw error;
       }
     });
     this.#txTail = task.then(

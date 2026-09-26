@@ -1,10 +1,10 @@
 import type { Event, UnsignedEvent } from "../core/event.ts";
 
 /**
- * Universal signing interface (aligned with nula's NostrSigner).
- * Implementations: KeysSigner, Nip07Signer, Nip46Signer, …
+ * Universal signing interface (aligned with nula's NostrSigner). Implementations: KeysSigner,
+ * Nip07Signer, Nip46Signer, …
  */
-export interface NostrSigner {
+export type NostrSigner = {
   getPublicKey(): Promise<string>;
   signEvent(unsigned: UnsignedEvent): Promise<Event>;
 

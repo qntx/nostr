@@ -1,5 +1,6 @@
 import type { Event, UnsignedEvent } from "../core/event.ts";
-import { Keys, SecretKey, signEvent } from "../core/key.ts";
+import type { SecretKey} from "../core/key.ts";
+import { Keys, signEvent } from "../core/key.ts";
 import * as nip04 from "../nips/nip04.ts";
 import * as nip44 from "../nips/nip44.ts";
 import type { NostrSigner } from "./types.ts";

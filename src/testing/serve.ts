@@ -1,9 +1,5 @@
-import {
-  FakeRelayCore,
-  type FakeRelay,
-  type FakeRelayOptions,
-  type RelayTransport,
-} from "./relay-core.ts";
+import { FakeRelayCore } from './relay-core.ts';
+import type { FakeRelay, FakeRelayOptions, RelayTransport } from './relay-core.ts';
 
 export type ServedFakeRelay = {
   url: string;
@@ -12,9 +8,9 @@ export type ServedFakeRelay = {
 };
 
 /**
- * Serve the fake relay on a real WebSocket port via the optional `ws` peer
- * dependency (dynamic import — `@qntx/nostr/testing` never requires `ws`
- * unless you serve). `port: 0` picks an ephemeral port.
+ * Serve the fake relay on a real WebSocket port via the optional `ws` peer dependency (dynamic
+ * import — `@qntx/nostr/testing` never requires `ws` unless you serve). `port: 0` picks an
+ * ephemeral port.
  */
 export async function serveFakeRelay(
   opts: FakeRelayOptions & { port?: number; host?: string } = {},
@@ -47,10 +43,10 @@ export async function serveFakeRelay(
   return {
     url,
     relay: core,
-    close: () =>
+    close:  async () =>
       new Promise((resolve) => {
         core.disconnect();
-        for (const client of wss.clients) client.terminate();
+        for (const client of wss.clients) {client.terminate();}
         wss.close(() => resolve());
       }),
   };

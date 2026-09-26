@@ -1,16 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
-import {
-  NIP05_REGEX,
-  isNip05,
-  lookupFromDocument,
-  parseNip05,
-  parseNip05Document,
-  queryProfile,
-  verifyNip05,
-  wellKnownUrl,
-  type Nip05Fetch,
-  queryNip05Document,
-} from "../src/nips/nip05.ts";
+
+import { NIP05_REGEX, isNip05, lookupFromDocument, parseNip05, parseNip05Document, queryProfile, verifyNip05, wellKnownUrl, queryNip05Document } from '../src/nips/nip05.ts';
+import type { Nip05Fetch } from '../src/nips/nip05.ts';
 
 const PK = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d";
 const PK2 = "2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc";
@@ -27,9 +18,9 @@ describe("nip05 parse", () => {
   });
 
   test("parseNip05 forms", () => {
-    expect(parseNip05("Bob@Example.COM")).toEqual({ local: "bob", domain: "example.com" });
-    expect(parseNip05("_@example.com")).toEqual({ local: "_", domain: "example.com" });
-    expect(parseNip05("example.com")).toEqual({ local: "_", domain: "example.com" });
+    expect(parseNip05("Bob@Example.COM")).toStrictEqual({ local: "bob", domain: "example.com" });
+    expect(parseNip05("_@example.com")).toStrictEqual({ local: "_", domain: "example.com" });
+    expect(parseNip05("example.com")).toStrictEqual({ local: "_", domain: "example.com" });
     expect(() => parseNip05("not an id")).toThrow(/invalid NIP-05/);
   });
 
@@ -72,11 +63,11 @@ describe("nip05 parse", () => {
       },
     });
     expect(doc.names.bob).toBe(PK);
-    expect(lookupFromDocument(doc, { local: "bob", domain: "example.com" })).toEqual({
+    expect(lookupFromDocument(doc, { local: "bob", domain: "example.com" })).toStrictEqual({
       pubkey: PK,
       relays: ["wss://a.example", "wss://b.example"],
     });
-    expect(lookupFromDocument(doc, { local: "_", domain: "example.com" })).toEqual({
+    expect(lookupFromDocument(doc, { local: "_", domain: "example.com" })).toStrictEqual({
       pubkey: PK2,
     });
     expect(lookupFromDocument(doc, { local: "missing", domain: "example.com" })).toBeUndefined();
@@ -90,7 +81,7 @@ describe("nip05 parse", () => {
         nostrconnect_url: "nostrconnect://abc",
       },
     });
-    expect(spec.nip46).toEqual({
+    expect(spec.nip46).toStrictEqual({
       relays: ["wss://spec.example"],
       nostrconnectUrl: "nostrconnect://abc",
     });
@@ -111,12 +102,12 @@ describe("nip05 parse", () => {
         [PK]: ["wss://map.example"],
       },
     });
-    expect(mixed.nip46).toEqual({
+    expect(mixed.nip46).toStrictEqual({
       relays: ["wss://spec.example"],
       nostrconnectUrl: "nostrconnect://abc",
     });
     expect("relaysByPubkey" in (mixed.nip46 ?? {})).toBe(false);
-    expect(lookupFromDocument(mixed, { local: "bob", domain: "example.com" })).toEqual({
+    expect(lookupFromDocument(mixed, { local: "bob", domain: "example.com" })).toStrictEqual({
       pubkey: PK,
       relays: ["wss://profile.example"],
     });
@@ -133,13 +124,13 @@ describe("nip05 parse", () => {
       names: { bob: PK },
       nip46: { relays: [] },
     });
-    expect(emptyRelays.nip46).toEqual({ relays: [] });
+    expect(emptyRelays.nip46).toStrictEqual({ relays: [] });
 
     const urlOnly = parseNip05Document({
       names: { bob: PK },
       nip46: { nostrconnect_url: "nostrconnect://abc" },
     });
-    expect(urlOnly.nip46).toEqual({ nostrconnectUrl: "nostrconnect://abc" });
+    expect(urlOnly.nip46).toStrictEqual({ nostrconnectUrl: "nostrconnect://abc" });
 
     const emptyUrl = parseNip05Document({
       names: { bob: PK },
@@ -176,7 +167,7 @@ describe("nip05 query", () => {
     return async (url, init) => {
       expect((init as { redirect?: string } | undefined)?.redirect).toBe("manual");
       const entry = map[url];
-      if (!entry) return jsonResponse(404, {});
+      if (!entry) {return jsonResponse(404, {});}
       return jsonResponse(entry.status, entry.body);
     };
   }
@@ -207,7 +198,7 @@ describe("nip05 query", () => {
     });
 
     const root = await queryProfile("fiatjaf.com", { fetch: fetchImpl });
-    expect(root).toEqual({
+    expect(root).toStrictEqual({
       pubkey: PK,
       relays: ["wss://pyramid.fiatjaf.com", "wss://nos.lol"],
     });
@@ -234,9 +225,9 @@ describe("nip05 query", () => {
       },
     });
 
-    expect(await queryProfile("redir.example", { fetch: fetchImpl })).toBeNull();
-    expect(await queryProfile("bob@empty.example", { fetch: fetchImpl })).toBeNull();
-    expect(await queryProfile("%%%", { fetch: fetchImpl })).toBeNull();
+    await expect(queryProfile("redir.example", { fetch: fetchImpl })).resolves.toBeNull();
+    await expect(queryProfile("bob@empty.example", { fetch: fetchImpl })).resolves.toBeNull();
+    await expect(queryProfile("%%%", { fetch: fetchImpl })).resolves.toBeNull();
   });
 
   test("aborted signal throws AbortError, not null", async () => {
@@ -257,11 +248,11 @@ describe("nip05 query", () => {
     const net: Nip05Fetch = async () => {
       throw new TypeError("fetch failed");
     };
-    expect(await queryNip05Document("bob@example.com", { fetch: net })).toBeNull();
-    expect(await queryProfile("bob@example.com", { fetch: net })).toBeNull();
+    await expect(queryNip05Document("bob@example.com", { fetch: net })).resolves.toBeNull();
+    await expect(queryProfile("bob@example.com", { fetch: net })).resolves.toBeNull();
 
     const badDoc: Nip05Fetch = async () => jsonResponse(200, { names: "nope" });
-    expect(await queryNip05Document("bob@example.com", { fetch: badDoc })).toBeNull();
+    await expect(queryNip05Document("bob@example.com", { fetch: badDoc })).resolves.toBeNull();
   });
 
   test("verifyNip05", async () => {
@@ -272,8 +263,8 @@ describe("nip05 query", () => {
       },
     });
 
-    expect(await verifyNip05(PK, "bob@example.com", { fetch: fetchImpl })).toBe(true);
-    expect(await verifyNip05(PK2, "bob@example.com", { fetch: fetchImpl })).toBe(false);
-    expect(await verifyNip05("zz", "bob@example.com", { fetch: fetchImpl })).toBe(false);
+    await expect(verifyNip05(PK, "bob@example.com", { fetch: fetchImpl })).resolves.toBe(true);
+    await expect(verifyNip05(PK2, "bob@example.com", { fetch: fetchImpl })).resolves.toBe(false);
+    await expect(verifyNip05("zz", "bob@example.com", { fetch: fetchImpl })).resolves.toBe(false);
   });
 });

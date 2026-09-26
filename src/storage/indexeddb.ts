@@ -16,21 +16,8 @@ import {
 } from "./idb-helpers.ts";
 import { prefixRange, scanFilter } from "./idb-query.ts";
 import { openDb } from "./idb-schema.ts";
-import {
-  ADDRESSES,
-  EVENTS,
-  OUTBOX_BOUNDS,
-  TAG_REFS,
-  TOMBSTONES,
-  WRITE_STORES,
-  type AddressRow,
-  type IDBCursorDirectionLike,
-  type IDBDatabaseLike,
-  type IDBFactoryLike,
-  type IDBTransactionLike,
-  type OutboxBoundRow,
-  type Tombstone,
-} from "./idb-types.ts";
+import { ADDRESSES, EVENTS, OUTBOX_BOUNDS, TAG_REFS, TOMBSTONES, WRITE_STORES } from './idb-types.ts';
+import type { AddressRow, IDBCursorDirectionLike, IDBDatabaseLike, IDBFactoryLike, IDBTransactionLike, OutboxBoundRow, Tombstone } from './idb-types.ts';
 import { decidePut, outboxBoundKey } from "./put.ts";
 import type { EventStore, NegentropyItem, OutboxBound, PutResult } from "./types.ts";
 
@@ -41,16 +28,16 @@ export type IndexedDbEventStoreOptions = {
 };
 
 /**
- * Browser IndexedDB event store with the same replaceable / deletion semantics
- * as {@link MemoryEventStore}. Requires a DOM IndexedDB implementation.
+ * Browser IndexedDB event store with the same replaceable / deletion semantics as
+ * {@link MemoryEventStore}. Requires a DOM IndexedDB implementation.
  *
- * `open` loads every tombstone and address row into memory. Fine at 10^4 events;
- * tens of MB at 10^5 addressables.
+ * `open` loads every tombstone and address row into memory. Fine at 10^4 events; tens of MB at 10^5
+ * addressables.
  */
 export class IndexedDbEventStore implements EventStore {
   readonly #dbName: string;
   #db: IDBDatabaseLike | undefined;
-  #deletion = new DeletionState();
+  readonly #deletion = new DeletionState();
   #replaceable = new Map<string, string>();
   /** Serializes writes so abort restore cannot roll back a committed sibling tx. */
   #writeTail: Promise<void> = Promise.resolve();
@@ -60,11 +47,11 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   static isAvailable(): boolean {
-    return typeof (globalThis as { indexedDB?: IDBFactoryLike }).indexedDB !== "undefined";
+    return (globalThis as { indexedDB?: IDBFactoryLike }).indexedDB !== undefined;
   }
 
   async open(): Promise<void> {
-    if (this.#db) return;
+    if (this.#db) {return;}
     if (!IndexedDbEventStore.isAvailable()) {
       throw new StorageError("IndexedDB is not available in this environment");
     }
@@ -94,7 +81,7 @@ export class IndexedDbEventStore implements EventStore {
     await done;
   }
 
-  #enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
+   async #enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
     const run = this.#writeTail.then(op, op);
     this.#writeTail = run.then(
       () => undefined,
@@ -109,17 +96,17 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   /** One readwrite transaction; abort rejects the whole batch with no partial persist. */
-  async putMany(events: readonly Event[]): Promise<PutResult[]> {
-    if (events.length === 0) return [];
-    return this.#enqueueWrite(() => this.#putManyLocked(events));
+  async putMany(events: ReadonlyArray<Event>): Promise<PutResult[]> {
+    if (events.length === 0) {return [];}
+    return this.#enqueueWrite( async () => this.#putManyLocked(events));
   }
 
-  async #putManyLocked(events: readonly Event[]): Promise<PutResult[]> {
+  async #putManyLocked(events: ReadonlyArray<Event>): Promise<PutResult[]> {
     let db: IDBDatabaseLike;
     try {
       db = await this.#ensure();
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
     const tx = db.transaction(WRITE_STORES, "readwrite");
     const txSettled = new Promise<void>((resolve, reject) => {
@@ -129,15 +116,15 @@ export class IndexedDbEventStore implements EventStore {
     });
     const txOutcome = txSettled.then(
       () => undefined,
-      (err: unknown) => err,
+      (error: unknown) => error,
     );
     const cache = this.#snapshotCaches();
     try {
       const results = await this.#putAllInTx(tx, events);
       const txErr = await txOutcome;
-      if (txErr !== undefined) throw txErr;
+      if (txErr !== undefined) {throw txErr;}
       return results;
-    } catch (err) {
+    } catch (error) {
       this.#restoreCaches(cache);
       try {
         tx.abort();
@@ -145,12 +132,12 @@ export class IndexedDbEventStore implements EventStore {
         // already aborted or complete
       }
       await txOutcome;
-      throw toStorageError(err);
+      throw toStorageError(error);
     }
   }
 
   /** Sequential awaits so the tx stays alive between events. */
-  async #putAllInTx(tx: IDBTransactionLike, batch: readonly Event[]): Promise<PutResult[]> {
+  async #putAllInTx(tx: IDBTransactionLike, batch: ReadonlyArray<Event>): Promise<PutResult[]> {
     const eventsStore = tx.objectStore(EVENTS);
     const addressesStore = tx.objectStore(ADDRESSES);
     const results: PutResult[] = [];
@@ -162,29 +149,29 @@ export class IndexedDbEventStore implements EventStore {
       const event = raw;
       const byId = new Map<string, Pick<Event, "id" | "pubkey" | "kind" | "created_at" | "tags">>();
       const existing = await reqOf<Event | undefined>(eventsStore.get(event.id));
-      if (existing) byId.set(existing.id, existing);
+      if (existing) {byId.set(existing.id, existing);}
       if (event.kind === Kind.EventDeletion) {
         for (const tag of event.tags) {
-          if (tag[0] !== "e" || tag[1] === undefined) continue;
+          if (tag[0] !== "e" || tag[1] === undefined) {continue;}
           const got = await reqOf<Event | undefined>(eventsStore.get(tag[1].toLowerCase()));
-          if (got) byId.set(got.id, got);
+          if (got) {byId.set(got.id, got);}
         }
       }
       const addrRows = new Map<string, { id: string; created_at: number }>();
       const ownAddr = eventAddress(event);
       if (ownAddr) {
         const row = await reqOf<AddressRow | undefined>(addressesStore.get(ownAddr));
-        if (row) addrRows.set(ownAddr, { id: row.id, created_at: row.created_at });
+        if (row) {addrRows.set(ownAddr, { id: row.id, created_at: row.created_at });}
       }
       if (event.kind === Kind.EventDeletion) {
         for (const tag of event.tags) {
-          if (tag[0] !== "a" || !tag[1]) continue;
+          if (tag[0] !== "a" || !tag[1]) {continue;}
           const coord = parseEventAddress(tag[1]);
-          if (!coord) continue;
+          if (!coord) {continue;}
           const key = `${coord.kind}:${coord.pubkey}:${coord.identifier}`;
-          if (addrRows.has(key)) continue;
+          if (addrRows.has(key)) {continue;}
           const row = await reqOf<AddressRow | undefined>(addressesStore.get(key));
-          if (row) addrRows.set(key, { id: row.id, created_at: row.created_at });
+          if (row) {addrRows.set(key, { id: row.id, created_at: row.created_at });}
         }
       }
       const d = decidePut(event, {
@@ -196,7 +183,7 @@ export class IndexedDbEventStore implements EventStore {
       // request continuation. `await` of a no-request promise auto-commits the tx.
       if (d.action === "delete") {
         const remove = new Set([...d.plan.removeIds, ...d.coordIds]);
-        for (const id of remove) await this.#deleteEventRows(tx, id);
+        for (const id of remove) {await this.#deleteEventRows(tx, id);}
       } else if (d.action === "insert" && d.replaceId) {
         await this.#deleteEventRows(tx, d.replaceId);
       }
@@ -236,16 +223,16 @@ export class IndexedDbEventStore implements EventStore {
   }): void {
     this.#replaceable = snap.replaceable;
     this.#deletion.ids.clear();
-    for (const id of snap.ids) this.#deletion.ids.add(id);
+    for (const id of snap.ids) {this.#deletion.ids.add(id);}
     this.#deletion.pending.clear();
-    for (const [k, v] of snap.pending) this.#deletion.pending.set(k, v);
+    for (const [k, v] of snap.pending) {this.#deletion.pending.set(k, v);}
     this.#deletion.coordinates.clear();
-    for (const [k, v] of snap.coordinates) this.#deletion.coordinates.set(k, v);
+    for (const [k, v] of snap.coordinates) {this.#deletion.coordinates.set(k, v);}
   }
 
   async get(id: string): Promise<Event | undefined> {
     const key = id.toLowerCase();
-    if (this.#deletion.ids.has(key)) return undefined;
+    if (this.#deletion.ids.has(key)) {return undefined;}
     const db = await this.#ensure();
     const tx = db.transaction(EVENTS, "readonly");
     const done = txDone(tx);
@@ -263,7 +250,7 @@ export class IndexedDbEventStore implements EventStore {
     for (const filter of filters) {
       const matched = await this.#queryOne(tx, filter);
       for (const event of matched) {
-        if (seen.has(event.id)) continue;
+        if (seen.has(event.id)) {continue;}
         seen.add(event.id);
         events.push(event);
       }
@@ -284,7 +271,7 @@ export class IndexedDbEventStore implements EventStore {
         local.add(event.id);
         return filter.limit !== undefined && local.size >= filter.limit;
       });
-      for (const id of local) seen.add(id);
+      for (const id of local) {seen.add(id);}
     }
     await done;
     return seen.size;
@@ -305,8 +292,8 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   #acceptHit(filter: Filter, event: Event): boolean {
-    if (this.#deletion.ids.has(event.id)) return false;
-    if (this.#deletion.covers(event)) return false;
+    if (this.#deletion.ids.has(event.id)) {return false;}
+    if (this.#deletion.covers(event)) {return false;}
     return matchFilter(filter, event);
   }
 
@@ -320,7 +307,7 @@ export class IndexedDbEventStore implements EventStore {
     return matched;
   }
 
-  #scan(tx: IDBTransactionLike, filter: Filter, take: (event: Event) => boolean): Promise<void> {
+   async #scan(tx: IDBTransactionLike, filter: Filter, take: (event: Event) => boolean): Promise<void> {
     return scanFilter(tx, filter, (event) => this.#acceptHit(filter, event), take);
   }
 
@@ -337,13 +324,13 @@ export class IndexedDbEventStore implements EventStore {
         return { oldest: row.oldest, newest: row.newest };
       }
       return await this.#deriveOutboxBound(pubkey, kind);
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
   }
 
   async setOutboxBound(pubkey: string, kind: number, bound: OutboxBound): Promise<void> {
-    return this.#enqueueWrite(() => this.#setOutboxBoundLocked(pubkey, kind, bound));
+    return this.#enqueueWrite( async () => this.#setOutboxBoundLocked(pubkey, kind, bound));
   }
 
   async #setOutboxBoundLocked(pubkey: string, kind: number, bound: OutboxBound): Promise<void> {
@@ -357,13 +344,13 @@ export class IndexedDbEventStore implements EventStore {
         newest: bound.newest,
       } satisfies OutboxBoundRow);
       await done;
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
   }
 
   async remove(ids: string[]): Promise<number> {
-    return this.#enqueueWrite(() => this.#removeLocked(ids));
+    return this.#enqueueWrite( async () => this.#removeLocked(ids));
   }
 
   async #removeLocked(ids: string[]): Promise<number> {
@@ -374,7 +361,7 @@ export class IndexedDbEventStore implements EventStore {
     let n = 0;
     for (const raw of ids) {
       const id = raw.toLowerCase();
-      if (await this.#deleteEventRows(tx, id)) n += 1;
+      if (await this.#deleteEventRows(tx, id)) {n += 1;}
       tombstones.put({ key: `id:${id}`, type: "id" } satisfies Tombstone);
       tombstones.delete(`pending:${id}`);
       this.#deletion.ids.add(id);
@@ -385,7 +372,7 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async clear(): Promise<void> {
-    return this.#enqueueWrite(() => this.#clearLocked());
+    return this.#enqueueWrite( async () => this.#clearLocked());
   }
 
   async #clearLocked(): Promise<void> {
@@ -393,7 +380,7 @@ export class IndexedDbEventStore implements EventStore {
     const stores = [...WRITE_STORES, OUTBOX_BOUNDS];
     const tx = db.transaction(stores, "readwrite");
     const done = txDone(tx);
-    for (const name of stores) tx.objectStore(name).clear();
+    for (const name of stores) {tx.objectStore(name).clear();}
     this.#deletion.clear();
     this.#replaceable.clear();
     await done;
@@ -407,12 +394,12 @@ export class IndexedDbEventStore implements EventStore {
   async #deleteEventRows(tx: IDBTransactionLike, id: string): Promise<boolean> {
     const events = tx.objectStore(EVENTS);
     const event = await reqOf<Event | undefined>(events.get(id));
-    if (!event) return false;
+    if (!event) {return false;}
     const addr = eventAddress(event);
     let row: AddressRow | undefined;
     if (addr) {
       row = await reqOf<AddressRow | undefined>(tx.objectStore(ADDRESSES).get(addr));
-      if (this.#replaceable.get(addr) === event.id) this.#replaceable.delete(addr);
+      if (this.#replaceable.get(addr) === event.id) {this.#replaceable.delete(addr);}
     }
     deleteStoredEvent(tx, event, row);
     return true;
@@ -428,10 +415,10 @@ export class IndexedDbEventStore implements EventStore {
     const filter: Filter = { authors: [pk], kinds: [kind] };
     let oldest: number | undefined;
     let newest: number | undefined;
-    const firstLive = (direction: IDBCursorDirectionLike, assign: (createdAt: number) => void) =>
+    const firstLive =  async (direction: IDBCursorDirectionLike, assign: (createdAt: number) => void) =>
       walkCursor(index, range, direction, (cursor) => {
         const event = cursor.value as Event;
-        if (!this.#acceptHit(filter, event)) return false;
+        if (!this.#acceptHit(filter, event)) {return false;}
         assign(event.created_at);
         return true;
       });
@@ -444,7 +431,7 @@ export class IndexedDbEventStore implements EventStore {
       }),
     ]);
     await done;
-    if (oldest === undefined || newest === undefined) return undefined;
+    if (oldest === undefined || newest === undefined) {return undefined;}
     return { oldest, newest };
   }
 }

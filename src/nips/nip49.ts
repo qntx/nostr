@@ -7,6 +7,7 @@ import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import { scrypt } from "@noble/hashes/scrypt.js";
 import { concatBytes, randomBytes } from "@noble/hashes/utils.js";
 import { bech32 } from "@scure/base";
+
 import { NostrError } from "../core/error.ts";
 import { assertSecretKeyBytes } from "../core/util.ts";
 import { Bech32MaxSize, encodeBytes } from "./nip19.ts";
@@ -76,9 +77,9 @@ export function decrypt(ncryptsec: string, password: string): Uint8Array {
     const decoded = bech32.decode(ncryptsec as `${string}1${string}`, Bech32MaxSize);
     prefix = decoded.prefix;
     b = new Uint8Array(bech32.fromWords(decoded.words));
-  } catch (cause) {
+  } catch (error) {
     throw new Nip49Error("invalid ncryptsec", {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
   if (prefix !== "ncryptsec") {
@@ -100,10 +101,10 @@ export function decrypt(ncryptsec: string, password: string): Uint8Array {
   try {
     const key = deriveKey(password, salt, logn);
     return xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
-  } catch (cause) {
-    if (cause instanceof Nip49Error) throw cause;
+  } catch (error) {
+    if (error instanceof Nip49Error) throw error;
     throw new Nip49Error("failed to decrypt", {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
 }

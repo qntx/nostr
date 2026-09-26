@@ -1,10 +1,14 @@
-import { compareEventsDesc, itemCompare, sortEvents, type Event } from "../core/event.ts";
-import { matchFilter, type Filter } from "../core/filter.ts";
+import { compareEventsDesc, itemCompare, sortEvents } from '../core/event.ts';
+import type { Event } from '../core/event.ts';
+import { matchFilter } from '../core/filter.ts';
+import type { Filter } from '../core/filter.ts';
 import { Kind } from "../core/kind.ts";
 import { eventAddress, formatEventAddress, parseEventAddress } from "../core/tag.ts";
-import { DeletionState, type DeletionPlan } from "./deletion.ts";
+import { DeletionState } from './deletion.ts';
+import type { DeletionPlan } from './deletion.ts';
 import { toStorageError } from "./error.ts";
-import { decidePut, type PutDecision, type PutLookup } from "./put.ts";
+import { decidePut } from './put.ts';
+import type { PutDecision, PutLookup } from './put.ts';
 import type { EventStore, NegentropyItem, OutboxBound, PutResult } from "./types.ts";
 
 /** Value bindable to a SQLite statement parameter. */
@@ -13,9 +17,9 @@ export type SqlValue = string | number | null | Uint8Array;
 /**
  * Minimal async SQLite driver surface.
  *
- * `transaction` must serialize `fn` exclusively — no interleaved statements
- * from other callers may run while the callback transaction is active. It
- * commits when `fn` resolves and rolls back when `fn` rejects.
+ * `transaction` must serialize `fn` exclusively — no interleaved statements from other callers may
+ * run while the callback transaction is active. It commits when `fn` resolves and rolls back when
+ * `fn` rejects.
  *
  * `expo-sqlite` maps onto this interface without changes to query code:
  *
@@ -32,7 +36,7 @@ export type SqlValue = string | number | null | Uint8Array;
  * };
  * ```
  */
-export interface SqlDriver {
+export type SqlDriver = {
   /** Execute SQL without parameters (DDL, PRAGMA, multi-statement batches). */
   exec(sql: string): Promise<void>;
   /** Run a statement; resolves with the number of changed rows. */
@@ -122,7 +126,7 @@ function rowToEvent(row: EventRow): Event {
   };
 }
 
-function chunkValues<T>(values: readonly T[]): T[][] {
+function chunkValues<T>(values: ReadonlyArray<T>): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < values.length; i += IN_CHUNK) {
     chunks.push(values.slice(i, i + IN_CHUNK));
@@ -141,16 +145,15 @@ type FilterPlan = {
 };
 
 /**
- * Compile one NIP-01 filter into query variants. `IN` lists are chunked so a
- * variant never binds more than {@link IN_CHUNK} values per list; variants are
- * the cartesian product of chunks across constrained fields. `deferred` means
- * a `#<multi-char>` tag term cannot use the tags index (only single-letter tag
- * names are indexed) and must be checked with `matchFilter` before `limit`.
+ * Compile one NIP-01 filter into query variants. `IN` lists are chunked so a variant never binds
+ * more than {@link IN_CHUNK} values per list; variants are the cartesian product of chunks across
+ * constrained fields. `deferred` means a `#<multi-char>` tag term cannot use the tags index (only
+ * single-letter tag names are indexed) and must be checked with `matchFilter` before `limit`.
  * Returns `undefined` when an empty list field makes the filter match nothing.
  */
 function compileFilter(filter: Filter): { plans: FilterPlan[]; deferred: boolean } | undefined {
   const variants: FilterPlan[][] = [];
-  const pushIn = (values: readonly SqlValue[], clause: (n: number) => string) => {
+  const pushIn = (values: ReadonlyArray<SqlValue>, clause: (n: number) => string) => {
     variants.push(
       chunkValues(values).map((chunk) => ({
         wheres: [clause(chunk.length)],
@@ -160,21 +163,21 @@ function compileFilter(filter: Filter): { plans: FilterPlan[]; deferred: boolean
   };
 
   if (filter.ids) {
-    if (filter.ids.length === 0) return undefined;
+    if (filter.ids.length === 0) {return undefined;}
     pushIn(
       filter.ids.map((id) => id.toLowerCase()),
       (n) => inClause("id", n),
     );
   }
   if (filter.authors) {
-    if (filter.authors.length === 0) return undefined;
+    if (filter.authors.length === 0) {return undefined;}
     pushIn(
       filter.authors.map((pk) => pk.toLowerCase()),
       (n) => inClause("pubkey", n),
     );
   }
   if (filter.kinds) {
-    if (filter.kinds.length === 0) return undefined;
+    if (filter.kinds.length === 0) {return undefined;}
     pushIn(filter.kinds, (n) => inClause("kind", n));
   }
   if (filter.since !== undefined) {
@@ -186,15 +189,15 @@ function compileFilter(filter: Filter): { plans: FilterPlan[]; deferred: boolean
 
   let deferred = false;
   for (const key of Object.keys(filter)) {
-    if (!key.startsWith("#")) continue;
+    if (!key.startsWith("#")) {continue;}
     const name = key.slice(1);
     const values = filter[key as `#${string}`];
-    if (!values) continue;
+    if (!values) {continue;}
     if (name.length !== 1) {
       deferred = true;
       continue;
     }
-    if (values.length === 0) return undefined;
+    if (values.length === 0) {return undefined;}
     const normalized = name === "e" || name === "p" ? values.map((v) => v.toLowerCase()) : values;
     variants.push(
       chunkValues(normalized).map((chunk) => ({
@@ -225,14 +228,13 @@ function compileFilter(filter: Filter): { plans: FilterPlan[]; deferred: boolean
 }
 
 /**
- * SQLite-backed {@link EventStore} for React Native (`expo-sqlite`,
- * `op-sqlite`) and desktop runtimes. Same semantics as
- * {@link MemoryEventStore} and {@link IndexedDbEventStore}: identical
- * `decidePut` insertion policy, NIP-09 tombstones, and filter handling, with
- * the database — not in-memory caches — as the source of truth.
+ * SQLite-backed {@link EventStore} for React Native (`expo-sqlite`, `op-sqlite`) and desktop
+ * runtimes. Same semantics as {@link MemoryEventStore} and {@link IndexedDbEventStore}: identical
+ * `decidePut` insertion policy, NIP-09 tombstones, and filter handling, with the database — not
+ * in-memory caches — as the source of truth.
  *
- * Construct via {@link SqliteEventStore.open}; writes are serialized and run
- * inside an exclusive driver transaction.
+ * Construct via {@link SqliteEventStore.open}; writes are serialized and run inside an exclusive
+ * driver transaction.
  */
 export class SqliteEventStore implements EventStore {
   readonly #driver: SqlDriver;
@@ -260,12 +262,12 @@ export class SqliteEventStore implements EventStore {
       } else if (version !== SCHEMA_VERSION) {
         throw toStorageError(new Error(`unsupported sqlite event store schema version ${version}`));
       }
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
   }
 
-  #enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
+   async #enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
     const result = this.#writeTail.then(op);
     this.#writeTail = result.then(
       () => undefined,
@@ -279,18 +281,18 @@ export class SqliteEventStore implements EventStore {
     return result!;
   }
 
-  async putMany(events: readonly Event[]): Promise<PutResult[]> {
-    if (events.length === 0) return [];
+  async putMany(events: ReadonlyArray<Event>): Promise<PutResult[]> {
+    if (events.length === 0) {return [];}
     return this.#enqueueWrite(async () => {
       try {
-        return await this.#driver.transaction((tx) => this.#putAllInTx(tx, events));
-      } catch (err) {
-        throw toStorageError(err);
+        return await this.#driver.transaction( async (tx) => this.#putAllInTx(tx, events));
+      } catch (error) {
+        throw toStorageError(error);
       }
     });
   }
 
-  async #putAllInTx(tx: SqlDriver, batch: readonly Event[]): Promise<PutResult[]> {
+  async #putAllInTx(tx: SqlDriver, batch: ReadonlyArray<Event>): Promise<PutResult[]> {
     const results: PutResult[] = [];
     for (const event of batch) {
       const lookup = await this.#buildLookup(tx, event);
@@ -306,7 +308,7 @@ export class SqliteEventStore implements EventStore {
     const idList = [event.id];
     if (event.kind === Kind.EventDeletion) {
       for (const tag of event.tags) {
-        if (tag[0] === "e" && tag[1]) idList.push(tag[1].toLowerCase());
+        if (tag[0] === "e" && tag[1]) {idList.push(tag[1].toLowerCase());}
       }
     }
     for (const row of await this.#eventRowsByIds(tx, idList)) {
@@ -316,14 +318,14 @@ export class SqliteEventStore implements EventStore {
     const byAddress = new Map<string, { id: string; created_at: number }>();
     const addressList: string[] = [];
     const ownAddress = eventAddress(event);
-    if (ownAddress) addressList.push(ownAddress);
+    if (ownAddress) {addressList.push(ownAddress);}
     if (event.kind === Kind.EventDeletion) {
       for (const tag of event.tags) {
-        if (tag[0] !== "a" || !tag[1]) continue;
+        if (tag[0] !== "a" || !tag[1]) {continue;}
         const coord = parseEventAddress(tag[1]);
-        if (!coord) continue;
+        if (!coord) {continue;}
         const key = formatEventAddress(coord.kind, coord.pubkey, coord.identifier);
-        if (!addressList.includes(key)) addressList.push(key);
+        if (!addressList.includes(key)) {addressList.push(key);}
       }
     }
     for (const chunk of chunkValues(addressList)) {
@@ -352,7 +354,7 @@ export class SqliteEventStore implements EventStore {
       ownAddress ? [event.id, ownAddress] : [event.id],
     );
     for (const row of tombstoneRows) {
-      if (row.kind === "id") deletion.ids.add(row.key);
+      if (row.kind === "id") {deletion.ids.add(row.key);}
       else if (row.kind === "pending" && row.pubkey !== null) {
         deletion.pending.set(row.key, row.pubkey);
       } else if (row.kind === "coord" && row.until !== null) {
@@ -367,7 +369,7 @@ export class SqliteEventStore implements EventStore {
     };
   }
 
-  async #eventRowsByIds(tx: SqlDriver, ids: readonly string[]): Promise<Event[]> {
+  async #eventRowsByIds(tx: SqlDriver, ids: ReadonlyArray<string>): Promise<Event[]> {
     const events: Event[] = [];
     for (const chunk of chunkValues(ids)) {
       for (const row of await tx.all<EventRow>(
@@ -389,18 +391,18 @@ export class SqliteEventStore implements EventStore {
         await this.#putTombstone(tx, "id", d.event.id);
         await this.#deleteTombstone(tx, "pending", d.event.id);
         return;
-      case "delete": {
+      case "delete": 
         await this.#persistPlan(tx, d.event.id, d.plan, d.coordIds);
         for (const id of d.plan.removeIds) await this.#deleteEvent(tx, id);
         for (const id of d.coordIds) await this.#deleteEvent(tx, id);
         await this.#insertEvent(tx, d.event);
         return;
-      }
-      case "insert": {
+      
+      case "insert": 
         if (d.replaceId) await this.#deleteEvent(tx, d.replaceId);
         await this.#insertEvent(tx, d.event);
         return;
-      }
+      
     }
   }
 
@@ -409,7 +411,7 @@ export class SqliteEventStore implements EventStore {
     tx: SqlDriver,
     deletionId: string,
     plan: DeletionPlan,
-    coordIds: readonly string[],
+    coordIds: ReadonlyArray<string>,
   ): Promise<void> {
     await this.#deleteTombstone(tx, "pending", deletionId);
     for (const id of plan.removeIds) {
@@ -494,8 +496,8 @@ export class SqliteEventStore implements EventStore {
       );
       const row = rows[0];
       return row ? rowToEvent(row) : undefined;
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
   }
 
@@ -505,14 +507,14 @@ export class SqliteEventStore implements EventStore {
       const events: Event[] = [];
       for (const filter of filters) {
         for (const event of await this.#filterRows(filter, "*")) {
-          if (seen.has(event.id)) continue;
+          if (seen.has(event.id)) {continue;}
           seen.add(event.id);
           events.push(event);
         }
       }
       return sortEvents(events);
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
   }
 
@@ -525,8 +527,8 @@ export class SqliteEventStore implements EventStore {
         }
       }
       return seen.size;
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
   }
 
@@ -534,16 +536,15 @@ export class SqliteEventStore implements EventStore {
     try {
       const items = await this.#filterRows(filter, "id, created_at");
       return items.sort(itemCompare);
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
   }
 
   /**
-   * Rows matching one filter, deduped, newest-first, with `limit` applied.
-   * `select` is a trusted column list for the projection. A filter with a
-   * non-indexed (multi-char) `#` tag term falls back to a `matchFilter` pass
-   * and cannot push `limit` down.
+   * Rows matching one filter, deduped, newest-first, with `limit` applied. `select` is a trusted
+   * column list for the projection. A filter with a non-indexed (multi-char) `#` tag term falls
+   * back to a `matchFilter` pass and cannot push `limit` down.
    */
   async #filterRows(filter: Filter, select: "*"): Promise<Event[]>;
   async #filterRows(filter: Filter, select: "id, created_at"): Promise<NegentropyItem[]>;
@@ -551,18 +552,18 @@ export class SqliteEventStore implements EventStore {
     filter: Filter,
     select: "*" | "id, created_at",
   ): Promise<Array<Event | NegentropyItem>> {
-    if (filter.limit === 0) return [];
+    if (filter.limit === 0) {return [];}
     const compiled = compileFilter(filter);
-    if (!compiled) return [];
+    if (!compiled) {return [];}
     const { plans, deferred } = compiled;
     const effectiveSelect = deferred ? "*" : select;
     const limit = deferred ? undefined : filter.limit;
-    const tail = ` ORDER BY created_at DESC, id ASC${limit !== undefined ? " LIMIT ?" : ""}`;
+    const tail = ` ORDER BY created_at DESC, id ASC${limit === undefined ? "" : " LIMIT ?"}`;
 
     const rows: Array<EventRow | NegentropyItem> = [];
     for (const plan of plans) {
       const where = plan.wheres.length > 0 ? ` WHERE ${plan.wheres.join(" AND ")}` : "";
-      const params = limit !== undefined ? [...plan.params, limit] : plan.params;
+      const params = limit === undefined ? plan.params : [...plan.params, limit];
       rows.push(
         ...(await this.#driver.all<EventRow | NegentropyItem>(
           `SELECT ${effectiveSelect} FROM events${where}${tail}`,
@@ -574,20 +575,20 @@ export class SqliteEventStore implements EventStore {
     const seen = new Set<string>();
     const merged: typeof rows = [];
     for (const row of rows) {
-      if (seen.has(row.id)) continue;
+      if (seen.has(row.id)) {continue;}
       seen.add(row.id);
       merged.push(row);
     }
 
     if (!deferred) {
-      const capped = limit !== undefined ? merged.slice(0, limit) : merged;
+      const capped = limit === undefined ? merged : merged.slice(0, limit);
       return select === "*" ? capped.map((row) => rowToEvent(row as EventRow)) : capped;
     }
     const matched = merged
       .map((row) => rowToEvent(row as EventRow))
       .filter((event) => matchFilter(filter, event));
-    const limited = filter.limit !== undefined ? matched.slice(0, filter.limit) : matched;
-    if (select === "*") return limited;
+    const limited = filter.limit === undefined ? matched : matched.slice(0, filter.limit);
+    if (select === "*") {return limited;}
     return limited.map((e) => ({ id: e.id, created_at: e.created_at }));
   }
 
@@ -600,7 +601,7 @@ export class SqliteEventStore implements EventStore {
         [pk, kind],
       );
       const row = rows[0];
-      if (row) return { oldest: row.oldest, newest: row.newest };
+      if (row) {return { oldest: row.oldest, newest: row.newest };}
       const derived = await this.#driver.all<{
         oldest: number | null;
         newest: number | null;
@@ -610,10 +611,10 @@ export class SqliteEventStore implements EventStore {
         [pk, kind],
       );
       const d = derived[0];
-      if (!d || d.oldest === null || d.newest === null) return undefined;
+      if (!d || d.oldest === null || d.newest === null) {return undefined;}
       return { oldest: d.oldest, newest: d.newest };
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
   }
 
@@ -628,8 +629,8 @@ export class SqliteEventStore implements EventStore {
             [pk, kind, bound.oldest, bound.newest],
           );
         });
-      } catch (err) {
-        throw toStorageError(err);
+      } catch (error) {
+        throw toStorageError(error);
       }
     });
   }
@@ -647,8 +648,8 @@ export class SqliteEventStore implements EventStore {
           }
           return removed;
         });
-      } catch (err) {
-        throw toStorageError(err);
+      } catch (error) {
+        throw toStorageError(error);
       }
     });
   }
@@ -662,8 +663,8 @@ export class SqliteEventStore implements EventStore {
           await tx.run("DELETE FROM tombstones");
           await tx.run("DELETE FROM outbox_bounds");
         });
-      } catch (err) {
-        throw toStorageError(err);
+      } catch (error) {
+        throw toStorageError(error);
       }
     });
   }

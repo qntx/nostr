@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
-import { ReactiveEventStore } from "../src/index.ts";
+
 import type { Event } from "../src/core/event.ts";
-import { Keys } from "../src/index.ts";
+import { ReactiveEventStore,Keys } from "../src/index.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
@@ -36,7 +36,7 @@ describe("reactive store bench", () => {
     const events: Event[] = Array.from({ length: N }, (_, i) => event(i, pubkey));
 
     const t0 = performance.now();
-    for (let i = 0; i < N; i++) store.add(events[i]!, "wss://bench");
+    for (let i = 0; i < N; i++) {store.add(events[i], "wss://bench");}
     const ms = performance.now() - t0;
 
     const usPerAdd = (ms / N) * 1000;

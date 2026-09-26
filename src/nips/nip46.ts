@@ -1,3 +1,4 @@
+import { NostrError } from "../core/error.ts";
 /**
  * NIP-46 (Nostr Connect) protocol helpers: bunker URI, nostrconnect URI, RPC JSON.
  * Transport/signing live in {@link Nip46Signer}.
@@ -5,7 +6,6 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/46.md
  */
 import { assertHex32, isHex32 } from "../core/util.ts";
-import { NostrError } from "../core/error.ts";
 
 export const BUNKER_REGEX: RegExp = /^bunker:\/\/([0-9a-fA-F]{64})\??([?/\w:.=&%-]*)$/;
 
@@ -60,12 +60,12 @@ export function toBunkerURL(pointer: BunkerPointer): string {
 }
 
 /**
- * Parse a `bunker://` URL into a pointer.
- * Returns null when the input is not a bunker URL (including NIP-05 identifiers).
+ * Parse a `bunker://` URL into a pointer. Returns null when the input is not a bunker URL
+ * (including NIP-05 identifiers).
  */
 export function parseBunkerURL(input: string): BunkerPointer | null {
-  const match = input.trim().match(BUNKER_REGEX);
-  if (!match?.[1]) return null;
+  const match = BUNKER_REGEX.exec(input.trim());
+  if (!match?.[1]) {return null;}
   try {
     const pubkey = assertHex32(match[1], "bunker pubkey");
     const qs = new URLSearchParams(match[2] ?? "");
@@ -99,9 +99,9 @@ export function createNostrConnectURI(params: NostrConnectParams): string {
   if (params.perms && params.perms.length > 0) {
     query.set("perms", params.perms.join(","));
   }
-  if (params.name) query.set("name", params.name);
-  if (params.url) query.set("url", params.url);
-  if (params.image) query.set("image", params.image);
+  if (params.name) {query.set("name", params.name);}
+  if (params.url) {query.set("url", params.url);}
+  if (params.image) {query.set("image", params.image);}
 
   return `nostrconnect://${params.clientPubkey.toLowerCase()}?${query.toString()}`;
 }
@@ -111,9 +111,9 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
   let url: URL;
   try {
     url = new URL(uri);
-  } catch (cause) {
+  } catch (error) {
     throw new Nip46Error(`invalid nostrconnect URI: ${uri}`, {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
   if (url.protocol !== "nostrconnect:") {
@@ -124,9 +124,9 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
     throw new Nip46Error("invalid client pubkey in nostrconnect URI");
   }
   const secret = url.searchParams.get("secret");
-  if (!secret) throw new Nip46Error("missing secret in nostrconnect URI");
+  if (!secret) {throw new Nip46Error("missing secret in nostrconnect URI");}
   const relays = url.searchParams.getAll("relay");
-  if (relays.length === 0) throw new Nip46Error("missing relays in nostrconnect URI");
+  if (relays.length === 0) {throw new Nip46Error("missing relays in nostrconnect URI");}
   const permsRaw = url.searchParams.get("perms");
   return {
     clientPubkey: clientPubkey.toLowerCase(),
@@ -147,9 +147,9 @@ export function decodeNip46Request(json: string): Nip46Request {
   let data: unknown;
   try {
     data = JSON.parse(json);
-  } catch (cause) {
+  } catch (error) {
     throw new Nip46Error("invalid NIP-46 request JSON", {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
   if (!isRecord(data) || typeof data.id !== "string" || typeof data.method !== "string") {
@@ -158,13 +158,13 @@ export function decodeNip46Request(json: string): Nip46Request {
   if (!Array.isArray(data.params) || !data.params.every((p) => typeof p === "string")) {
     throw new Nip46Error("invalid NIP-46 request params");
   }
-  return { id: data.id, method: data.method, params: data.params as string[] };
+  return { id: data.id, method: data.method, params: data.params };
 }
 
 export function encodeNip46Response(res: Nip46Response): string {
   const body: Record<string, string> = { id: res.id };
-  if (res.result !== undefined) body.result = res.result;
-  if (res.error !== undefined) body.error = res.error;
+  if (res.result !== undefined) {body.result = res.result;}
+  if (res.error !== undefined) {body.error = res.error;}
   return JSON.stringify(body);
 }
 
@@ -172,9 +172,9 @@ export function decodeNip46Response(json: string): Nip46Response {
   let data: unknown;
   try {
     data = JSON.parse(json);
-  } catch (cause) {
+  } catch (error) {
     throw new Nip46Error("invalid NIP-46 response JSON", {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
   if (!isRecord(data) || typeof data.id !== "string") {
@@ -188,8 +188,8 @@ export function decodeNip46Response(json: string): Nip46Response {
   }
   return {
     id: data.id,
-    result: data.result as string | undefined,
-    error: data.error as string | undefined,
+    result: data.result,
+    error: data.error,
   };
 }
 

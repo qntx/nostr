@@ -11,8 +11,8 @@ export type SubscriptionHandlers = {
   /** Skip verify + onevent when true. Evaluated after parse, before verify. */
   alreadyHaveEvent?: (id: string) => boolean;
   /**
-   * Fired for every EVENT id this sub sees, including duplicates and
-   * alreadyHaveEvent hits, after parse and before the verify skip.
+   * Fired for every EVENT id this sub sees, including duplicates and alreadyHaveEvent hits, after
+   * parse and before the verify skip.
    */
   receivedEvent?: (id: string) => void;
 };
@@ -21,13 +21,13 @@ export type SubscriptionHandlers = {
 export type SubscribeOptions = SubscriptionHandlers & {
   id?: string;
   /**
-   * If set, fire `oneose` once after this many ms if EOSE has not arrived.
-   * Does not close the REQ. `Relay.fetch` is the one-shot closer.
+   * If set, fire `oneose` once after this many ms if EOSE has not arrived. Does not close the REQ.
+   * `Relay.fetch` is the one-shot closer.
    */
   eoseTimeoutMs?: number;
   /**
-   * One-shot REQ: do not join a live coalescing group, and close on EOSE.
-   * Default false (live). `Relay.fetch` passes true.
+   * One-shot REQ: do not join a live coalescing group, and close on EOSE. Default false (live).
+   * `Relay.fetch` passes true.
    */
   closeOnEose?: boolean;
   signal?: AbortSignal;
@@ -45,9 +45,9 @@ export class Subscription {
   /** Inclusive NIP-01 `since` watermark from verified EVENTs. */
   lastCreatedAt: number | undefined;
   /** Event ids at `lastCreatedAt` (same-second reconnect dedup). Not all seen ids. */
-  readonly idsAtWatermark: Set<string> = new Set();
+  readonly idsAtWatermark = new Set<string>();
   readonly #sendClose: (id: string) => void;
-  #abort: (() => void) | undefined;
+  readonly #abort: (() => void) | undefined;
 
   constructor(filters: Filter[], opts: SubscribeOptions, sendClose: (id: string) => void) {
     this.#sendClose = sendClose;
@@ -74,7 +74,7 @@ export class Subscription {
   }
 
   close(reason = "closed by client"): void {
-    if (this.closed) return;
+    if (this.closed) {return;}
     this.closed = true;
     this.#abort?.();
     this.#sendClose(this.id);
@@ -89,16 +89,16 @@ export class Subscription {
       this.idsAtWatermark.add(event.id);
       return;
     }
-    if (event.created_at === this.lastCreatedAt) this.idsAtWatermark.add(event.id);
+    if (event.created_at === this.lastCreatedAt) {this.idsAtWatermark.add(event.id);}
   }
 
   /**
-   * Filters for re-REQ. Original `filters` stay unchanged.
-   * NIP-01 `since` is inclusive — never `lastCreatedAt + 1`.
+   * Filters for re-REQ. Original `filters` stay unchanged. NIP-01 `since` is inclusive — never
+   * `lastCreatedAt + 1`.
    */
   replayFilters(): Filter[] {
     const since = this.lastCreatedAt;
-    if (since === undefined) return this.filters;
+    if (since === undefined) {return this.filters;}
     return this.filters.map((f) => ({
       ...f,
       since: f.since === undefined ? since : Math.max(f.since, since),
@@ -146,7 +146,7 @@ export function subscriptionToAsyncIterable(
       // The Subscription's own abort listener fires before this wrapper's,
       // so a signal-driven close can surface here while localClose is still
       // false — it is still a local close, not a remote one.
-      if (opts?.signal?.aborted) localClose = true;
+      if (opts?.signal?.aborted) {localClose = true;}
       if (!localClose && reason) {
         error = new RelayClosedError(reason);
       }
@@ -174,8 +174,8 @@ export function subscriptionToAsyncIterable(
             if (queue.length > 0) {
               return { value: queue.shift()!, done: false };
             }
-            if (error) throw error;
-            if (done) return { value: undefined, done: true };
+            if (error) {throw error;}
+            if (done) {return { value: undefined, done: true };}
             await new Promise<void>((resolve) => {
               wake = resolve;
             });

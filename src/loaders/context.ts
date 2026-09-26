@@ -5,13 +5,12 @@ import type { ReactiveEventStore } from "../store/reactive.ts";
 export type LoaderContextOptions = {
   pool: Pool;
   /** Fallback / discovery relays when no per-user routing is known. */
-  relays: readonly string[];
+  relays: ReadonlyArray<string>;
   /** The reactive index loaders read from and feed fetched events into. */
   index: ReactiveEventStore;
   /**
-   * Inbound-event sink for fetched events. Defaults to `index.add`; Client
-   * supplies its single ingest path so loader fetches get gossip meta and
-   * persistence like every other inbound event.
+   * Inbound-event sink for fetched events. Defaults to `index.add`; Client supplies its single
+   * ingest path so loader fetches get gossip meta and persistence like every other inbound event.
    */
   ingest?: (event: Event, relayUrl: string) => void;
   /** Max age (seconds) before a fetched replaceable is considered stale. Default 2 days. */
@@ -19,9 +18,7 @@ export type LoaderContextOptions = {
   fetchTimeoutMs?: number;
 };
 
-/**
- * Internal dependency bag for loaders — never a module-level singleton.
- */
+/** Internal dependency bag for loaders — never a module-level singleton. */
 export class LoaderContext {
   readonly pool: Pool;
   readonly index: ReactiveEventStore;
@@ -40,19 +37,19 @@ export class LoaderContext {
   }
 
   /** Snapshot of discovery/fallback relays. */
-  get relays(): readonly string[] {
+  get relays(): ReadonlyArray<string> {
     return this.#relays;
   }
 
   addRelay(url: string): void {
-    if (!this.#relays.includes(url)) this.#relays.push(url);
+    if (!this.#relays.includes(url)) {this.#relays.push(url);}
   }
 
   removeRelay(url: string): void {
     this.#relays = this.#relays.filter((r) => r !== url);
   }
 
-  setRelays(urls: readonly string[]): void {
+  setRelays(urls: ReadonlyArray<string>): void {
     this.#relays = [...urls];
   }
 

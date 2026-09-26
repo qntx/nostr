@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, test } from "vite-plus/test";
+
 import { IndexedDbEventStore, MemoryEventStore } from "../src/index.ts";
 import { eventStoreConformanceCases } from "../src/testing/index.ts";
-import { installIdbMock, type IdbMock } from "./helpers/idb-mock.ts";
+import { installIdbMock } from './helpers/idb-mock.ts';
+import type { IdbMock } from './helpers/idb-mock.ts';
 
 describe("MemoryEventStore conformance", () => {
   for (const c of eventStoreConformanceCases) {
-    test(c.name, () => c.run(new MemoryEventStore()));
+    test(c.name,  async () => c.run(new MemoryEventStore()));
   }
 });
 

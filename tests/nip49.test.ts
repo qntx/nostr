@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { hexToBytes, nsecEncode } from "../src/index.ts";
-import { decrypt, encrypt, Nip49Error, type KeySecurityByte } from "../src/nips/nip49.ts";
+import { decrypt, encrypt, Nip49Error } from '../src/nips/nip49.ts';
+import type { KeySecurityByte } from '../src/nips/nip49.ts';
 
 describe("nip49", () => {
   test("encrypt and decrypt vectors", () => {
@@ -9,8 +11,8 @@ describe("nip49", () => {
       const there = encrypt(sec, password, logn, ksb);
       const back = decrypt(there, password);
       const again = decrypt(ncryptsec, password);
-      expect(back).toEqual(again);
-      expect(again).toEqual(sec);
+      expect(back).toStrictEqual(again);
+      expect(again).toStrictEqual(sec);
     }
   });
 
@@ -18,7 +20,7 @@ describe("nip49", () => {
     const ncryptsec =
       "ncryptsec1qgg9947rlpvqu76pj5ecreduf9jxhselq2nae2kghhvd5g7dgjtcxfqtd67p9m0w57lspw8gsq6yphnm8623nsl8xn9j4jdzz84zm3frztj3z7s35vpzmqf6ksu8r89qk5z2zxfmu5gv8th8wclt0h4p";
     const sec = hexToBytes("3501454135014541350145413501453fefb02227e449e57cf4d3a3ce05378683");
-    expect(decrypt(ncryptsec, "nostr")).toEqual(sec);
+    expect(decrypt(ncryptsec, "nostr")).toStrictEqual(sec);
   });
 
   test("wrong password throws", () => {
@@ -46,7 +48,7 @@ describe("nip49", () => {
   });
 });
 
-const vectors: [string, string, number, KeySecurityByte, string][] = [
+const vectors: Array<[string, string, number, KeySecurityByte, string]> = [
   [
     ".ksjabdk.aselqwe",
     "14c226dbdd865d5e1645e72c7470fd0a17feb42cc87b750bab6538171b3a3f8a",

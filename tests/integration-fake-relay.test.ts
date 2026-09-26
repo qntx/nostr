@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+
 import {
   Client,
   EventBuilder,
@@ -9,7 +10,8 @@ import {
   relayListEventBuilder,
   Pool,
 } from "../src/index.ts";
-import { createFakeRelayNetwork, type FakeRelayNetwork } from "../src/testing/index.ts";
+import { createFakeRelayNetwork } from '../src/testing/index.ts';
+import type { FakeRelayNetwork } from '../src/testing/index.ts';
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const SK_B = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -156,7 +158,7 @@ describe("integration via createFakeRelayNetwork", () => {
     const feed = client.outbox({ authors: [a.publicKey], kinds: [Kind.TextNote] });
     const events = await feed.sync({ skipHydrate: true, limit: 20 });
     expect(events.some((e) => e.id === note.id)).toBe(true);
-    expect(await store.get(note.id)).toBeDefined();
+    await expect(store.get(note.id)).resolves.toBeDefined();
 
     // B has no routes — discovery path still works without throwing
     const feedB = client.outbox({ authors: [b.publicKey], kinds: [Kind.TextNote] });

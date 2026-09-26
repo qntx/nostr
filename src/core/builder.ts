@@ -1,13 +1,13 @@
 import { EventValidationError } from "./error.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "./event.ts";
-import { Kind, isAddressableKind, isReplaceableKind } from "./kind.ts";
 import { Keys, finalizeEvent } from "./key.ts";
+import { Kind, isAddressableKind, isReplaceableKind } from "./kind.ts";
 import { Tag, formatEventAddress, getDTag, parseEventAddress } from "./tag.ts";
 import { normalizeURL } from "./util.ts";
 
 function hasProtectedTag(event: Event): boolean {
   for (const tag of event.tags) {
-    if (tag[0] === "-") return true;
+    if (tag[0] === "-") {return true;}
   }
   return false;
 }
@@ -34,13 +34,13 @@ export type ProfileMetadata = {
 };
 
 /**
- * Fluent builder for event templates.
- * Decouples intent (kind/content/tags) from signing (Keys / NostrSigner).
+ * Fluent builder for event templates. Decouples intent (kind/content/tags) from signing (Keys /
+ * NostrSigner).
  */
 export class EventBuilder {
   #kind: number;
   #content: string;
-  #tags: Tag[];
+  readonly #tags: Tag[];
   #createdAt: number | undefined;
 
   constructor(kind: number, content = "") {
@@ -60,17 +60,16 @@ export class EventBuilder {
 
   static contacts(pubkeys: string[]): EventBuilder {
     const b = new EventBuilder(Kind.Contacts, "");
-    for (const pk of pubkeys) b.#tags.push(Tag.p(pk));
+    for (const pk of pubkeys) {b.#tags.push(Tag.p(pk));}
     return b;
   }
 
   /**
-   * Kind-5 deletion. Each target is a bare event id string (or
-   * `{ id, kind }`), or `{ address }` for a `kind:pubkey:d` coordinate.
-   * Known kinds are emitted as deduped `k` tags (NIP-09 SHOULD).
+   * Kind-5 deletion. Each target is a bare event id string (or `{ id, kind }`), or `{ address }`
+   * for a `kind:pubkey:d` coordinate. Known kinds are emitted as deduped `k` tags (NIP-09 SHOULD).
    */
   static deletion(
-    targets: readonly (string | { id: string; kind?: number } | { address: string })[],
+    targets: ReadonlyArray<string | { id: string; kind?: number } | { address: string }>,
     reason = "",
   ): EventBuilder {
     const b = new EventBuilder(Kind.EventDeletion, reason);
@@ -82,14 +81,14 @@ export class EventBuilder {
       }
       if ("address" in target) {
         const parsed = parseEventAddress(target.address);
-        if (parsed) kinds.add(parsed.kind);
+        if (parsed) {kinds.add(parsed.kind);}
         b.#tags.push(Tag.a(target.address));
         continue;
       }
       b.#tags.push(Tag.e(target.id));
-      if (target.kind !== undefined) kinds.add(target.kind);
+      if (target.kind !== undefined) {kinds.add(target.kind);}
     }
-    for (const kind of kinds) b.#tags.push(Tag.k(kind));
+    for (const kind of kinds) {b.#tags.push(Tag.k(kind));}
     return b;
   }
 
@@ -167,7 +166,7 @@ export class EventBuilder {
   }
 
   tags(tags: Iterable<Tag>): this {
-    for (const t of tags) this.#tags.push(t);
+    for (const t of tags) {this.#tags.push(t);}
     return this;
   }
 
@@ -184,7 +183,7 @@ export class EventBuilder {
     return this.#content;
   }
 
-  get currentTags(): readonly Tag[] {
+  get currentTags(): ReadonlyArray<Tag> {
     return this.#tags;
   }
 
@@ -197,7 +196,7 @@ export class EventBuilder {
     return {
       kind: this.#kind,
       content: this.#content,
-      tags: this.#tags.slice(),
+      tags: [...this.#tags],
       created_at: this.#createdAt ?? Math.floor(Date.now() / 1000),
     };
   }
@@ -220,8 +219,8 @@ export class EventBuilder {
   }
 
   /**
-   * Sign via any NostrSigner-shaped object.
-   * Accepts a structural type so core does not depend on the signer module.
+   * Sign via any NostrSigner-shaped object. Accepts a structural type so core does not depend on
+   * the signer module.
    */
   async sign(signer: {
     getPublicKey(): Promise<string>;

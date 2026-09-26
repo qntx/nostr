@@ -1,6 +1,6 @@
 /**
- * Minimal in-memory IndexedDB factory for unit tests (no browser).
- * Installs on `globalThis.indexedDB` / `IDBKeyRange` and returns an uninstall handle.
+ * Minimal in-memory IndexedDB factory for unit tests (no browser). Installs on
+ * `globalThis.indexedDB` / `IDBKeyRange` and returns an uninstall handle.
  */
 
 export type IdbMock = {
@@ -67,7 +67,7 @@ export function installIdbMock(): IdbMock {
       upperOpen = false,
     ): MockKeyRange {
       if (cmp(lower, upper) > 0)
-        throw new Error("DataError: lower bound is greater than upper bound");
+        {throw new Error("DataError: lower bound is greater than upper bound");}
       return new MockKeyRange(lower, upper, lowerOpen, upperOpen);
     }
   }
@@ -94,9 +94,9 @@ export function installIdbMock(): IdbMock {
     #completed = false;
     #scheduled = false;
     #aborted = false;
-    #backup = new Map<string, Map<string, Row>>();
-    private db: MockDb;
-    private names: string[] | "all";
+    readonly #backup = new Map<string, Map<string, Row>>();
+    private readonly db: MockDb;
+    private readonly names: string[] | "all";
 
     constructor(db: MockDb, names: string[] | "all") {
       this.db = db;
@@ -104,9 +104,9 @@ export function installIdbMock(): IdbMock {
       const list = names === "all" ? db.storeNames() : names;
       for (const name of list) {
         const data = db.getStore(name);
-        if (!data) continue;
+        if (!data) {continue;}
         const copy = new Map<string, Row>();
-        for (const [k, v] of data.rows) copy.set(k, structuredClone(v));
+        for (const [k, v] of data.rows) {copy.set(k, structuredClone(v));}
         this.#backup.set(name, copy);
       }
       this.#queue();
@@ -130,14 +130,14 @@ export function installIdbMock(): IdbMock {
     }
 
     abort() {
-      if (this.#aborted) return;
-      if (this.#completed) throw new Error("InvalidStateError: transaction already finished");
+      if (this.#aborted) {return;}
+      if (this.#completed) {throw new Error("InvalidStateError: transaction already finished");}
       this.#aborted = true;
       for (const [name, rows] of this.#backup) {
         const data = this.db.getStore(name);
-        if (!data) continue;
+        if (!data) {continue;}
         data.rows.clear();
-        for (const [k, v] of rows) data.rows.set(k, structuredClone(v));
+        for (const [k, v] of rows) {data.rows.set(k, structuredClone(v));}
       }
       this.error = new Error("transaction aborted");
       this.#completed = true;
@@ -154,21 +154,21 @@ export function installIdbMock(): IdbMock {
     }
 
     #queue() {
-      if (this.#scheduled) return;
+      if (this.#scheduled) {return;}
       this.#scheduled = true;
       // Real IDB commits at a task boundary; a microtask tick would complete
       // the tx before microtask-chained follow-up requests are issued.
       setTimeout(() => {
         this.#scheduled = false;
-        if (this.#completed || this.#held || this.#pending > 0) return;
+        if (this.#completed || this.#held || this.#pending > 0) {return;}
         if (stats.failTx) {
           const fail = stats.failTx;
           stats.failTx = undefined;
           for (const [name, rows] of this.#backup) {
             const data = this.db.getStore(name);
-            if (!data) continue;
+            if (!data) {continue;}
             data.rows.clear();
-            for (const [k, v] of rows) data.rows.set(k, structuredClone(v));
+            for (const [k, v] of rows) {data.rows.set(k, structuredClone(v));}
           }
           this.error = fail.error;
           this.#completed = true;
@@ -190,15 +190,15 @@ export function installIdbMock(): IdbMock {
         throw new Error(`store ${name} not in transaction`);
       }
       const data = this.db.getStore(name);
-      if (!data) throw new Error(`store ${name} not found`);
+      if (!data) {throw new Error(`store ${name} not found`);}
       return new MockStore(data, this, name);
     }
   }
 
   class MockIndex {
-    private data: StoreData;
-    private keyPath: string | string[];
-    private tx: MockTx;
+    private readonly data: StoreData;
+    private readonly keyPath: string | string[];
+    private readonly tx: MockTx;
 
     constructor(data: StoreData, keyPath: string | string[], tx: MockTx) {
       this.data = data;
@@ -223,9 +223,9 @@ export function installIdbMock(): IdbMock {
   }
 
   class MockStore {
-    private data: StoreData;
-    private tx: MockTx;
-    private name: string;
+    private readonly data: StoreData;
+    private readonly tx: MockTx;
+    private readonly name: string;
 
     constructor(data: StoreData, tx: MockTx, name: string) {
       this.data = data;
@@ -240,14 +240,14 @@ export function installIdbMock(): IdbMock {
 
     index(name: string) {
       const keyPath = this.data.indexes.get(name);
-      if (keyPath === undefined) throw new Error(`index ${name} not found`);
+      if (keyPath === undefined) {throw new Error(`index ${name} not found`);}
       return new MockIndex(this.data, keyPath, this.tx);
     }
 
     put(value: unknown) {
       const row = structuredClone(value) as Row;
       const key = row[this.data.keyPath];
-      if (typeof key !== "string") throw new Error("IndexedDB put missing keyPath value");
+      if (typeof key !== "string") {throw new Error("IndexedDB put missing keyPath value");}
       this.data.rows.set(key, row);
     }
 
@@ -264,9 +264,9 @@ export function installIdbMock(): IdbMock {
         }
         if (fail) {
           req.error =
-            stats.failGetError !== undefined
-              ? stats.failGetError
-              : new Error("IndexedDB request failed");
+            stats.failGetError === undefined
+              ? new Error("IndexedDB request failed")
+              : stats.failGetError;
           req.onerror?.({});
           this.tx.abort();
           this.tx.end();
@@ -294,7 +294,7 @@ export function installIdbMock(): IdbMock {
     }
 
     getAll() {
-      if (this.name === "events") stats.eventsGetAll += 1;
+      if (this.name === "events") {stats.eventsGetAll += 1;}
       const req = new MockRequest<Row[]>();
       this.tx.begin();
       queueMicrotask(() => {
@@ -322,7 +322,7 @@ export function installIdbMock(): IdbMock {
       contains: (name: string) => this.rec.stores.has(name),
     };
 
-    private rec: PersistedDb;
+    private readonly rec: PersistedDb;
 
     constructor(rec: PersistedDb) {
       this.rec = rec;
@@ -337,7 +337,7 @@ export function installIdbMock(): IdbMock {
     }
 
     createObjectStore(name: string, options?: { keyPath?: string }) {
-      if (this.rec.stores.has(name)) throw new Error(`store ${name} already exists`);
+      if (this.rec.stores.has(name)) {throw new Error(`store ${name} already exists`);}
       const data: StoreData = {
         keyPath: options?.keyPath ?? "id",
         rows: new Map(),
@@ -349,7 +349,7 @@ export function installIdbMock(): IdbMock {
 
     transaction(storeNames: string | string[], mode: "readonly" | "readwrite" = "readonly") {
       const names = Array.isArray(storeNames) ? storeNames : [storeNames];
-      if (mode === "readwrite") stats.readwrite.push([...names]);
+      if (mode === "readwrite") {stats.readwrite.push([...names]);}
       return new MockTx(this, names);
     }
 
@@ -433,7 +433,7 @@ export function installIdbMock(): IdbMock {
     failGetOnCall(n: number, error?: Error | null) {
       stats.getCalls = 0;
       stats.failGetOn = n;
-      stats.failGetError = error !== undefined ? error : new Error("IndexedDB request failed");
+      stats.failGetError = error === undefined ? new Error("IndexedDB request failed") : error;
     },
     failOpen(error: Error | null) {
       stats.failOpenError = error;
@@ -462,7 +462,7 @@ export function installIdbMock(): IdbMock {
   };
 }
 
-export function seedIdbV1(dbName: string, events: Array<Record<string, unknown>>): Promise<void> {
+export async function seedIdbV1(dbName: string, events: Array<Record<string, unknown>>): Promise<void> {
   const factory = (
     globalThis as unknown as { indexedDB: { open(name: string, version?: number): MockOpenReq } }
   ).indexedDB;
@@ -479,7 +479,7 @@ export function seedIdbV1(dbName: string, events: Array<Record<string, unknown>>
       const db = req.result;
       const tx = db.transaction("events", "readwrite");
       const store = tx.objectStore("events");
-      for (const event of events) store.put(event);
+      for (const event of events) {store.put(event);}
       tx.oncomplete = () => {
         db.close();
         resolve();
@@ -489,7 +489,7 @@ export function seedIdbV1(dbName: string, events: Array<Record<string, unknown>>
   });
 }
 
-export function seedIdbV2(
+export async function seedIdbV2(
   dbName: string,
   data: {
     events: Array<Record<string, unknown>>;
@@ -522,11 +522,11 @@ export function seedIdbV2(
       const db = req.result;
       const tx = db.transaction(["events", "addresses", "tag_refs"], "readwrite");
       const eventsStore = tx.objectStore("events");
-      for (const event of data.events) eventsStore.put(event);
+      for (const event of data.events) {eventsStore.put(event);}
       const addressesStore = tx.objectStore("addresses");
-      for (const row of data.addresses) addressesStore.put(row);
+      for (const row of data.addresses) {addressesStore.put(row);}
       const tagStore = tx.objectStore("tag_refs");
-      for (const row of data.tagRefs) tagStore.put(row);
+      for (const row of data.tagRefs) {tagStore.put(row);}
       tx.oncomplete = () => {
         db.close();
         resolve();
@@ -536,7 +536,7 @@ export function seedIdbV2(
   });
 }
 
-export function seedIdbV3(dbName: string): Promise<void> {
+export async function seedIdbV3(dbName: string): Promise<void> {
   const factory = (
     globalThis as unknown as { indexedDB: { open(name: string, version?: number): MockOpenReq } }
   ).indexedDB;
@@ -590,7 +590,7 @@ type MockOpenReq = {
 };
 
 function getKeyPath(row: Row, keyPath: string | string[]): unknown {
-  if (typeof keyPath === "string") return row[keyPath];
+  if (typeof keyPath === "string") {return row[keyPath];}
   return keyPath.map((k) => row[k]);
 }
 
@@ -600,8 +600,8 @@ function keyRangeIncludes(
 ): boolean {
   const lo = cmp(key, range.lower);
   const hi = cmp(key, range.upper);
-  if (range.lowerOpen ? lo <= 0 : lo < 0) return false;
-  if (range.upperOpen ? hi >= 0 : hi > 0) return false;
+  if (range.lowerOpen ? lo <= 0 : lo < 0) {return false;}
+  if (range.upperOpen ? hi >= 0 : hi > 0) {return false;}
   return true;
 }
 
@@ -634,16 +634,16 @@ function openCursor(
   const entries: Array<{ key: unknown; primaryKey: unknown; value: Row }> = [];
   for (const row of data.rows.values()) {
     const key = keyOf(row);
-    if (key === undefined) continue;
-    if (range && !keyRangeIncludes(range, key)) continue;
+    if (key === undefined) {continue;}
+    if (range && !keyRangeIncludes(range, key)) {continue;}
     entries.push({ key, primaryKey: row[data.keyPath], value: row });
   }
   entries.sort((a, b) => {
     const c = cmp(a.key, b.key);
-    if (c !== 0) return c;
+    if (c !== 0) {return c;}
     return cmp(a.primaryKey, b.primaryKey);
   });
-  if (direction === "prev") entries.reverse();
+  if (direction === "prev") {entries.reverse();}
 
   let pos = 0;
   const emit = () => {
@@ -677,17 +677,17 @@ function openCursor(
 }
 
 function cmp(a: unknown, b: unknown): number {
-  if (a === b) return 0;
+  if (a === b) {return 0;}
   const ra = typeRank(a);
   const rb = typeRank(b);
-  if (ra !== rb) return ra - rb;
-  if (typeof a === "number" && typeof b === "number") return a < b ? -1 : a > b ? 1 : 0;
-  if (typeof a === "string" && typeof b === "string") return a < b ? -1 : a > b ? 1 : 0;
+  if (ra !== rb) {return ra - rb;}
+  if (typeof a === "number" && typeof b === "number") {return a < b ? -1 : a > b ? 1 : 0;}
+  if (typeof a === "string" && typeof b === "string") {return a < b ? -1 : a > b ? 1 : 0;}
   if (Array.isArray(a) && Array.isArray(b)) {
     const n = Math.min(a.length, b.length);
     for (let i = 0; i < n; i++) {
       const c = cmp(a[i], b[i]);
-      if (c !== 0) return c;
+      if (c !== 0) {return c;}
     }
     return a.length - b.length;
   }
@@ -695,8 +695,8 @@ function cmp(a: unknown, b: unknown): number {
 }
 
 function typeRank(value: unknown): number {
-  if (typeof value === "number") return 1;
-  if (typeof value === "string") return 2;
-  if (Array.isArray(value)) return 3;
+  if (typeof value === "number") {return 1;}
+  if (typeof value === "string") {return 2;}
+  if (Array.isArray(value)) {return 3;}
   return 0;
 }

@@ -122,9 +122,9 @@ const config: UserConfig = defineConfig({
   test: {
     include: wasmTest
       ? ["wasm-tests/**/*.ts"]
-      : storeBench
+      : (storeBench
         ? ["bench/**/*.ts"]
-        : ["tests/**/*.{test,spec}.ts"],
+        : ["tests/**/*.{test,spec}.ts"]),
     exclude: ["3rdparty/**", "node_modules/**", "dist/**"],
   },
   lint: merge(lintConfig, {

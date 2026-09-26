@@ -2,9 +2,10 @@ import type { Event } from "../core/event.ts";
 import { isReplaceableWinner } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
-import { parseDmRelayList } from "../nips/nip17.ts";
-import { parseRelayList, type RelayListItem } from "../nips/nip65.ts";
 import { normalizeURL } from "../core/util.ts";
+import { parseDmRelayList } from "../nips/nip17.ts";
+import { parseRelayList } from '../nips/nip65.ts';
+import type { RelayListItem } from '../nips/nip65.ts';
 
 /** Relay routing state for one pubkey: NIP-65 outbox/inbox plus NIP-17 DM relays. */
 export type PubkeyRoutes = {
@@ -26,14 +27,12 @@ export type PubkeyRoutes = {
 
 /** A filter split by gossip routes: per-relay narrowed filters plus the unrouted remainder. */
 export type RoutedFilter = {
-  /** url → already-narrowed filter. Empty when nothing routed. */
+  /** Url → already-narrowed filter. Empty when nothing routed. */
   perRelay: Map<string, Filter>;
   /**
-   * Unrouted work for the caller:
-   * - no authors and no #p: original filter (today's "generic")
-   * - authors/#p all unrouted: original filter (today's "orphan")
-   * - mixed: narrowed leftover (today's fallback)
-   * - all routed: undefined
+   * Unrouted work for the caller: - no authors and no #p: original filter (today's "generic") -
+   * authors/#p all unrouted: original filter (today's "orphan") - mixed: narrowed leftover (today's
+   * fallback) - all routed: undefined
    */
   remainder?: Filter;
 };
@@ -42,9 +41,8 @@ export type GossipOptions = {
   /** Max relays to keep per direction when ranking. Default 4. */
   maxRelaysPerPubkey?: number;
   /**
-   * Max pubkeys with tracked routes; the map is LRU — writes and lookups
-   * refresh recency, and inserting beyond the cap drops the oldest entry.
-   * Default 10_000.
+   * Max pubkeys with tracked routes; the map is LRU — writes and lookups refresh recency, and
+   * inserting beyond the cap drops the oldest entry. Default 10_000.
    */
   maxPubkeys?: number;
 };
@@ -60,8 +58,8 @@ function emptyRoutes(): PubkeyRoutes {
 }
 
 /**
- * Routing table for NIP-65 (10002) and NIP-17 DM relays (10050).
- * Ingest replaceable list events, then route filters into per-relay REQs.
+ * Routing table for NIP-65 (10002) and NIP-17 DM relays (10050). Ingest replaceable list events,
+ * then route filters into per-relay REQs.
  */
 export class Gossip {
   readonly #routes = new Map<string, PubkeyRoutes>();
@@ -74,9 +72,7 @@ export class Gossip {
   }
 
   /**
-   * Ingest a routing list event.
-   * - kind:10002 → write/read (NIP-65)
-   * - kind:10050 → dm (NIP-17)
+   * Ingest a routing list event. - kind:10002 → write/read (NIP-65) - kind:10050 → dm (NIP-17)
    * Returns true if routes for that list type were updated.
    */
   ingest(event: Event): boolean {
@@ -109,7 +105,7 @@ export class Gossip {
   ): boolean {
     const pk = pubkey.toLowerCase();
     const prev = this.#lookup(pk) ?? emptyRoutes();
-    if (prev.updatedAt > updatedAt) return false;
+    if (prev.updatedAt > updatedAt) {return false;}
     if (
       eventId &&
       prev.relayListId &&
@@ -131,8 +127,8 @@ export class Gossip {
       } catch {
         continue;
       }
-      if (item.write && !write.includes(url)) write.push(url);
-      if (item.read && !read.includes(url)) read.push(url);
+      if (item.write && !write.includes(url)) {write.push(url);}
+      if (item.read && !read.includes(url)) {read.push(url);}
     }
 
     this.#put(pk, {
@@ -149,13 +145,13 @@ export class Gossip {
 
   setDmRoutes(
     pubkey: string,
-    relays: readonly string[],
+    relays: ReadonlyArray<string>,
     updatedAt: number = Math.floor(Date.now() / 1000),
     eventId?: string,
   ): boolean {
     const pk = pubkey.toLowerCase();
     const prev = this.#lookup(pk) ?? emptyRoutes();
-    if (prev.dmUpdatedAt > updatedAt) return false;
+    if (prev.dmUpdatedAt > updatedAt) {return false;}
     if (
       eventId &&
       prev.dmListId &&
@@ -176,7 +172,7 @@ export class Gossip {
       } catch {
         continue;
       }
-      if (!dm.includes(url)) dm.push(url);
+      if (!dm.includes(url)) {dm.push(url);}
     }
 
     this.#put(pk, {
@@ -209,8 +205,8 @@ export class Gossip {
   }
 
   clear(pubkey?: string): void {
-    if (pubkey) this.#routes.delete(pubkey.toLowerCase());
-    else this.#routes.clear();
+    if (pubkey) {this.#routes.delete(pubkey.toLowerCase());}
+    else {this.#routes.clear();}
   }
 
   get size(): number {
@@ -218,11 +214,10 @@ export class Gossip {
   }
 
   /**
-   * Route a user-facing filter into per-relay sub-filters plus leftover.
-   * - authors → outbox relays, filter narrowed per relay's authors
-   * - #p only → inbox relays of those pubkeys
-   * - neither / all unrouted → remainder is the original filter
-   * - mixed → remainder is the narrowed leftover; all routed → no remainder
+   * Route a user-facing filter into per-relay sub-filters plus leftover. - authors → outbox relays,
+   * filter narrowed per relay's authors - #p only → inbox relays of those pubkeys - neither / all
+   * unrouted → remainder is the original filter - mixed → remainder is the narrowed leftover; all
+   * routed → no remainder
    */
   route(filter: Filter): RoutedFilter {
     const authors = filter.authors?.map((a) => a.toLowerCase());
@@ -256,11 +251,11 @@ export class Gossip {
         anyUnrouted = true;
         continue;
       }
-      for (const u of urls) relays.add(u);
+      for (const u of urls) {relays.add(u);}
     }
-    if (relays.size === 0) return { perRelay: new Map(), remainder: filter };
+    if (relays.size === 0) {return { perRelay: new Map(), remainder: filter };}
     const map = new Map<string, Filter>();
-    for (const url of relays) map.set(url, { ...filter });
+    for (const url of relays) {map.set(url, { ...filter });}
     return anyUnrouted ? { perRelay: map, remainder: filter } : { perRelay: map };
   }
 
@@ -292,7 +287,7 @@ export class Gossip {
       }
     }
 
-    if (!anyRoute) return { perRelay: new Map(), remainder: filter };
+    if (!anyRoute) {return { perRelay: new Map(), remainder: filter };}
 
     const map = new Map<string, Filter>();
     for (const [url, pks] of perRelay) {
@@ -319,7 +314,7 @@ export class Gossip {
     this.#routes.set(pk, routes);
     while (this.#routes.size > this.#maxPubkeys) {
       const oldest = this.#routes.keys().next();
-      if (oldest.done) break;
+      if (oldest.done) {break;}
       this.#routes.delete(oldest.value);
     }
   }

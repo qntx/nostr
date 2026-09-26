@@ -1,17 +1,15 @@
-/**
- * NIP-04 legacy encrypted direct messages.
- * Prefer NIP-44 for new applications.
- */
+/** NIP-04 legacy encrypted direct messages. Prefer NIP-44 for new applications. */
 import { cbc } from "@noble/ciphers/aes.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 import { base64 } from "@scure/base";
+
 import { CryptoError } from "../core/error.ts";
 import { assertHex32, hexToBytes, utf8Decoder, utf8Encoder } from "../core/util.ts";
 
 function normalizeSharedSecret(privkey: Uint8Array, pubkey: string): Uint8Array {
   assertHex32(pubkey, "public key");
-  const key = secp256k1.getSharedSecret(privkey, hexToBytes("02" + pubkey.toLowerCase()));
+  const key = secp256k1.getSharedSecret(privkey, hexToBytes(`02${  pubkey.toLowerCase()}`));
   return key.slice(1, 33);
 }
 

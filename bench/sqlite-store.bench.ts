@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
-import { SqliteEventStore } from "../src/index.ts";
+
 import type { Event } from "../src/core/event.ts";
+import { SqliteEventStore } from "../src/index.ts";
 import { SqliteTestDriver } from "../tests/helpers/sqlite-driver.ts";
 
 const N = 100_000;
@@ -35,12 +36,12 @@ describe("sqlite store bench", () => {
     const t0 = performance.now();
     const batch: Event[] = [];
     for (let i = 0; i < N; i++) {
-      batch.push(event(i, authors[i % AUTHORS]!));
-      if (batch.length === 1_000) {
+      batch.push(event(i, authors[i % AUTHORS]));
+      if (batch.length === 1000) {
         await store.putMany(batch.splice(0));
       }
     }
-    if (batch.length > 0) await store.putMany(batch);
+    if (batch.length > 0) {await store.putMany(batch);}
     const fillMs = performance.now() - t0;
 
     const filter = { authors, kinds: [1], limit: LIMIT };
@@ -49,7 +50,7 @@ describe("sqlite store bench", () => {
 
     const RUNS = 20;
     const q0 = performance.now();
-    for (let i = 0; i < RUNS; i++) await store.query([filter]);
+    for (let i = 0; i < RUNS; i++) {await store.query([filter]);}
     const queryMs = (performance.now() - q0) / RUNS;
 
     console.log(

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   CryptoError,
   EventValidationError,
@@ -7,24 +8,8 @@ import {
   Kind,
   normalizeURL,
 } from "../src/index.ts";
-import {
-  bookmarkListEventBuilder,
-  decryptPrivateTags,
-  encryptPrivateTags,
-  muteListEventBuilder,
-  parseBookmarkList,
-  parseEmojiSet,
-  parseFavoriteRelays,
-  parseFollowPack,
-  parseMuteList,
-  parseMuteListPrivate,
-  parsePinList,
-  parseRelaySet,
-  parseUserEmojiList,
-  pinListEventBuilder,
-  type MuteItem,
-  type Nip51Crypto,
-} from "../src/nips/nip51.ts";
+import { bookmarkListEventBuilder, decryptPrivateTags, encryptPrivateTags, muteListEventBuilder, parseBookmarkList, parseEmojiSet, parseFavoriteRelays, parseFollowPack, parseMuteList, parseMuteListPrivate, parsePinList, parseRelaySet, parseUserEmojiList, pinListEventBuilder } from '../src/nips/nip51.ts';
+import type { MuteItem, Nip51Crypto } from '../src/nips/nip51.ts';
 
 const PK = "aa".repeat(32);
 const PK2 = "cc".repeat(32);
@@ -36,7 +21,7 @@ const EMOJI_SET = `30030:${PK}:cats`;
 const PEOPLE_SET = `30000:${PK}:friends`;
 const AUTHOR_SK = "000000000000000000000000000000000000000000000000000000000000a1ce";
 
-function unusedEncrypt(): Promise<string> {
+ async function unusedEncrypt(): Promise<string> {
   throw new Error("nip44Encrypt should not be invoked");
 }
 
@@ -52,7 +37,7 @@ function trackingCrypto(opts: {
     nip44Encrypt: unusedEncrypt,
     async nip44Decrypt(peer: string, payload: string) {
       stub.decryptInvocations += 1;
-      if (!opts.decrypt) throw new Error("nip44Decrypt should not be invoked");
+      if (!opts.decrypt) {throw new Error("nip44Decrypt should not be invoked");}
       return opts.decrypt(peer, payload);
     },
   };
@@ -73,7 +58,7 @@ describe("nip51 mute list", () => {
         ["e", ""],
       ],
     });
-    expect(items).toEqual<MuteItem[]>([
+    expect(items).toStrictEqual<MuteItem[]>([
       { type: "pubkey", value: PK },
       { type: "event", value: ID },
       { type: "hashtag", value: "spam" },
@@ -91,13 +76,13 @@ describe("nip51 mute list", () => {
     const built = muteListEventBuilder(items);
     expect(built.currentKind).toBe(Kind.MuteList);
     expect(built.currentContent).toBe("");
-    expect(built.currentTags).toEqual([
+    expect(built.currentTags).toStrictEqual([
       ["p", PK],
       ["e", ID],
       ["t", "spam"],
       ["word", "scam"],
     ]);
-    expect(parseMuteList({ kind: built.currentKind, tags: built.currentTags })).toEqual(items);
+    expect(parseMuteList({ kind: built.currentKind, tags: built.currentTags })).toStrictEqual(items);
   });
 
   test("muteListEventBuilder lowercases hex and words; skips empty t/word", () => {
@@ -108,7 +93,7 @@ describe("nip51 mute list", () => {
       { type: "word", value: "" },
       { type: "word", value: "Scam" },
     ]);
-    expect(built.currentTags).toEqual([
+    expect(built.currentTags).toStrictEqual([
       ["p", PK],
       ["e", ID],
       ["word", "scam"],
@@ -132,18 +117,18 @@ describe("nip51 pin list", () => {
           ["e", "nope"],
         ],
       }),
-    ).toEqual([ID, ID2]);
+    ).toStrictEqual([ID, ID2]);
   });
 
   test("pinListEventBuilder emits e tags", () => {
     const built = pinListEventBuilder([ID.toUpperCase(), ID2]);
     expect(built.currentKind).toBe(Kind.PinList);
     expect(built.currentContent).toBe("");
-    expect(built.currentTags).toEqual([
+    expect(built.currentTags).toStrictEqual([
       ["e", ID],
       ["e", ID2],
     ]);
-    expect(parsePinList({ kind: built.currentKind, tags: built.currentTags })).toEqual([ID, ID2]);
+    expect(parsePinList({ kind: built.currentKind, tags: built.currentTags })).toStrictEqual([ID, ID2]);
   });
 
   test("pinListEventBuilder rejects non-hex ids", () => {
@@ -164,18 +149,18 @@ describe("nip51 bookmark list", () => {
           ["a", ""],
         ],
       }),
-    ).toEqual({ e: [ID, ID2], a: [ARTICLE] });
+    ).toStrictEqual({ e: [ID, ID2], a: [ARTICLE] });
   });
 
   test("bookmarkListEventBuilder emits e then a", () => {
     const built = bookmarkListEventBuilder({ e: [ID.toUpperCase()], a: [ARTICLE, ""] });
     expect(built.currentKind).toBe(Kind.BookmarkList);
     expect(built.currentContent).toBe("");
-    expect(built.currentTags).toEqual([
+    expect(built.currentTags).toStrictEqual([
       ["e", ID],
       ["a", ARTICLE],
     ]);
-    expect(parseBookmarkList({ kind: built.currentKind, tags: built.currentTags })).toEqual({
+    expect(parseBookmarkList({ kind: built.currentKind, tags: built.currentTags })).toStrictEqual({
       e: [ID],
       a: [ARTICLE],
     });
@@ -195,7 +180,7 @@ describe("nip51 user emoji list", () => {
           ["emoji", "dog", "https://cdn.example/dog.png"],
         ],
       }),
-    ).toEqual({
+    ).toStrictEqual({
       emoji: [
         { shortcode: "cat", url: "https://cdn.example/cat.png" },
         { shortcode: "dog", url: "https://cdn.example/dog.png" },
@@ -220,14 +205,14 @@ describe("nip51 relay set", () => {
           ["relay", "wss://b.example"],
         ],
       }),
-    ).toEqual({
+    ).toStrictEqual({
       d: "home",
       relays: [normalizeURL("wss://a.example"), normalizeURL("wss://b.example")],
     });
   });
 
   test("missing d is empty string", () => {
-    expect(parseRelaySet({ kind: Kind.RelaySets, tags: [] })).toEqual({ d: "", relays: [] });
+    expect(parseRelaySet({ kind: Kind.RelaySets, tags: [] })).toStrictEqual({ d: "", relays: [] });
   });
 });
 
@@ -250,7 +235,7 @@ describe("nip51 favorite relays", () => {
           ["relay", "://bad"],
         ],
       }),
-    ).toEqual({
+    ).toStrictEqual({
       relays: [normalizeURL("wss://a.example")],
       sets: [RELAY_SET, withColonD],
     });
@@ -270,7 +255,7 @@ describe("nip51 emoji set", () => {
           ["a", EMOJI_SET],
         ],
       }),
-    ).toEqual({
+    ).toStrictEqual({
       d: "cats",
       title: "Cats",
       emoji: [{ shortcode: "cat", url: "https://cdn.example/cat.png" }],
@@ -287,7 +272,7 @@ describe("nip51 emoji set", () => {
     });
     expect(parsed.d).toBe("cats");
     expect(parsed.title).toBeUndefined();
-    expect(parsed.emoji).toEqual([{ shortcode: "cat", url: "https://cdn.example/cat.png" }]);
+    expect(parsed.emoji).toStrictEqual([{ shortcode: "cat", url: "https://cdn.example/cat.png" }]);
   });
 });
 
@@ -305,7 +290,7 @@ describe("nip51 follow pack", () => {
           ["e", ID],
         ],
       }),
-    ).toEqual({ d: "dev", pubkeys: [PK2, PK] });
+    ).toStrictEqual({ d: "dev", pubkeys: [PK2, PK] });
   });
 });
 
@@ -333,7 +318,7 @@ describe("nip51 private tags", () => {
     const author = await signer.getPublicKey();
     const peers: string[] = [];
     const crypto: Nip51Crypto = {
-      getPublicKey: () => signer.getPublicKey(),
+      getPublicKey:  async () => signer.getPublicKey(),
       nip44Encrypt: async (peer, plaintext) => {
         peers.push(peer);
         return signer.nip44Encrypt(peer, plaintext);
@@ -348,8 +333,8 @@ describe("nip51 private tags", () => {
     expect(content.length).toBeGreaterThan(0);
     expect(content).not.toBe(JSON.stringify(tags));
     const decrypted = await decryptPrivateTags(crypto, { pubkey: author, content });
-    expect(decrypted).toEqual([["p", PK]]);
-    expect(peers).toEqual([author, author]);
+    expect(decrypted).toStrictEqual([["p", PK]]);
+    expect(peers).toStrictEqual([author, author]);
   });
 
   test("parseMuteListPrivate splits public tags and private content; parseMuteList ignores content", async () => {
@@ -370,15 +355,15 @@ describe("nip51 private tags", () => {
       content,
     };
     const parsed = await parseMuteListPrivate(signer, event);
-    expect(parsed.public).toEqual<MuteItem[]>([
+    expect(parsed.public).toStrictEqual<MuteItem[]>([
       { type: "pubkey", value: PK },
       { type: "hashtag", value: "spam" },
     ]);
-    expect(parsed.private).toEqual<MuteItem[]>([
+    expect(parsed.private).toStrictEqual<MuteItem[]>([
       { type: "event", value: ID },
       { type: "word", value: "secret" },
     ]);
-    expect(parseMuteList(event)).toEqual(parsed.public);
+    expect(parseMuteList(event)).toStrictEqual(parsed.public);
     expect(event.content).toBe(content);
     expect(event.content.length).toBeGreaterThan(0);
   });
@@ -391,10 +376,10 @@ describe("nip51 private tags", () => {
       tags: [["p", PK2]],
       content: "",
     });
-    expect(parsed.public).toEqual<MuteItem[]>([{ type: "pubkey", value: PK2 }]);
-    expect(parsed.private).toEqual<MuteItem[]>([]);
+    expect(parsed.public).toStrictEqual<MuteItem[]>([{ type: "pubkey", value: PK2 }]);
+    expect(parsed.private).toStrictEqual<MuteItem[]>([]);
     expect(crypto.decryptInvocations).toBe(0);
-    expect(await decryptPrivateTags(crypto, { pubkey: PK2, content: "" })).toEqual([]);
+    await expect(decryptPrivateTags(crypto, { pubkey: PK2, content: "" })).resolves.toStrictEqual([]);
     expect(crypto.decryptInvocations).toBe(0);
   });
 
@@ -418,7 +403,7 @@ describe("nip51 private tags", () => {
       pubkey: PK.toUpperCase(),
       content: "ciphertext",
     });
-    expect(tags).toEqual([["p", PK2]]);
+    expect(tags).toStrictEqual([["p", PK2]]);
     expect(crypto.decryptInvocations).toBe(1);
   });
 
@@ -427,7 +412,7 @@ describe("nip51 private tags", () => {
     const author = await signer.getPublicKey();
     const tags = [["p", PK]] as const;
     const nip04Content = await signer.nip04Encrypt(author, JSON.stringify(tags));
-    expect(nip04Content.includes("?iv=")).toBe(true);
+    expect(nip04Content).toContain('?iv=');
     await expect(
       decryptPrivateTags(signer, { pubkey: author, content: nip04Content }),
     ).rejects.toThrow(CryptoError);
@@ -450,7 +435,7 @@ describe("nip51 private tags", () => {
     expect(() => JSON.parse(plaintextJson)).not.toThrow();
     const crypto = trackingCrypto({
       pubkey: author,
-      decrypt: (peer, payload) => signer.nip44Decrypt(peer, payload),
+      decrypt:  async (peer, payload) => signer.nip44Decrypt(peer, payload),
     });
     let succeeded: unknown;
     try {
@@ -508,7 +493,7 @@ describe("nip51 private tags", () => {
     built.content(cipher);
     expect(built.currentContent).toBe(cipher);
     expect(built.currentContent).not.toBe("");
-    expect(built.currentTags).toEqual([["p", PK]]);
+    expect(built.currentTags).toStrictEqual([["p", PK]]);
   });
 
   test("parseMuteListPrivate kind !== 10000 throws via requireKind", async () => {

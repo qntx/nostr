@@ -1,19 +1,16 @@
-import { MessageError } from "../core/error.ts";
 import { abortReason, throwIfAborted } from "../core/abort.ts";
-import { invokeSafely } from "../core/report.ts";
+import { MessageError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
-import { canonicalizeFilters, type Filter } from "../core/filter.ts";
-import { assertSubscriptionId, type CountResult } from "../core/message.ts";
+import { canonicalizeFilters } from '../core/filter.ts';
+import type { Filter } from '../core/filter.ts';
+import { assertSubscriptionId } from '../core/message.ts';
+import type { CountResult } from '../core/message.ts';
+import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
 import { RelayConnectionError, RelayPublishError } from "./error.ts";
 import { fanIn, fetchRouted } from "./fan-in.ts";
-import {
-  Relay,
-  RelayStatus,
-  type PublishResult,
-  type RelayOptions,
-  type SubscribeOptions,
-} from "./relay.ts";
+import { Relay, RelayStatus } from './relay.ts';
+import type { PublishResult, RelayOptions, SubscribeOptions } from './relay.ts';
 import { isInsecureRelayUrl } from "./url.ts";
 import type { WebSocketConstructor } from "./websocket.ts";
 
@@ -29,26 +26,26 @@ export type PoolOptions = {
   pingIntervalMs?: number;
   pingTimeoutMs?: number;
   /**
-   * When set, automatically answer NIP-42 AUTH challenges for relays that
-   * send them. Return null to skip a given relay URL.
+   * When set, automatically answer NIP-42 AUTH challenges for relays that send them. Return null to
+   * skip a given relay URL.
    */
   automaticallyAuth?: (relayURL: string) => null | ((event: EventTemplate) => Promise<Event>);
   /** When false (default), ensureRelay rejects isInsecureRelayUrl unless trusted. */
   allowInsecure?: boolean;
-  trustedInsecureUrls?: readonly string[];
+  trustedInsecureUrls?: ReadonlyArray<string>;
   /** Close unused relays. Unset/0 = disabled. */
   idleTimeoutMs?: number;
   idleCleanupIntervalMs?: number;
   onIdleRelaysClosed?: (urls: string[]) => void;
   /**
-   * Soft cap on connected non-pinned relays. When `ensureRelay` would create a
-   * new non-pinned relay at the cap, the least-recently-used idle one is closed
-   * first (idle = no subscriptions and no in-flight requests). If none is idle
-   * the connect proceeds anyway — the cap never fails a request.
+   * Soft cap on connected non-pinned relays. When `ensureRelay` would create a new non-pinned relay
+   * at the cap, the least-recently-used idle one is closed first (idle = no subscriptions and no
+   * in-flight requests). If none is idle the connect proceeds anyway — the cap never fails a
+   * request.
    */
   maxRelays?: number;
   /** Normalized URLs never closed by idle cleanup or `maxRelays` eviction. */
-  pinnedUrls?: readonly string[];
+  pinnedUrls?: ReadonlyArray<string>;
 };
 
 /** Per-relay publish outcome: the relay's OK reply or an error string. */
@@ -81,9 +78,7 @@ function isIdle(relay: Relay): boolean {
   );
 }
 
-/**
- * Multi-relay coordinator: connection reuse, cross-relay event dedup, fan-out publish.
- */
+/** Multi-relay coordinator: connection reuse, cross-relay event dedup, fan-out publish. */
 export class Pool {
   readonly #relays = new Map<string, Relay>();
   readonly #opts: PoolOptions;
@@ -112,37 +107,37 @@ export class Pool {
     this.#allowInsecure = allow;
   }
 
-  setTrustedInsecureUrls(urls: readonly string[]): void {
+  setTrustedInsecureUrls(urls: ReadonlyArray<string>): void {
     this.#trustedInsecure = new Set(urls.map(normalizeURL));
   }
 
-  setPinnedUrls(urls: readonly string[]): void {
+  setPinnedUrls(urls: ReadonlyArray<string>): void {
     this.#pinned = new Set(urls.map(normalizeURL));
   }
 
   /**
-   * Drop cached AUTH rejections and re-fire pending challenges on every
-   * pooled relay, so a later `setSigner` takes effect without reconnect.
+   * Drop cached AUTH rejections and re-fire pending challenges on every pooled relay, so a later
+   * `setSigner` takes effect without reconnect.
    */
   resetAuth(): void {
-    for (const relay of this.#relays.values()) relay.resetAuth();
+    for (const relay of this.#relays.values()) {relay.resetAuth();}
   }
 
   cleanIdleRelays(): void {
-    if (this.#idleTimeoutMs <= 0) return;
+    if (this.#idleTimeoutMs <= 0) {return;}
     const now = Date.now();
     const idle: string[] = [];
     for (const [url, relay] of this.#relays) {
-      if (this.#pinned.has(url) || !isIdle(relay)) continue;
+      if (this.#pinned.has(url) || !isIdle(relay)) {continue;}
       const last = this.#lastActivity.get(url) ?? 0;
       if (!relay.connected || now - last >= this.#idleTimeoutMs) {
         idle.push(url);
       }
     }
     for (const url of this.#lastActivity.keys()) {
-      if (!this.#relays.has(url)) this.#lastActivity.delete(url);
+      if (!this.#relays.has(url)) {this.#lastActivity.delete(url);}
     }
-    if (idle.length === 0) return;
+    if (idle.length === 0) {return;}
     this.close(idle);
     invokeSafely(() => this.#opts.onIdleRelaysClosed?.(idle));
   }
@@ -152,40 +147,40 @@ export class Pool {
   }
 
   #rejectInsecure(url: string, norm: string): void {
-    if (this.#allowInsecure) return;
-    if (!isInsecureRelayUrl(url)) return;
-    if (this.#trustedInsecure.has(norm)) return;
+    if (this.#allowInsecure) {return;}
+    if (!isInsecureRelayUrl(url)) {return;}
+    if (this.#trustedInsecure.has(norm)) {return;}
     throw new RelayConnectionError("insecure relay connection blocked", norm);
   }
 
   #stopIdleCleanup(): void {
-    if (this.#idleTimer === undefined) return;
+    if (this.#idleTimer === undefined) {return;}
     clearInterval(this.#idleTimer);
     this.#idleTimer = undefined;
   }
 
   /**
-   * Soft cap: closing the least-recently-used idle non-pinned relay when a new
-   * non-pinned relay would push the count past `maxRelays`. Busy relays are
-   * never evicted; with none idle the cap is exceeded rather than failing.
+   * Soft cap: closing the least-recently-used idle non-pinned relay when a new non-pinned relay
+   * would push the count past `maxRelays`. Busy relays are never evicted; with none idle the cap is
+   * exceeded rather than failing.
    */
   #enforceMaxRelays(incoming: string): void {
     const cap = this.#opts.maxRelays;
-    if (cap === undefined || this.#pinned.has(incoming)) return;
+    if (cap === undefined || this.#pinned.has(incoming)) {return;}
     let count = 0;
     let oldestUrl: string | undefined;
     let oldestAt = Number.POSITIVE_INFINITY;
     for (const [url, relay] of this.#relays) {
-      if (this.#pinned.has(url)) continue;
+      if (this.#pinned.has(url)) {continue;}
       count += 1;
-      if (!isIdle(relay)) continue;
+      if (!isIdle(relay)) {continue;}
       const at = this.#lastActivity.get(url) ?? 0;
       if (at < oldestAt) {
         oldestAt = at;
         oldestUrl = url;
       }
     }
-    if (count >= cap && oldestUrl !== undefined) this.close([oldestUrl]);
+    if (count >= cap && oldestUrl !== undefined) {this.close([oldestUrl]);}
   }
 
   async ensureRelay(
@@ -232,13 +227,13 @@ export class Pool {
           signal: opts?.signal,
           timeoutMs: opts?.timeoutMs ?? this.#opts.connectTimeoutMs,
         });
-      } catch (err) {
+      } catch (error) {
         // Keep the entry when reconnect is enabled so open subscriptions can recover.
         if (!this.#opts.enableReconnect) {
           this.#relays.delete(norm);
           this.#lastActivity.delete(norm);
         }
-        throw err;
+        throw error;
       }
     }
     return relay;
@@ -247,7 +242,7 @@ export class Pool {
   close(urls?: string[]): void {
     if (!urls) {
       this.#stopIdleCleanup();
-      for (const relay of this.#relays.values()) relay.close();
+      for (const relay of this.#relays.values()) {relay.close();}
       this.#relays.clear();
       this.#lastActivity.clear();
       return;
@@ -261,16 +256,16 @@ export class Pool {
   }
 
   /**
-   * Subscribe across relays. Deduplicates by event id.
-   * Returns a closer; callbacks receive every new event once.
+   * Subscribe across relays. Deduplicates by event id. Returns a closer; callbacks receive every
+   * new event once.
    */
   subscribe(
     relays: string[],
     filters: Filter[],
     opts: PoolSubscribeOptions = {},
   ): { close: (reason?: string) => void } {
-    if (filters.length === 0) throw new MessageError("REQ requires at least one filter");
-    if (opts.id !== undefined) assertSubscriptionId(opts.id);
+    if (filters.length === 0) {throw new MessageError("REQ requires at least one filter");}
+    if (opts.id !== undefined) {assertSubscriptionId(opts.id);}
     filters = canonicalizeFilters(filters);
     return fanIn(this, [{ urls: relays, filters, id: opts.id }], {
       onevent: opts.onevent,
@@ -296,7 +291,7 @@ export class Pool {
       onevent?: (event: Event, relayUrl: string) => void;
     },
   ): Promise<Event[]> {
-    if (filters.length === 0) throw new MessageError("REQ requires at least one filter");
+    if (filters.length === 0) {throw new MessageError("REQ requires at least one filter");}
     return fetchRouted(this, [{ urls: relays, filters: canonicalizeFilters(filters) }], {
       timeoutMs: opts?.timeoutMs,
       signal: opts?.signal,
@@ -320,8 +315,8 @@ export class Pool {
           this.#touch(relay.url);
           const result = await relay.publish(event, { timeoutMs: opts?.timeoutMs });
           return { url: relay.url, result };
-        } catch (err) {
-          return { url, error: err instanceof Error ? err.message : String(err) };
+        } catch (error) {
+          return { url, error: error instanceof Error ? error.message : String(error) };
         }
       }),
     );
@@ -341,15 +336,15 @@ export class Pool {
         });
         this.#touch(relay.url);
         const result = await relay.publish(event, { timeoutMs: opts?.timeoutMs });
-        if (!result.ok) throw new RelayPublishError(result.message || "rejected", relay.url);
+        if (!result.ok) {throw new RelayPublishError(result.message || "rejected", relay.url);}
         return { url: relay.url, result };
       }),
     );
   }
 
   /**
-   * NIP-45 COUNT across relays. Per-relay outcomes; failures do not throw.
-   * Counts are not summed — each relay reports independently (may overlap).
+   * NIP-45 COUNT across relays. Per-relay outcomes; failures do not throw. Counts are not summed —
+   * each relay reports independently (may overlap).
    */
   async count(
     relays: string[],
@@ -376,10 +371,10 @@ export class Pool {
             approximate: payload.approximate,
             hll: payload.hll,
           };
-        } catch (err) {
+        } catch (error) {
           // An abort rejects the whole call; per-relay failures are reported.
           if (opts?.signal?.aborted) throw abortReason(opts.signal);
-          return { url, error: err instanceof Error ? err.message : String(err) };
+          return { url, error: error instanceof Error ? error.message : String(error) };
         }
       }),
     );
@@ -403,7 +398,7 @@ export class Pool {
   connectedUrls(): string[] {
     const urls: string[] = [];
     for (const [url, relay] of this.#relays) {
-      if (relay.connected) urls.push(url);
+      if (relay.connected) {urls.push(url);}
     }
     return urls;
   }

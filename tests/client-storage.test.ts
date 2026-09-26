@@ -1,18 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import {
-  Client,
-  EventBuilder,
-  Gossip,
-  Kind,
-  Keys,
-  KeysSigner,
-  MemoryEventStore,
-  relayListEventBuilder,
-  StorageError,
-  useWebSocketImplementation,
-  type EventStore,
-  type PutResult,
-} from "../src/index.ts";
+
+import { Client, EventBuilder, Gossip, Kind, Keys, KeysSigner, MemoryEventStore, relayListEventBuilder, StorageError, useWebSocketImplementation } from '../src/index.ts';
+import type { EventStore, PutResult } from '../src/index.ts';
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -84,7 +73,7 @@ describe("Client storage + observe", () => {
     expect(remote).toHaveLength(1);
 
     await new Promise((r) => setTimeout(r, 5));
-    expect(await store.get(note.id)).toBeDefined();
+    await expect(store.get(note.id)).resolves.toBeDefined();
 
     // Second fetch with localFirst should return stored event even without network reply
     // (we still open REQ; answer EOSE empty)
@@ -95,7 +84,7 @@ describe("Client storage + observe", () => {
     await new Promise((r) => setTimeout(r, 10));
     const ws2 = MockWebSocket.last();
     const reqs = ws2.sent.map((s) => JSON.parse(s)).filter((m) => m[0] === "REQ");
-    const lastReq = reqs[reqs.length - 1] as [string, string];
+    const lastReq = reqs.at(-1) as [string, string];
     ws2.receive(JSON.stringify(["EOSE", lastReq[1]]));
     const merged = await fetch2;
     expect(merged.some((e) => e.id === note.id)).toBe(true);
@@ -110,19 +99,19 @@ describe("Client storage + observe", () => {
     let queryCalls = 0;
     const seen: StorageError[] = [];
     const store: EventStore = {
-      put: (event) => inner.put(event),
-      putMany: (events) => inner.putMany(events),
-      get: (id) => inner.get(id),
+      put:  async (event) => inner.put(event),
+      putMany:  async (events) => inner.putMany(events),
+      get:  async (id) => inner.get(id),
       query: async () => {
         queryCalls += 1;
         throw new Error("query boom");
       },
-      count: (filters) => inner.count(filters),
-      negentropyItems: (filter) => inner.negentropyItems(filter),
-      remove: (ids) => inner.remove(ids),
-      clear: () => inner.clear(),
-      getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+      count:  async (filters) => inner.count(filters),
+      negentropyItems:  async (filter) => inner.negentropyItems(filter),
+      remove:  async (ids) => inner.remove(ids),
+      clear:  async () => inner.clear(),
+      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
     const client = Client.builder()
       .storage(store)
@@ -177,9 +166,9 @@ describe("Client storage + observe", () => {
     const ws = MockWebSocket.last();
     const req = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [string, string];
     ws.receive(JSON.stringify(["EVENT", req[1], note]));
-    expect(got).toEqual([note.id]);
+    expect(got).toStrictEqual([note.id]);
     await new Promise((r) => setTimeout(r, 5));
-    expect(await store.get(note.id)).toBeDefined();
+    await expect(store.get(note.id)).resolves.toBeDefined();
     sub.close();
     await client.shutdown();
   });
@@ -204,7 +193,7 @@ describe("Client storage + observe", () => {
     for (const ws of MockWebSocket.instances) {
       for (const raw of ws.sent) {
         const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") continue;
+        if (msg[0] !== "REQ") {continue;}
         const subId = msg[1] as string;
         const filter = msg[2] as { kinds?: number[] };
         if (filter.kinds?.includes(Kind.RelayList)) {
@@ -234,7 +223,7 @@ describe("Client storage + observe", () => {
 
     client.observe(note);
     await new Promise((r) => setTimeout(r, 5));
-    expect(await store.get(note.id)).toBeUndefined();
+    await expect(store.get(note.id)).resolves.toBeUndefined();
     // gossip still runs for kind 10002 only — text notes are fine
     await client.shutdown();
   });
@@ -254,26 +243,26 @@ describe("Client storage + observe", () => {
       putMany: async (events) => {
         batches.push(events.map((e) => e.id));
         const out: PutResult[] = [];
-        for (const event of events) out.push(await inner.put(event));
+        for (const event of events) {out.push(await inner.put(event));}
         return out;
       },
-      get: (id) => inner.get(id),
-      query: (filters) => inner.query(filters),
-      count: (filters) => inner.count(filters),
-      negentropyItems: (filter) => inner.negentropyItems(filter),
-      remove: (ids) => inner.remove(ids),
-      clear: () => inner.clear(),
-      getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+      get:  async (id) => inner.get(id),
+      query:  async (filters) => inner.query(filters),
+      count:  async (filters) => inner.count(filters),
+      negentropyItems:  async (filter) => inner.negentropyItems(filter),
+      remove:  async (ids) => inner.remove(ids),
+      clear:  async () => inner.clear(),
+      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
     const client = Client.builder().storage(store).enableReconnect(false).build();
     client.observe(a);
     client.observe(b);
     await client.shutdown();
-    expect(batches).toEqual([[a.id, b.id]]);
+    expect(batches).toStrictEqual([[a.id, b.id]]);
     expect(putCalls).toBe(0);
-    expect(await inner.get(a.id)).toBeDefined();
-    expect(await inner.get(b.id)).toBeDefined();
+    await expect(inner.get(a.id)).resolves.toBeDefined();
+    await expect(inner.get(b.id)).resolves.toBeDefined();
   });
 
   test("observeAll queues unique events as one persist batch", async () => {
@@ -283,26 +272,26 @@ describe("Client storage + observe", () => {
     const b = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
     const batches: string[][] = [];
     const store: EventStore = {
-      put: (event) => inner.put(event),
+      put:  async (event) => inner.put(event),
       putMany: async (events) => {
         batches.push(events.map((e) => e.id));
         const out: PutResult[] = [];
-        for (const event of events) out.push(await inner.put(event));
+        for (const event of events) {out.push(await inner.put(event));}
         return out;
       },
-      get: (id) => inner.get(id),
-      query: (filters) => inner.query(filters),
-      count: (filters) => inner.count(filters),
-      negentropyItems: (filter) => inner.negentropyItems(filter),
-      remove: (ids) => inner.remove(ids),
-      clear: () => inner.clear(),
-      getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+      get:  async (id) => inner.get(id),
+      query:  async (filters) => inner.query(filters),
+      count:  async (filters) => inner.count(filters),
+      negentropyItems:  async (filter) => inner.negentropyItems(filter),
+      remove:  async (ids) => inner.remove(ids),
+      clear:  async () => inner.clear(),
+      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
     const client = Client.builder().storage(store).enableReconnect(false).build();
     client.observeAll([a, b, a]);
     await client.shutdown();
-    expect(batches).toEqual([[a.id, b.id]]);
+    expect(batches).toStrictEqual([[a.id, b.id]]);
   });
 
   test("single-flight flush does not overlap putMany", async () => {
@@ -352,13 +341,13 @@ describe("Client storage + observe", () => {
     client.observe(a);
     await Promise.resolve();
     await Promise.resolve();
-    expect(batches).toEqual([[a.id]]);
+    expect(batches).toStrictEqual([[a.id]]);
     client.observe(b);
-    expect(batches).toEqual([[a.id]]);
+    expect(batches).toStrictEqual([[a.id]]);
     expect(inFlight).toBe(1);
     releaseFirst();
     await client.shutdown();
-    expect(batches).toEqual([[a.id], [b.id]]);
+    expect(batches).toStrictEqual([[a.id], [b.id]]);
     expect(maxInFlight).toBe(1);
   });
 
@@ -500,7 +489,7 @@ describe("Client storage + observe", () => {
     expect(seen[0]).toBeInstanceOf(StorageError);
     expect(seen[0]!.cause).toBeInstanceOf(Error);
     expect(seen[0]!.message).toBe("disk full");
-    expect(seen[0]!.message.includes(note.content)).toBe(false);
+    expect(seen[0]!.message).not.toContain(note.content);
   });
 
   test("subscribe persist failure does not throw and still delivers onevent", async () => {
@@ -551,7 +540,7 @@ describe("Client storage + observe", () => {
     const ws = MockWebSocket.last();
     const req = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [string, string];
     ws.receive(JSON.stringify(["EVENT", req[1], note]));
-    expect(got).toEqual([note.id]);
+    expect(got).toStrictEqual([note.id]);
     await client.shutdown();
     expect(seen).toHaveLength(1);
     expect(seen[0]).toBeInstanceOf(StorageError);

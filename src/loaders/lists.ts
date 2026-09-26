@@ -20,12 +20,12 @@ export type MutedEntity =
   | { label: "hashtag"; value: string }
   | { label: "word"; value: string };
 
-function fromTags<T>(event: Event | null, map: (tag: readonly string[]) => T | undefined): T[] {
-  if (!event) return [];
+function fromTags<T>(event: Event | null, map: (tag: ReadonlyArray<string>) => T | undefined): T[] {
+  if (!event) {return [];}
   const out: T[] = [];
   for (const tag of event.tags) {
     const item = map(tag);
-    if (item !== undefined) out.push(item);
+    if (item !== undefined) {out.push(item);}
   }
   return out;
 }
@@ -62,7 +62,7 @@ export function createListLoaders(replaceable: (kind: number) => ReplaceableLoad
         event,
         fresh,
         items: fromTags(event, (tag) => {
-          if (!tag[1]) return undefined;
+          if (!tag[1]) {return undefined;}
           switch (tag[0]) {
             case "p":
               return isHex32(tag[1].toLowerCase())

@@ -1,16 +1,16 @@
 /**
- * NIP-59: Gift Wrap.
- * Rumor → NIP-44 seal (kind 13) → gift wrap (kind 1059).
- * Does not import signer, relay, or client. Crypto is a structural type.
+ * NIP-59: Gift Wrap. Rumor → NIP-44 seal (kind 13) → gift wrap (kind 1059). Does not import signer,
+ * relay, or client. Crypto is a structural type.
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/59.md
  */
 import { randomBytes } from "@noble/hashes/utils.js";
+
+import { NostrError } from "../core/error.ts";
 import type { Event, UnsignedEvent } from "../core/event.ts";
 import { getEventHash, validateEvent, validateSignedEvent } from "../core/event.ts";
-import { NostrError } from "../core/error.ts";
-import { Kind } from "../core/kind.ts";
 import { Keys, finalizeEvent, verifyEvent } from "../core/key.ts";
+import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
 import { assertHex32 } from "../core/util.ts";
@@ -22,9 +22,8 @@ export type Rumor = UnsignedEvent & {
 };
 
 /**
- * Structural crypto used by NIP-59.
- * Satisfied by NostrSigner when nip44Encrypt/nip44Decrypt are present.
- * This module must not import src/signer/.
+ * Structural crypto used by NIP-59. Satisfied by NostrSigner when nip44Encrypt/nip44Decrypt are
+ * present. This module must not import src/signer/.
  */
 export type Nip59Crypto = {
   getPublicKey(): Promise<string>;
@@ -54,8 +53,11 @@ export type WrapOptions = {
   readonly timestamps?: GiftWrapTimestamps;
   readonly relayHint?: string;
   /** Appended after the required wrap `p` tag. Never applied to the seal. */
-  readonly extraTags?: readonly Tag[];
-  /** Default `"seal+wrap"` (NIP-59). `"wrap"` = only wrap timestamp is randomized; seal uses rumor.created_at. */
+  readonly extraTags?: ReadonlyArray<Tag>;
+  /**
+   * Default `"seal+wrap"` (NIP-59). `"wrap"` = only wrap timestamp is randomized; seal uses
+   * rumor.created_at.
+   */
   readonly randomize?: TimestampRandomize;
 };
 
@@ -88,10 +90,10 @@ export function requireNip59Crypto(crypto: Nip59CryptoInput): Nip59Crypto {
     throw new Nip59Error("NIP-44 is required");
   }
   return {
-    getPublicKey: () => crypto.getPublicKey(),
-    signEvent: (unsigned) => crypto.signEvent(unsigned),
-    nip44Encrypt: (peer, plaintext) => encrypt.call(crypto, peer, plaintext),
-    nip44Decrypt: (peer, payload) => decrypt.call(crypto, peer, payload),
+    getPublicKey:  async () => crypto.getPublicKey(),
+    signEvent:  async (unsigned) => crypto.signEvent(unsigned),
+    nip44Encrypt:  async (peer, plaintext) => encrypt.call(crypto, peer, plaintext),
+    nip44Decrypt:  async (peer, payload) => decrypt.call(crypto, peer, payload),
   };
 }
 
@@ -103,7 +105,7 @@ export function requireNip44Decryptor(crypto: {
     throw new Nip59Error("NIP-44 is required");
   }
   return {
-    nip44Decrypt: (peer, payload) => decrypt.call(crypto, peer, payload),
+    nip44Decrypt:  async (peer, payload) => decrypt.call(crypto, peer, payload),
   };
 }
 
@@ -153,7 +155,7 @@ export function createRumor(
   template: {
     kind: number;
     content?: string;
-    tags?: readonly Tag[];
+    tags?: ReadonlyArray<Tag>;
     created_at?: number;
   },
 ): Rumor {

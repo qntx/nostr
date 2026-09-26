@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+
 import {
   EventBuilder,
   Keys,
@@ -11,7 +12,8 @@ import {
   parseRelayMessage,
   useWebSocketImplementation,
 } from "../src/index.ts";
-import { createFakeRelayNetwork, type FakeRelayNetwork } from "../src/testing/index.ts";
+import { createFakeRelayNetwork } from '../src/testing/index.ts';
+import type { FakeRelayNetwork } from '../src/testing/index.ts';
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -19,14 +21,14 @@ const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 describe("NIP-45 COUNT codec", () => {
   test("encode client COUNT and parse relay COUNT with optional fields", () => {
     const wire = encodeClientMessage(["COUNT", "c1", { kinds: [1] }]);
-    expect(JSON.parse(wire)).toEqual(["COUNT", "c1", { kinds: [1] }]);
+    expect(JSON.parse(wire)).toStrictEqual(["COUNT", "c1", { kinds: [1] }]);
 
-    const hll = "ab" + "00".repeat(255);
+    const hll = `ab${  "00".repeat(255)}`;
     const msg = parseRelayMessage(
       JSON.stringify(["COUNT", "c1", { count: 3, approximate: true, hll }]),
     );
-    expect(msg).toEqual(["COUNT", "c1", { count: 3, approximate: true, hll }]);
-    if (msg[0] !== "COUNT") throw new Error("expected COUNT");
+    expect(msg).toStrictEqual(["COUNT", "c1", { count: 3, approximate: true, hll }]);
+    if (msg[0] !== "COUNT") {throw new Error("expected COUNT");}
     expect(msg[2].hll).toBe(hll);
     expect(msg[2].hll).toHaveLength(512);
   });
@@ -35,32 +37,32 @@ describe("NIP-45 COUNT codec", () => {
     const short = parseRelayMessage(
       JSON.stringify(["COUNT", "c1", { count: 3, approximate: true, hll: "abc" }]),
     );
-    expect(short).toEqual(["COUNT", "c1", { count: 3, approximate: true }]);
-    if (short[0] !== "COUNT") throw new Error("expected COUNT");
+    expect(short).toStrictEqual(["COUNT", "c1", { count: 3, approximate: true }]);
+    if (short[0] !== "COUNT") {throw new Error("expected COUNT");}
     expect("hll" in short[2]).toBe(false);
 
     const nonHex = parseRelayMessage(
       JSON.stringify(["COUNT", "c1", { count: 1, hll: "g".repeat(512) }]),
     );
-    expect(nonHex).toEqual(["COUNT", "c1", { count: 1 }]);
-    if (nonHex[0] !== "COUNT") throw new Error("expected COUNT");
+    expect(nonHex).toStrictEqual(["COUNT", "c1", { count: 1 }]);
+    if (nonHex[0] !== "COUNT") {throw new Error("expected COUNT");}
     expect("hll" in nonHex[2]).toBe(false);
 
     const notString = parseRelayMessage(
       JSON.stringify(["COUNT", "c1", { count: 2, approximate: false, hll: 1 }]),
     );
-    expect(notString).toEqual(["COUNT", "c1", { count: 2, approximate: false }]);
-    if (notString[0] !== "COUNT") throw new Error("expected COUNT");
+    expect(notString).toStrictEqual(["COUNT", "c1", { count: 2, approximate: false }]);
+    if (notString[0] !== "COUNT") {throw new Error("expected COUNT");}
     expect("hll" in notString[2]).toBe(false);
   });
 
   test("lowercases a valid 512-hex hll", () => {
-    const lower = "cd" + "00".repeat(255);
+    const lower = `cd${  "00".repeat(255)}`;
     const msg = parseRelayMessage(
       JSON.stringify(["COUNT", "c1", { count: 9, hll: lower.toUpperCase() }]),
     );
-    expect(msg).toEqual(["COUNT", "c1", { count: 9, hll: lower }]);
-    if (msg[0] !== "COUNT") throw new Error("expected COUNT");
+    expect(msg).toStrictEqual(["COUNT", "c1", { count: 9, hll: lower }]);
+    if (msg[0] !== "COUNT") {throw new Error("expected COUNT");}
     expect(msg[2].hll).toBe(lower);
   });
 });
@@ -71,14 +73,14 @@ describe("mergeCountHll", () => {
   });
 
   test("one element is a lowercase clone", () => {
-    const sketch = "AB" + "00".repeat(255);
-    expect(mergeCountHll([sketch])).toBe("ab" + "00".repeat(255));
+    const sketch = `AB${  "00".repeat(255)}`;
+    expect(mergeCountHll([sketch])).toBe(`ab${  "00".repeat(255)}`);
   });
 
   test("register-wise max of 0x01 and 0x02", () => {
-    const a = "01" + "02" + "00".repeat(254);
-    const b = "02" + "01" + "00".repeat(254);
-    expect(mergeCountHll([a, b])).toBe("02" + "02" + "00".repeat(254));
+    const a = `01` + `02${  "00".repeat(254)}`;
+    const b = `02` + `01${  "00".repeat(254)}`;
+    expect(mergeCountHll([a, b])).toBe(`02` + `02${  "00".repeat(254)}`);
   });
 
   test("rejects length 511", () => {
@@ -86,7 +88,7 @@ describe("mergeCountHll", () => {
   });
 
   test("rejects non-hex gg", () => {
-    expect(() => mergeCountHll(["gg" + "00".repeat(255)])).toThrow(MessageError);
+    expect(() => mergeCountHll([`gg${  "00".repeat(255)}`])).toThrow(MessageError);
   });
 });
 
@@ -114,10 +116,10 @@ describe("Relay.count", () => {
     const countMsg = sent.find((m) => m[0] === "COUNT") as [string, string, ...unknown[]];
     expect(countMsg[0]).toBe("COUNT");
     expect(countMsg[1]).toBe("count:test");
-    expect(countMsg[2]).toEqual({ kinds: [1], authors: ["aa".repeat(32)] });
+    expect(countMsg[2]).toStrictEqual({ kinds: [1], authors: ["aa".repeat(32)] });
 
     ws.receive(JSON.stringify(["COUNT", "count:test", { count: 7, approximate: false }]));
-    await expect(countP).resolves.toEqual({ count: 7, approximate: false });
+    await expect(countP).resolves.toStrictEqual({ count: 7, approximate: false });
     relay.close();
   });
 
@@ -158,7 +160,7 @@ describe("Relay.count", () => {
     const second = relay.count([{ kinds: [0] }], { id: "count:second", timeoutMs: 2000 });
     await Promise.resolve();
     ws.receive(JSON.stringify(["COUNT", "count:second", { count: 4 }]));
-    await expect(second).resolves.toEqual({ count: 4 });
+    await expect(second).resolves.toStrictEqual({ count: 4 });
     expect("hll" in (await second)).toBe(false);
     relay.close();
   });
@@ -190,9 +192,9 @@ describe("Relay.count", () => {
     await new Promise((r) => setTimeout(r, 20));
     const counts = ws.sent.map((s) => JSON.parse(s) as unknown[]).filter((m) => m[0] === "COUNT");
     expect(counts).toHaveLength(2);
-    expect(counts[1]).toEqual(["COUNT", "count:auth", filters[0]]);
+    expect(counts[1]).toStrictEqual(["COUNT", "count:auth", filters[0]]);
     ws.receive(JSON.stringify(["COUNT", "count:auth", { count: 11, approximate: true }]));
-    await expect(countP).resolves.toEqual({ count: 11, approximate: true });
+    await expect(countP).resolves.toStrictEqual({ count: 11, approximate: true });
     relay.close();
   });
 
@@ -222,7 +224,7 @@ describe("Relay.count", () => {
     ws.receive(JSON.stringify(["OK", authFrame![1].id, true, ""]));
     await new Promise((r) => setTimeout(r, 20));
     ws.receive(JSON.stringify(["COUNT", "count:slow", { count: 2 }]));
-    await expect(countP).resolves.toEqual({ count: 2 });
+    await expect(countP).resolves.toStrictEqual({ count: 2 });
     relay.close();
   });
 
@@ -263,7 +265,7 @@ describe("Relay.count", () => {
     await new Promise((r) => setTimeout(r, 20));
     const counts = ws.sent.map((s) => JSON.parse(s) as unknown[]).filter((m) => m[0] === "COUNT");
     expect(counts).toHaveLength(2);
-    expect(counts[1]).toEqual(["COUNT", "count:post-auth-timeout", filters[0]]);
+    expect(counts[1]).toStrictEqual(["COUNT", "count:post-auth-timeout", filters[0]]);
     await expect(countP).rejects.toThrow(RelayTimeoutError);
     await expect(countP).rejects.toThrow(/count timed out/);
     relay.close();
@@ -291,7 +293,7 @@ describe("Relay.count", () => {
     const second = relay.count([{ kinds: [1] }], { id: "count:nochal2", timeoutMs: 2000 });
     await Promise.resolve();
     MockWebSocket.last().receive(JSON.stringify(["COUNT", "count:nochal2", { count: 8 }]));
-    await expect(second).resolves.toEqual({ count: 8 });
+    await expect(second).resolves.toStrictEqual({ count: 8 });
     relay.close();
   });
 
@@ -323,7 +325,7 @@ describe("Relay.count", () => {
     const second = relay.count([{ kinds: [1] }], { id: "count:after-fail", timeoutMs: 2000 });
     await Promise.resolve();
     ws.receive(JSON.stringify(["COUNT", "count:after-fail", { count: 1 }]));
-    await expect(second).resolves.toEqual({ count: 1 });
+    await expect(second).resolves.toStrictEqual({ count: 1 });
     relay.close();
   });
 
@@ -380,7 +382,7 @@ describe("Relay.count", () => {
     const second = relay.count([{ kinds: [1] }], { id: "count:after-throw", timeoutMs: 2000 });
     await Promise.resolve();
     ws.receive(JSON.stringify(["COUNT", "count:after-throw", { count: 3 }]));
-    await expect(second).resolves.toEqual({ count: 3 });
+    await expect(second).resolves.toStrictEqual({ count: 3 });
     relay.close();
   });
 
@@ -419,7 +421,7 @@ describe("Relay.count", () => {
     ws.receive(JSON.stringify(["OK", authFrame![1].id, false, "restricted: bad auth"]));
     await new Promise((r) => setTimeout(r, 20));
     ws.receive(JSON.stringify(["COUNT", "count:reuse", { count: 9 }]));
-    await expect(second).resolves.toEqual({ count: 9 });
+    await expect(second).resolves.toStrictEqual({ count: 9 });
     relay.close();
   });
 
@@ -461,7 +463,7 @@ describe("Relay.count", () => {
       .find((m) => m[0] === "COUNT") as [string, string, ...unknown[]];
     expect(countMsg[1]).toBe(id);
     MockWebSocket.last().receive(JSON.stringify(["COUNT", id, { count: 1 }]));
-    await expect(countP).resolves.toEqual({ count: 1 });
+    await expect(countP).resolves.toStrictEqual({ count: 1 });
     relay.close();
   });
 });

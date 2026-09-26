@@ -1,5 +1,6 @@
-import { EventBuilder, Keys, type Event } from "../core/index.ts";
 import type { Filter } from "../core/filter.ts";
+import { EventBuilder, Keys } from '../core/index.ts';
+import type { Event } from '../core/index.ts';
 import type { EventStore } from "../storage/types.ts";
 
 export type EventStoreConformanceCase = {
@@ -48,14 +49,14 @@ function eq<T>(got: T, want: T, what: string): void {
   }
 }
 
-function ids(events: readonly Event[]): string[] {
+function ids(events: ReadonlyArray<Event>): string[] {
   return events.map((e) => e.id);
 }
 
 /**
- * Framework-agnostic {@link EventStore} conformance cases. Each `run` throws on
- * failure; register them with the test framework of your choice:
- * `for (const c of eventStoreConformanceCases) test(c.name, () => c.run(store()))`.
+ * Framework-agnostic {@link EventStore} conformance cases. Each `run` throws on failure; register
+ * them with the test framework of your choice: `for (const c of eventStoreConformanceCases)
+ * test(c.name, () => c.run(store()))`.
  */
 export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase> = [
   {

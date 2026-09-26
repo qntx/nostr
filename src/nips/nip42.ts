@@ -2,8 +2,8 @@ import type { EventTemplate } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 
 /**
- * Build an unsigned NIP-42 AUTH event template for the given relay challenge.
- * Caller must sign with their `NostrSigner` / keys.
+ * Build an unsigned NIP-42 AUTH event template for the given relay challenge. Caller must sign with
+ * their `NostrSigner` / keys.
  */
 export function makeAuthEvent(relayURL: string, challenge: string): EventTemplate {
   return {

@@ -1,11 +1,14 @@
 import { describe, expect, test } from "vite-plus/test";
-import { hexToBytes, utf8Encoder } from "../src/core/util.ts";
-import { finalizeEvent, serializeEvent, verifyEvent, type Event } from "../src/index.ts";
-import { Kind } from "../src/core/kind.ts";
+
 import { HexError } from "../src/core/error.ts";
+import { Kind } from "../src/core/kind.ts";
+import { hexToBytes, utf8Encoder } from "../src/core/util.ts";
+import { finalizeEvent, serializeEvent, verifyEvent } from '../src/index.ts';
+import type { Event } from '../src/index.ts';
 import { assertAllowedWasmImports, instantiateCryptoWasm } from "../src/wasm/abi.ts";
 import { makeVerifyEvent, WasmVerifyPoisonedError } from "../src/wasm/adapter.ts";
-import { loadNostrWasm, resetNostrWasmForTests, type NostrWasm } from "../src/wasm/load.ts";
+import { loadNostrWasm, resetNostrWasmForTests } from '../src/wasm/load.ts';
+import type { NostrWasm } from '../src/wasm/load.ts';
 import { readBuiltWasm } from "./read-wasm.ts";
 
 const SK_HEX = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";

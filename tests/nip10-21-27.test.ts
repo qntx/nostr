@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   EventBuilder,
   EventValidationError,
@@ -35,15 +36,15 @@ describe("nip10", () => {
 
     const thread = parseThreadTags(event);
     expect(thread.root?.id).toBe(rootId);
-    expect(thread.root?.relays).toEqual(
+    expect(thread.root?.relays).toStrictEqual(
       expect.arrayContaining(["wss://root.example", "wss://author.example"]),
     );
     expect(thread.root?.author).toBe(author);
     expect(thread.reply?.id).toBe(replyId);
-    expect(thread.reply?.relays).toEqual(
+    expect(thread.reply?.relays).toStrictEqual(
       expect.arrayContaining(["wss://reply.example", "wss://author.example"]),
     );
-    expect(thread.mentions).toEqual([]);
+    expect(thread.mentions).toStrictEqual([]);
     expect(thread.profiles[0]?.pubkey).toBe(author);
   });
 
@@ -59,7 +60,7 @@ describe("nip10", () => {
     const thread = parseThreadTags(event);
     expect(thread.root?.id).toBe(rootId);
     expect(thread.reply?.id).toBe(parentId);
-    expect(thread.mentions).toEqual([]);
+    expect(thread.mentions).toStrictEqual([]);
   });
 
   test("parseThreadTags quotes and mentions", () => {
@@ -74,9 +75,9 @@ describe("nip10", () => {
 
     const thread = parseThreadTags(event);
     expect(thread.root?.id).toBe(rootId);
-    expect(thread.mentions.map((m) => m.id)).toEqual([mentionId]);
+    expect(thread.mentions.map((m) => m.id)).toStrictEqual([mentionId]);
     expect(thread.reply?.id).toBe(rootId);
-    expect(thread.quotes).toEqual([{ id: quoteId, relays: ["wss://quote.example"] }]);
+    expect(thread.quotes).toStrictEqual([{ id: quoteId, relays: ["wss://quote.example"] }]);
   });
 
   test("parseThreadTags lone mention-marked e is extras not reply", () => {
@@ -86,7 +87,7 @@ describe("nip10", () => {
     const thread = parseThreadTags(event);
     expect(thread.root).toBeUndefined();
     expect(thread.reply).toBeUndefined();
-    expect(thread.mentions.map((m) => m.id)).toEqual([mentionId]);
+    expect(thread.mentions.map((m) => m.id)).toStrictEqual([mentionId]);
   });
 
   test("parseThreadTags unknown e markers are mentions only", () => {
@@ -96,7 +97,7 @@ describe("nip10", () => {
     const thread = parseThreadTags(event);
     expect(thread.root).toBeUndefined();
     expect(thread.reply).toBeUndefined();
-    expect(thread.mentions.map((m) => m.id)).toEqual([extraId]);
+    expect(thread.mentions.map((m) => m.id)).toStrictEqual([extraId]);
   });
 
   test("parseThreadTags single unmarked e is positional reply", () => {
@@ -106,7 +107,7 @@ describe("nip10", () => {
     const thread = parseThreadTags(event);
     expect(thread.root?.id).toBe(parentId);
     expect(thread.reply?.id).toBe(parentId);
-    expect(thread.mentions).toEqual([]);
+    expect(thread.mentions).toStrictEqual([]);
   });
 
   test("parseThreadTags empty marker is positional unmarked", () => {
@@ -120,7 +121,7 @@ describe("nip10", () => {
     const thread = parseThreadTags(event);
     expect(thread.root?.id).toBe(rootId);
     expect(thread.reply?.id).toBe(parentId);
-    expect(thread.mentions).toEqual([]);
+    expect(thread.mentions).toStrictEqual([]);
   });
 
   test("parseThreadTags NIP-01 e 4-tuple is positional with author", () => {
@@ -135,8 +136,8 @@ describe("nip10", () => {
     expect(thread.reply?.id).toBe(parentId);
     expect(thread.root?.author).toBe(author);
     expect(thread.reply?.author).toBe(author);
-    expect(thread.root?.relays).toEqual(["wss://relay.example"]);
-    expect(thread.mentions).toEqual([]);
+    expect(thread.root?.relays).toStrictEqual(["wss://relay.example"]);
+    expect(thread.mentions).toStrictEqual([]);
   });
 
   test("parseThreadTags unknown marker does not fill positional root/reply", () => {
@@ -150,7 +151,7 @@ describe("nip10", () => {
     const thread = parseThreadTags(event);
     expect(thread.root?.id).toBe(parentId);
     expect(thread.reply?.id).toBe(parentId);
-    expect(thread.mentions.map((m) => m.id)).toEqual([extraId]);
+    expect(thread.mentions.map((m) => m.id)).toStrictEqual([extraId]);
   });
 
   test("buildReplyTags for root parent", () => {
@@ -160,7 +161,7 @@ describe("nip10", () => {
     const pTags = tags.filter((t) => t[0] === "p");
 
     expect(eTags).toHaveLength(1);
-    expect(eTags[0]).toEqual(["e", parent.id, "wss://r.example", "root", parent.pubkey]);
+    expect(eTags[0]).toStrictEqual(["e", parent.id, "wss://r.example", "root", parent.pubkey]);
     expect(pTags.some((t) => t[1] === parent.pubkey)).toBe(true);
   });
 
@@ -170,10 +171,10 @@ describe("nip10", () => {
       parent: { ...parent, id: parent.id.toUpperCase(), pubkey: parent.pubkey.toUpperCase() },
       relayHint: "wss://r.example",
     });
-    expect(tags.filter((t) => t[0] === "e")).toEqual([
+    expect(tags.filter((t) => t[0] === "e")).toStrictEqual([
       ["e", parent.id, "wss://r.example", "root", parent.pubkey],
     ]);
-    expect(tags.filter((t) => t[0] === "p")).toEqual([["p", parent.pubkey]]);
+    expect(tags.filter((t) => t[0] === "p")).toStrictEqual([["p", parent.pubkey]]);
 
     const child = signedNote(keysB, "child", [
       ["e", parent.id.toUpperCase(), "wss://root.example", "root", parent.pubkey.toUpperCase()],
@@ -183,21 +184,21 @@ describe("nip10", () => {
       parent: { ...child, id: child.id.toUpperCase(), pubkey: child.pubkey.toUpperCase() },
       relayHint: "wss://parent.example",
     });
-    expect(nested.find((t) => t[0] === "e" && t[3] === "root")).toEqual([
+    expect(nested.find((t) => t[0] === "e" && t[3] === "root")).toStrictEqual([
       "e",
       parent.id,
       "wss://root.example",
       "root",
       parent.pubkey,
     ]);
-    expect(nested.find((t) => t[0] === "e" && t[3] === "reply")).toEqual([
+    expect(nested.find((t) => t[0] === "e" && t[3] === "reply")).toStrictEqual([
       "e",
       child.id,
       "wss://parent.example",
       "reply",
       child.pubkey,
     ]);
-    expect(nested.filter((t) => t[0] === "p")).toEqual([
+    expect(nested.filter((t) => t[0] === "p")).toStrictEqual([
       ["p", parent.pubkey, "wss://root.example"],
       ["p", child.pubkey, "wss://parent.example"],
     ]);
@@ -214,7 +215,7 @@ describe("nip10", () => {
     const tags = buildReplyTags({ parent: tagged, relayHint: "wss://r.example" });
     const eTags = tags.filter((t) => t[0] === "e");
     expect(eTags).toHaveLength(1);
-    expect(eTags[0]).toEqual(["e", parent.id, "wss://r.example", "root", parent.pubkey]);
+    expect(eTags[0]).toStrictEqual(["e", parent.id, "wss://r.example", "root", parent.pubkey]);
     expect(eTags.some((t) => t[3] === "reply")).toBe(false);
   });
 
@@ -234,7 +235,7 @@ describe("nip10", () => {
     const qTags = tags.filter((t) => t[0] === "q");
 
     expect(eTags.find((t) => t[3] === "root")?.[1]).toBe(root.id);
-    expect(eTags.find((t) => t[3] === "reply")).toEqual([
+    expect(eTags.find((t) => t[3] === "reply")).toStrictEqual([
       "e",
       parent.id,
       "wss://parent.example",
@@ -242,7 +243,7 @@ describe("nip10", () => {
       parent.pubkey,
     ]);
     expect(eTags.some((t) => t[3] === "mention")).toBe(false);
-    expect(qTags).toEqual([["q", "66".repeat(32)]]);
+    expect(qTags).toStrictEqual([["q", "66".repeat(32)]]);
   });
 
   test("buildReplyTags omits root author hint when the root author is unknown", () => {
@@ -250,7 +251,7 @@ describe("nip10", () => {
     const parent = signedNote(keysB, "child", [["e", rootId, "wss://root.example", "root"]]);
     const tags = buildReplyTags({ parent, relayHint: "wss://parent.example" });
     const rootTag = tags.find((t) => t[0] === "e" && t[3] === "root");
-    expect(rootTag).toEqual(["e", rootId, "wss://root.example", "root"]);
+    expect(rootTag).toStrictEqual(["e", rootId, "wss://root.example", "root"]);
     expect(rootTag?.[4]).toBeUndefined();
     expect(rootTag?.[4]).not.toBe(parent.pubkey);
   });
@@ -297,7 +298,7 @@ describe("nip10", () => {
     const thread = parseThreadTags(event);
     const quote = thread.quotes[0];
     expect(thread.quotes).toHaveLength(1);
-    expect(quote).toEqual({
+    expect(quote).toStrictEqual({
       id: quoteId,
       relays: ["wss://quote.example"],
       author,
@@ -316,7 +317,7 @@ describe("nip10", () => {
 
     const thread = parseThreadTags(event);
     expect(thread.quotes).toHaveLength(1);
-    expect(thread.quotes[0]).toEqual({
+    expect(thread.quotes[0]).toStrictEqual({
       identifier: ident,
       pubkey: pk,
       kind: 30023,
@@ -337,7 +338,7 @@ describe("nip10", () => {
     ]);
 
     const thread = parseThreadTags(event);
-    expect(thread.quotes).toEqual([{ id: "55".repeat(32), relays: ["wss://ok.example"] }]);
+    expect(thread.quotes).toStrictEqual([{ id: "55".repeat(32), relays: ["wss://ok.example"] }]);
     expect(thread.quotes[0]).not.toHaveProperty("author");
   });
 
@@ -357,14 +358,14 @@ describe("nip10", () => {
       ],
     });
 
-    expect(tags.filter((t) => t[0] === "q")).toEqual([["q", quoteId, quoteRelay, quoteAuthor]]);
+    expect(tags.filter((t) => t[0] === "q")).toStrictEqual([["q", quoteId, quoteRelay, quoteAuthor]]);
     expect(tags).toContainEqual(["p", quoteAuthor, quoteRelay]);
 
     const viaReplyTo = replyTo(parent, "quoted", {
       quotes: [{ id: quoteId, relays: [quoteRelay], author: quoteAuthor }],
     });
     expect(viaReplyTo.currentKind).toBe(Kind.TextNote);
-    expect(viaReplyTo.currentTags.filter((t) => t[0] === "q")).toEqual([
+    expect(viaReplyTo.currentTags.filter((t) => t[0] === "q")).toStrictEqual([
       ["q", quoteId, quoteRelay, quoteAuthor],
     ]);
     expect(viaReplyTo.currentTags).toContainEqual(["p", quoteAuthor, quoteRelay]);
@@ -397,7 +398,7 @@ describe("nip10", () => {
     });
 
     const qTags = tags.filter((t) => t[0] === "q");
-    expect(qTags).toEqual([
+    expect(qTags).toStrictEqual([
       ["q", hexId],
       ["q", emptyRelayId, "", emptyRelayAuthor],
       ["q", `30023:${addrPk}:post`, addrRelay],
@@ -414,14 +415,14 @@ describe("nip10", () => {
   test("Tag.e and replyTo builder", () => {
     const id = "aa".repeat(32);
     const pk = "cd".repeat(32);
-    expect(Tag.e(id.toUpperCase(), "wss://x", "root", pk.toUpperCase())).toEqual([
+    expect(Tag.e(id.toUpperCase(), "wss://x", "root", pk.toUpperCase())).toStrictEqual([
       "e",
       id,
       "wss://x",
       "root",
       pk,
     ]);
-    expect(Tag.e("aa".repeat(32), "wss://x", "root", keysA.publicKey)).toEqual([
+    expect(Tag.e("aa".repeat(32), "wss://x", "root", keysA.publicKey)).toStrictEqual([
       "e",
       "aa".repeat(32),
       "wss://x",
@@ -454,7 +455,7 @@ describe("nip21", () => {
     const parsed = parseNostrURI(uri);
     expect(parsed.uri).toBe(uri);
     expect(parsed.value).toBe(npub);
-    expect(parsed.decoded).toEqual({ type: "npub", data: keysA.publicKey });
+    expect(parsed.decoded).toStrictEqual({ type: "npub", data: keysA.publicKey });
   });
 
   test("parseNostrURI rejects garbage", () => {
@@ -474,7 +475,7 @@ describe("nip27", () => {
     const blocks = parseContentBlocks(
       "hello #nostr see https://cdn.example.com/a.png and https://x.example.com/post",
     );
-    expect(blocks).toEqual([
+    expect(blocks).toStrictEqual([
       { type: "text", text: "hello " },
       { type: "hashtag", value: "nostr" },
       { type: "text", text: " see " },
@@ -488,10 +489,10 @@ describe("nip27", () => {
     const npub = npubEncode(keysA.publicKey);
     const note = noteEncode("77".repeat(32));
     const blocks = parseContentBlocks(`hi nostr:${npub} and note nostr:${note}`);
-    expect(blocks[0]).toEqual({ type: "text", text: "hi " });
-    expect(blocks[1]).toEqual({ type: "reference", pointer: { pubkey: keysA.publicKey } });
-    expect(blocks[2]).toEqual({ type: "text", text: " and note " });
-    expect(blocks[3]).toEqual({ type: "reference", pointer: { id: "77".repeat(32) } });
+    expect(blocks[0]).toStrictEqual({ type: "text", text: "hi " });
+    expect(blocks[1]).toStrictEqual({ type: "reference", pointer: { pubkey: keysA.publicKey } });
+    expect(blocks[2]).toStrictEqual({ type: "text", text: " and note " });
+    expect(blocks[3]).toStrictEqual({ type: "reference", pointer: { id: "77".repeat(32) } });
   });
 
   test("parseContentBlocks emoji tags and relays", () => {
@@ -499,7 +500,7 @@ describe("nip27", () => {
       ["emoji", "shipit", "https://cdn.example.com/shipit.png"],
     ]);
     const blocks = parseContentBlocks(event);
-    expect(blocks).toEqual([
+    expect(blocks).toStrictEqual([
       { type: "text", text: "ship it " },
       { type: "emoji", shortcode: "shipit", url: "https://cdn.example.com/shipit.png" },
       { type: "text", text: " via " },

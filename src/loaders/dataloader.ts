@@ -3,7 +3,7 @@ import { NostrError } from "../core/error.ts";
 export class LoaderError extends NostrError {}
 
 /** Minimal request coalescer. Batches keys within a microtask; no global state. */
-export type BatchLoadFn<K, V> = (keys: readonly K[]) => Promise<readonly (V | Error)[]>;
+export type BatchLoadFn<K, V> = (keys: ReadonlyArray<K>) => Promise<ReadonlyArray<V | Error>>;
 
 export type DataLoaderOptions<K, C = K> = {
   cacheKeyFn?: (key: K) => C;
@@ -19,7 +19,7 @@ export class DataLoader<K, V, C = K> {
   readonly #useCache: boolean;
   readonly #cache = new Map<C, Promise<V>>();
   readonly #inflight = new Map<C, Promise<V>>();
-  #queue: Array<{
+  readonly #queue: Array<{
     key: K;
     resolve: (v: V) => void;
     reject: (e: unknown) => void;
@@ -29,18 +29,18 @@ export class DataLoader<K, V, C = K> {
   constructor(batchLoadFn: BatchLoadFn<K, V>, options: DataLoaderOptions<K, C> = {}) {
     this.#batchLoadFn = batchLoadFn;
     this.#cacheKeyFn = options.cacheKeyFn ?? ((k: K) => k as unknown as C);
-    this.#maxBatchSize = options.maxBatchSize ?? Infinity;
+    this.#maxBatchSize = options.maxBatchSize ?? Number.POSITIVE_INFINITY;
     this.#useCache = options.cache !== false;
   }
 
-  load(key: K): Promise<V> {
+   async load(key: K): Promise<V> {
     const cacheKey = this.#cacheKeyFn(key);
     if (this.#useCache) {
       const cached = this.#cache.get(cacheKey);
-      if (cached) return cached;
+      if (cached) {return cached;}
     }
     const inflight = this.#inflight.get(cacheKey);
-    if (inflight) return inflight;
+    if (inflight) {return inflight;}
 
     const promise = new Promise<V>((resolve, reject) => {
       this.#queue.push({ key, resolve, reject });
@@ -55,7 +55,7 @@ export class DataLoader<K, V, C = K> {
     });
 
     this.#inflight.set(cacheKey, promise);
-    if (this.#useCache) this.#cache.set(cacheKey, promise);
+    if (this.#useCache) {this.#cache.set(cacheKey, promise);}
     return promise;
   }
 
@@ -72,7 +72,7 @@ export class DataLoader<K, V, C = K> {
   #dispatch(): void {
     this.#scheduled = false;
     const batch = this.#queue.splice(0, this.#maxBatchSize);
-    if (batch.length === 0) return;
+    if (batch.length === 0) {return;}
 
     const keys = batch.map((b) => b.key);
     void this.#batchLoadFn(keys)
@@ -81,17 +81,17 @@ export class DataLoader<K, V, C = K> {
           const err = new LoaderError(
             `DataLoader batch function must return array of length ${keys.length}, got ${values.length}`,
           );
-          for (const item of batch) item.reject(err);
+          for (const item of batch) {item.reject(err);}
           return;
         }
         for (let i = 0; i < batch.length; i++) {
           const value = values[i]!;
-          if (value instanceof Error) batch[i]!.reject(value);
-          else batch[i]!.resolve(value);
+          if (value instanceof Error) {batch[i]!.reject(value);}
+          else {batch[i]!.resolve(value);}
         }
       })
-      .catch((err) => {
-        for (const item of batch) item.reject(err);
+      .catch((error) => {
+        for (const item of batch) item.reject(error);
       });
 
     if (this.#queue.length > 0) {

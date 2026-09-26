@@ -3,21 +3,18 @@ import type { Filter } from "../core/filter.ts";
 import { MemoryIndex } from "./memory-index.ts";
 import type { EventStore, NegentropyItem, OutboxBound, PutResult } from "./types.ts";
 
-/**
- * In-memory event store: async {@link EventStore} facade over the synchronous
- * {@link MemoryIndex}.
- */
+/** In-memory event store: async {@link EventStore} facade over the synchronous {@link MemoryIndex}. */
 export class MemoryEventStore implements EventStore {
-  #index = new MemoryIndex();
+  readonly #index = new MemoryIndex();
 
   async put(raw: Event): Promise<PutResult> {
     return this.#index.put(raw);
   }
 
   /** Sequential `put` in input order. No transaction: a throw leaves earlier events applied. */
-  async putMany(events: readonly Event[]): Promise<PutResult[]> {
+  async putMany(events: ReadonlyArray<Event>): Promise<PutResult[]> {
     const results: PutResult[] = [];
-    for (const event of events) results.push(await this.put(event));
+    for (const event of events) {results.push(await this.put(event));}
     return results;
   }
 

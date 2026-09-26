@@ -1,4 +1,5 @@
 import { expect, test } from "vite-plus/test";
+
 import { Kind, finalizeEvent, verifyEvent, getPublicKey } from "../src/index.ts";
 
 test("core root export signs and verifies", () => {

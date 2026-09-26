@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import { Client, EventBuilder, Keys } from "../src/index.ts";
+
 import { normalizeURL } from "../src/core/util.ts";
-import { createFakeRelayNetwork, type FakeRelayNetwork } from "../src/testing/index.ts";
+import { Client, EventBuilder, Keys } from "../src/index.ts";
+import { createFakeRelayNetwork } from '../src/testing/index.ts';
+import type { FakeRelayNetwork } from '../src/testing/index.ts';
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -9,14 +11,14 @@ const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const A = normalizeURL("wss://a.example");
 const B = normalizeURL("wss://b.example");
 
-function sleep(ms: number): Promise<void> {
+ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) return;
+    if (pred()) {return;}
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -48,7 +50,7 @@ describe("Client + ReactiveEventStore", () => {
     const note = EventBuilder.textNote("x").createdAt(1).signWithKeys(keys);
     client.observe(note, "wss://a.example");
     expect(client.index.get(note.id)?.id).toBe(note.id);
-    expect(client.index.seenOn(note.id)).toEqual([A]);
+    expect(client.index.seenOn(note.id)).toStrictEqual([A]);
     await client.shutdown();
   });
 
@@ -83,7 +85,7 @@ describe("Client + ReactiveEventStore", () => {
       {
         onevent: (event) => {
           // index must already contain the event when the caller sees it
-          order.push(client.index.get(event.id) !== undefined ? "index-first" : "index-late");
+          order.push(client.index.get(event.id) === undefined ? "index-late" : "index-first");
         },
         receivedEvent: (id) => received.push(id),
       },
@@ -92,9 +94,9 @@ describe("Client + ReactiveEventStore", () => {
     await waitUntil(() => received.length === 2);
     await sleep(20);
 
-    expect(order).toEqual(["index-first"]);
+    expect(order).toStrictEqual(["index-first"]);
     expect(client.index.get(note.id)?.id).toBe(note.id);
-    expect(client.index.seenOn(note.id)).toEqual([A, B]);
+    expect(client.index.seenOn(note.id)).toStrictEqual([A, B]);
 
     closer.close();
     await client.shutdown();
@@ -118,7 +120,7 @@ describe("Client + ReactiveEventStore", () => {
     expect(ids.has(inNet.id)).toBe(true);
     // storage hit hydrated into the index, network event indexed with its url
     expect(client.index.get(inStorage.id) !== undefined).toBe(true);
-    expect(client.index.seenOn(inNet.id)).toEqual([A]);
+    expect(client.index.seenOn(inNet.id)).toStrictEqual([A]);
     await client.shutdown();
   });
 
@@ -157,7 +159,7 @@ describe("issue #125", () => {
     await client.storage.put(stale);
 
     const events = await client.fetchEvents({ kinds: [0] }, { localFirst: true });
-    expect(events.map((e) => e.id)).toEqual([fresh.id]);
+    expect(events.map((e) => e.id)).toStrictEqual([fresh.id]);
     expect(client.index.getReplaceable(0, keys.publicKey)?.id).toBe(fresh.id);
     await client.shutdown();
   });
@@ -175,7 +177,7 @@ describe("issue #125", () => {
       .enableReconnect(false)
       .build();
     const events = await client.fetchEvents({ kinds: [1], limit: 2 });
-    expect(events.map((e) => e.id)).toEqual([t3.id, t2.id]);
+    expect(events.map((e) => e.id)).toStrictEqual([t3.id, t2.id]);
     await client.shutdown();
   });
 
@@ -202,7 +204,7 @@ describe("issue #125", () => {
     ws.receive(JSON.stringify(["EOSE", subId]));
 
     const events = await pending;
-    expect(events.map((e) => e.id)).toEqual([eph.id]);
+    expect(events.map((e) => e.id)).toStrictEqual([eph.id]);
     await client.shutdown();
     MockWebSocket.reset();
   });

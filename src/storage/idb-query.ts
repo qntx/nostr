@@ -3,21 +3,11 @@ import { compareEventsDesc, sortEvents } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { StorageError } from "./error.ts";
 import { reqOf } from "./idb-helpers.ts";
-import {
-  EVENTS,
-  TAG_REFS,
-  type IDBCursorDirectionLike,
-  type IDBCursorLike,
-  type IDBIndexLike,
-  type IDBKeyRangeLike,
-  type IDBObjectStoreLike,
-  type IDBRequestLike,
-  type IDBTransactionLike,
-  type TagRef,
-} from "./idb-types.ts";
+import { EVENTS, TAG_REFS } from './idb-types.ts';
+import type { IDBCursorDirectionLike, IDBCursorLike, IDBIndexLike, IDBKeyRangeLike, IDBObjectStoreLike, IDBRequestLike, IDBTransactionLike, TagRef } from './idb-types.ts';
 
 export function prefixRange(
-  prefix: readonly (string | number)[],
+  prefix: ReadonlyArray<string | number>,
   since?: number,
   until?: number,
 ): IDBKeyRangeLike {
@@ -41,8 +31,8 @@ export function epTagPrefixes(filter: Filter): Array<{ name: "e" | "p"; value: s
   const out: Array<{ name: "e" | "p"; value: string }> = [];
   for (const name of ["e", "p"] as const) {
     const values = filter[`#${name}`];
-    if (!values) continue;
-    for (const value of values) out.push({ name, value: value.toLowerCase() });
+    if (!values) {continue;}
+    for (const value of values) {out.push({ name, value: value.toLowerCase() });}
   }
   return out;
 }
@@ -86,7 +76,7 @@ function tagCursor(
   };
 }
 
-export function scanIds(
+export async function scanIds(
   tx: IDBTransactionLike,
   filter: Filter,
   accept: (event: Event) => boolean,
@@ -95,25 +85,25 @@ export function scanIds(
   const ids = filter.ids ?? [];
   const events = tx.objectStore(EVENTS);
   const reqs = ids.map((id) => events.get(id.toLowerCase()));
-  return Promise.all(reqs.map((req) => reqOf<Event | undefined>(req))).then((rows) => {
+  return Promise.all(reqs.map( async (req) => reqOf<Event | undefined>(req))).then((rows) => {
     const matched: Event[] = [];
     const seen = new Set<string>();
     for (const event of rows) {
-      if (!event || seen.has(event.id) || !accept(event)) continue;
+      if (!event || seen.has(event.id) || !accept(event)) {continue;}
       seen.add(event.id);
       matched.push(event);
     }
     sortEvents(matched);
-    const out = filter.limit !== undefined ? matched.slice(0, filter.limit) : matched;
+    const out = filter.limit === undefined ? matched : matched.slice(0, filter.limit);
     for (const event of out) {
-      if (take(event)) break;
+      if (take(event)) {break;}
     }
   });
 }
 
 /** IDB auto-commits when onsuccess returns with no outstanding requests. */
-export function kWayMerge(
-  openers: readonly MergeOpener[],
+export async function kWayMerge(
+  openers: ReadonlyArray<MergeOpener>,
   accept: (event: Event) => boolean,
   take: (event: Event) => boolean,
 ): Promise<void> {
@@ -132,19 +122,19 @@ export function kWayMerge(
     let drainBuf: Event[] = [];
 
     const finish = () => {
-      if (phase === "done") return;
+      if (phase === "done") {return;}
       phase = "done";
       resolve();
     };
     const fail = (error: Error) => {
-      if (phase === "done") return;
+      if (phase === "done") {return;}
       phase = "done";
       reject(error);
     };
 
     const stepCursor = (i: number) => {
-      const cursor = slots[i]!.cursor;
-      if (!cursor) return;
+      const {cursor} = slots[i]!;
+      if (!cursor) {return;}
       inflight++;
       cursor.continue();
     };
@@ -152,7 +142,7 @@ export function kWayMerge(
     const emitDrain = () => {
       sortEvents(drainBuf);
       for (const event of drainBuf) {
-        if (seen.has(event.id) || !accept(event)) continue;
+        if (seen.has(event.id) || !accept(event)) {continue;}
         seen.add(event.id);
         if (take(event)) {
           finish();
@@ -165,7 +155,7 @@ export function kWayMerge(
     };
 
     const pump = () => {
-      if (phase === "done" || inflight > 0) return;
+      if (phase === "done" || inflight > 0) {return;}
       if (phase === "drain") {
         emitDrain();
         return;
@@ -173,8 +163,8 @@ export function kWayMerge(
       let best: Event | undefined;
       for (let i = 0; i < slots.length; i++) {
         const event = slots[i]!.head;
-        if (!event) continue;
-        if (!best || compareEventsDesc(event, best) < 0) best = event;
+        if (!event) {continue;}
+        if (!best || compareEventsDesc(event, best) < 0) {best = event;}
       }
       if (!best) {
         finish();
@@ -185,18 +175,18 @@ export function kWayMerge(
       drainBuf = [];
       for (let i = 0; i < slots.length; i++) {
         const event = slots[i]!.head;
-        if (!event || event.created_at !== drainT) continue;
+        if (!event || event.created_at !== drainT) {continue;}
         drainBuf.push(event);
         slots[i]!.head = undefined;
         stepCursor(i);
       }
-      if (inflight === 0) pump();
+      if (inflight === 0) {pump();}
     };
 
     const onEvent = (i: number, event: Event | undefined) => {
-      if (phase === "done") return;
+      if (phase === "done") {return;}
       const slot = slots[i]!;
-      const cursor = slot.cursor;
+      const {cursor} = slot;
       if (!event) {
         if (cursor) {
           inflight++;
@@ -231,7 +221,7 @@ export function kWayMerge(
       inflight++;
       req.onsuccess = () => {
         inflight--;
-        if (phase === "done") return;
+        if (phase === "done") {return;}
         const cursor = req.result as IDBCursorLike | undefined;
         const slot = slots[i]!;
         if (!cursor) {
@@ -259,20 +249,19 @@ export function kWayMerge(
 }
 
 /**
- * Cap on cursors opened per filter: beyond it a k-way merge degenerates into
- * one request per match candidate. Past the cap the planner opens fewer,
- * wider cursors and lets `accept` (matchFilter) enforce the remaining terms,
- * so results and per-filter limits are unchanged.
+ * Cap on cursors opened per filter: beyond it a k-way merge degenerates into one request per match
+ * candidate. Past the cap the planner opens fewer, wider cursors and lets `accept` (matchFilter)
+ * enforce the remaining terms, so results and per-filter limits are unchanged.
  */
 export const MAX_MERGE_CURSORS = 64;
 
-export function scanFilter(
+export async function scanFilter(
   tx: IDBTransactionLike,
   filter: Filter,
   accept: (event: Event) => boolean,
   take: (event: Event) => boolean,
 ): Promise<void> {
-  if (filter.limit === 0) return Promise.resolve();
+  if (filter.limit === 0) {return Promise.resolve();}
   if (filter.since !== undefined && filter.until !== undefined && filter.since > filter.until) {
     return Promise.resolve();
   }

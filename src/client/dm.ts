@@ -1,19 +1,13 @@
+import type { EventBuilder } from "../core/builder.ts";
 import type { Event } from "../core/event.ts";
 import { itemCompare } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
-import type { EventBuilder } from "../core/builder.ts";
 import type { Gossip } from "../gossip/gossip.ts";
+import { Nip17Error, buildChatMessageRumor, dmRelayListEventBuilder, normalizeRecipients, requireDmRelays, wrapDirectMessage } from '../nips/nip17.ts';
+import type { Recipient } from '../nips/nip17.ts';
+import { unwrap } from '../nips/nip59.ts';
+import type { Nip59Crypto } from '../nips/nip59.ts';
 import type { Pool, PoolPublishResult } from "../relay/pool.ts";
-import {
-  Nip17Error,
-  buildChatMessageRumor,
-  dmRelayListEventBuilder,
-  normalizeRecipients,
-  requireDmRelays,
-  wrapDirectMessage,
-  type Recipient,
-} from "../nips/nip17.ts";
-import { unwrap, type Nip59Crypto } from "../nips/nip59.ts";
 import type {
   FetchPrivateMessagesOptions,
   PrivateMessageSendResult,
@@ -26,7 +20,7 @@ import type {
 export type DmDeps = {
   pool: Pool;
   gossip: Gossip;
-  hydrateGossip: (pubkeys: readonly string[]) => Promise<void>;
+  hydrateGossip: (pubkeys: ReadonlyArray<string>) => Promise<void>;
   ingest: (event: Event, relayUrl?: string) => void;
   markSeen: (id: string, relayUrl: string) => void;
   assertAlive: () => void;
@@ -42,7 +36,7 @@ export type DmDeps = {
 export function giftWrapRelays(gossip: Gossip, event: Event): string[] {
   const targets: string[] = [];
   for (const tag of event.tags) {
-    if (tag[0] === "p" && tag[1]) targets.push(tag[1].toLowerCase());
+    if (tag[0] === "p" && tag[1]) {targets.push(tag[1].toLowerCase());}
   }
   if (targets.length === 0) {
     throw new Nip17Error("gift wrap has no p-tag recipient");
@@ -59,7 +53,7 @@ export function giftWrapRelays(gossip: Gossip, event: Event): string[] {
 
 export async function setDmRelays(
   deps: DmDeps,
-  relays: readonly string[],
+  relays: ReadonlyArray<string>,
   opts?: PublishOptions,
 ): Promise<PoolPublishResult[]> {
   return deps.publish(dmRelayListEventBuilder(relays), { gossip: true, ...opts });
@@ -67,7 +61,7 @@ export async function setDmRelays(
 
 export async function sendPrivateMessage(
   deps: DmDeps,
-  recipients: string | Recipient | readonly (string | Recipient)[],
+  recipients: string | Recipient | ReadonlyArray<string | Recipient>,
   content: string,
   opts?: SendPrivateMessageOptions,
 ): Promise<PrivateMessageSendResult> {
@@ -131,7 +125,7 @@ export async function fetchPrivateMessages(
       signal: opts?.signal,
       onevent: (event, relayUrl) => {
         let set = urls.get(event.id);
-        if (!set) urls.set(event.id, (set = new Set()));
+        if (!set) {urls.set(event.id, (set = new Set()));}
         set.add(relayUrl);
       },
     },
@@ -148,7 +142,7 @@ export async function fetchPrivateMessages(
         // Every other relay that delivered the same wrap is recorded too.
         if (wrapUrls) {
           for (const url of wrapUrls) {
-            if (url !== firstUrl) deps.markSeen(wrap.id, url);
+            if (url !== firstUrl) {deps.markSeen(wrap.id, url);}
           }
         }
       }
@@ -181,17 +175,17 @@ export async function subscribePrivateMessages(
   const flushSeen = (wrapId: string): void => {
     processed.add(wrapId);
     const extra = pendingUrls.get(wrapId);
-    if (extra === undefined) return;
+    if (extra === undefined) {return;}
     pendingUrls.delete(wrapId);
-    for (const url of extra) deps.markSeen(wrapId, url);
+    for (const url of extra) {deps.markSeen(wrapId, url);}
   };
   let tail = Promise.resolve();
   let closed = false;
   const markClosed = (): void => {
     closed = true;
   };
-  if (opts?.signal?.aborted) markClosed();
-  else opts?.signal?.addEventListener("abort", markClosed, { once: true });
+  if (opts?.signal?.aborted) {markClosed();}
+  else {opts?.signal?.addEventListener("abort", markClosed, { once: true });}
 
   const inner = deps.pool.subscribe(
     relays,
@@ -206,29 +200,29 @@ export async function subscribePrivateMessages(
       },
       eoseTimeoutMs: opts?.eoseTimeoutMs,
       receivedEvent: (id, relayUrl) => {
-        if (closed) return;
+        if (closed) {return;}
         if (processed.has(id)) {
           deps.markSeen(id, relayUrl);
           return;
         }
         const list = pendingUrls.get(id);
-        if (list === undefined) pendingUrls.set(id, [relayUrl]);
-        else if (!list.includes(relayUrl)) list.push(relayUrl);
+        if (list === undefined) {pendingUrls.set(id, [relayUrl]);}
+        else if (!list.includes(relayUrl)) {list.push(relayUrl);}
       },
       onevent: (wrap, relayUrl) => {
-        if (closed) return;
+        if (closed) {return;}
         tail = tail
           .then(async () => {
-            if (closed) return;
+            if (closed) {return;}
             try {
               const rumor = await unwrap(crypto, wrap);
-              if (closed) return;
+              if (closed) {return;}
               if (seen.has(rumor.id)) {
                 flushSeen(wrap.id);
                 return;
               }
               seen.add(rumor.id);
-              if (deps.wantObserve(opts?.observe)) deps.ingest(wrap, relayUrl);
+              if (deps.wantObserve(opts?.observe)) {deps.ingest(wrap, relayUrl);}
               flushSeen(wrap.id);
               opts?.onevent?.({ wrap, rumor, relayUrl });
             } catch {

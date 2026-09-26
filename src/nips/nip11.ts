@@ -1,9 +1,11 @@
 /**
  * NIP-11: Relay Information Document
+ *
  * @see https://github.com/nostr-protocol/nips/blob/master/11.md
  */
 import { NostrError } from "../core/error.ts";
-import { fetchManual, requireGlobalFetch, type ManualFetch } from "./http.ts";
+import { fetchManual, requireGlobalFetch } from './http.ts';
+import type { ManualFetch } from './http.ts';
 
 const ACCEPT = "application/nostr+json";
 
@@ -75,14 +77,14 @@ export function relayInfoHttpUrl(wsUrl: string): string {
   let url: URL;
   try {
     url = new URL(wsUrl);
-  } catch (cause) {
+  } catch (error) {
     throw new Nip11Error(`invalid relay URL: ${wsUrl}`, {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
 
-  if (url.protocol === "wss:") url.protocol = "https:";
-  else if (url.protocol === "ws:") url.protocol = "http:";
+  if (url.protocol === "wss:") {url.protocol = "https:";}
+  else if (url.protocol === "ws:") {url.protocol = "http:";}
   else if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Nip11Error(`unsupported relay URL scheme: ${url.protocol}`);
   }
@@ -103,7 +105,7 @@ function parseRelayInformation(json: unknown): RelayInformation {
 
   for (const key of STRING_FIELDS) {
     const value = raw[key];
-    if (typeof value === "string") info[key] = value;
+    if (typeof value === "string") {info[key] = value;}
   }
 
   if (Array.isArray(raw.supported_nips)) {
@@ -115,13 +117,13 @@ function parseRelayInformation(json: unknown): RelayInformation {
     const limitation: NonNullable<RelayInformation["limitation"]> = {};
     for (const key of LIMITATION_NUMBERS) {
       const value = rawLim[key];
-      if (isNonNegativeInteger(value)) limitation[key] = value;
+      if (isNonNegativeInteger(value)) {limitation[key] = value;}
     }
     for (const key of LIMITATION_BOOLEANS) {
       const value = rawLim[key];
-      if (typeof value === "boolean") limitation[key] = value;
+      if (typeof value === "boolean") {limitation[key] = value;}
     }
-    if (Object.keys(limitation).length > 0) info.limitation = limitation;
+    if (Object.keys(limitation).length > 0) {info.limitation = limitation;}
   }
 
   return info;
@@ -153,9 +155,9 @@ export async function fetchRelayInformation(
   let json: unknown;
   try {
     json = await res.json();
-  } catch (cause) {
+  } catch (error) {
     throw new Nip11Error("relay information document is not valid JSON", {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
 

@@ -1,50 +1,15 @@
-import { expect, test, describe } from "vite-plus/test";
 import { hexToBytes } from "@noble/hashes/utils.js";
-import {
-  Kind,
-  Keys,
-  MessageError,
-  UrlError,
-  SUBSCRIPTION_ID_MAX_CHARS,
-  SecretKey,
-  assertSubscriptionId,
-  canonicalizeFilter,
-  canonicalizeFilters,
-  classifyKind,
-  createSubscriptionId,
-  eventAddress,
-  formatEventAddress,
-  encodeClientMessage,
-  finalizeEvent,
-  getEventHash,
-  getPublicKey,
-  isAddressableKind,
-  isEphemeralKind,
-  isRegularKind,
-  isReplaceableKind,
-  filterFingerprint,
-  matchFilter,
-  matchFilters,
-  mergeFilters,
-  parseClientMessage,
-  parseEventAddress,
-  parseRelayMessage,
-  serializeEvent,
-  normalizeURL,
-  Tag,
-  validateEvent,
-  validateSignedEvent,
-  verifyEvent,
-  type Event,
-  type Filter,
-} from "../src/index.ts";
+import { expect, test, describe } from "vite-plus/test";
+
+import { Kind, Keys, MessageError, UrlError, SUBSCRIPTION_ID_MAX_CHARS, SecretKey, assertSubscriptionId, canonicalizeFilter, canonicalizeFilters, classifyKind, createSubscriptionId, eventAddress, formatEventAddress, encodeClientMessage, finalizeEvent, getEventHash, getPublicKey, isAddressableKind, isEphemeralKind, isRegularKind, isReplaceableKind, filterFingerprint, matchFilter, matchFilters, mergeFilters, parseClientMessage, parseEventAddress, parseRelayMessage, serializeEvent, normalizeURL, Tag, validateEvent, validateSignedEvent, verifyEvent } from '../src/index.ts';
+import type { Event, Filter } from '../src/index.ts';
 
 const SK_HEX = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
 describe("keys", () => {
   test("generate secret key as 32 bytes / 64 hex", () => {
     const sk = SecretKey.generate();
-    expect(sk.bytes.length).toBe(32);
+    expect(sk.bytes).toHaveLength(32);
     expect(sk.toHex()).toMatch(/^[0-9a-f]{64}$/);
     sk.zeroize();
   });
@@ -182,7 +147,7 @@ describe("kinds", () => {
   });
 
   test("catalog is the 28 production names", () => {
-    expect(Kind).toEqual({
+    expect(Kind).toStrictEqual({
       Metadata: 0,
       TextNote: 1,
       Contacts: 3,
@@ -220,12 +185,12 @@ describe("kinds", () => {
 
   test("event address coordinates", () => {
     const pk = "aa".repeat(32);
-    expect(parseEventAddress(`30023:${pk}:hello:world`)).toEqual({
+    expect(parseEventAddress(`30023:${pk}:hello:world`)).toStrictEqual({
       kind: 30023,
       pubkey: pk,
       identifier: "hello:world",
     });
-    expect(parseEventAddress(`0:${pk}:`)).toEqual({ kind: 0, pubkey: pk, identifier: "" });
+    expect(parseEventAddress(`0:${pk}:`)).toStrictEqual({ kind: 0, pubkey: pk, identifier: "" });
     expect(parseEventAddress("0:short:")).toBeUndefined();
     expect(formatEventAddress(0, pk)).toBe(`0:${pk}:`);
     expect(eventAddress({ kind: 1, pubkey: pk, tags: [] })).toBeUndefined();
@@ -239,24 +204,24 @@ describe("tags", () => {
   const pk = "cd".repeat(32);
 
   test("Tag.e lowercases hex slots and leaves relay URL and marker", () => {
-    expect(Tag.e(id.toUpperCase(), "wss://Relay.Example", "Root", pk.toUpperCase())).toEqual([
+    expect(Tag.e(id.toUpperCase(), "wss://Relay.Example", "Root", pk.toUpperCase())).toStrictEqual([
       "e",
       id,
       "wss://Relay.Example",
       "Root",
       pk,
     ]);
-    expect(Tag.e(id.toUpperCase())).toEqual(["e", id]);
+    expect(Tag.e(id.toUpperCase())).toStrictEqual(["e", id]);
   });
 
   test("Tag.p lowercases pubkey and leaves relay URL and petname", () => {
-    expect(Tag.p(pk.toUpperCase(), "wss://Relay.Example", "Alice")).toEqual([
+    expect(Tag.p(pk.toUpperCase(), "wss://Relay.Example", "Alice")).toStrictEqual([
       "p",
       pk,
       "wss://Relay.Example",
       "Alice",
     ]);
-    expect(Tag.p(pk.toUpperCase())).toEqual(["p", pk]);
+    expect(Tag.p(pk.toUpperCase())).toStrictEqual(["p", pk]);
   });
 });
 
@@ -297,8 +262,8 @@ describe("filter", () => {
 
   test("mergeFilters unions list fields", () => {
     const merged = mergeFilters({ kinds: [1], authors: ["a"] }, { kinds: [2], authors: ["b"] });
-    expect([...(merged.kinds ?? [])].sort((a, b) => a - b)).toEqual([1, 2]);
-    expect([...(merged.authors ?? [])].sort((a, b) => a.localeCompare(b))).toEqual(["a", "b"]);
+    expect([...(merged.kinds ?? [])].sort((a, b) => a - b)).toStrictEqual([1, 2]);
+    expect([...(merged.authors ?? [])].sort((a, b) => a.localeCompare(b))).toStrictEqual(["a", "b"]);
   });
 
   test("filterFingerprint sorts keys, list items, and filter order", () => {
@@ -369,18 +334,18 @@ describe("filter", () => {
     };
     const withUndef = { ...filter, since: undefined } as Filter;
     const out = canonicalizeFilter(filter);
-    expect(out.ids).toEqual([id]);
-    expect(out.authors).toEqual([pkA, pkB]);
-    expect(out.kinds).toEqual([1, 2]);
-    expect(out["#e"]).toEqual([id]);
-    expect(out["#p"]).toEqual([pkA, pkB]);
-    expect(out["#t"]).toEqual(["a", "b"]);
-    expect(canonicalizeFilter({ "#t": ["Nostr"] })["#t"]).toEqual(["Nostr"]);
+    expect(out.ids).toStrictEqual([id]);
+    expect(out.authors).toStrictEqual([pkA, pkB]);
+    expect(out.kinds).toStrictEqual([1, 2]);
+    expect(out["#e"]).toStrictEqual([id]);
+    expect(out["#p"]).toStrictEqual([pkA, pkB]);
+    expect(out["#t"]).toStrictEqual(["a", "b"]);
+    expect(canonicalizeFilter({ "#t": ["Nostr"] })["#t"]).toStrictEqual(["Nostr"]);
     expect("since" in canonicalizeFilter(withUndef)).toBe(false);
-    expect(canonicalizeFilter({ kinds: [1], authors: [] })).toEqual({ authors: [], kinds: [1] });
-    expect(canonicalizeFilter({ kinds: [1] })).toEqual({ kinds: [1] });
-    expect(filter.authors).toEqual([pkB.toUpperCase(), pkA]);
-    expect(filter.kinds).toEqual([2, 1]);
+    expect(canonicalizeFilter({ kinds: [1], authors: [] })).toStrictEqual({ authors: [], kinds: [1] });
+    expect(canonicalizeFilter({ kinds: [1] })).toStrictEqual({ kinds: [1] });
+    expect(filter.authors).toStrictEqual([pkB.toUpperCase(), pkA]);
+    expect(filter.kinds).toStrictEqual([2, 1]);
   });
 
   test("canonicalizeFilters maps each filter; fingerprint matches stored form", () => {
@@ -389,7 +354,7 @@ describe("filter", () => {
       { "#t": ["z", "a"] },
     ];
     const canonical = canonicalizeFilters(filters);
-    expect(canonical).toEqual([
+    expect(canonical).toStrictEqual([
       { authors: ["aa".repeat(32), "bb".repeat(32)], kinds: [1, 2] },
       { "#t": ["a", "z"] },
     ]);

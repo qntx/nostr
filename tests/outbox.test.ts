@@ -1,21 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import {
-  Client,
-  EventBuilder,
-  Gossip,
-  Kind,
-  Keys,
-  MemoryEventStore,
-  OutboxFeed,
-  StorageError,
-  groupAuthorsByOutboxRelay,
-  relayListEventBuilder,
-  normalizeURL,
-  useWebSocketImplementation,
-  type Event,
-  type EventStore,
-  type PutResult,
-} from "../src/index.ts";
+
+import { Client, EventBuilder, Gossip, Kind, Keys, MemoryEventStore, OutboxFeed, StorageError, groupAuthorsByOutboxRelay, relayListEventBuilder, normalizeURL, useWebSocketImplementation } from '../src/index.ts';
+import type { Event, EventStore, PutResult } from '../src/index.ts';
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK_A = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -23,14 +9,14 @@ const SK_B = "0000000000000000000000000000000000000000000000000000000000000001";
 
 type ReqFilter = { authors?: string[]; kinds?: number[]; since?: number };
 
-function sleep(ms: number): Promise<void> {
+ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function waitForReq(timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (collectReqFilters().length > 0) return;
+    if (collectReqFilters().length > 0) {return;}
     await sleep(5);
   }
   throw new Error("timeout waiting for REQ");
@@ -40,7 +26,7 @@ async function waitForReqSockets(minCount: number, timeoutMs = 500): Promise<Moc
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const sockets = MockWebSocket.instances.filter((ws) => reqMessages(ws).length > 0);
-    if (sockets.length >= minCount) return sockets;
+    if (sockets.length >= minCount) {return sockets;}
     await sleep(5);
   }
   throw new Error("timeout waiting for REQ sockets");
@@ -51,8 +37,8 @@ function collectReqFilters(): ReqFilter[] {
   for (const ws of MockWebSocket.instances) {
     for (const raw of ws.sent) {
       const msg = JSON.parse(raw) as unknown[];
-      if (msg[0] !== "REQ") continue;
-      for (const filter of msg.slice(2) as ReqFilter[]) filters.push(filter);
+      if (msg[0] !== "REQ") {continue;}
+      for (const filter of msg.slice(2) as ReqFilter[]) {filters.push(filter);}
     }
   }
   return filters;
@@ -62,7 +48,7 @@ function reqMessages(ws: MockWebSocket): unknown[][] {
   const out: unknown[][] = [];
   for (const raw of ws.sent) {
     const msg = JSON.parse(raw) as unknown[];
-    if (msg[0] === "REQ") out.push(msg);
+    if (msg[0] === "REQ") {out.push(msg);}
   }
   return out;
 }
@@ -77,7 +63,7 @@ async function waitForSharedKind1Reqs(minCount = 1): Promise<unknown[][]> {
     const ws = MockWebSocket.instances.find((s) => s.url.includes("shared.example"));
     if (ws) {
       const reqs = reqMessages(ws).filter((msg) => kind1ReqFilters(msg).length > 0);
-      if (reqs.length >= minCount) return reqs;
+      if (reqs.length >= minCount) {return reqs;}
     }
     await sleep(5);
   }
@@ -88,7 +74,7 @@ function eoseAllReqs(): void {
   for (const ws of MockWebSocket.instances) {
     for (const raw of ws.sent) {
       const msg = JSON.parse(raw) as unknown[];
-      if (msg[0] !== "REQ") continue;
+      if (msg[0] !== "REQ") {continue;}
       ws.receive(JSON.stringify(["EOSE", msg[1] as string]));
     }
   }
@@ -97,7 +83,7 @@ function eoseAllReqs(): void {
 function trackingStore(
   inner: MemoryEventStore,
   opts?: {
-    putMany?: (events: readonly Event[]) => Promise<PutResult[]>;
+    putMany?: (events: ReadonlyArray<Event>) => Promise<PutResult[]>;
   },
 ): EventStore & { persistCalls: string[] } {
   const persistCalls: string[] = [];
@@ -109,19 +95,19 @@ function trackingStore(
     },
     putMany: async (events) => {
       persistCalls.push(`putMany:${events.length}`);
-      if (opts?.putMany) return opts.putMany(events);
+      if (opts?.putMany) {return opts.putMany(events);}
       return inner.putMany(events);
     },
-    get: (id) => inner.get(id),
+    get:  async (id) => inner.get(id),
     query: async () => {
       throw new Error("query should not be called");
     },
-    count: (filters) => inner.count(filters),
-    negentropyItems: (filter) => inner.negentropyItems(filter),
-    getOutboxBound: (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-    setOutboxBound: (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
-    remove: (ids) => inner.remove(ids),
-    clear: () => inner.clear(),
+    count:  async (filters) => inner.count(filters),
+    negentropyItems:  async (filter) => inner.negentropyItems(filter),
+    getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+    setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+    remove:  async (ids) => inner.remove(ids),
+    clear:  async () => inner.clear(),
   };
 }
 
@@ -172,7 +158,7 @@ describe("groupAuthorsByOutboxRelay", () => {
     // B has no routes → discovery
     const discoveryKey = [...map.keys()].find((k) => k.includes("discovery"));
     expect(discoveryKey).toBeDefined();
-    expect(map.get(discoveryKey!)!.includes(b.publicKey)).toBe(true);
+    expect(map.get(discoveryKey!)!).toContain(b.publicKey);
   });
 
   test("prefers connected URLs already in the author's list when slicing", () => {
@@ -195,7 +181,7 @@ describe("groupAuthorsByOutboxRelay", () => {
     expect(urls).toContain(normalizeURL("wss://a.example"));
     expect(urls).toContain(normalizeURL("wss://b.example"));
     expect(urls.some((u) => u.includes("c.example"))).toBe(false);
-    expect(map.get(urls[0]!)!.includes(a.publicKey)).toBe(true);
+    expect(map.get(urls[0]!)!).toContain(a.publicKey);
   });
 
   test("does not append a preferred URL that is not already a candidate", () => {
@@ -216,7 +202,7 @@ describe("groupAuthorsByOutboxRelay", () => {
     expect(urls).toHaveLength(2);
     expect(urls[0]).toBe(normalizeURL("wss://b.example"));
     expect(urls[1]).toBe(normalizeURL("wss://a.example"));
-    expect(urls.includes(extra)).toBe(false);
+    expect(urls).not.toContain(extra);
     expect([...map.keys()].some((u) => u.includes("discovery"))).toBe(false);
   });
 
@@ -239,7 +225,7 @@ describe("groupAuthorsByOutboxRelay", () => {
       "wss://d.example",
     ]);
     expect([...withoutSlash.keys()][0]).toBe(normalizeURL("wss://d.example"));
-    expect([...withoutSlash.keys()]).toEqual(slashed);
+    expect([...withoutSlash.keys()]).toStrictEqual(slashed);
   });
 
   test("empty discovery omits leftover authors", () => {
@@ -250,8 +236,8 @@ describe("groupAuthorsByOutboxRelay", () => {
 
     const map = groupAuthorsByOutboxRelay([a.publicKey, b.publicKey], gossip, [], 3);
     expect([...map.keys()].some((u) => u.includes("a.example"))).toBe(true);
-    expect([...map.values()].flat().includes(a.publicKey)).toBe(true);
-    expect([...map.values()].flat().includes(b.publicKey)).toBe(false);
+    expect([...map.values()].flat()).toContain(a.publicKey);
+    expect([...map.values()].flat()).not.toContain(b.publicKey);
   });
 });
 
@@ -284,7 +270,7 @@ describe("OutboxFeed", () => {
     for (const ws of MockWebSocket.instances) {
       for (const raw of ws.sent) {
         const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") continue;
+        if (msg[0] !== "REQ") {continue;}
         const subId = msg[1] as string;
         const filter = msg[2] as { kinds?: number[]; authors?: string[] };
         if (filter.kinds?.includes(1) && filter.authors?.includes(a.publicKey)) {
@@ -299,8 +285,8 @@ describe("OutboxFeed", () => {
     const events = await syncP;
     expect(events.some((e) => e.id === note.id)).toBe(true);
     await new Promise((r) => setTimeout(r, 5));
-    expect(await store.get(note.id)).toBeDefined();
-    expect(feed.getBound(a.publicKey, Kind.TextNote)).toEqual({ oldest: 50, newest: 50 });
+    await expect(store.get(note.id)).resolves.toBeDefined();
+    expect(feed.getBound(a.publicKey, Kind.TextNote)).toStrictEqual({ oldest: 50, newest: 50 });
 
     feed.close();
     await client.shutdown();
@@ -339,7 +325,7 @@ describe("OutboxFeed", () => {
     for (const ws of MockWebSocket.instances) {
       for (const raw of ws.sent) {
         const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") continue;
+        if (msg[0] !== "REQ") {continue;}
         const subId = msg[1] as string;
         ws.receive(JSON.stringify(["EVENT", subId, note]));
       }
@@ -394,7 +380,7 @@ describe("OutboxFeed", () => {
     for (const filter of filters) {
       expect(filter.since).toBe(99);
     }
-    expect(feed.getBound(a.publicKey, Kind.TextNote)).toEqual({ oldest: 100, newest: 100 });
+    expect(feed.getBound(a.publicKey, Kind.TextNote)).toStrictEqual({ oldest: 100, newest: 100 });
 
     feed.close();
     await client.shutdown();
@@ -434,7 +420,7 @@ describe("OutboxFeed", () => {
     const reqs = await waitForSharedKind1Reqs(1);
     expect(reqs).toHaveLength(1);
     const msg = reqs[0]!;
-    expect(msg.length).toBe(4);
+    expect(msg).toHaveLength(4);
     const filters = msg.slice(2) as ReqFilter[];
     eoseAllReqs();
     await syncP;
@@ -483,9 +469,9 @@ describe("OutboxFeed", () => {
     for (const since of [50, 0] as const) {
       const syncP = feed.sync({ skipHydrate: true, since, limit: 20 });
       const reqs = await waitForSharedKind1Reqs(seen + 1);
-      const msg = reqs[reqs.length - 1]!;
+      const msg = reqs.at(-1)!;
       seen = reqs.length;
-      expect(msg.length).toBe(3);
+      expect(msg).toHaveLength(3);
       const filters = kind1ReqFilters(msg);
       eoseAllReqs();
       await syncP;
@@ -616,8 +602,8 @@ describe("OutboxFeed", () => {
     eoseAllReqs();
     await syncP;
 
-    expect(feed.getBound(a.publicKey, Kind.TextNote)).toEqual({ oldest: 10, newest: 20 });
-    expect(await inner.getOutboxBound(a.publicKey, Kind.TextNote)).toEqual({
+    expect(feed.getBound(a.publicKey, Kind.TextNote)).toStrictEqual({ oldest: 10, newest: 20 });
+    await expect(inner.getOutboxBound(a.publicKey, Kind.TextNote)).resolves.toStrictEqual({
       oldest: 10,
       newest: 20,
     });
@@ -633,19 +619,19 @@ describe("OutboxFeed", () => {
     const store = new MemoryEventStore();
     await store.put(older);
     await store.put(newer);
-    expect(await store.getOutboxBound(a.publicKey, Kind.TextNote)).toEqual({
+    await expect(store.getOutboxBound(a.publicKey, Kind.TextNote)).resolves.toStrictEqual({
       oldest: 10,
       newest: 20,
     });
     await store.clear();
-    expect(await store.getOutboxBound(a.publicKey, Kind.TextNote)).toBeUndefined();
+    await expect(store.getOutboxBound(a.publicKey, Kind.TextNote)).resolves.toBeUndefined();
     await store.setOutboxBound(a.publicKey, Kind.TextNote, { oldest: 3, newest: 9 });
-    expect(await store.getOutboxBound(a.publicKey, Kind.TextNote)).toEqual({
+    await expect(store.getOutboxBound(a.publicKey, Kind.TextNote)).resolves.toStrictEqual({
       oldest: 3,
       newest: 9,
     });
     await store.clear();
-    expect(await store.getOutboxBound(a.publicKey, Kind.TextNote)).toBeUndefined();
+    await expect(store.getOutboxBound(a.publicKey, Kind.TextNote)).resolves.toBeUndefined();
   });
 
   test("sync writes unique events once via putMany then ingestMeta", async () => {
@@ -676,21 +662,21 @@ describe("OutboxFeed", () => {
     for (const ws of MockWebSocket.instances) {
       for (const raw of ws.sent) {
         const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") continue;
+        if (msg[0] !== "REQ") {continue;}
         const subId = msg[1] as string;
         ws.receive(JSON.stringify(["EVENT", subId, note]));
         ws.receive(JSON.stringify(["EOSE", subId]));
       }
     }
     const events = await syncP;
-    expect(events.map((e) => e.id)).toEqual([note.id]);
+    expect(events.map((e) => e.id)).toStrictEqual([note.id]);
     await client.shutdown();
 
-    expect(store.persistCalls).toEqual(["putMany:1"]);
-    expect(observed).toEqual([]);
+    expect(store.persistCalls).toStrictEqual(["putMany:1"]);
+    expect(observed).toStrictEqual([]);
     expect(ingested).toBe(1);
-    expect(await inner.get(note.id)).toBeDefined();
-    expect(feed.getBound(a.publicKey, Kind.TextNote)).toEqual({ oldest: 50, newest: 50 });
+    await expect(inner.get(note.id)).resolves.toBeDefined();
+    expect(feed.getBound(a.publicKey, Kind.TextNote)).toStrictEqual({ oldest: 50, newest: 50 });
   });
 
   test("sync without applySync does not persist events or advance bounds", async () => {
@@ -720,19 +706,19 @@ describe("OutboxFeed", () => {
     for (const ws of MockWebSocket.instances) {
       for (const raw of ws.sent) {
         const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") continue;
+        if (msg[0] !== "REQ") {continue;}
         const subId = msg[1] as string;
         ws.receive(JSON.stringify(["EVENT", subId, note]));
         ws.receive(JSON.stringify(["EOSE", subId]));
       }
     }
     const events = await syncP;
-    expect(events.map((e) => e.id)).toEqual([note.id]);
-    expect(store.persistCalls).toEqual([]);
-    expect(got).toEqual([]);
+    expect(events.map((e) => e.id)).toStrictEqual([note.id]);
+    expect(store.persistCalls).toStrictEqual([]);
+    expect(got).toStrictEqual([]);
     expect(feed.getBound(a.publicKey, Kind.TextNote)).toBeUndefined();
-    expect(await inner.get(note.id)).toBeUndefined();
-    expect(await inner.getOutboxBound(a.publicKey, Kind.TextNote)).toBeUndefined();
+    await expect(inner.get(note.id)).resolves.toBeUndefined();
+    await expect(inner.getOutboxBound(a.publicKey, Kind.TextNote)).resolves.toBeUndefined();
 
     feed.close();
     await client.shutdown();
@@ -767,19 +753,19 @@ describe("OutboxFeed", () => {
     for (const ws of MockWebSocket.instances) {
       for (const raw of ws.sent) {
         const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") continue;
+        if (msg[0] !== "REQ") {continue;}
         const subId = msg[1] as string;
         ws.receive(JSON.stringify(["EVENT", subId, note]));
         ws.receive(JSON.stringify(["EOSE", subId]));
       }
     }
     const events = await syncP;
-    expect(events.map((e) => e.id)).toEqual([note.id]);
-    expect(store.persistCalls).toEqual([]);
+    expect(events.map((e) => e.id)).toStrictEqual([note.id]);
+    expect(store.persistCalls).toStrictEqual([]);
     expect(ingested).toBe(1);
-    expect(got).toEqual([]);
+    expect(got).toStrictEqual([]);
     expect(feed.getBound(a.publicKey, Kind.TextNote)).toBeUndefined();
-    expect(await inner.get(note.id)).toBeUndefined();
+    await expect(inner.get(note.id)).resolves.toBeUndefined();
 
     feed.close();
     await client.shutdown();
@@ -818,7 +804,7 @@ describe("OutboxFeed", () => {
     for (const ws of MockWebSocket.instances) {
       for (const raw of ws.sent) {
         const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") continue;
+        if (msg[0] !== "REQ") {continue;}
         const subId = msg[1] as string;
         ws.receive(JSON.stringify(["EVENT", subId, note]));
         ws.receive(JSON.stringify(["EOSE", subId]));
@@ -827,9 +813,9 @@ describe("OutboxFeed", () => {
     await expect(syncP).rejects.toBeInstanceOf(StorageError);
     expect(feed.getBound(a.publicKey, Kind.TextNote)).toBeUndefined();
     expect(ingested).toBe(0);
-    expect(got).toEqual([]);
-    expect(store.persistCalls).toEqual(["putMany:1"]);
-    expect(await inner.get(note.id)).toBeUndefined();
+    expect(got).toStrictEqual([]);
+    expect(store.persistCalls).toStrictEqual(["putMany:1"]);
+    await expect(inner.get(note.id)).resolves.toBeUndefined();
 
     feed.close();
     await client.shutdown();
@@ -865,20 +851,20 @@ describe("OutboxFeed", () => {
     for (const ws of MockWebSocket.instances) {
       for (const raw of ws.sent) {
         const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") continue;
+        if (msg[0] !== "REQ") {continue;}
         const subId = msg[1] as string;
         ws.receive(JSON.stringify(["EVENT", subId, note]));
       }
     }
     await sleep(20);
 
-    expect(observed).toEqual([note.id]);
-    expect(got).toEqual([note.id]);
+    expect(observed).toStrictEqual([note.id]);
+    expect(got).toStrictEqual([note.id]);
     live.close();
     feed.close();
     await client.shutdown();
-    expect(store.persistCalls).toEqual(["putMany:1"]);
-    expect(await inner.get(note.id)).toBeDefined();
+    expect(store.persistCalls).toStrictEqual(["putMany:1"]);
+    await expect(inner.get(note.id)).resolves.toBeDefined();
   });
 
   test("startLive without observe does not putMany and still delivers onEvent", async () => {
@@ -909,17 +895,17 @@ describe("OutboxFeed", () => {
     for (const ws of MockWebSocket.instances) {
       for (const raw of ws.sent) {
         const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") continue;
+        if (msg[0] !== "REQ") {continue;}
         const subId = msg[1] as string;
         ws.receive(JSON.stringify(["EVENT", subId, note]));
       }
     }
     await sleep(20);
 
-    expect(got).toEqual([note.id]);
-    expect(store.persistCalls).toEqual([]);
-    expect(await inner.get(note.id)).toBeUndefined();
-    expect(feed.getBound(a.publicKey, Kind.TextNote)).toEqual({
+    expect(got).toStrictEqual([note.id]);
+    expect(store.persistCalls).toStrictEqual([]);
+    await expect(inner.get(note.id)).resolves.toBeUndefined();
+    expect(feed.getBound(a.publicKey, Kind.TextNote)).toStrictEqual({
       oldest: note.created_at,
       newest: note.created_at,
     });

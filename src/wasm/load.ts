@@ -1,13 +1,7 @@
 import { CryptoError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
-import {
-  instantiateCryptoWasm,
-  wasmPublicKey,
-  wasmSign,
-  wasmVerify,
-  wasmVerifySerialized,
-  type CryptoWasmExports,
-} from "./abi.ts";
+import { instantiateCryptoWasm, wasmPublicKey, wasmSign, wasmVerify, wasmVerifySerialized } from './abi.ts';
+import type { CryptoWasmExports } from './abi.ts';
 import { makeVerifyEvent, WasmVerifyPoisonedError } from "./adapter.ts";
 
 export type LoadNostrWasmOptions = {
@@ -65,7 +59,7 @@ async function readWasmUrl(url: URL): Promise<Uint8Array> {
 
 async function wasmBytes(opts?: LoadNostrWasmOptions): Promise<ArrayBuffer | ArrayBufferView> {
   const source = opts?.module;
-  if (source !== undefined && isWasmBytes(source)) return source;
+  if (source !== undefined && isWasmBytes(source)) {return source;}
   const href = source instanceof URL ? source : new URL(await defaultWasmHref(), import.meta.url);
   return readWasmUrl(href);
 }
@@ -77,17 +71,17 @@ function requireByteLength(bytes: Uint8Array, expected: number, label: string): 
 }
 
 function wrapPoison<T>(poison: { error?: Error }, fn: () => T): T {
-  if (poison.error) throw poison.error;
+  if (poison.error) {throw poison.error;}
   try {
     return fn();
-  } catch (e) {
-    if (e instanceof WebAssembly.RuntimeError) {
+  } catch (error) {
+    if (error instanceof WebAssembly.RuntimeError) {
       poison.error = new WasmVerifyPoisonedError("wasm verify aborted the instance", {
-        cause: e,
+        cause: error,
       });
       throw poison.error;
     }
-    throw e;
+    throw error;
   }
 }
 
@@ -110,14 +104,14 @@ function bindExports(exports: CryptoWasmExports): NostrWasm {
         requireByteLength(seckey, 32, "secret key");
         requireByteLength(aux, 32, "aux");
         const sig = wasmSign(exports, id, seckey, aux);
-        if (sig.length !== 64) throw new CryptoError("wasm sign failed");
+        if (sig.length !== 64) {throw new CryptoError("wasm sign failed");}
         return sig;
       }),
     publicKey: (seckey) =>
       wrapPoison(poison, () => {
         requireByteLength(seckey, 32, "secret key");
         const pk = wasmPublicKey(exports, seckey);
-        if (pk.length !== 32) throw new CryptoError("wasm publicKey failed");
+        if (pk.length !== 32) {throw new CryptoError("wasm publicKey failed");}
         return pk;
       }),
   };
@@ -130,10 +124,10 @@ async function instantiateNostrWasm(opts?: LoadNostrWasmOptions): Promise<NostrW
 }
 
 /** Instantiate once. Repeats reuse the same module. Failure throws; no noble fallback. */
-export function loadNostrWasm(opts?: LoadNostrWasmOptions): Promise<NostrWasm> {
-  if (interned) return interned;
+export async function loadNostrWasm(opts?: LoadNostrWasmOptions): Promise<NostrWasm> {
+  if (interned) {return interned;}
   const pending = instantiateNostrWasm(opts).catch((error: unknown) => {
-    if (interned === pending) interned = undefined;
+    if (interned === pending) {interned = undefined;}
     throw error;
   });
   interned = pending;

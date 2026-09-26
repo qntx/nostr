@@ -25,8 +25,8 @@ export type WebSocketConstructor = {
 let impl: WebSocketConstructor | undefined;
 
 try {
-  if (typeof globalThis.WebSocket !== "undefined") {
-    impl = globalThis.WebSocket as unknown as WebSocketConstructor;
+  if (globalThis.WebSocket !== undefined) {
+    impl = globalThis.WebSocket;
   }
 } catch {
   // no global WebSocket

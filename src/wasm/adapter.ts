@@ -26,9 +26,9 @@ export function makeVerifyEvent(
   poison: { error?: Error },
 ): (event: Event) => boolean {
   return (event: Event): boolean => {
-    if (poison.error) throw poison.error;
-    if (isMarkedVerified(event)) return true;
-    if (isMarkedFailed(event)) return false;
+    if (poison.error) {throw poison.error;}
+    if (isMarkedVerified(event)) {return true;}
+    if (isMarkedFailed(event)) {return false;}
     if (!validateSignedEvent(event)) {
       markUnverified(event);
       return false;
@@ -39,13 +39,13 @@ export function makeVerifyEvent(
       const pubkey = hexToBytes(event.pubkey);
       const sig = hexToBytes(event.sig);
       const ok = wasm.verifySerialized(serialized, id, pubkey, sig);
-      if (ok) markVerified(event);
-      else markUnverified(event);
+      if (ok) {markVerified(event);}
+      else {markUnverified(event);}
       return ok;
-    } catch (e) {
-      if (e instanceof WebAssembly.RuntimeError) {
+    } catch (error) {
+      if (error instanceof WebAssembly.RuntimeError) {
         poison.error = new WasmVerifyPoisonedError("wasm verify aborted the instance", {
-          cause: e,
+          cause: error,
         });
         throw poison.error;
       }

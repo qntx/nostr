@@ -1,4 +1,4 @@
-/** wasm-bindgen 0.2.122 bundler-produced exports used by interned TS glue. */
+/** Wasm-bindgen 0.2.122 bundler-produced exports used by interned TS glue. */
 export type CryptoWasmExports = {
   memory: WebAssembly.Memory;
   verify: (
@@ -121,7 +121,7 @@ function passBytes(exports: CryptoWasmExports, bytes: Uint8Array): { ptr: number
 
 function callWithBytes(
   exports: CryptoWasmExports,
-  arrays: readonly Uint8Array[],
+  arrays: ReadonlyArray<Uint8Array>,
   invoke: (args: number[]) => number,
 ): boolean {
   const passed = arrays.map((bytes) => passBytes(exports, bytes));
@@ -172,7 +172,7 @@ function takeBytes(exports: CryptoWasmExports, ptr: number, len: number): Uint8A
 
 function callReturningBytes(
   exports: CryptoWasmExports,
-  arrays: readonly Uint8Array[],
+  arrays: ReadonlyArray<Uint8Array>,
   invoke: (retptr: number, args: number[]) => void,
 ): Uint8Array {
   const passed = arrays.map((bytes) => passBytes(exports, bytes));

@@ -1,5 +1,7 @@
-import { describe, expect, test } from "vite-plus/test";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { describe, expect, test } from "vite-plus/test";
+
+import { bytesToHex, utf8Encoder } from "../src/core/util.ts";
 import { Kind, finalizeEvent } from "../src/index.ts";
 import {
   Nip98Error,
@@ -7,7 +9,6 @@ import {
   unpackEventFromToken,
   validateAuthEvent,
 } from "../src/nips/nip98.ts";
-import { bytesToHex, utf8Encoder } from "../src/core/util.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const URL = "https://api.example.com/upload?x=1";
@@ -27,7 +28,7 @@ describe("nip98", () => {
     expect(event.kind).toBe(Kind.HttpAuth);
     expect(event.kind).toBe(27235);
     expect(event.content).toBe("");
-    expect(event.tags).toEqual([
+    expect(event.tags).toStrictEqual([
       ["u", URL],
       ["method", METHOD],
     ]);
@@ -71,7 +72,7 @@ describe("nip98", () => {
     const payload = { name: "file.png", size: 12 };
     const expected = bytesToHex(sha256(utf8Encoder.encode(JSON.stringify(payload))));
     const event = unpackEventFromToken(await getToken(URL, METHOD, sign, { payload }));
-    expect(event.tags).toEqual([
+    expect(event.tags).toStrictEqual([
       ["u", URL],
       ["method", METHOD],
       ["payload", expected],
@@ -82,14 +83,14 @@ describe("nip98", () => {
 
     const raw = "raw-body";
     const rawEvent = unpackEventFromToken(await getToken(URL, METHOD, sign, { payload: raw }));
-    expect(rawEvent.tags[2]).toEqual(["payload", bytesToHex(sha256(utf8Encoder.encode(raw)))]);
+    expect(rawEvent.tags[2]).toStrictEqual(["payload", bytesToHex(sha256(utf8Encoder.encode(raw)))]);
     expect(rawEvent.tags[2]?.[1]).not.toBe(
       bytesToHex(sha256(utf8Encoder.encode(JSON.stringify(raw)))),
     );
 
     const bytes = new Uint8Array([1, 2, 3]);
     const bytesEvent = unpackEventFromToken(await getToken(URL, METHOD, sign, { payload: bytes }));
-    expect(bytesEvent.tags[2]).toEqual(["payload", bytesToHex(sha256(bytes))]);
+    expect(bytesEvent.tags[2]).toStrictEqual(["payload", bytesToHex(sha256(bytes))]);
   });
 
   test("wrong kind or bad signature fails validation", async () => {
@@ -124,12 +125,12 @@ describe("nip98", () => {
     const spec =
       "eyJpZCI6ImZlOTY0ZTc1ODkwMzM2MGYyOGQ4NDI0ZDA5MmRhODQ5NGVkMjA3Y2JhODIzMTEwYmUzYTU3ZGZlNGI1Nzg3MzQiLCJwdWJrZXkiOiI2M2ZlNjMxOGRjNTg1ODNjZmUxNjgxMGY4NmRkMDllMThiZmQ3NmFhYmMyNGEwMDgxY2UyODU2ZjMzMDUwNGVkIiwiY29udGVudCI6IiIsImtpbmQiOjI3MjM1LCJjcmVhdGVkX2F0IjoxNjgyMzI3ODUyLCJ0YWdzIjpbWyJ1IiwiaHR0cHM6Ly9hcGkuc25vcnQuc29jaWFsL2FwaS92MS9uNXNwL2xpc3QiXSxbIm1ldGhvZCIsIkdFVCJdXSwic2lnIjoiNWVkOWQ4ZWM5NThiYzg1NGY5OTdiZGMyNGFjMzM3ZDAwNWFmMzcyMzI0NzQ3ZWZlNGEwMGUyNGY0YzMwNDM3ZmY0ZGQ4MzA4Njg0YmVkNDY3ZDlkNmJlM2U1YTUxN2JiNDNiMTczMmNjN2QzMzk0OWEzYWFmODY3MDVjMjIxODQifQ";
     expect(spec.length % 4).toBe(2);
-    expect(spec.includes("=")).toBe(false);
+    expect(spec).not.toContain('=');
 
     const event = unpackEventFromToken(spec);
     expect(event.id).toBe("fe964e758903360f28d8424d092da8494ed207cba823110be3a57dfe4b578734");
     expect(event.kind).toBe(Kind.HttpAuth);
-    expect(event.tags).toEqual([
+    expect(event.tags).toStrictEqual([
       ["u", "https://api.snort.social/api/v1/n5sp/list"],
       ["method", "GET"],
     ]);

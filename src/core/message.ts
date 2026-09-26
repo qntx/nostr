@@ -18,7 +18,7 @@ export function assertSubscriptionId(id: string): SubscriptionId {
 
 /** Validate the given id, or mint a random 16-hex-char subscription id. */
 export function createSubscriptionId(id?: string): SubscriptionId {
-  if (id !== undefined) return assertSubscriptionId(id);
+  if (id !== undefined) {return assertSubscriptionId(id);}
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
   return bytesToHex(bytes);
@@ -52,8 +52,8 @@ export type CountResult = {
   count: number;
   approximate?: boolean;
   /**
-   * Optional 512-char hex HyperLogLog sketch (256 registers).
-   * Merge sketches with `mergeCountHll`. Estimation is unspecified by NIP-45 and not provided.
+   * Optional 512-char hex HyperLogLog sketch (256 registers). Merge sketches with `mergeCountHll`.
+   * Estimation is unspecified by NIP-45 and not provided.
    */
   hll?: string;
 };
@@ -63,10 +63,10 @@ const HLL_HEX_LEN = HLL_BYTES * 2;
 const HEX_RE = /^[0-9a-fA-F]+$/;
 
 /**
- * Register-wise max of NIP-45 HyperLogLog sketches.
- * Output is always lowercase 512 hex. Empty input is the zero sketch (identity).
+ * Register-wise max of NIP-45 HyperLogLog sketches. Output is always lowercase 512 hex. Empty input
+ * is the zero sketch (identity).
  */
-export function mergeCountHll(hexes: readonly string[]): string {
+export function mergeCountHll(hexes: ReadonlyArray<string>): string {
   const merged = new Uint8Array(HLL_BYTES);
   for (const hex of hexes) {
     if (hex.length !== HLL_HEX_LEN || !HEX_RE.test(hex)) {
@@ -75,7 +75,7 @@ export function mergeCountHll(hexes: readonly string[]): string {
     const bytes = hexToBytes(hex);
     for (let i = 0; i < HLL_BYTES; i++) {
       const b = bytes[i]!;
-      if (b > merged[i]!) merged[i] = b;
+      if (b > merged[i]!) {merged[i] = b;}
     }
   }
   return bytesToHex(merged);
@@ -99,42 +99,42 @@ export function parseClientMessage(raw: string): ClientMessage {
   } catch {
     throw new MessageError("client message is not valid JSON");
   }
-  if (!Array.isArray(data) || data.length < 1 || typeof data[0] !== "string") {
+  if (!Array.isArray(data) || data.length === 0 || typeof data[0] !== "string") {
     throw new MessageError("client message must be a non-empty JSON array");
   }
   const type = data[0];
   switch (type) {
-    case "EVENT": {
+    case "EVENT": 
       if (data.length !== 2 || !validateSignedEvent(data[1])) {
         throw new MessageError("invalid EVENT client message");
       }
       return ["EVENT", data[1]];
-    }
-    case "REQ": {
+    
+    case "REQ": 
       if (data.length < 3 || typeof data[1] !== "string") {
         throw new MessageError("invalid REQ client message");
       }
       return ["REQ", data[1], ...(data.slice(2) as Filter[])];
-    }
-    case "CLOSE": {
+    
+    case "CLOSE": 
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid CLOSE client message");
       }
       return ["CLOSE", data[1]];
-    }
-    case "AUTH": {
+    
+    case "AUTH": 
       if (data.length !== 2 || !validateSignedEvent(data[1])) {
         throw new MessageError("invalid AUTH client message");
       }
       return ["AUTH", data[1]];
-    }
-    case "COUNT": {
+    
+    case "COUNT": 
       if (data.length < 3 || typeof data[1] !== "string") {
         throw new MessageError("invalid COUNT client message");
       }
       return ["COUNT", data[1], ...(data.slice(2) as Filter[])];
-    }
-    case "NEG-OPEN": {
+    
+    case "NEG-OPEN": 
       if (data.length === 5) {
         throw new MessageError("obsolete 5-element NEG-OPEN; expected [NEG-OPEN, id, filter, hex]");
       }
@@ -147,19 +147,19 @@ export function parseClientMessage(raw: string): ClientMessage {
         throw new MessageError("invalid NEG-OPEN client message");
       }
       return ["NEG-OPEN", data[1], data[2], data[3].toLowerCase()];
-    }
-    case "NEG-MSG": {
+    
+    case "NEG-MSG": 
       if (data.length !== 3 || typeof data[1] !== "string" || !isNegHex(data[2])) {
         throw new MessageError("invalid NEG-MSG client message");
       }
       return ["NEG-MSG", data[1], data[2].toLowerCase()];
-    }
-    case "NEG-CLOSE": {
+    
+    case "NEG-CLOSE": 
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid NEG-CLOSE client message");
       }
       return ["NEG-CLOSE", data[1]];
-    }
+    
     default:
       throw new MessageError(`unknown client message type: ${type}`);
   }
@@ -173,18 +173,18 @@ export function parseRelayMessage(raw: string): RelayMessage {
   } catch {
     throw new MessageError("relay message is not valid JSON");
   }
-  if (!Array.isArray(data) || data.length < 1 || typeof data[0] !== "string") {
+  if (!Array.isArray(data) || data.length === 0 || typeof data[0] !== "string") {
     throw new MessageError("relay message must be a non-empty JSON array");
   }
   const type = data[0];
   switch (type) {
-    case "EVENT": {
+    case "EVENT": 
       if (data.length !== 3 || typeof data[1] !== "string" || !validateSignedEvent(data[2])) {
         throw new MessageError("invalid EVENT relay message");
       }
       return ["EVENT", data[1], data[2]];
-    }
-    case "OK": {
+    
+    case "OK": 
       if (
         data.length !== 4 ||
         typeof data[1] !== "string" ||
@@ -194,31 +194,31 @@ export function parseRelayMessage(raw: string): RelayMessage {
         throw new MessageError("invalid OK relay message");
       }
       return ["OK", data[1], data[2], data[3]];
-    }
-    case "EOSE": {
+    
+    case "EOSE": 
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid EOSE relay message");
       }
       return ["EOSE", data[1]];
-    }
-    case "CLOSED": {
+    
+    case "CLOSED": 
       if (data.length !== 3 || typeof data[1] !== "string" || typeof data[2] !== "string") {
         throw new MessageError("invalid CLOSED relay message");
       }
       return ["CLOSED", data[1], data[2]];
-    }
-    case "NOTICE": {
+    
+    case "NOTICE": 
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid NOTICE relay message");
       }
       return ["NOTICE", data[1]];
-    }
-    case "AUTH": {
+    
+    case "AUTH": 
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid AUTH relay message");
       }
       return ["AUTH", data[1]];
-    }
+    
     case "COUNT": {
       if (
         data.length !== 3 ||
@@ -231,18 +231,18 @@ export function parseRelayMessage(raw: string): RelayMessage {
       }
       const payload = data[2] as { count: number; approximate?: unknown; hll?: unknown };
       const result: CountResult = { count: payload.count };
-      if (typeof payload.approximate === "boolean") result.approximate = payload.approximate;
+      if (typeof payload.approximate === "boolean") {result.approximate = payload.approximate;}
       const hll = parseCountHll(payload.hll);
-      if (hll !== undefined) result.hll = hll;
+      if (hll !== undefined) {result.hll = hll;}
       return ["COUNT", data[1], result];
     }
-    case "NEG-MSG": {
+    case "NEG-MSG": 
       if (data.length !== 3 || typeof data[1] !== "string" || !isNegHex(data[2])) {
         throw new MessageError("invalid NEG-MSG relay message");
       }
       return ["NEG-MSG", data[1], data[2].toLowerCase()];
-    }
-    case "NEG-ERR": {
+    
+    case "NEG-ERR": 
       if (
         (data.length !== 3 && data.length !== 4) ||
         typeof data[1] !== "string" ||
@@ -251,7 +251,7 @@ export function parseRelayMessage(raw: string): RelayMessage {
         throw new MessageError("invalid NEG-ERR relay message");
       }
       return ["NEG-ERR", data[1], data[2]];
-    }
+    
     default:
       throw new MessageError(`unknown relay message type: ${type}`);
   }

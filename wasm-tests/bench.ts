@@ -1,7 +1,10 @@
-import { describe, expect, test } from "vite-plus/test";
 import { arch, cpus, hostname, platform } from "node:os";
-import { finalizeEvent, verifyEvent, type Event } from "../src/index.ts";
+
+import { describe, expect, test } from "vite-plus/test";
+
 import { Kind } from "../src/core/kind.ts";
+import { finalizeEvent, verifyEvent } from '../src/index.ts';
+import type { Event } from '../src/index.ts';
 import { loadNostrWasm } from "../src/wasm/load.ts";
 import { readBuiltWasm } from "./read-wasm.ts";
 
@@ -22,9 +25,9 @@ function fixture(): Event {
 
 function timeOps(n: number, run: () => void): { ms: number; ops: number } {
   const t0 = performance.now();
-  for (let i = 0; i < n; i++) run();
+  for (let i = 0; i < n; i++) {run();}
   const ms = performance.now() - t0;
-  return { ms, ops: ms === 0 ? Infinity : (n / ms) * 1000 };
+  return { ms, ops: ms === 0 ? Number.POSITIVE_INFINITY : (n / ms) * 1000 };
 }
 
 describe("wasm bench", () => {
@@ -38,7 +41,7 @@ describe("wasm bench", () => {
     verifyEvent({ ...base });
     wasm.verifyEvent({ ...base });
 
-    const rows: Record<string, unknown>[] = [];
+    const rows: Array<Record<string, unknown>> = [];
     let noble10k = 0;
     let wasm10k = 0;
     for (const n of SIZES) {

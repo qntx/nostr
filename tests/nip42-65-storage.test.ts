@@ -1,23 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+
 import { itemCompare, sortedEvents } from "../src/core/index.ts";
-import {
-  EventBuilder,
-  EventValidationError,
-  Keys,
-  Kind,
-  MemoryEventStore,
-  Relay,
-  isAuthRequired,
-  isEphemeralKind,
-  makeAuthEvent,
-  parseRelayList,
-  readRelays,
-  relayListEventBuilder,
-  relayListToTags,
-  useWebSocketImplementation,
-  writeRelays,
-  type Event,
-} from "../src/index.ts";
+import { EventBuilder, EventValidationError, Keys, Kind, MemoryEventStore, Relay, isAuthRequired, isEphemeralKind, makeAuthEvent, parseRelayList, readRelays, relayListEventBuilder, relayListToTags, useWebSocketImplementation, writeRelays } from '../src/index.ts';
+import type { Event } from '../src/index.ts';
 import * as nip77 from "../src/nips/nip77.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
@@ -27,7 +12,7 @@ describe("nip42", () => {
   test("makeAuthEvent shape", () => {
     const t = makeAuthEvent("wss://relay.example", "challenge-token");
     expect(t.kind).toBe(Kind.ClientAuth);
-    expect(t.tags).toEqual([
+    expect(t.tags).toStrictEqual([
       ["relay", "wss://relay.example"],
       ["challenge", "challenge-token"],
     ]);
@@ -113,7 +98,7 @@ describe("nip42", () => {
 
     const note = EventBuilder.textNote("after auth").createdAt(1).signWithKeys(keys);
     ws.receive(JSON.stringify(["EVENT", sub.id, note]));
-    expect(got).toEqual([note.id]);
+    expect(got).toStrictEqual([note.id]);
     relay.close();
     MockWebSocket.reset();
   });
@@ -129,20 +114,20 @@ describe("nip65", () => {
     ]).signWithKeys(keys);
 
     const items = parseRelayList(event);
-    expect(items).toEqual([
+    expect(items).toStrictEqual([
       { url: "wss://a.example/", read: true, write: true },
       { url: "wss://b.example/", read: true, write: false },
       { url: "wss://c.example/", read: false, write: true },
     ]);
     // normalizeURL may add trailing slash depending on URL parser — accept both
-    expect(readRelays(items).length).toBe(2);
-    expect(writeRelays(items).length).toBe(2);
+    expect(readRelays(items)).toHaveLength(2);
+    expect(writeRelays(items)).toHaveLength(2);
 
     const tags = relayListToTags([
       { url: "wss://x.example", read: true, write: true },
       { url: "wss://y.example", read: true, write: false },
     ]);
-    expect(tags).toEqual([
+    expect(tags).toStrictEqual([
       ["r", "wss://x.example"],
       ["r", "wss://y.example", "read"],
     ]);
@@ -152,15 +137,15 @@ describe("nip65", () => {
     expect(() => relayListToTags([{ url: "wss://z.example", read: false, write: false }])).toThrow(
       EventValidationError,
     );
-    expect(relayListToTags([{ url: "wss://z.example", read: true, write: true }])).toEqual([
+    expect(relayListToTags([{ url: "wss://z.example", read: true, write: true }])).toStrictEqual([
       ["r", "wss://z.example"],
     ]);
     const keys = Keys.fromSecretKey(SK);
     const event = relayListEventBuilder([
       { url: "wss://z.example", read: true, write: true },
     ]).signWithKeys(keys);
-    expect(event.tags).toEqual([["r", "wss://z.example"]]);
-    expect(parseRelayList(event)).toEqual([{ url: "wss://z.example/", read: true, write: true }]);
+    expect(event.tags).toStrictEqual([["r", "wss://z.example"]]);
+    expect(parseRelayList(event)).toStrictEqual([{ url: "wss://z.example/", read: true, write: true }]);
   });
 });
 
@@ -171,16 +156,16 @@ describe("MemoryEventStore", () => {
 
     const meta1 = EventBuilder.metadata({ name: "v1" }).createdAt(10).signWithKeys(keys);
     const meta2 = EventBuilder.metadata({ name: "v2" }).createdAt(20).signWithKeys(keys);
-    expect(await store.put(meta1)).toBe("accepted");
-    expect(await store.put(meta2)).toBe("replaced");
-    expect(await store.get(meta1.id)).toBeUndefined();
+    await expect(store.put(meta1)).resolves.toBe("accepted");
+    await expect(store.put(meta2)).resolves.toBe("replaced");
+    await expect(store.get(meta1.id)).resolves.toBeUndefined();
     expect((await store.get(meta2.id))?.content).toContain("v2");
 
     const note = EventBuilder.textNote("keep").createdAt(1).signWithKeys(keys);
     await store.put(note);
     const del = EventBuilder.deletion([note.id]).createdAt(2).signWithKeys(keys);
-    expect(await store.put(del)).toBe("deleted");
-    expect(await store.get(note.id)).toBeUndefined();
+    await expect(store.put(del)).resolves.toBe("deleted");
+    await expect(store.get(note.id)).resolves.toBeUndefined();
 
     const found = await store.query([{ kinds: [0], authors: [keys.publicKey] }]);
     expect(found).toHaveLength(1);
@@ -195,7 +180,7 @@ describe("MemoryEventStore", () => {
       EventBuilder.textNote("b").createdAt(2).signWithKeys(keys),
     ];
     const meta = EventBuilder.metadata({ name: "n" }).createdAt(3).signWithKeys(keys);
-    for (const e of notes) await store.put(e);
+    for (const e of notes) {await store.put(e);}
     await store.put(meta);
     const found = await store.query([
       { kinds: [1], limit: 10 },
@@ -213,14 +198,14 @@ describe("MemoryEventStore", () => {
     const del = EventBuilder.deletion([{ address: `0:${keys.publicKey}:` }], "gone")
       .createdAt(15)
       .signWithKeys(keys);
-    expect(await store.put(del)).toBe("deleted");
-    expect(await store.get(meta.id)).toBeUndefined();
+    await expect(store.put(del)).resolves.toBe("deleted");
+    await expect(store.get(meta.id)).resolves.toBeUndefined();
 
     const older = EventBuilder.metadata({ name: "old" }).createdAt(12).signWithKeys(keys);
-    expect(await store.put(older)).toBe("duplicate");
+    await expect(store.put(older)).resolves.toBe("duplicate");
 
     const newer = EventBuilder.metadata({ name: "v2" }).createdAt(20).signWithKeys(keys);
-    expect(await store.put(newer)).toBe("accepted");
+    await expect(store.put(newer)).resolves.toBe("accepted");
     expect((await store.get(newer.id))?.content).toContain("v2");
   });
 
@@ -232,17 +217,17 @@ describe("MemoryEventStore", () => {
     await store.put(note);
 
     const foreign = EventBuilder.deletion([note.id]).createdAt(2).signWithKeys(other);
-    expect(await store.put(foreign)).toBe("deleted");
-    expect(await store.get(note.id)).toBeDefined();
+    await expect(store.put(foreign)).resolves.toBe("deleted");
+    await expect(store.get(note.id)).resolves.toBeDefined();
 
     const first = EventBuilder.deletion([note.id]).createdAt(3).signWithKeys(keys);
-    expect(await store.put(first)).toBe("deleted");
-    expect(await store.get(note.id)).toBeUndefined();
+    await expect(store.put(first)).resolves.toBe("deleted");
+    await expect(store.get(note.id)).resolves.toBeUndefined();
 
     const undo = EventBuilder.deletion([first.id]).createdAt(4).signWithKeys(keys);
-    expect(await store.put(undo)).toBe("deleted");
-    expect(await store.get(note.id)).toBeUndefined();
-    expect(await store.get(first.id)).toBeDefined();
+    await expect(store.put(undo)).resolves.toBe("deleted");
+    await expect(store.get(note.id)).resolves.toBeUndefined();
+    await expect(store.get(first.id)).resolves.toBeDefined();
   });
 
   test("NIP-09 pending e-tag hides the event when it arrives later", async () => {
@@ -250,9 +235,9 @@ describe("MemoryEventStore", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("late").createdAt(1).signWithKeys(keys);
     const del = EventBuilder.deletion([note.id]).createdAt(2).signWithKeys(keys);
-    expect(await store.put(del)).toBe("deleted");
-    expect(await store.put(note)).toBe("duplicate");
-    expect(await store.get(note.id)).toBeUndefined();
+    await expect(store.put(del)).resolves.toBe("deleted");
+    await expect(store.put(note)).resolves.toBe("duplicate");
+    await expect(store.get(note.id)).resolves.toBeUndefined();
   });
 
   test("replace kind 0 and 10002 drops old id from query/count/negentropyItems", async () => {
@@ -261,8 +246,8 @@ describe("MemoryEventStore", () => {
 
     const meta1 = EventBuilder.metadata({ name: "v1" }).createdAt(10).signWithKeys(keys);
     const meta2 = EventBuilder.metadata({ name: "v2" }).createdAt(20).signWithKeys(keys);
-    expect(await store.put(meta1)).toBe("accepted");
-    expect(await store.put(meta2)).toBe("replaced");
+    await expect(store.put(meta1)).resolves.toBe("accepted");
+    await expect(store.put(meta2)).resolves.toBe("replaced");
 
     const list1 = relayListEventBuilder([{ url: "wss://a.example", read: true, write: true }])
       .createdAt(10)
@@ -270,21 +255,21 @@ describe("MemoryEventStore", () => {
     const list2 = relayListEventBuilder([{ url: "wss://b.example", read: true, write: true }])
       .createdAt(20)
       .signWithKeys(keys);
-    expect(await store.put(list1)).toBe("accepted");
-    expect(await store.put(list2)).toBe("replaced");
+    await expect(store.put(list1)).resolves.toBe("accepted");
+    await expect(store.put(list2)).resolves.toBe("replaced");
 
     const q0 = await store.query([{ kinds: [Kind.Metadata] }]);
-    expect(q0.map((e) => e.id)).toEqual([meta2.id]);
-    expect(await store.count([{ kinds: [Kind.Metadata] }])).toBe(1);
+    expect(q0.map((e) => e.id)).toStrictEqual([meta2.id]);
+    await expect(store.count([{ kinds: [Kind.Metadata] }])).resolves.toBe(1);
     const items0 = await store.negentropyItems({ kinds: [Kind.Metadata] });
-    expect(items0).toEqual([{ id: meta2.id, created_at: 20 }]);
+    expect(items0).toStrictEqual([{ id: meta2.id, created_at: 20 }]);
     expect(items0.some((i) => i.id === meta1.id)).toBe(false);
 
     const q65 = await store.query([{ kinds: [Kind.RelayList] }]);
-    expect(q65.map((e) => e.id)).toEqual([list2.id]);
-    expect(await store.count([{ kinds: [Kind.RelayList] }])).toBe(1);
+    expect(q65.map((e) => e.id)).toStrictEqual([list2.id]);
+    await expect(store.count([{ kinds: [Kind.RelayList] }])).resolves.toBe(1);
     const items65 = await store.negentropyItems({ kinds: [Kind.RelayList] });
-    expect(items65.map((i) => i.id)).toEqual([list2.id]);
+    expect(items65.map((i) => i.id)).toStrictEqual([list2.id]);
     expect(items65.some((i) => i.id === list1.id)).toBe(false);
   });
 
@@ -303,12 +288,12 @@ describe("MemoryEventStore", () => {
       { kinds: [0], limit: 1 },
       { authors: [keys.publicKey] },
     ];
-    expect(await store.count(filters)).toBe((await store.query(filters)).length);
-    expect(await store.count([{ kinds: [1] }])).toBe((await store.query([{ kinds: [1] }])).length);
-    expect(await store.count([{ kinds: [1], limit: 1 }])).toBe(1);
+    await expect(store.count(filters)).resolves.toBe((await store.query(filters)).length);
+    await expect(store.count([{ kinds: [1] }])).resolves.toBe((await store.query([{ kinds: [1] }])).length);
+    await expect(store.count([{ kinds: [1], limit: 1 }])).resolves.toBe(1);
 
     const items = await store.negentropyItems({ kinds: [1] });
-    expect(items).toEqual([
+    expect(items).toStrictEqual([
       { id: a.id, created_at: 1 },
       { id: b.id, created_at: 2 },
     ]);
@@ -319,16 +304,16 @@ describe("MemoryEventStore", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("n").createdAt(1).signWithKeys(keys);
     const mixed = { ...note, id: note.id.toUpperCase(), pubkey: note.pubkey.toUpperCase() };
-    expect(await store.put(mixed)).toBe("invalid");
-    expect(await store.get(note.id)).toBeUndefined();
+    await expect(store.put(mixed)).resolves.toBe("invalid");
+    await expect(store.get(note.id)).resolves.toBeUndefined();
 
-    expect(await store.put(note)).toBe("accepted");
+    await expect(store.put(note)).resolves.toBe("accepted");
     expect((await store.get(note.id.toUpperCase()))?.id).toBe(note.id);
-    expect((await store.query([{ ids: [note.id.toUpperCase()] }])).map((e) => e.id)).toEqual([
+    expect((await store.query([{ ids: [note.id.toUpperCase()] }])).map((e) => e.id)).toStrictEqual([
       note.id,
     ]);
-    expect(await store.count([{ ids: [note.id.toUpperCase()] }])).toBe(1);
-    expect(await store.negentropyItems({ ids: [note.id.toUpperCase()] })).toEqual([
+    await expect(store.count([{ ids: [note.id.toUpperCase()] }])).resolves.toBe(1);
+    await expect(store.negentropyItems({ ids: [note.id.toUpperCase()] })).resolves.toStrictEqual([
       { id: note.id, created_at: 1 },
     ]);
   });
@@ -341,9 +326,9 @@ describe("MemoryEventStore", () => {
     await store.put(older);
     await store.put(newer);
     const filter = { ids: [older.id, newer.id], limit: 1 };
-    expect((await store.query([filter])).map((e) => e.id)).toEqual([newer.id]);
-    expect(await store.count([filter])).toBe(1);
-    expect((await store.negentropyItems(filter)).map((i) => i.id)).toEqual([newer.id]);
+    expect((await store.query([filter])).map((e) => e.id)).toStrictEqual([newer.id]);
+    await expect(store.count([filter])).resolves.toBe(1);
+    expect((await store.negentropyItems(filter)).map((i) => i.id)).toStrictEqual([newer.id]);
   });
 
   test("negentropyItems 10k authors+kinds has no content and matches itemCompare", async () => {
@@ -361,16 +346,16 @@ describe("MemoryEventStore", () => {
         sig: "ab".repeat(64),
       });
     }
-    for (const event of events) await store.put(event);
+    for (const event of events) {await store.put(event);}
     const filter = { authors: [keys.publicKey], kinds: [Kind.TextNote] };
     const items = await store.negentropyItems(filter);
     expect(items).toHaveLength(10_000);
     for (const item of items) {
-      expect(Object.keys(item).sort()).toEqual(["created_at", "id"]);
+      expect(Object.keys(item).sort()).toStrictEqual(["created_at", "id"]);
     }
     const expected = events.map((e) => ({ id: e.id, created_at: e.created_at })).sort(itemCompare);
-    expect(items).toEqual(expected);
-    expect(await store.count([filter])).toBe((await store.query([filter])).length);
+    expect(items).toStrictEqual(expected);
+    await expect(store.count([filter])).resolves.toBe((await store.query([filter])).length);
   });
 
   test("ephemeral kinds are not inserted", async () => {
@@ -387,43 +372,43 @@ describe("MemoryEventStore", () => {
     const lo = new EventBuilder(20_000, "lo").createdAt(3).signWithKeys(keys);
     const hi = new EventBuilder(29_999, "hi").createdAt(4).signWithKeys(keys);
     expect(isEphemeralKind(auth.kind)).toBe(true);
-    expect(await store.put(auth)).toBe("ephemeral");
-    expect(await store.put(wrap)).toBe("ephemeral");
-    expect(await store.put(lo)).toBe("ephemeral");
-    expect(await store.put(hi)).toBe("ephemeral");
+    await expect(store.put(auth)).resolves.toBe("ephemeral");
+    await expect(store.put(wrap)).resolves.toBe("ephemeral");
+    await expect(store.put(lo)).resolves.toBe("ephemeral");
+    await expect(store.put(hi)).resolves.toBe("ephemeral");
     expect(store.size).toBe(0);
-    expect(await store.get(auth.id)).toBeUndefined();
-    expect(await store.get(wrap.id)).toBeUndefined();
-    expect(await store.query([{ kinds: [Kind.ClientAuth] }])).toEqual([]);
-    expect(await store.query([{ kinds: [Kind.GiftWrapEphemeral] }])).toEqual([]);
-    expect(await store.query([{ "#p": [keys.publicKey] }])).toEqual([]);
-    expect(await store.count([{ kinds: [Kind.ClientAuth] }])).toBe(0);
-    expect(await store.negentropyItems({ kinds: [Kind.ClientAuth] })).toEqual([]);
+    await expect(store.get(auth.id)).resolves.toBeUndefined();
+    await expect(store.get(wrap.id)).resolves.toBeUndefined();
+    await expect(store.query([{ kinds: [Kind.ClientAuth] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ kinds: [Kind.GiftWrapEphemeral] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ "#p": [keys.publicKey] }])).resolves.toStrictEqual([]);
+    await expect(store.count([{ kinds: [Kind.ClientAuth] }])).resolves.toBe(0);
+    await expect(store.negentropyItems({ kinds: [Kind.ClientAuth] })).resolves.toStrictEqual([]);
 
     const below = new EventBuilder(19_999, "below").createdAt(5).signWithKeys(keys);
     const note = EventBuilder.textNote("keep").createdAt(6).signWithKeys(keys);
-    expect(await store.put(below)).toBe("accepted");
-    expect(await store.put(note)).toBe("accepted");
+    await expect(store.put(below)).resolves.toBe("accepted");
+    await expect(store.put(note)).resolves.toBe("accepted");
     expect(store.size).toBe(2);
     expect((await store.get(note.id))?.id).toBe(note.id);
-    expect((await store.query([{ kinds: [1] }])).map((e) => e.id)).toEqual([note.id]);
+    expect((await store.query([{ kinds: [1] }])).map((e) => e.id)).toStrictEqual([note.id]);
   });
 
   test("putMany empty and sequential replaceable input order", async () => {
     const store = new MemoryEventStore();
     const keys = Keys.fromSecretKey(SK);
-    expect(await store.putMany([])).toEqual([]);
+    await expect(store.putMany([])).resolves.toStrictEqual([]);
     const old = EventBuilder.metadata({ name: "v1" }).createdAt(10).signWithKeys(keys);
     const neu = EventBuilder.metadata({ name: "v2" }).createdAt(20).signWithKeys(keys);
-    expect(await store.putMany([old, neu])).toEqual(["accepted", "replaced"]);
-    expect(await store.get(old.id)).toBeUndefined();
+    await expect(store.putMany([old, neu])).resolves.toStrictEqual(["accepted", "replaced"]);
+    await expect(store.get(old.id)).resolves.toBeUndefined();
     expect((await store.get(neu.id))?.content).toContain("v2");
     const older = EventBuilder.metadata({ name: "v0" }).createdAt(5).signWithKeys(keys);
-    expect(await store.putMany([older])).toEqual(["rejected"]);
+    await expect(store.putMany([older])).resolves.toStrictEqual(["rejected"]);
     expect(store.size).toBe(1);
     const a = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
     const b = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
-    expect(await store.putMany([a, b])).toEqual(["accepted", "accepted"]);
+    await expect(store.putMany([a, b])).resolves.toStrictEqual(["accepted", "accepted"]);
     expect(store.size).toBe(3);
   });
 
@@ -442,7 +427,7 @@ describe("MemoryEventStore", () => {
     const low: Event = { ...high, id: "00".repeat(32) };
     await store.put(high);
     await store.put(low);
-    expect(await store.negentropyItems({ kinds: [Kind.TextNote] })).toEqual([
+    await expect(store.negentropyItems({ kinds: [Kind.TextNote] })).resolves.toStrictEqual([
       { id: low.id, created_at: 5 },
       { id: high.id, created_at: 5 },
     ]);
@@ -461,26 +446,24 @@ describe("MemoryEventStore", () => {
     const bMeta = EventBuilder.metadata({ name: "b" }).createdAt(60).signWithKeys(b);
     const outNote = EventBuilder.textNote("out").createdAt(90).signWithKeys(outsider);
     for (const e of [aMeta, aOld, aNew, bNote, bMeta, outNote]) {
-      expect(await store.put(e)).toBe("accepted");
+      await expect(store.put(e)).resolves.toBe("accepted");
     }
 
     const filter = { authors: [a.publicKey, b.publicKey], kinds: [Kind.TextNote], limit: 2 };
-    expect((await store.query([filter])).map((e) => e.id)).toEqual([bNote.id, aNew.id]);
-    expect(await store.count([filter])).toBe(2);
-    expect((await store.negentropyItems(filter)).map((i) => i.id)).toEqual([aNew.id, bNote.id]);
+    expect((await store.query([filter])).map((e) => e.id)).toStrictEqual([bNote.id, aNew.id]);
+    await expect(store.count([filter])).resolves.toBe(2);
+    expect((await store.negentropyItems(filter)).map((i) => i.id)).toStrictEqual([aNew.id, bNote.id]);
 
     const metaFilter = {
       authors: [a.publicKey.toUpperCase(), b.publicKey],
       kinds: [Kind.Metadata],
     };
-    expect((await store.query([metaFilter])).map((e) => e.id)).toEqual([bMeta.id, aMeta.id]);
-    expect(await store.count([metaFilter])).toBe(2);
+    expect((await store.query([metaFilter])).map((e) => e.id)).toStrictEqual([bMeta.id, aMeta.id]);
+    await expect(store.count([metaFilter])).resolves.toBe(2);
 
-    expect(await store.query([{ authors: [], kinds: [Kind.TextNote] }])).toEqual([]);
-    expect(await store.count([{ authors: [a.publicKey], kinds: [] }])).toBe(0);
-    expect(
-      await store.query([{ authors: [outsider.publicKey], kinds: [Kind.TextNote, Kind.Metadata] }]),
-    ).toEqual([outNote]);
+    await expect(store.query([{ authors: [], kinds: [Kind.TextNote] }])).resolves.toStrictEqual([]);
+    await expect(store.count([{ authors: [a.publicKey], kinds: [] }])).resolves.toBe(0);
+    await expect(store.query([{ authors: [outsider.publicKey], kinds: [Kind.TextNote, Kind.Metadata] }])).resolves.toStrictEqual([outNote]);
   });
 
   test("authors×kinds same created_at keeps lowest id first under limit", async () => {
@@ -498,10 +481,10 @@ describe("MemoryEventStore", () => {
     };
     const mid: Event = { ...low, id: "80".repeat(32), pubkey: b.publicKey, content: "mid" };
     const high: Event = { ...low, id: "ff".repeat(32), content: "high" };
-    for (const e of [high, mid, low]) expect(await store.put(e)).toBe("accepted");
+    for (const e of [high, mid, low]) await expect(store.put(e)).resolves.toBe("accepted");
     const filter = { authors: [a.publicKey, b.publicKey], kinds: [Kind.TextNote], limit: 2 };
-    expect((await store.query([filter])).map((e) => e.id)).toEqual([low.id, mid.id]);
-    expect(await store.count([filter])).toBe(2);
+    expect((await store.query([filter])).map((e) => e.id)).toStrictEqual([low.id, mid.id]);
+    await expect(store.count([filter])).resolves.toBe(2);
   });
 
   test("tag-only #e/#p indexes union then matchFilter AND; empty #e is no match", async () => {
@@ -530,34 +513,34 @@ describe("MemoryEventStore", () => {
       .signWithKeys(other);
     const untagged = EventBuilder.textNote("none").createdAt(50).signWithKeys(keys);
     for (const e of [both, onlyE, onlyP, mentioned, otherE, untagged]) {
-      expect(await store.put(e)).toBe("accepted");
+      await expect(store.put(e)).resolves.toBe("accepted");
     }
 
     const byE = { "#e": [eid] as const };
-    expect((await store.query([byE])).map((e) => e.id)).toEqual([both.id, onlyE.id]);
-    expect(await store.count([byE])).toBe(2);
-    expect((await store.negentropyItems(byE)).map((i) => i.id)).toEqual([onlyE.id, both.id]);
+    expect((await store.query([byE])).map((e) => e.id)).toStrictEqual([both.id, onlyE.id]);
+    await expect(store.count([byE])).resolves.toBe(2);
+    expect((await store.negentropyItems(byE)).map((i) => i.id)).toStrictEqual([onlyE.id, both.id]);
 
     const byP = { "#p": [keys.publicKey] as const };
-    expect((await store.query([byP])).map((e) => e.id)).toEqual([both.id, onlyP.id]);
-    expect((await store.query([{ "#p": [other.publicKey] }])).map((e) => e.id)).toEqual([
+    expect((await store.query([byP])).map((e) => e.id)).toStrictEqual([both.id, onlyP.id]);
+    expect((await store.query([{ "#p": [other.publicKey] }])).map((e) => e.id)).toStrictEqual([
       mentioned.id,
     ]);
 
     const andBoth = { "#e": [eid] as const, "#p": [keys.publicKey] as const };
-    expect((await store.query([andBoth])).map((e) => e.id)).toEqual([both.id]);
-    expect(await store.count([andBoth])).toBe(1);
+    expect((await store.query([andBoth])).map((e) => e.id)).toStrictEqual([both.id]);
+    await expect(store.count([andBoth])).resolves.toBe(1);
 
-    expect(await store.query([{ "#e": [eid], "#p": [other.publicKey] }])).toEqual([]);
-    expect(await store.query([{ "#e": [eidOther], "#p": [keys.publicKey] }])).toEqual([]);
-    expect(await store.query([{ "#e": [eidOther] }])).toEqual([otherE]);
-    expect(await store.query([{ "#e": [] }])).toEqual([]);
-    expect(await store.count([{ "#e": [] }])).toBe(0);
-    expect(await store.query([{ "#p": [] }])).toEqual([]);
-    expect(await store.query([{ "#e": [eid], limit: 0 }])).toEqual([]);
-    expect(await store.query([{ "#e": [eid], since: 25, until: 35 }])).toEqual([both]);
-    expect(await store.query([{ "#e": [eid], since: 40, until: 10 }])).toEqual([]);
-    expect(await store.query([{ "#e": [eid], limit: 1 }])).toEqual([both]);
+    await expect(store.query([{ "#e": [eid], "#p": [other.publicKey] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ "#e": [eidOther], "#p": [keys.publicKey] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ "#e": [eidOther] }])).resolves.toStrictEqual([otherE]);
+    await expect(store.query([{ "#e": [] }])).resolves.toStrictEqual([]);
+    await expect(store.count([{ "#e": [] }])).resolves.toBe(0);
+    await expect(store.query([{ "#p": [] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ "#e": [eid], limit: 0 }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ "#e": [eid], since: 25, until: 35 }])).resolves.toStrictEqual([both]);
+    await expect(store.query([{ "#e": [eid], since: 40, until: 10 }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ "#e": [eid], limit: 1 }])).resolves.toStrictEqual([both]);
   });
 
   test("tag-only mixed-case #e/#p and dual #e tags do not double-count", async () => {
@@ -573,13 +556,13 @@ describe("MemoryEventStore", () => {
       .createdAt(1)
       .signWithKeys(keys);
     const mixed = stored;
-    expect(await store.put(stored)).toBe("accepted");
-    expect((await store.query([{ "#e": [eid.toUpperCase()] }])).map((e) => e.id)).toEqual([
+    await expect(store.put(stored)).resolves.toBe("accepted");
+    expect((await store.query([{ "#e": [eid.toUpperCase()] }])).map((e) => e.id)).toStrictEqual([
       mixed.id,
     ]);
     expect(
       (await store.query([{ "#p": [keys.publicKey.toUpperCase()] }])).map((e) => e.id),
-    ).toEqual([mixed.id]);
+    ).toStrictEqual([mixed.id]);
 
     const reply = EventBuilder.textNote("reply")
       .tag(["e", root])
@@ -587,11 +570,11 @@ describe("MemoryEventStore", () => {
       .createdAt(10)
       .signWithKeys(keys);
     const other = EventBuilder.textNote("other").tag(["e", parent]).createdAt(5).signWithKeys(keys);
-    expect(await store.put(reply)).toBe("accepted");
-    expect(await store.put(other)).toBe("accepted");
+    await expect(store.put(reply)).resolves.toBe("accepted");
+    await expect(store.put(other)).resolves.toBe("accepted");
     const dual = { "#e": [root, parent] as const, limit: 2 };
-    expect((await store.query([dual])).map((e) => e.id)).toEqual([reply.id, other.id]);
-    expect(await store.count([dual])).toBe(2);
+    expect((await store.query([dual])).map((e) => e.id)).toStrictEqual([reply.id, other.id]);
+    await expect(store.count([dual])).resolves.toBe(2);
   });
 
   test("#t tag-only still matches via full scan; defined miss is empty", async () => {
@@ -608,17 +591,17 @@ describe("MemoryEventStore", () => {
       .createdAt(2)
       .signWithKeys(keys);
     const noT = EventBuilder.textNote("plain").tag(["e", eid]).createdAt(1).signWithKeys(keys);
-    for (const e of [nostr, bitcoin, noT]) expect(await store.put(e)).toBe("accepted");
+    for (const e of [nostr, bitcoin, noT]) await expect(store.put(e)).resolves.toBe("accepted");
 
-    expect((await store.query([{ "#t": ["nostr"] }])).map((e) => e.id)).toEqual([nostr.id]);
-    expect(await store.count([{ "#t": ["nostr"] }])).toBe(1);
-    expect(await store.query([{ "#t": ["absent-hashtag"] }])).toEqual([]);
-    expect(await store.query([{ "#t": ["bitcoin"] }])).toEqual([bitcoin]);
-    expect((await store.query([{ "#e": [eid], "#t": ["nostr"] }])).map((e) => e.id)).toEqual([
+    expect((await store.query([{ "#t": ["nostr"] }])).map((e) => e.id)).toStrictEqual([nostr.id]);
+    await expect(store.count([{ "#t": ["nostr"] }])).resolves.toBe(1);
+    await expect(store.query([{ "#t": ["absent-hashtag"] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ "#t": ["bitcoin"] }])).resolves.toStrictEqual([bitcoin]);
+    expect((await store.query([{ "#e": [eid], "#t": ["nostr"] }])).map((e) => e.id)).toStrictEqual([
       nostr.id,
     ]);
-    expect(await store.query([{ "#e": [eid], "#t": ["bitcoin"] }])).toEqual([]);
-    expect((await store.negentropyItems({ "#t": ["nostr"] })).map((i) => i.id)).toEqual([nostr.id]);
+    await expect(store.query([{ "#e": [eid], "#t": ["bitcoin"] }])).resolves.toStrictEqual([]);
+    expect((await store.negentropyItems({ "#t": ["nostr"] })).map((i) => i.id)).toStrictEqual([nostr.id]);
   });
 
   test("replace/remove/clear keep live siblings on the same index keys", async () => {
@@ -635,21 +618,21 @@ describe("MemoryEventStore", () => {
       .tag(["e", eid])
       .createdAt(20)
       .signWithKeys(keys);
-    expect(await store.put(meta1)).toBe("accepted");
-    expect(await store.put(keepE)).toBe("accepted");
-    expect(await store.put(meta2)).toBe("replaced");
-    expect((await store.query([{ "#e": [eid] }])).map((e) => e.id)).toEqual([meta2.id, keepE.id]);
+    await expect(store.put(meta1)).resolves.toBe("accepted");
+    await expect(store.put(keepE)).resolves.toBe("accepted");
+    await expect(store.put(meta2)).resolves.toBe("replaced");
+    expect((await store.query([{ "#e": [eid] }])).map((e) => e.id)).toStrictEqual([meta2.id, keepE.id]);
     expect(
       (await store.query([{ authors: [keys.publicKey], kinds: [Kind.Metadata] }])).map((e) => e.id),
-    ).toEqual([meta2.id]);
+    ).toStrictEqual([meta2.id]);
 
     const dropE = EventBuilder.textNote("drop-e").tag(["e", eid]).createdAt(12).signWithKeys(keys);
-    expect(await store.put(dropE)).toBe("accepted");
-    expect(await store.remove([dropE.id])).toBe(1);
-    expect((await store.query([{ "#e": [eid] }])).map((e) => e.id)).toEqual([meta2.id, keepE.id]);
+    await expect(store.put(dropE)).resolves.toBe("accepted");
+    await expect(store.remove([dropE.id])).resolves.toBe(1);
+    expect((await store.query([{ "#e": [eid] }])).map((e) => e.id)).toStrictEqual([meta2.id, keepE.id]);
     expect(
       (await store.query([{ authors: [keys.publicKey], kinds: [Kind.TextNote] }])).map((e) => e.id),
-    ).toEqual([keepE.id]);
+    ).toStrictEqual([keepE.id]);
 
     const keepP = EventBuilder.textNote("keep-p")
       .tag(["p", mentioned.publicKey])
@@ -659,25 +642,25 @@ describe("MemoryEventStore", () => {
       .tag(["p", mentioned.publicKey])
       .createdAt(4)
       .signWithKeys(keys);
-    expect(await store.put(keepP)).toBe("accepted");
-    expect(await store.put(dropP)).toBe("accepted");
-    expect(await store.remove([dropP.id])).toBe(1);
-    expect((await store.query([{ "#p": [mentioned.publicKey] }])).map((e) => e.id)).toEqual([
+    await expect(store.put(keepP)).resolves.toBe("accepted");
+    await expect(store.put(dropP)).resolves.toBe("accepted");
+    await expect(store.remove([dropP.id])).resolves.toBe(1);
+    expect((await store.query([{ "#p": [mentioned.publicKey] }])).map((e) => e.id)).toStrictEqual([
       keepP.id,
     ]);
     expect(
       (await store.query([{ authors: [keys.publicKey], kinds: [Kind.TextNote] }])).map((e) => e.id),
-    ).toEqual([keepE.id, keepP.id]);
+    ).toStrictEqual([keepE.id, keepP.id]);
 
     await store.clear();
     expect(store.size).toBe(0);
     const fresh = EventBuilder.textNote("fresh").tag(["e", eid]).createdAt(1).signWithKeys(keys);
-    expect(await store.put(fresh)).toBe("accepted");
-    expect((await store.query([{ "#e": [eid] }])).map((e) => e.id)).toEqual([fresh.id]);
+    await expect(store.put(fresh)).resolves.toBe("accepted");
+    expect((await store.query([{ "#e": [eid] }])).map((e) => e.id)).toStrictEqual([fresh.id]);
     expect(
       (await store.query([{ authors: [keys.publicKey], kinds: [Kind.TextNote] }])).map((e) => e.id),
-    ).toEqual([fresh.id]);
-    expect(await store.query([{ "#p": [mentioned.publicKey] }])).toEqual([]);
+    ).toStrictEqual([fresh.id]);
+    await expect(store.query([{ "#p": [mentioned.publicKey] }])).resolves.toStrictEqual([]);
   });
 
   test("valueless e tag is not indexed; empty-string e tag is", async () => {
@@ -685,11 +668,11 @@ describe("MemoryEventStore", () => {
     const keys = Keys.fromSecretKey(SK);
     const bare = EventBuilder.textNote("bare").tag(["e"]).createdAt(1).signWithKeys(keys);
     const empty = EventBuilder.textNote("empty").tag(["e", ""]).createdAt(2).signWithKeys(keys);
-    expect(await store.put(bare)).toBe("accepted");
-    expect(await store.put(empty)).toBe("accepted");
-    expect(await store.query([{ "#e": ["undefined"] }])).toEqual([]);
-    expect((await store.query([{ "#e": [""] }])).map((e) => e.id)).toEqual([empty.id]);
-    expect((await store.query([{ kinds: [Kind.TextNote] }])).map((e) => e.id)).toEqual([
+    await expect(store.put(bare)).resolves.toBe("accepted");
+    await expect(store.put(empty)).resolves.toBe("accepted");
+    await expect(store.query([{ "#e": ["undefined"] }])).resolves.toStrictEqual([]);
+    expect((await store.query([{ "#e": [""] }])).map((e) => e.id)).toStrictEqual([empty.id]);
+    expect((await store.query([{ kinds: [Kind.TextNote] }])).map((e) => e.id)).toStrictEqual([
       empty.id,
       bare.id,
     ]);
@@ -701,12 +684,12 @@ describe("MemoryEventStore", () => {
     const eid = "aa".repeat(32);
     const other = "bb".repeat(32);
     const note = EventBuilder.textNote("n").tag(["e", eid]).createdAt(1).signWithKeys(keys);
-    expect(await store.put(note)).toBe("accepted");
-    expect((await store.query([{ ids: [note.id], "#e": [eid] }])).map((e) => e.id)).toEqual([
+    await expect(store.put(note)).resolves.toBe("accepted");
+    expect((await store.query([{ ids: [note.id], "#e": [eid] }])).map((e) => e.id)).toStrictEqual([
       note.id,
     ]);
-    expect(await store.query([{ ids: [note.id], "#e": [other] }])).toEqual([]);
-    expect(await store.query([{ ids: [] }])).toEqual([]);
+    await expect(store.query([{ ids: [note.id], "#e": [other] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ ids: [] }])).resolves.toStrictEqual([]);
   });
 });
 
@@ -737,12 +720,12 @@ describe("itemCompare", () => {
     };
     const olderHigh: Event = { ...olderLow, id: "zz" };
     const newer: Event = { ...olderLow, id: "mm", created_at: 2 };
-    expect([newer, olderHigh, olderLow].sort(itemCompare).map((e) => e.id)).toEqual([
+    expect([newer, olderHigh, olderLow].sort(itemCompare).map((e) => e.id)).toStrictEqual([
       "aa",
       "zz",
       "mm",
     ]);
-    expect(sortedEvents([newer, olderHigh, olderLow]).map((e) => e.id)).toEqual(["mm", "aa", "zz"]);
+    expect(sortedEvents([newer, olderHigh, olderLow]).map((e) => e.id)).toStrictEqual(["mm", "aa", "zz"]);
   });
 
   test("nip77 module export has no itemCompare", async () => {

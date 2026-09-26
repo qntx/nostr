@@ -5,27 +5,17 @@ import { eventAddress } from "../core/tag.ts";
 import { DeletionState, planDeletion } from "./deletion.ts";
 import { StorageError } from "./error.ts";
 import { deleteStoredEvent, writeTagRefs } from "./idb-helpers.ts";
-import {
-  ADDRESSES,
-  EVENTS,
-  OUTBOX_BOUNDS,
-  TAG_REFS,
-  TOMBSTONES,
-  type AddressRow,
-  type IDBDatabaseLike,
-  type IDBFactoryLike,
-  type IDBTransactionLike,
-  type Tombstone,
-} from "./idb-types.ts";
+import { ADDRESSES, EVENTS, OUTBOX_BOUNDS, TAG_REFS, TOMBSTONES } from './idb-types.ts';
+import type { AddressRow, IDBDatabaseLike, IDBFactoryLike, IDBTransactionLike, Tombstone } from './idb-types.ts';
 export const IDB_VERSION = 4;
 
-export function openDb(dbName: string): Promise<IDBDatabaseLike> {
+export async function openDb(dbName: string): Promise<IDBDatabaseLike> {
   return new Promise((resolve, reject) => {
     const factory = (globalThis as unknown as { indexedDB: IDBFactoryLike }).indexedDB;
     const req = factory.open(dbName, IDB_VERSION);
     req.onupgradeneeded = (ev) => {
       const db = req.result;
-      const oldVersion = ev.oldVersion;
+      const {oldVersion} = ev;
       const tx = ev.target.transaction;
       if (oldVersion < 1) {
         db.createObjectStore(EVENTS, { keyPath: "id" });
@@ -76,7 +66,7 @@ export function migrateV1Events(tx: IDBTransactionLike, events: Event[]): void {
       continue;
     }
     const row = e as { id?: unknown };
-    if (typeof row.id === "string") eventsStore.delete(row.id);
+    if (typeof row.id === "string") {eventsStore.delete(row.id);}
   }
 
   const byId = new Map(valid.map((e) => [e.id, e]));
@@ -87,7 +77,7 @@ export function migrateV1Events(tx: IDBTransactionLike, events: Event[]): void {
     deletion.absorb(plan);
     for (const c of plan.coordinates) {
       for (const ev of valid) {
-        if (ev.kind === Kind.EventDeletion) continue;
+        if (ev.kind === Kind.EventDeletion) {continue;}
         if (eventAddress(ev) === c.key && ev.created_at <= c.until) {
           deletion.ids.add(ev.id);
         }
@@ -115,7 +105,7 @@ export function migrateV1Events(tx: IDBTransactionLike, events: Event[]): void {
     const addr = eventAddress(event);
     if (addr) {
       const prev = winners.get(addr);
-      if (!prev || isReplaceableWinner(event, prev)) winners.set(addr, event);
+      if (!prev || isReplaceableWinner(event, prev)) {winners.set(addr, event);}
     }
   }
   for (const [address, event] of winners) {
@@ -131,9 +121,9 @@ export function compactSupersededReplaceables(tx: IDBTransactionLike): void {
   let events: Event[] | undefined;
   let addressRows: AddressRow[] | undefined;
   const run = () => {
-    if (events === undefined || addressRows === undefined) return;
+    if (events === undefined || addressRows === undefined) {return;}
     const byAddr = new Map<string, AddressRow>();
-    for (const row of addressRows) byAddr.set(row.address, row);
+    for (const row of addressRows) {byAddr.set(row.address, row);}
     const kept: Event[] = [];
     for (const event of events) {
       const addr = eventAddress(event);
@@ -149,7 +139,7 @@ export function compactSupersededReplaceables(tx: IDBTransactionLike): void {
     addressesStore.clear();
     for (const event of kept) {
       const addr = eventAddress(event);
-      if (!addr) continue;
+      if (!addr) {continue;}
       addressesStore.put({ address: addr, id: event.id, created_at: event.created_at });
     }
   };

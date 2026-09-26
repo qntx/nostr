@@ -1,26 +1,18 @@
+import { EventBuilder } from "../core/builder.ts";
+import { EventValidationError, NostrError } from "../core/error.ts";
 /**
- * NIP-17: Private Direct Messages.
- * Kind 10050 advertises where gift-wraps should be delivered.
- * Kind 14 rumor construction and per-recipient wrap live here.
- * Envelope primitives live in nip59.ts.
+ * NIP-17: Private Direct Messages. Kind 10050 advertises where gift-wraps should be delivered. Kind
+ * 14 rumor construction and per-recipient wrap live here. Envelope primitives live in nip59.ts.
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/17.md
  */
 import type { Event } from "../core/event.ts";
-import { EventValidationError, NostrError } from "../core/error.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
-import { EventBuilder } from "../core/builder.ts";
 import { assertHex32, normalizeURL } from "../core/util.ts";
-import {
-  createGiftWrap,
-  createRumor,
-  createSeal,
-  type Nip59Crypto,
-  type Rumor,
-  type WrapOptions,
-} from "./nip59.ts";
+import { createGiftWrap, createRumor, createSeal } from './nip59.ts';
+import type { Nip59Crypto, Rumor, WrapOptions } from './nip59.ts';
 
 export class Nip17Error extends NostrError {
   constructor(message: string, options?: ErrorOptions) {
@@ -54,14 +46,14 @@ export function parseDmRelayList(event: Pick<Event, "kind" | "tags">): string[] 
   const out: string[] = [];
   const seen = new Set<string>();
   for (const tag of event.tags) {
-    if (tag[0] !== "relay" || !tag[1]) continue;
+    if (tag[0] !== "relay" || !tag[1]) {continue;}
     let url: string;
     try {
       url = normalizeURL(tag[1]);
     } catch {
       continue;
     }
-    if (seen.has(url)) continue;
+    if (seen.has(url)) {continue;}
     seen.add(url);
     out.push(url);
   }
@@ -69,7 +61,7 @@ export function parseDmRelayList(event: Pick<Event, "kind" | "tags">): string[] 
 }
 
 /** Encode DM relay URLs as NIP-17 `relay` tags. */
-export function dmRelayListToTags(relays: readonly string[]): Tag[] {
+export function dmRelayListToTags(relays: ReadonlyArray<string>): Tag[] {
   const tags: Tag[] = [];
   const seen = new Set<string>();
   for (const raw of relays) {
@@ -79,7 +71,7 @@ export function dmRelayListToTags(relays: readonly string[]): Tag[] {
     } catch {
       continue;
     }
-    if (seen.has(url)) continue;
+    if (seen.has(url)) {continue;}
     seen.add(url);
     tags.push(["relay", url]);
   }
@@ -87,7 +79,7 @@ export function dmRelayListToTags(relays: readonly string[]): Tag[] {
 }
 
 /** Build an unsigned kind:10050 EventBuilder. NIP-17 requires ≥1 relay tag. */
-export function dmRelayListEventBuilder(relays: readonly string[]): EventBuilder {
+export function dmRelayListEventBuilder(relays: ReadonlyArray<string>): EventBuilder {
   const tags = dmRelayListToTags(relays);
   if (tags.length === 0) {
     throw new Nip17Error("DM relay list requires at least one relay");
@@ -96,23 +88,23 @@ export function dmRelayListEventBuilder(relays: readonly string[]): EventBuilder
 }
 
 function asRecipientList(
-  input: string | Recipient | readonly (string | Recipient)[],
-): readonly (string | Recipient)[] {
-  if (typeof input === "string") return [input];
-  if (Array.isArray(input)) return input as readonly (string | Recipient)[];
+  input: string | Recipient | ReadonlyArray<string | Recipient>,
+): ReadonlyArray<string | Recipient> {
+  if (typeof input === "string") {return [input];}
+  if (Array.isArray(input)) {return input as readonly (string | Recipient)[];}
   return [input as Recipient];
 }
 
 /** Accept a hex pubkey, a Recipient, or a readonly array of either. Dedup by pubkey. */
 export function normalizeRecipients(
-  input: string | Recipient | readonly (string | Recipient)[],
+  input: string | Recipient | ReadonlyArray<string | Recipient>,
 ): Recipient[] {
   const out: Recipient[] = [];
   const seen = new Set<string>();
   for (const item of asRecipientList(input)) {
     const rec: Recipient = typeof item === "string" ? { pubkey: item } : item;
     const pubkey = assertHex32(rec.pubkey, "public key");
-    if (seen.has(pubkey)) continue;
+    if (seen.has(pubkey)) {continue;}
     seen.add(pubkey);
     out.push({ pubkey, relayHint: rec.relayHint });
   }
@@ -121,7 +113,7 @@ export function normalizeRecipients(
 
 export function buildChatMessageRumor(
   senderPubkey: string,
-  recipients: readonly Recipient[],
+  recipients: ReadonlyArray<Recipient>,
   content: string,
   opts?: ChatMessageOptions,
 ): Rumor {
@@ -148,14 +140,14 @@ export function buildChatMessageRumor(
   });
 }
 
-function wrapTargets(sender: string, recipients: readonly Recipient[]): Recipient[] {
+function wrapTargets(sender: string, recipients: ReadonlyArray<Recipient>): Recipient[] {
   const senderPk = sender.toLowerCase();
   const self = recipients.find((r) => r.pubkey.toLowerCase() === senderPk);
   const out: Recipient[] = [{ pubkey: senderPk, relayHint: self?.relayHint }];
   const seen = new Set<string>([senderPk]);
   for (const recipient of recipients) {
     const pk = recipient.pubkey.toLowerCase();
-    if (seen.has(pk)) continue;
+    if (seen.has(pk)) {continue;}
     seen.add(pk);
     out.push({ pubkey: pk, relayHint: recipient.relayHint });
   }
@@ -164,7 +156,7 @@ function wrapTargets(sender: string, recipients: readonly Recipient[]): Recipien
 
 export async function wrapDirectMessage(
   crypto: Nip59Crypto,
-  recipients: readonly Recipient[],
+  recipients: ReadonlyArray<Recipient>,
   rumor: Rumor,
   opts?: Pick<WrapOptions, "now" | "randomInt" | "timestamps" | "randomize">,
 ): Promise<ReadonlyArray<{ recipient: string; wrap: Event }>> {
@@ -192,7 +184,7 @@ export async function wrapDirectMessage(
   return out;
 }
 
-export function requireDmRelays(pubkey: string, relays: readonly string[]): string[] {
+export function requireDmRelays(pubkey: string, relays: ReadonlyArray<string>): string[] {
   if (relays.length === 0) {
     throw new Nip17Error(`pubkey ${pubkey} is not ready to receive DMs (no kind 10050)`);
   }

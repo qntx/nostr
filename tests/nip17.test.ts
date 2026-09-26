@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
-import { Kind, Keys, KeysSigner, normalizeURL, type Tag } from "../src/index.ts";
+
+import { Kind, Keys, KeysSigner, normalizeURL } from '../src/index.ts';
+import type { Tag } from '../src/index.ts';
 import {
   Nip17Error,
   buildChatMessageRumor,
@@ -9,7 +11,8 @@ import {
   requireDmRelays,
   wrapDirectMessage,
 } from "../src/nips/nip17.ts";
-import { unwrap, type SealOptions, type WrapOptions } from "../src/nips/nip59.ts";
+import { unwrap } from '../src/nips/nip59.ts';
+import type { SealOptions, WrapOptions } from '../src/nips/nip59.ts';
 
 const ALICE_SK = "000000000000000000000000000000000000000000000000000000000000a1ce";
 const BOB_SK = "00000000000000000000000000000000000000000000000000000000000000b0";
@@ -29,7 +32,7 @@ describe("nip17 chat helpers", () => {
     expect(rumor.kind).toBe(Kind.PrivateDirectMessage);
     expect(rumor.content).toBe("hola");
     expect(rumor.created_at).toBe(42);
-    expect(rumor.tags).toEqual([
+    expect(rumor.tags).toStrictEqual([
       ["p", bob.publicKey, "wss://hint.example"],
       ["e", replyId, ""],
       ["subject", "party"],
@@ -50,7 +53,7 @@ describe("nip17 chat helpers", () => {
       { pubkey: carol.publicKey, relayHint: "wss://c.example" },
       bob.publicKey,
     ]);
-    expect(list).toEqual([
+    expect(list).toStrictEqual([
       { pubkey: bob.publicKey, relayHint: undefined },
       { pubkey: carol.publicKey, relayHint: "wss://c.example" },
     ]);
@@ -66,7 +69,7 @@ describe("nip17 chat helpers", () => {
     const recipients = normalizeRecipients([bobPk, carolPk]);
     const rumor = buildChatMessageRumor(alicePk, recipients, "group");
     const wraps = await wrapDirectMessage(alice, recipients, rumor);
-    expect(wraps.map((w) => w.recipient)).toEqual([alicePk, bobPk, carolPk]);
+    expect(wraps.map((w) => w.recipient)).toStrictEqual([alicePk, bobPk, carolPk]);
 
     const self = await unwrap(alice, wraps[0]!.wrap);
     expect(self.content).toBe("group");
@@ -89,7 +92,7 @@ describe("nip17 chat helpers", () => {
     const rumor = buildChatMessageRumor(alicePk, recipients, "self listed");
     const wraps = await wrapDirectMessage(alice, recipients, rumor);
     expect(wraps).toHaveLength(2);
-    expect(wraps.map((w) => w.recipient)).toEqual([alicePk, bobPk]);
+    expect(wraps.map((w) => w.recipient)).toStrictEqual([alicePk, bobPk]);
   });
 
   test("wrapDirectMessage does not take extraTags or encryptTo", async () => {
@@ -119,11 +122,11 @@ describe("nip17 chat helpers", () => {
       encryptTo: alicePk,
       randomize: "wrap",
     } as never);
-    expect(wraps.map((w) => w.wrap.tags)).toEqual([[["p", alicePk]], [["p", bobPk]]]);
+    expect(wraps.map((w) => w.wrap.tags)).toStrictEqual([[["p", alicePk]], [["p", bobPk]]]);
     const bobWrap = wraps[1]!.wrap;
-    const sealJson = await bob.nip44Decrypt!(bobWrap.pubkey, bobWrap.content);
+    const sealJson = await bob.nip44Decrypt(bobWrap.pubkey, bobWrap.content);
     const seal = JSON.parse(sealJson) as { tags: unknown; created_at: number };
-    expect(seal.tags).toEqual([]);
+    expect(seal.tags).toStrictEqual([]);
     expect(seal.created_at).toBe(rumor.created_at);
     const toBob = await unwrap(bob, bobWrap);
     expect(toBob.content).toBe("x");
@@ -132,7 +135,7 @@ describe("nip17 chat helpers", () => {
   test("dmRelayListToTags emits relay tags without assertion", () => {
     const url = "wss://inbox.example";
     const tags: Tag[] = dmRelayListToTags([url, `${url}/`]);
-    expect(tags).toEqual([["relay", normalizeURL(url)]]);
+    expect(tags).toStrictEqual([["relay", normalizeURL(url)]]);
   });
 
   test("dmRelayListEventBuilder throws on an empty relay list", () => {

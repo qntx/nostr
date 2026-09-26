@@ -1,16 +1,10 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bech32 } from "@scure/base";
 import { describe, expect, test } from "vite-plus/test";
-import {
-  EventBuilder,
-  EventValidationError,
-  Keys,
-  Kind,
-  hexToBytes,
-  type Event,
-  type Tag,
-} from "../src/index.ts";
+
 import { utf8Encoder } from "../src/core/util.ts";
+import { EventBuilder, EventValidationError, Keys, Kind, hexToBytes } from '../src/index.ts';
+import type { Event, Tag } from '../src/index.ts';
 import {
   makeZapRequest,
   parseBolt11,
@@ -37,7 +31,7 @@ describe("makeZapRequest", () => {
     expect(zr.content).toBe("Zap!");
     expect(zr.created_at).toBeGreaterThanOrEqual(before);
     expect(zr.created_at).toBeLessThanOrEqual(after);
-    expect(zr.tags).toEqual([
+    expect(zr.tags).toStrictEqual([
       ["p", keys.publicKey],
       ["amount", "21000"],
       ["relays", "wss://a.example", "wss://b.example"],
@@ -65,8 +59,8 @@ describe("makeZapRequest", () => {
     });
     const relayTags = zr.tags.filter((t) => t[0] === "relays");
     expect(relayTags).toHaveLength(1);
-    expect(relayTags[0]).toEqual(["relays", "wss://a.example", "wss://b.example"]);
-    expect(typeof relayTags[0]![1]).toBe("string");
+    expect(relayTags[0]).toStrictEqual(["relays", "wss://a.example", "wss://b.example"]);
+    expect(relayTags[0]![1]).toBeTypeOf("string");
   });
 
   test("empty relays throws", () => {
@@ -88,7 +82,7 @@ describe("makeZapRequest", () => {
 
     expect(zr.kind).toBe(Kind.ZapRequest);
     expect(zr.content).toBe("");
-    expect(zr.tags).toEqual([
+    expect(zr.tags).toStrictEqual([
       ["p", event.pubkey],
       ["amount", "1000"],
       ["relays", "wss://r.example"],
@@ -137,7 +131,7 @@ describe("makeZapRequest", () => {
       amount: 1,
       relays: ["wss://r.example"],
     });
-    expect(profile.tags[0]).toEqual(["p", keys.publicKey]);
+    expect(profile.tags[0]).toStrictEqual(["p", keys.publicKey]);
     expect(profile.tags[0]![1]).not.toBe(keys.publicKey.toUpperCase());
 
     const event = EventBuilder.textNote("hi").signWithKeys(keys);
@@ -186,10 +180,10 @@ function encodeBolt11(
   fields: { paymentHash?: Uint8Array; descriptionHash?: Uint8Array },
 ): string {
   const words = [0, 0, 0, 0, 0, 0, 0];
-  if (fields.paymentHash) words.push(...taggedField(1, fields.paymentHash));
-  if (fields.descriptionHash) words.push(...taggedField(23, fields.descriptionHash));
+  if (fields.paymentHash) {words.push(...taggedField(1, fields.paymentHash));}
+  if (fields.descriptionHash) {words.push(...taggedField(23, fields.descriptionHash));}
   // BOLT11 data part ends with 104 5-bit words of secp256k1 signature.
-  for (let i = 0; i < 104; i++) words.push(0);
+  for (let i = 0; i < 104; i++) {words.push(0);}
   return bech32.encode(hrp, words, false);
 }
 
@@ -201,9 +195,9 @@ function signedZapRequest(opts?: { amount?: number; lnurl?: string; extraTags?: 
   const builder = new EventBuilder(Kind.ZapRequest, "")
     .tag(["p", keys.publicKey])
     .tag(["relays", "wss://r.example"]);
-  if (opts?.amount !== undefined) builder.tag(["amount", String(opts.amount)]);
-  if (opts?.lnurl !== undefined) builder.tag(["lnurl", opts.lnurl]);
-  if (opts?.extraTags) builder.tags(opts.extraTags);
+  if (opts?.amount !== undefined) {builder.tag(["amount", String(opts.amount)]);}
+  if (opts?.lnurl !== undefined) {builder.tag(["lnurl", opts.lnurl]);}
+  if (opts?.extraTags) {builder.tags(opts.extraTags);}
   const request = builder.signWithKeys(payer);
   return { request, json: JSON.stringify(request) };
 }
@@ -230,9 +224,9 @@ function receiptFor(
     ["bolt11", invoice],
     ["description", json],
   ];
-  if (extra?.preimage !== undefined) tags.push(["preimage", extra.preimage]);
-  else tags.push(["preimage", APPENDIX_E_PREIMAGE]);
-  if (extra?.extraTags) tags.push(...extra.extraTags);
+  if (extra?.preimage === undefined) {tags.push(["preimage", APPENDIX_E_PREIMAGE]);}
+  else {tags.push(["preimage", extra.preimage]);}
+  if (extra?.extraTags) {tags.push(...extra.extraTags);}
   return signedReceipt(provider, tags);
 }
 
@@ -242,7 +236,7 @@ describe("parseBolt11", () => {
     const fields = parseBolt11(APPENDIX_E_INVOICE);
     expect(fields?.amountMsats).toBe(1_000_000);
     expect(fields?.descriptionHash?.length).toBe(32);
-    expect(fields?.paymentHash).toEqual(sha256(hexToBytes(APPENDIX_E_PREIMAGE)));
+    expect(fields?.paymentHash).toStrictEqual(sha256(hexToBytes(APPENDIX_E_PREIMAGE)));
   });
 
   test("descriptionHash is sha256 of the description TAG STRING", () => {
@@ -250,9 +244,9 @@ describe("parseBolt11", () => {
     const paymentHash = sha256(hexToBytes(APPENDIX_E_PREIMAGE));
     const invoice = encodeBolt11("lnbc10u", { paymentHash, descriptionHash: tagHash });
     const fields = parseBolt11(invoice);
-    expect(fields?.descriptionHash).toEqual(tagHash);
+    expect(fields?.descriptionHash).toStrictEqual(tagHash);
     expect(fields?.amountMsats).toBe(1_000_000);
-    expect(fields?.paymentHash).toEqual(paymentHash);
+    expect(fields?.paymentHash).toStrictEqual(paymentHash);
   });
 
   test("truncated bech32 returns undefined", () => {

@@ -1,10 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
-import {
-  Nip11Error,
-  fetchRelayInformation,
-  relayInfoHttpUrl,
-  type Nip11Fetch,
-} from "../src/nips/nip11.ts";
+
+import { Nip11Error, fetchRelayInformation, relayInfoHttpUrl } from '../src/nips/nip11.ts';
+import type { Nip11Fetch } from '../src/nips/nip11.ts';
 
 describe("relayInfoHttpUrl", () => {
   test("rewrites websocket schemes", () => {
@@ -60,7 +57,7 @@ describe("fetchRelayInformation", () => {
     expect(seenUrl).toBe("https://relay.example.com/");
     expect(seenInit?.headers?.Accept).toBe("application/nostr+json");
     expect((seenInit as { redirect?: string } | undefined)?.redirect).toBe("manual");
-    expect(info).toEqual({ name: "Example" });
+    expect(info).toStrictEqual({ name: "Example" });
   });
 
   test("404 throws Nip11Error", async () => {
@@ -101,7 +98,7 @@ describe("fetchRelayInformation", () => {
       });
 
     const info = await fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl });
-    expect(info).toEqual({
+    expect(info).toStrictEqual({
       name: "relay",
       terms_of_service: "https://example.com/tos",
       supported_nips: [1, 11],
@@ -128,7 +125,7 @@ describe("fetchRelayInformation", () => {
       });
 
     const info = await fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl });
-    expect(info).toEqual({ name: "relay" });
+    expect(info).toStrictEqual({ name: "relay" });
     expect("limitation" in info).toBe(false);
     expect("tags" in info).toBe(false);
   });
@@ -148,10 +145,10 @@ describe("fetchRelayInformation", () => {
     try {
       await fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl });
       throw new Error("expected reject");
-    } catch (err) {
-      expect(err).toBeInstanceOf(Nip11Error);
-      expect((err as Nip11Error).cause).toBe(net);
-      expect(err).not.toBe(net);
+    } catch (error) {
+      expect(error).toBeInstanceOf(Nip11Error);
+      expect((error as Nip11Error).cause).toBe(net);
+      expect(error).not.toBe(net);
     }
   });
 

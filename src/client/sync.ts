@@ -1,9 +1,12 @@
 import type { Event } from "../core/event.ts";
-import { canonicalizeFilter, type Filter } from "../core/filter.ts";
+import { canonicalizeFilter } from '../core/filter.ts';
+import type { Filter } from '../core/filter.ts';
+import { storageFromItems } from '../nips/nip77.ts';
+import type { NegentropyStorageVector } from '../nips/nip77.ts';
 import type { Pool } from "../relay/pool.ts";
 import type { EventStore, PutResult } from "../storage/types.ts";
-import { storageFromItems, type NegentropyStorageVector } from "../nips/nip77.ts";
-import { SyncDirection, type SyncOptions, type SyncSummary } from "./types.ts";
+import { SyncDirection } from './types.ts';
+import type { SyncOptions, SyncSummary } from './types.ts';
 
 export type SyncDeps = {
   pool: Pool;
@@ -13,9 +16,8 @@ export type SyncDeps = {
   throwIfAborted: (signal?: AbortSignal) => void;
   wantObserve: (flag?: boolean) => boolean;
   /**
-   * The client's single ingest path: index (with relay URL) → meta →
-   * persistence. `persist: false` when this function already wrote storage
-   * via an awaited `putMany`.
+   * The client's single ingest path: index (with relay URL) → meta → persistence. `persist: false`
+   * when this function already wrote storage via an awaited `putMany`.
    */
   ingest: (event: Event, relayUrl?: string, opts?: { persist?: boolean }) => void;
   /** Record a relay sighting for an id already in the index. */
@@ -26,7 +28,7 @@ export type SyncDeps = {
 const SYNC_ID_BATCH = 100;
 const SYNC_UPLOAD_CONCURRENCY = 8;
 
-function uniqueIds(ids: readonly string[]): string[] {
+function uniqueIds(ids: ReadonlyArray<string>): string[] {
   return [...new Set(ids)];
 }
 
@@ -55,10 +57,9 @@ function mergeSyncSummary(into: SyncSummary, other: SyncSummary): SyncSummary {
 }
 
 /**
- * NIP-77 sync against one relay: reconcile, then optionally upload
- * local-only events and/or download remote-only events.
- * `observe: false` skips putMany and ingest; received ids are still listed.
- * `persistEvents: false` skips putMany, still ingests when observe is on.
+ * NIP-77 sync against one relay: reconcile, then optionally upload local-only events and/or
+ * download remote-only events. `observe: false` skips putMany and ingest; received ids are still
+ * listed. `persistEvents: false` skips putMany, still ingests when observe is on.
  */
 export async function syncToRelay(
   deps: SyncDeps,
@@ -87,7 +88,7 @@ export async function syncToRelay(
     persistFailures: {},
   };
 
-  if (opts?.dryRun) return summary;
+  if (opts?.dryRun) {return summary;}
 
   if (direction === SyncDirection.Up || direction === SyncDirection.Both) {
     if (have.length > 0) {
@@ -107,7 +108,7 @@ export async function syncToRelay(
                 timeoutMs: opts?.timeoutMs,
               });
               const ok = results.some((r) => r.result?.ok);
-              if (ok) summary.sent.push(event.id);
+              if (ok) {summary.sent.push(event.id);}
               else {
                 summary.sendFailures[event.id] =
                   results[0]?.error ?? results[0]?.result?.message ?? "publish failed";
@@ -135,19 +136,19 @@ export async function syncToRelay(
         onevent: shouldObserve
           ? (event, relayUrl) => {
               const urls = urlsById.get(event.id);
-              if (urls === undefined) urlsById.set(event.id, [relayUrl]);
-              else if (!urls.includes(relayUrl)) urls.push(relayUrl);
+              if (urls === undefined) {urlsById.set(event.id, [relayUrl]);}
+              else if (!urls.includes(relayUrl)) {urls.push(relayUrl);}
             }
           : undefined,
       });
       if (!shouldObserve) {
-        for (const event of events) summary.received.push(event.id);
+        for (const event of events) {summary.received.push(event.id);}
         continue;
       }
       const ingestAll = (event: Event): void => {
         const urls = urlsById.get(event.id) ?? [];
         deps.ingest(event, urls[0], { persist: false });
-        for (let u = 1; u < urls.length; u++) deps.markSeen(event.id, urls[u]!);
+        for (let u = 1; u < urls.length; u++) {deps.markSeen(event.id, urls[u]!);}
       };
       if (!deps.persistEvents) {
         for (const event of events) {
@@ -161,14 +162,14 @@ export async function syncToRelay(
       let results: PutResult[];
       try {
         results = await deps.storage.putMany(events);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        for (const event of events) summary.persistFailures[event.id] = message;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        for (const event of events) {summary.persistFailures[event.id] = message;}
         break;
       }
       for (let j = 0; j < events.length; j++) {
         const event = events[j]!;
-        if (results[j] === "rejected" || results[j] === "invalid") continue;
+        if (results[j] === "rejected" || results[j] === "invalid") {continue;}
         ingestAll(event);
         summary.received.push(event.id);
       }
@@ -179,9 +180,9 @@ export async function syncToRelay(
 }
 
 /**
- * NIP-77 sync against the given relays (or Client default relays).
- * Independent sessions run in parallel. Fulfilled summaries are merged;
- * if every relay rejects, throws the first rejection in URL order.
+ * NIP-77 sync against the given relays (or Client default relays). Independent sessions run in
+ * parallel. Fulfilled summaries are merged; if every relay rejects, throws the first rejection in
+ * URL order.
  */
 export async function sync(
   deps: SyncDeps,
@@ -190,7 +191,7 @@ export async function sync(
 ): Promise<SyncSummary> {
   deps.assertAlive();
   const urls = deps.defaultRelays(opts?.relays ? [...opts.relays] : undefined);
-  const results = await Promise.allSettled(urls.map((url) => syncToRelay(deps, url, filter, opts)));
+  const results = await Promise.allSettled(urls.map( async (url) => syncToRelay(deps, url, filter, opts)));
   let merged = emptySummary();
   let fulfilled = 0;
   let firstRejection: unknown;
@@ -202,6 +203,6 @@ export async function sync(
       firstRejection ??= result.reason;
     }
   }
-  if (urls.length > 0 && fulfilled === 0) throw firstRejection;
+  if (urls.length > 0 && fulfilled === 0) {throw firstRejection;}
   return merged;
 }

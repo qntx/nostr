@@ -1,6 +1,6 @@
 /**
- * Shared nips HTTP primitive. Not a pack entry (core has zero network).
- * Callers never pass `redirect`; sendManual always sets `"manual"`.
+ * Shared nips HTTP primitive. Not a pack entry (core has zero network). Callers never pass
+ * `redirect`; sendManual always sets `"manual"`.
  */
 
 export type ManualFetch = (
@@ -22,8 +22,8 @@ export type ManualFetch = (
 type ManualInit = NonNullable<Parameters<ManualFetch>[1]>;
 
 export function requireGlobalFetch(missing: () => Error): ManualFetch {
-  if (typeof globalThis.fetch !== "function") throw missing();
-  return globalThis.fetch.bind(globalThis) as ManualFetch;
+  if (typeof globalThis.fetch !== "function") {throw missing();}
+  return globalThis.fetch.bind(globalThis);
 }
 
 /** Always sets redirect:manual. Shared by fetchManual and headStatus. */
@@ -32,7 +32,7 @@ export async function sendManual(
   url: string,
   init: ManualInit,
 ): Promise<Awaited<ReturnType<ManualFetch>>> {
-  return await fetchImpl(url, { ...init, redirect: "manual" } as Parameters<ManualFetch>[1]);
+  return  fetchImpl(url, { ...init, redirect: "manual" } as Parameters<ManualFetch>[1]);
 }
 
 export async function fetchManual(
@@ -43,8 +43,8 @@ export async function fetchManual(
 ): Promise<Awaited<ReturnType<ManualFetch>>> {
   try {
     return await sendManual(fetchImpl, url, init);
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw err;
-    throw wrapNetwork(err);
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    throw wrapNetwork(error);
   }
 }

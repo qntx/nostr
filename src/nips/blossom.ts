@@ -1,19 +1,21 @@
 /**
- * Blossom BUD-01/02/04/06 HTTP helpers, NIP-B7 kind 10063 server lists, and URL healing.
- * Auth is kind 24242, not NIP-98; the Authorization value is base64url.
+ * Blossom BUD-01/02/04/06 HTTP helpers, NIP-B7 kind 10063 server lists, and URL healing. Auth is
+ * kind 24242, not NIP-98; the Authorization value is base64url.
  *
  * @see https://github.com/hzrd149/blossom
  * @see https://github.com/nostr-protocol/nips/blob/master/B7.md
  */
 import { sha256 } from "@noble/hashes/sha2.js";
 import { base64urlnopad } from "@scure/base";
+
 import { EventBuilder } from "../core/builder.ts";
 import { EventValidationError, NostrError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { assertHex32, bytesToHex, utf8Encoder } from "../core/util.ts";
-import { fetchManual, requireGlobalFetch, sendManual, type ManualFetch } from "./http.ts";
+import { fetchManual, requireGlobalFetch, sendManual } from './http.ts';
+import type { ManualFetch } from './http.ts';
 
 export type BlobDescriptor = {
   url: string;
@@ -55,8 +57,8 @@ export function getHashFromURL(url: string | URL): string | null {
     return null;
   }
   const matches = path.match(/[0-9a-f]{64}/gi);
-  if (!matches?.length) return null;
-  return matches[matches.length - 1]!.toLowerCase();
+  if (!matches?.length) {return null;}
+  return matches.at(-1)!.toLowerCase();
 }
 
 export async function sha256Blob(data: Blob | ArrayBuffer | Uint8Array): Promise<string> {
@@ -81,8 +83,8 @@ export async function verifyBlob(
 }
 
 /**
- * `Nostr ` + base64url(utf8 JSON), padding stripped.
- * NIP-98 uses standard base64; mixing them is a 401.
+ * `Nostr ` + base64url(utf8 JSON), padding stripped. NIP-98 uses standard base64; mixing them is a
+ * 401.
  */
 export function encodeAuthorizationHeader(event: Event): string {
   return `Nostr ${base64urlnopad.encode(utf8Encoder.encode(JSON.stringify(event)))}`;
@@ -143,7 +145,7 @@ export async function upload(
     Authorization: encodeAuthorizationHeader(auth),
     "X-SHA-256": hash,
   };
-  if (file.type) headers["Content-Type"] = file.type;
+  if (file.type) {headers["Content-Type"] = file.type;}
   const res = await blossomRequest(opts?.fetch, blossomUrl(server, "/upload"), {
     method: "PUT",
     headers,
@@ -161,7 +163,7 @@ export async function listBlobs(
 ): Promise<BlobDescriptor[]> {
   const pk = assertHex32(pubkey, "pubkey");
   const headers: Record<string, string> = {};
-  if (auth) headers.Authorization = encodeAuthorizationHeader(auth);
+  if (auth) {headers.Authorization = encodeAuthorizationHeader(auth);}
   const res = await blossomRequest(opts?.fetch, blossomUrl(server, `/list/${pk}`), {
     method: "GET",
     headers,
@@ -200,7 +202,7 @@ export async function mirrorBlob(
     "X-SHA-256": hash,
     "X-Content-Length": String(blob.size),
   };
-  if (blob.type) headers["X-Content-Type"] = blob.type;
+  if (blob.type) {headers["X-Content-Type"] = blob.type;}
   const res = await blossomRequest(opts.fetch, blossomUrl(server, "/mirror"), {
     method: "PUT",
     headers,
@@ -223,7 +225,7 @@ export async function checkUpload(
     "X-SHA-256": hash,
     "X-Content-Length": String(file.size),
   };
-  if (file.type) headers["X-Content-Type"] = file.type;
+  if (file.type) {headers["X-Content-Type"] = file.type;}
   await blossomRequest(opts?.fetch, blossomUrl(server, "/upload"), {
     method: "HEAD",
     headers,
@@ -231,7 +233,10 @@ export async function checkUpload(
   });
 }
 
-/** Strict HEAD probe. 2xx → true. 404 → false. Other HTTP (including 405) / network → throw BlossomError. AbortError propagates. No GET fallback. */
+/**
+ * Strict HEAD probe. 2xx → true. 404 → false. Other HTTP (including 405) / network → throw
+ * BlossomError. AbortError propagates. No GET fallback.
+ */
 export async function blobExists(
   server: string,
   sha256Hex: string,
@@ -240,8 +245,8 @@ export async function blobExists(
   const hash = assertHex32(sha256Hex, "blob sha256");
   const url = blossomUrl(server, `/${hash}`);
   const res = await blossomFetch(opts?.fetch, url, { method: "HEAD", signal: opts?.signal });
-  if (res.status === 404) return false;
-  if (res.ok) return true;
+  if (res.status === 404) {return false;}
+  if (res.ok) {return true;}
   throw blossomHttpError("HEAD", url, res);
 }
 
@@ -254,7 +259,7 @@ export async function getBlob(
   const hash = assertHex32(sha256Hex, "blob sha256");
   const url = blossomUrl(server, `/${hash}`);
   const res = await blossomFetch(opts?.fetch, url, { method: "GET", signal: opts?.signal });
-  if (!res.ok) throw blossomHttpError("GET", url, res);
+  if (!res.ok) {throw blossomHttpError("GET", url, res);}
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (!(await verifyBlob(bytes, hash))) {
     throw new BlossomError("blob sha256 mismatch");
@@ -263,17 +268,17 @@ export async function getBlob(
 }
 
 /**
- * If `url` is not available, try `servers` for the same hash (NIP-B7 SHOULD).
- * Never throws on HTTP status. AbortError still throws.
- * Returns the original URL when no hash, original still available, or nothing else responds.
+ * If `url` is not available, try `servers` for the same hash (NIP-B7 SHOULD). Never throws on HTTP
+ * status. AbortError still throws. Returns the original URL when no hash, original still available,
+ * or nothing else responds.
  */
 export async function healBlobUrl(
   url: string,
-  servers: readonly string[],
+  servers: ReadonlyArray<string>,
   opts?: { fetch?: BlossomFetch; signal?: AbortSignal },
 ): Promise<string> {
   const hash = getHashFromURL(url);
-  if (!hash) return url;
+  if (!hash) {return url;}
 
   const ext = extensionFromHashUrl(url, hash);
   const fetchImpl = opts?.fetch ?? requireGlobalFetch(missingBlossomFetch);
@@ -286,17 +291,17 @@ export async function healBlobUrl(
 
   for (const server of servers) {
     const base = parseHttpUrl(server);
-    if (!base) continue;
+    if (!base) {continue;}
     const candidate = `${base}/${hash}${ext}`;
     const status = await headStatus(fetchImpl, candidate, opts?.signal);
-    if (status !== undefined && status >= 200 && status < 300) return candidate;
+    if (status !== undefined && status >= 200 && status < 300) {return candidate;}
   }
   return url;
 }
 
 /** PUT /upload to each server in order until one descriptor succeeds. */
 export async function uploadToServers(
-  servers: readonly string[],
+  servers: ReadonlyArray<string>,
   file: Blob,
   auth: Event,
   opts?: { fetch?: BlossomFetch; signal?: AbortSignal },
@@ -308,25 +313,25 @@ export async function uploadToServers(
   for (const server of servers) {
     try {
       return await upload(server, file, auth, opts);
-    } catch (err) {
-      if (isAbortError(err)) throw err;
+    } catch (error) {
+      if (isAbortError(error)) throw error;
       last =
-        err instanceof BlossomError
-          ? err
+        error instanceof BlossomError
+          ? error
           : new BlossomError("blossom upload failed", {
-              cause: err instanceof Error ? err : undefined,
+              cause: error instanceof Error ? error : undefined,
             });
     }
   }
   throw last ?? new BlossomError("no servers");
 }
 
-export function blossomServerListEventBuilder(servers: readonly string[]): EventBuilder {
+export function blossomServerListEventBuilder(servers: ReadonlyArray<string>): EventBuilder {
   const tags: Tag[] = [];
   const seen = new Set<string>();
   for (const raw of servers) {
     const url = parseHttpUrl(raw);
-    if (!url || seen.has(url)) continue;
+    if (!url || seen.has(url)) {continue;}
     seen.add(url);
     tags.push(["server", url]);
   }
@@ -343,9 +348,9 @@ export function parseBlossomServerList(event: Pick<Event, "kind" | "tags">): str
   const out: string[] = [];
   const seen = new Set<string>();
   for (const tag of event.tags) {
-    if (tag[0] !== "server" || !tag[1]) continue;
+    if (tag[0] !== "server" || !tag[1]) {continue;}
     const url = parseHttpUrl(tag[1]);
-    if (!url || seen.has(url)) continue;
+    if (!url || seen.has(url)) {continue;}
     seen.add(url);
     out.push(url);
   }
@@ -355,7 +360,7 @@ export function parseBlossomServerList(event: Pick<Event, "kind" | "tags">): str
 function parseHttpUrl(raw: string): string | undefined {
   try {
     const u = new URL(raw);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+    if (u.protocol !== "http:" && u.protocol !== "https:") {return undefined;}
     const path = u.pathname.replace(/\/+$/, "");
     return `${u.origin}${path}`;
   } catch {
@@ -386,8 +391,8 @@ function extensionFromHashUrl(url: string, hash: string): string {
     return "";
   }
   const i = pathname.toLowerCase().lastIndexOf(hash);
-  if (i < 0) return "";
-  const m = pathname.slice(i + 64).match(/^\.[^/]+/);
+  if (i === -1) {return "";}
+  const m = /^\.[^/]+/.exec(pathname.slice(i + 64));
   return m?.[0] ?? "";
 }
 
@@ -430,7 +435,10 @@ async function blossomFetch(
   );
 }
 
-/** HEAD with redirect:manual. Network → undefined. AbortError propagates. Never throws on HTTP status. */
+/**
+ * HEAD with redirect:manual. Network → undefined. AbortError propagates. Never throws on HTTP
+ * status.
+ */
 async function headStatus(
   fetchImpl: ManualFetch,
   url: string,
@@ -439,8 +447,8 @@ async function headStatus(
   try {
     const res = await sendManual(fetchImpl, url, { method: "HEAD", signal });
     return res.status;
-  } catch (err) {
-    if (isAbortError(err)) throw err;
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     return undefined;
   }
 }
@@ -456,16 +464,16 @@ async function blossomRequest(
   },
 ): Promise<ManualResponse> {
   const res = await blossomFetch(fetchImpl, url, init);
-  if (res.ok) return res;
+  if (res.ok) {return res;}
   throw blossomHttpError(init.method, url, res);
 }
 
 async function readJson(res: ManualResponse): Promise<unknown> {
   try {
     return await res.json();
-  } catch (cause) {
+  } catch (error) {
     throw new BlossomError("invalid blossom JSON response", {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
       status: res.status,
     });
   }
@@ -487,7 +495,7 @@ function parseBlobDescriptor(json: unknown): BlobDescriptor {
     throw new BlossomError("blob descriptor missing size");
   }
   const desc: BlobDescriptor = { url: raw.url, sha256: hash, size: raw.size };
-  if (typeof raw.type === "string") desc.type = raw.type;
+  if (typeof raw.type === "string") {desc.type = raw.type;}
   if (typeof raw.uploaded === "number" && Number.isInteger(raw.uploaded) && raw.uploaded >= 0) {
     desc.uploaded = raw.uploaded;
   }

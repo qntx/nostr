@@ -1,10 +1,12 @@
 /**
  * NIP-05: Mapping Nostr keys to DNS-based internet identifiers
+ *
  * @see https://github.com/nostr-protocol/nips/blob/master/05.md
  */
 import { NostrError } from "../core/error.ts";
 import { isHex32 } from "../core/util.ts";
-import { fetchManual, requireGlobalFetch, type ManualFetch } from "./http.ts";
+import { fetchManual, requireGlobalFetch } from './http.ts';
+import type { ManualFetch } from './http.ts';
 import type { ProfilePointer } from "./nip19.ts";
 
 /** Root local-part (`_@domain` rendered as just the domain). */
@@ -14,6 +16,7 @@ export const WELL_KNOWN_PATH = "/.well-known/nostr.json";
 
 /**
  * NIP-05 identifier string.
+ *
  * - Full: `name@domain`
  * - Root: `domain` or `_@domain`
  */
@@ -26,10 +29,7 @@ export type Nip05Address = {
   domain: string;
 };
 
-/**
- * 46.md appendix discovery metadata (`{relays, nostrconnect_url}`).
- * Not a bunker pointer.
- */
+/** 46.md appendix discovery metadata (`{relays, nostrconnect_url}`). Not a bunker pointer. */
 export type Nip05Nip46 = {
   relays?: string[];
   nostrconnectUrl?: string;
@@ -50,14 +50,11 @@ export class Nip05Error extends NostrError {
   }
 }
 
-/**
- * Matches optional local@domain.
- * Groups: 1=local (optional), 2=domain.
- */
+/** Matches optional local@domain. Groups: 1=local (optional), 2=domain. */
 export const NIP05_REGEX: RegExp = /^(?:([a-z0-9._-]+)@)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)$/i;
 
 export function isNip05(value: unknown): value is string {
-  if (typeof value !== "string") return false;
+  if (typeof value !== "string") {return false;}
   try {
     parseNip05(value);
     return true;
@@ -67,11 +64,11 @@ export function isNip05(value: unknown): value is string {
 }
 
 /**
- * Parse an identifier into local + domain.
- * Accepts `name@domain`, `_@domain`, or bare `domain` (local becomes `_`).
+ * Parse an identifier into local + domain. Accepts `name@domain`, `_@domain`, or bare `domain`
+ * (local becomes `_`).
  */
 export function parseNip05(input: string): Nip05Address {
-  const match = input.trim().match(NIP05_REGEX);
+  const match = NIP05_REGEX.exec(input.trim());
   if (!match?.[2]) {
     throw new Nip05Error(`invalid NIP-05 identifier: ${input}`);
   }
@@ -87,16 +84,16 @@ export function wellKnownUrl(address: Nip05Address): string {
 }
 
 function stringUrls(list: unknown): string[] | undefined {
-  if (!Array.isArray(list)) return undefined;
+  if (!Array.isArray(list)) {return undefined;}
   return list.filter((u): u is string => typeof u === "string" && u.length > 0);
 }
 
 /**
- * Parse nostr.json `nip46`: 46.md appendix `{relays, nostrconnect_url}`.
- * Hex-pubkey maps and other keys are ignored.
+ * Parse nostr.json `nip46`: 46.md appendix `{relays, nostrconnect_url}`. Hex-pubkey maps and other
+ * keys are ignored.
  */
 export function parseNip05Nip46(raw: unknown): Nip05Nip46 | undefined {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {return undefined;}
   const obj = raw as Record<string, unknown>;
   const result: Nip05Nip46 = {};
 
@@ -126,7 +123,7 @@ export function parseNip05Document(json: unknown): Nip05Document {
 
   const names: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw.names as Record<string, unknown>)) {
-    if (typeof v !== "string" || !isHex32(v.toLowerCase())) continue;
+    if (typeof v !== "string" || !isHex32(v.toLowerCase())) {continue;}
     names[k.toLowerCase()] = v.toLowerCase();
   }
 
@@ -134,9 +131,9 @@ export function parseNip05Document(json: unknown): Nip05Document {
   if (raw.relays && typeof raw.relays === "object" && !Array.isArray(raw.relays)) {
     relays = {};
     for (const [pk, list] of Object.entries(raw.relays as Record<string, unknown>)) {
-      if (!isHex32(pk.toLowerCase())) continue;
+      if (!isHex32(pk.toLowerCase())) {continue;}
       const urls = stringUrls(list);
-      if (urls?.length) relays[pk.toLowerCase()] = urls;
+      if (urls?.length) {relays[pk.toLowerCase()] = urls;}
     }
   }
 
@@ -149,16 +146,15 @@ export function lookupFromDocument(
   address: Nip05Address,
 ): ProfilePointer | undefined {
   const pubkey = doc.names[address.local];
-  if (!pubkey) return undefined;
+  if (!pubkey) {return undefined;}
   const relays = doc.relays?.[pubkey];
   return relays?.length ? { pubkey, relays: [...relays] } : { pubkey };
 }
 
 /**
- * Fetch and parse `/.well-known/nostr.json`.
- * Returns `null` on network/parse failure (does not throw for those).
- * Rejects HTTP redirects (non-200) per NIP-05 security constraints.
- * AbortError rethrows; it is not mapped to `null`.
+ * Fetch and parse `/.well-known/nostr.json`. Returns `null` on network/parse failure (does not
+ * throw for those). Rejects HTTP redirects (non-200) per NIP-05 security constraints. AbortError
+ * rethrows; it is not mapped to `null`.
  */
 export async function queryNip05Document(
   identifier: string,
@@ -181,26 +177,26 @@ export async function queryNip05Document(
       err instanceof Error ? err : new Error("NIP-05 request failed"),
     );
     // Redirects and errors must not be trusted (NIP-05 security).
-    if (res.status !== 200) return null;
+    if (res.status !== 200) {return null;}
     const json = await res.json();
     return { address, doc: parseNip05Document(json) };
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw err;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
     return null;
   }
 }
 
 /**
- * Query `/.well-known/nostr.json` for an identifier.
- * Returns `null` on network/parse/lookup failure (does not throw for those).
- * Profile `relays` only. `nip46` is discovery metadata, not a bunker pointer.
+ * Query `/.well-known/nostr.json` for an identifier. Returns `null` on network/parse/lookup failure
+ * (does not throw for those). Profile `relays` only. `nip46` is discovery metadata, not a bunker
+ * pointer.
  */
 export async function queryProfile(
   identifier: string,
   opts?: { fetch?: Nip05Fetch; signal?: AbortSignal },
 ): Promise<ProfilePointer | null> {
   const fetched = await queryNip05Document(identifier, opts);
-  if (!fetched) return null;
+  if (!fetched) {return null;}
   return lookupFromDocument(fetched.doc, fetched.address) ?? null;
 }
 
@@ -210,7 +206,7 @@ export async function verifyNip05(
   identifier: string,
   opts?: { fetch?: Nip05Fetch; signal?: AbortSignal },
 ): Promise<boolean> {
-  if (!isHex32(pubkey.toLowerCase())) return false;
+  if (!isHex32(pubkey.toLowerCase())) {return false;}
   const profile = await queryProfile(identifier, opts);
   return profile !== null && profile.pubkey === pubkey.toLowerCase();
 }

@@ -1,34 +1,5 @@
-/**
- * Hermes smoke test (N12): bundled to a single classic script and run on the
- * Hermes CLI that RN 0.86 ships (hermes-v250829098.0.17). Hard asserts only;
- * prints `HERMES_SMOKE_OK` after every check — including async ones — settled.
- *
- * The OK line is the pass contract: Hermes exits 0 even for unhandled async
- * errors (and `quit()` inside a promise callback does not set the exit code),
- * so runners must assert the marker appears in stdout.
- */
-import { hermesGlobalsInstalled } from "./globals.ts";
-import {
-  EventBuilder,
-  Keys,
-  KeysSigner,
-  Kind,
-  MemoryEventStore,
-  ReactiveEventStore,
-  bytesToHex,
-  finalizeEvent,
-  getEventHash,
-  hexToBytes,
-  matchFilter,
-  nip19Decode,
-  normalizeURL,
-  noteEncode,
-  npubEncode,
-  nsecEncode,
-  serializeEvent,
-  verifyEvent,
-  type Event,
-} from "../../src/index.ts";
+import { EventBuilder, Keys, KeysSigner, Kind, MemoryEventStore, ReactiveEventStore, bytesToHex, finalizeEvent, getEventHash, hexToBytes, matchFilter, nip19Decode, normalizeURL, noteEncode, npubEncode, nsecEncode, serializeEvent, verifyEvent } from '../../src/index.ts';
+import type { Event } from '../../src/index.ts';
 import {
   decrypt as nip44Decrypt,
   decryptFromPubkey,
@@ -38,12 +9,22 @@ import {
 } from "../../src/nips/nip44.ts";
 import * as nip49 from "../../src/nips/nip49.ts";
 import { createRumor, unwrap, wrap } from "../../src/nips/nip59.ts";
+/**
+ * Hermes smoke test (N12): bundled to a single classic script and run on the Hermes CLI that RN
+ * 0.86 ships (hermes-v250829098.0.17). Hard asserts only; prints `HERMES_SMOKE_OK` after every
+ * check — including async ones — settled.
+ *
+ * The OK line is the pass contract: Hermes exits 0 even for unhandled async errors (and `quit()`
+ * inside a promise callback does not set the exit code), so runners must assert the marker appears
+ * in stdout.
+ */
+import { hermesGlobalsInstalled } from "./globals.ts";
 
 declare function print(msg: string): void;
 declare function quit(code: number): void;
 
 function assert(cond: boolean, name: string): void {
-  if (!cond) throw new Error(`smoke: ${name}`);
+  if (!cond) {throw new Error(`smoke: ${name}`);}
 }
 function eq<T>(got: T, want: T, name: string): void {
   if (JSON.stringify(got) !== JSON.stringify(want)) {
@@ -197,8 +178,8 @@ main().then(
   () => {
     print("HERMES_SMOKE_OK");
   },
-  (err: unknown) => {
-    print(`HERMES_SMOKE_FAIL: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+  (error: unknown) => {
+    print(`HERMES_SMOKE_FAIL: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
     quit(1);
   },
 );

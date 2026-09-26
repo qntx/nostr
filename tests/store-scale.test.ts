@@ -1,21 +1,16 @@
 /**
- * Opt-in 10^4 EventStore recency / cursor-bound tests.
- * Enable with: STORE_SCALE=1 bun run test tests/store-scale.test.ts
+ * Opt-in 10^4 EventStore recency / cursor-bound tests. Enable with: STORE_SCALE=1 bun run test
+ * tests/store-scale.test.ts
  *
- * Skipped by default so bun CI does not pay the fill cost.
- * Uses describe.skip (not describe.runIf) for bun:test + vite-plus compatibility.
+ * Skipped by default so bun CI does not pay the fill cost. Uses describe.skip (not describe.runIf)
+ * for bun:test + vite-plus compatibility.
  */
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import {
-  IndexedDbEventStore,
-  Kind,
-  MemoryEventStore,
-  SqliteEventStore,
-  sortEvents,
-  type Event,
-  type EventStore,
-} from "../src/index.ts";
-import { installIdbMock, type IdbMock } from "./helpers/idb-mock.ts";
+
+import { IndexedDbEventStore, Kind, MemoryEventStore, SqliteEventStore, sortEvents } from '../src/index.ts';
+import type { Event, EventStore } from '../src/index.ts';
+import { installIdbMock } from './helpers/idb-mock.ts';
+import type { IdbMock } from './helpers/idb-mock.ts';
 import { SqliteTestDriver } from "./helpers/sqlite-driver.ts";
 
 const SCALE = process.env.STORE_SCALE === "1";
@@ -24,7 +19,7 @@ const describeScale = SCALE ? describe : describe.skip;
 const N = 10_000;
 const LIMIT = 50;
 const FOLLOW_N = 8;
-const A_OLD = 6_900;
+const A_OLD = 6900;
 const A_REMAINDER = 10;
 const B_NEW = 40;
 const SIG = "ab".repeat(64);
@@ -80,30 +75,30 @@ function buildScaleSet(): {
   }
 
   const kinds = [Kind.TextNote, Kind.Repost, Kind.Reaction] as const;
-  let fillerT = 7_000;
+  let fillerT = 7000;
   while (events.length < N) {
     const n = events.length;
     const pubkey = n % 5 === 0 ? outsiders[n % outsiders.length]! : follow[n % follow.length]!;
     const kind = kinds[n % kinds.length]!;
     const tags: Event["tags"] =
-      n % 3 === 0 ? [["t", "nostr"]] : n % 3 === 1 ? [["e", E_REF]] : [["p", a]];
+      n % 3 === 0 ? [["t", "nostr"]] : (n % 3 === 1 ? [["e", E_REF]] : [["p", a]]);
     push(pubkey, kind, fillerT, tags);
     fillerT += 1;
   }
 
   const followSet = new Set(follow);
   const matching = events.filter((e) => e.kind === Kind.TextNote && followSet.has(e.pubkey));
-  const expectedIds = sortEvents(matching.slice())
+  const expectedIds = sortEvents([...matching])
     .slice(0, LIMIT)
     .map((e) => e.id);
-  const firstAuthorIds = sortEvents(matching.filter((e) => e.pubkey === a).slice())
+  const firstAuthorIds = sortEvents([...matching.filter((e) => e.pubkey === a)])
     .slice(0, LIMIT)
     .map((e) => e.id);
 
   return { events, follow, expectedIds, firstAuthorIds };
 }
 
-async function fill(store: EventStore, events: readonly Event[]): Promise<void> {
+async function fill(store: EventStore, events: ReadonlyArray<Event>): Promise<void> {
   await store.putMany(events);
 }
 
@@ -122,7 +117,7 @@ describeScale("store scale 10^4", () => {
     const { events, follow, expectedIds, firstAuthorIds } = buildScaleSet();
     expect(events).toHaveLength(N);
     expect(expectedIds).toHaveLength(LIMIT);
-    expect(expectedIds).not.toEqual(firstAuthorIds);
+    expect(expectedIds).not.toStrictEqual(firstAuthorIds);
 
     const byId = new Map(events.map((e) => [e.id, e]));
     const expected = expectedIds.map((id) => byId.get(id)!);
@@ -136,15 +131,15 @@ describeScale("store scale 10^4", () => {
       (await memory.query([{ authors: follow, kinds: [Kind.TextNote], limit: LIMIT }])).map(
         (e) => e.id,
       ),
-    ).toEqual(expectedIds);
+    ).toStrictEqual(expectedIds);
 
     const idb = new IndexedDbEventStore({ dbName: "scale-104" });
     await idb.open();
     await fill(idb, events);
     mock.resetStats();
     const found = await idb.query([{ authors: follow, kinds: [Kind.TextNote], limit: LIMIT }]);
-    expect(found.map((e) => e.id)).toEqual(expectedIds);
-    expect(found.map((e) => e.id)).not.toEqual(firstAuthorIds);
+    expect(found.map((e) => e.id)).toStrictEqual(expectedIds);
+    expect(found.map((e) => e.id)).not.toStrictEqual(firstAuthorIds);
     expect(mock.eventsGetAllCount()).toBe(0);
     expect(mock.cursorVisitCount()).toBeGreaterThan(LIMIT);
     expect(mock.cursorVisitCount()).toBeLessThan(LIMIT + FOLLOW_N + 32);
@@ -156,7 +151,7 @@ describeScale("store scale 10^4", () => {
     const foundSqlite = await sqlite.query([
       { authors: follow, kinds: [Kind.TextNote], limit: LIMIT },
     ]);
-    expect(foundSqlite.map((e) => e.id)).toEqual(expectedIds);
+    expect(foundSqlite.map((e) => e.id)).toStrictEqual(expectedIds);
     sqliteDriver.close();
   }, 60_000);
 });

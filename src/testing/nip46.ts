@@ -1,11 +1,12 @@
-import { Keys, finalizeEvent, type Tag } from "../core/index.ts";
+import { Keys, finalizeEvent } from '../core/index.ts';
+import type { Tag } from '../core/index.ts';
+import { Kind } from "../core/kind.ts";
 import {
   getConversationKey,
   decrypt as nip44Decrypt,
   encrypt as nip44Encrypt,
 } from "../nips/nip44.ts";
 import { decodeNip46Request, encodeNip46Response } from "../nips/nip46.ts";
-import { Kind } from "../core/kind.ts";
 import type { FakeRelayNetwork } from "./network.ts";
 
 export type FakeNip46SignerOptions = {
@@ -20,7 +21,7 @@ export type FakeNip46SignerOptions = {
   userSk?: string;
   /** First answer `auth_url` (result) with this URL in the error field, then the real response. */
   authUrl?: string;
-  authUrlMethods?: readonly string[];
+  authUrlMethods?: ReadonlyArray<string>;
   /** Delay in ms before the real response after an `auth_url` reply. */
   authReplyDelayMs?: number;
   /** Collected RPC requests (mutated as they arrive). */
@@ -31,7 +32,7 @@ export type FakeNip46SignerOptions = {
   connectResult?: string;
 };
 
-export interface FakeNip46Signer {
+export type FakeNip46Signer = {
   readonly bunkerPubkey: string;
   readonly userPublicKey: string;
   /** Also answer RPCs on another relay of the same network (e.g. after switch_relays). */
@@ -44,8 +45,8 @@ export interface FakeNip46Signer {
 type SocketMessage = { data: unknown };
 
 /**
- * In-process NIP-46 remote signer: subscribes to kind:24133 requests on
- * `relayUrl` and answers as a bunker, encrypted to `clientPubkey` with NIP-44.
+ * In-process NIP-46 remote signer: subscribes to kind:24133 requests on `relayUrl` and answers as a
+ * bunker, encrypted to `clientPubkey` with NIP-44.
  */
 export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Signer {
   const bunkerKeys = opts.bunkerSk ? Keys.fromSecretKey(opts.bunkerSk) : Keys.generate();
@@ -69,26 +70,26 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
       );
     });
     ws.addEventListener("message", (ev) => onMessage(ev, ws));
-    sockets.add(ws as unknown as { close(): void });
+    sockets.add(ws);
   };
 
   const onMessage = (ev: unknown, ws: { send(data: string): void }): void => {
-    const data = (ev as SocketMessage).data;
+    const {data} = (ev as SocketMessage);
     let msg: unknown;
     try {
       msg = JSON.parse(String(data));
     } catch {
       return;
     }
-    if (!Array.isArray(msg) || msg[0] !== "EVENT") return;
+    if (!Array.isArray(msg) || msg[0] !== "EVENT") {return;}
     const event = msg[2] as {
       kind: number;
       pubkey: string;
       content: string;
       id: string;
     };
-    if (!event || event.kind !== Kind.NostrConnect) return;
-    if (event.pubkey !== opts.clientPubkey || handled.has(event.id)) return;
+    if (!event || event.kind !== Kind.NostrConnect) {return;}
+    if (event.pubkey !== opts.clientPubkey || handled.has(event.id)) {return;}
 
     try {
       const req = decodeNip46Request(nip44Decrypt(event.content, convKey));
@@ -156,7 +157,7 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
     result?: string,
     error?: string,
   ): void => {
-    if (closed) return;
+    if (closed) {return;}
     const payload = encodeNip46Response({ id, result, error });
     const event = finalizeEvent(
       {
@@ -193,7 +194,7 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
     },
     close(): void {
       closed = true;
-      for (const ws of sockets) ws.close();
+      for (const ws of sockets) {ws.close();}
       sockets.clear();
     },
   };

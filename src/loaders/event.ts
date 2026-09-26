@@ -2,7 +2,8 @@ import type { Event } from "../core/event.ts";
 import { isAddressableKind } from "../core/kind.ts";
 import { formatEventAddress } from "../core/tag.ts";
 import { isHex32 } from "../core/util.ts";
-import { decode, Nip19Error, type AddressPointer, type EventPointer } from "../nips/nip19.ts";
+import { decode, Nip19Error } from '../nips/nip19.ts';
+import type { AddressPointer, EventPointer } from '../nips/nip19.ts';
 import type { LoaderContext } from "./context.ts";
 
 export type EventRef = string | EventPointer | AddressPointer;
@@ -16,7 +17,7 @@ type ParsedRef = {
 };
 
 function dFilter(kind: number, identifier: string): { "#d"?: string[] } {
-  if (isAddressableKind(kind)) return { "#d": [identifier] };
+  if (isAddressableKind(kind)) {return { "#d": [identifier] };}
   return {};
 }
 
@@ -91,23 +92,22 @@ function parseRef(ref: EventRef): ParsedRef {
 }
 
 /**
- * Resolve an event reference (hex id, note, nevent, naddr, or pointer object)
- * through the reactive index, fetching from relays on a miss. The index is
- * the durable store — the loader keeps only in-flight coalescing, so a miss
- * never blocks a later retry.
+ * Resolve an event reference (hex id, note, nevent, naddr, or pointer object) through the reactive
+ * index, fetching from relays on a miss. The index is the durable store — the loader keeps only
+ * in-flight coalescing, so a miss never blocks a later retry.
  */
 export function createEventLoader(ctx: LoaderContext) {
   const inflight = new Map<string, Promise<Event | undefined>>();
   return {
-    load(ref: EventRef): Promise<Event | undefined> {
+     async load(ref: EventRef): Promise<Event | undefined> {
       const parsed = parseRef(ref);
       const hit = parsed.lookup(ctx);
-      if (hit !== undefined) return Promise.resolve(hit);
+      if (hit !== undefined) {return Promise.resolve(hit);}
       const pending = inflight.get(parsed.cacheKey);
-      if (pending) return pending;
+      if (pending) {return pending;}
       const p = (async () => {
         const relays = [...new Set([...parsed.hints, ...ctx.relays])];
-        if (relays.length === 0) return undefined;
+        if (relays.length === 0) {return undefined;}
         await ctx.pool.fetch(relays, [parsed.filter], {
           timeoutMs: ctx.fetchTimeoutMs,
           onevent: (event, relayUrl) => ctx.ingest(event, relayUrl),

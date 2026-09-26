@@ -1,8 +1,8 @@
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { formatEventAddress } from "../core/tag.ts";
-import { DataLoader } from "./dataloader.ts";
 import type { LoaderContext } from "./context.ts";
+import { DataLoader } from "./dataloader.ts";
 
 /** Result of a replaceable load: the winning event (or null) and freshness. */
 export type ReplaceableLoadResult = {
@@ -23,19 +23,17 @@ export type ReplaceableLoader = (
 const MAX_FETCHED_AT = 10_000;
 
 /**
- * address -> last network fetch. `hit` is true when the index held a winner
- * right after that fetch; a fresh `hit` record whose winner was evicted
- * since must refetch instead of reporting a miss.
+ * Address -> last network fetch. `hit` is true when the index held a winner right after that fetch;
+ * a fresh `hit` record whose winner was evicted since must refetch instead of reporting a miss.
  */
 type FetchedAt = Map<string, { at: number; hit: boolean }>;
 
 /**
- * Batch-fetch replaceable events (kind + authors) via the pool. Fetched
- * events are written into the reactive index (`onevent` records `seenOn`)
- * and the winner is read back from it; the index — not the loader — owns
- * the stored value and winner selection. The loader only tracks per-address
- * `fetchedAt` timestamps so a recent fetch (including a miss) is not
- * repeated within `staleAfterSec`.
+ * Batch-fetch replaceable events (kind + authors) via the pool. Fetched events are written into the
+ * reactive index (`onevent` records `seenOn`) and the winner is read back from it; the index — not
+ * the loader — owns the stored value and winner selection. The loader only tracks per-address
+ * `fetchedAt` timestamps so a recent fetch (including a miss) is not repeated within
+ * `staleAfterSec`.
  */
 export function createReplaceableLoader(ctx: LoaderContext, kind: number): ReplaceableLoader {
   type Key = { pubkey: string; hints?: string[] };
@@ -46,7 +44,7 @@ export function createReplaceableLoader(ctx: LoaderContext, kind: number): Repla
     fetchedAt.set(addr, { at: now, hit });
     while (fetchedAt.size > MAX_FETCHED_AT) {
       const oldest = fetchedAt.keys().next();
-      if (oldest.done) break;
+      if (oldest.done) {break;}
       fetchedAt.delete(oldest.value);
     }
   };
@@ -85,7 +83,7 @@ export function createReplaceableLoader(ctx: LoaderContext, kind: number): Repla
     const style = opts?.style ?? "default";
     const current = (): Event | null => ctx.index.getByAddress(address) ?? null;
 
-    if (style === "cache-only") return { event: current(), fresh: false };
+    if (style === "cache-only") {return { event: current(), fresh: false };}
     if (style === "default") {
       const rec = fetchedAt.get(address);
       const event = current();

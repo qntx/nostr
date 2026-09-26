@@ -1,7 +1,8 @@
 import { describe, expect, test, vi } from "vite-plus/test";
-import { EventBuilder, Keys, ReactiveEventStore } from "../src/index.ts";
+
 import type { Event } from "../src/core/event.ts";
 import { normalizeURL } from "../src/core/util.ts";
+import { EventBuilder, Keys, ReactiveEventStore } from "../src/index.ts";
 import { MemoryIndex } from "../src/storage/memory-index.ts";
 import { stubReportError } from "./helpers/report-error.ts";
 
@@ -15,7 +16,7 @@ function note(content: string, created_at: number): Event {
   return EventBuilder.textNote(content).createdAt(created_at).signWithKeys(keys);
 }
 
-function kind5(targets: readonly Event[], created_at: number): Event {
+function kind5(targets: ReadonlyArray<Event>, created_at: number): Event {
   return EventBuilder.deletion(targets.map((t) => t.id))
     .createdAt(created_at)
     .signWithKeys(keys);
@@ -27,7 +28,7 @@ function meta(created_at: number): Event {
     .signWithKeys(keys);
 }
 
-function flush(): Promise<void> {
+ async function flush(): Promise<void> {
   return Promise.resolve();
 }
 
@@ -37,7 +38,7 @@ describe("ReactiveEventStore writes", () => {
     const e = note("a", 1);
     expect(store.add(e, "wss://a")).toBe("accepted");
     expect(store.add(e, "wss://b")).toBe("duplicate");
-    expect(store.seenOn(e.id)).toEqual([normalizeURL("wss://a"), normalizeURL("wss://b")]);
+    expect(store.seenOn(e.id)).toStrictEqual([normalizeURL("wss://a"), normalizeURL("wss://b")]);
   });
 
   test("ephemeral events are not stored", () => {
@@ -62,14 +63,14 @@ describe("ReactiveEventStore writes", () => {
     expect(store.markSeen(e.id, "wss://b")).toBe(true);
     await flush();
     expect(onChange).not.toHaveBeenCalled();
-    expect(store.seenOn(e.id)).toEqual([normalizeURL("wss://a"), normalizeURL("wss://b")]);
+    expect(store.seenOn(e.id)).toStrictEqual([normalizeURL("wss://a"), normalizeURL("wss://b")]);
   });
 
   test("seenOn caps at 16 urls per id", () => {
     const store = new ReactiveEventStore();
     const e = note("a", 1);
     store.add(e);
-    for (let i = 0; i < 20; i++) store.markSeen(e.id, `wss://r${i}`);
+    for (let i = 0; i < 20; i++) {store.markSeen(e.id, `wss://r${i}`);}
     expect(store.seenOn(e.id)).toHaveLength(16);
     expect(store.seenOn(e.id)[0]).toBe(normalizeURL("wss://r0"));
     expect(store.seenOn(e.id)[15]).toBe(normalizeURL("wss://r15"));
@@ -78,9 +79,9 @@ describe("ReactiveEventStore writes", () => {
   test("maxSeenOnEntries evicts the oldest id", () => {
     const store = new ReactiveEventStore({ maxSeenOnEntries: 3 });
     const events = [note("a", 1), note("b", 2), note("c", 3), note("d", 4)];
-    for (const e of events) store.add(e, `wss://${e.content}`);
-    expect(store.seenOn(events[0]!.id)).toEqual([]);
-    expect(store.seenOn(events[3]!.id)).toEqual([normalizeURL("wss://d")]);
+    for (const e of events) {store.add(e, `wss://${e.content}`);}
+    expect(store.seenOn(events[0]!.id)).toStrictEqual([]);
+    expect(store.seenOn(events[3]!.id)).toStrictEqual([normalizeURL("wss://d")]);
   });
 
   test("kind-5 deletion tombstones and isDeleted reports", () => {
@@ -177,7 +178,7 @@ describe("ReactiveEventStore watches", () => {
     store.add(e); // write while unregistered
     const onChange = vi.fn();
     watch.subscribe(onChange);
-    expect(watch.getSnapshot().map((x) => x.id)).toEqual([e.id]);
+    expect(watch.getSnapshot().map((x) => x.id)).toStrictEqual([e.id]);
     await flush();
     // no new write since subscribe → still no notification
     expect(onChange).not.toHaveBeenCalled();
@@ -202,7 +203,7 @@ describe("ReactiveEventStore watches", () => {
     store.add(b);
     const after = watch.getSnapshot();
     expect(after).not.toBe(before);
-    expect(after.map((e) => e.id)).toEqual([b.id, a.id]);
+    expect(after.map((e) => e.id)).toStrictEqual([b.id, a.id]);
   });
 
   test("shared watch for equal filters and StrictMode re-subscribe keeps registration", async () => {
@@ -242,7 +243,7 @@ describe("ReactiveEventStore watches", () => {
     store.add(m2);
     await flush();
     expect(watchMeta.getSnapshot()?.id).toBe(m2.id);
-    expect(watchNotes.getSnapshot().map((e) => e.id)).toEqual([m2.id]);
+    expect(watchNotes.getSnapshot().map((e) => e.id)).toStrictEqual([m2.id]);
     expect(store.get(m1.id)).toBeUndefined();
   });
 
@@ -269,7 +270,7 @@ describe("ReactiveEventStore watches", () => {
     store.add(a);
     store.add(m);
     store.add(del);
-    expect(inserted).toEqual([a.id, m.id, del.id]);
+    expect(inserted).toStrictEqual([a.id, m.id, del.id]);
   });
 });
 
@@ -361,15 +362,15 @@ describe("issue #125", () => {
   test("#7 query and hydrate keep LRU order (newest stay hottest)", () => {
     const store = new ReactiveEventStore({ maxEvents: 3 });
     const notes = [1, 2, 3, 4].map((t) => note(`n${t}`, t));
-    for (const n of notes) store.add(n);
+    for (const n of notes) {store.add(n);}
     store.query([{ kinds: [1] }]);
     store.add(note("n5", 5));
     // t2 is least-recently-used; t4 (just returned by query) must survive
-    expect(store.query([{ kinds: [1] }]).map((e) => e.created_at)).toEqual([5, 4, 3]);
+    expect(store.query([{ kinds: [1] }]).map((e) => e.created_at)).toStrictEqual([5, 4, 3]);
 
     const hydrated = new ReactiveEventStore({ maxEvents: 2 });
     hydrated.hydrate([notes[2]!, notes[1]!, notes[0]!]);
-    expect(hydrated.query([{ kinds: [1] }]).map((e) => e.created_at)).toEqual([3, 2]);
+    expect(hydrated.query([{ kinds: [1] }]).map((e) => e.created_at)).toStrictEqual([3, 2]);
   });
 
   test("#8 a watched query does not evict the event just inserted", async () => {
@@ -400,7 +401,7 @@ describe("issue #125", () => {
     let calls = 0;
     watch.subscribe(() => {
       calls += 1;
-      if (calls === 1) store.add(b);
+      if (calls === 1) {store.add(b);}
     });
     watch.getSnapshot();
     store.add(a);
@@ -454,7 +455,7 @@ describe("issue #125", () => {
     expect(store.get(e.id)).toBeUndefined();
     expect(store.add(e, "wss://r.example")).toBe("accepted");
     expect(store.get(e.id.toUpperCase())?.id).toBe(e.id);
-    expect(store.seenOn(e.id)).toEqual([normalizeURL("wss://r.example")]);
+    expect(store.seenOn(e.id)).toStrictEqual([normalizeURL("wss://r.example")]);
 
     // (b) isDeleted coordinates are case-insensitive and cleared by a newer replacement
     const index = new MemoryIndex();
