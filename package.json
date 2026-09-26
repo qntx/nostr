@@ -187,6 +187,9 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
+    "@qntx/oxfmt": "^1.0.2",
+    "@qntx/oxlint": "^1.0.2",
+    "@qntx/tsconfig": "^1.0.1",
     "@types/node": "^26.6.2",
     "@types/ws": "8.18.1",
     "buffer": "6.0.3",

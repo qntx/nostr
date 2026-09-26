@@ -1,6 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { defineConfig, type UserConfig } from "vite-plus";
+
+import { defineConfig } from "vite-plus";
+import type { UserConfig } from "vite-plus";
+
+import { fmt } from "@qntx/oxfmt";
+import { config as lintConfig, merge } from "@qntx/oxlint";
 
 const packWasm = process.env.WASM_PACK === "1";
 const wasmTest = process.env.WASM_TEST === "1";
@@ -9,7 +14,9 @@ const storeBench = process.env.STORE_BENCH === "1";
 /** Always declare ./wasm so `vp pack` without WASM_PACK does not strip the export. */
 export function applyPackExports(pkgExports: Record<string, unknown>): Record<string, unknown> {
   for (const [key, value] of Object.entries(pkgExports)) {
-    if (typeof value !== "string" || !value.endsWith(".mjs")) continue;
+    if (typeof value !== "string" || !value.endsWith(".mjs")) {
+      continue;
+    }
     pkgExports[key] = {
       types: value.replace(/\.mjs$/, ".d.mts"),
       import: value,
@@ -30,9 +37,13 @@ function wasmUrlAsset() {
   return {
     name: "wasm-url-asset",
     resolveId(id: string, importer: string | undefined) {
-      if (!id.endsWith(".wasm?url")) return;
+      if (!id.endsWith(".wasm?url")) {
+        return undefined;
+      }
       const bare = id.slice(0, -"?url".length);
-      const from = importer ? path.dirname(importer.split("?")[0] ?? importer) : process.cwd();
+      const imported = importer === undefined ? importer : importer.split("?")[0];
+      const from =
+        imported === undefined || imported === "" ? process.cwd() : path.dirname(imported);
       const file = path.resolve(from, bare);
       if (!existsSync(file)) {
         throw new Error(`missing wasm asset ${file}`);
@@ -45,7 +56,9 @@ function wasmUrlAsset() {
       },
       id: string,
     ) {
-      if (!id.startsWith("\0wasm-url:")) return;
+      if (!id.startsWith("\0wasm-url:")) {
+        return undefined;
+      }
       const file = id.slice("\0wasm-url:".length);
       const ref = this.emitFile({
         type: "asset",
@@ -114,13 +127,43 @@ const config: UserConfig = defineConfig({
         : ["tests/**/*.{test,spec}.ts"],
     exclude: ["3rdparty/**", "node_modules/**", "dist/**"],
   },
-  lint: {
-    options: {
-      typeAware: true,
-      typeCheck: true,
-    },
+  lint: merge(lintConfig, {
+    ignorePatterns: [
+      ...lintConfig.ignorePatterns,
+      "3rdparty/**",
+      "target/**",
+      "src/wasm/generated/**",
+      ".hermes-smoke.iife.js",
+    ],
+    overrides: [
+      {
+        files: ["src/nips/nip77.ts", "src/wasm/abi.ts", "tests/hermes/globals.ts", "wasm-tests/**"],
+        rules: {
+          // Bitwise ops are the binary format in these files (negentropy
+          // varints/fingerprints, the u32 wasm ABI, the Hermes xorshift/UTF-8
+          // test shims, and the wasm benches driving that ABI).
+          "eslint/no-bitwise": "off",
+        },
+      },
+      {
+        files: ["bench/**", "scripts/**", "wasm-tests/**"],
+        rules: {
+          // Bench and maintenance scripts print their results.
+          "eslint/no-console": "off",
+        },
+      },
+    ],
+  }),
+  fmt: {
+    ...fmt,
+    ignorePatterns: [
+      ...fmt.ignorePatterns,
+      "3rdparty/**",
+      "target/**",
+      "src/wasm/generated/**",
+      "bun.lock",
+    ],
   },
-  fmt: {},
 });
 
 export default config;
