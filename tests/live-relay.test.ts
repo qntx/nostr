@@ -15,7 +15,7 @@ import {
   useWebSocketImplementation,
 } from "../src/index.ts";
 
-const LIVE = process.env.NOSTR_LIVE_RELAY?.trim();
+const LIVE = process.env["NOSTR_LIVE_RELAY"]?.trim();
 const describeLive = LIVE ? describe : describe.skip;
 
 async function ensureNodeWebSocket(): Promise<void> {

@@ -72,7 +72,8 @@ describe("event loader nsec/npub", () => {
       relays: [],
       index: new ReactiveEventStore(),
     });
-    const err = syncThrow( async () => loaders.event(nsec));
+    // oxlint-disable-next-line typescript/promise-function-async -- asserting the synchronous throw
+    const err = syncThrow(() => loaders.event(nsec));
     expect(err).toBeInstanceOf(Nip19Error);
     expect((err as Nip19Error).message).toBe("cannot load event from nsec");
   });
@@ -86,7 +87,8 @@ describe("event loader nsec/npub", () => {
       relays: [],
       index: new ReactiveEventStore(),
     });
-    const err = syncThrow( async () => loaders.event(npub));
+    // oxlint-disable-next-line typescript/promise-function-async -- asserting the synchronous throw
+    const err = syncThrow(() => loaders.event(npub));
     expect(err).toBeInstanceOf(Nip19Error);
     expect((err as Nip19Error).message).toBe("cannot load event from npub");
   });
@@ -113,9 +115,9 @@ describe("OutboxFeed closed", () => {
 describe("DataLoader batch length", () => {
   test("values.length !== keys.length rejects LoaderError", async () => {
     let batchLen = 0;
-    const loader = new DataLoader<string, string>(async (keys) => {
+    const loader = new DataLoader<string, string>((keys) => {
       batchLen = keys.length;
-      return [];
+      return Promise.resolve([]);
     });
     const a = loader.load("a");
     const b = loader.load("b");
@@ -141,10 +143,10 @@ describe("wasm HTTP load", () => {
     const prev = globalThis.fetch;
     let fetchCalls = 0;
     globalThis.fetch = (async (input: URL | string) => {
-      const url = input instanceof URL ? input.href : String(input);
+      const url = input instanceof URL ? input.href : input;
       if (url !== href) {return prev(input);}
       fetchCalls += 1;
-      return { ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) };
+      return { ok: false, status: 404, arrayBuffer: () => new ArrayBuffer(0) };
     }) as typeof fetch;
     try {
       const err = await captureError(loadNostrWasm({ module: new URL(href) }));

@@ -176,7 +176,7 @@ describe("Negentropy algorithm", () => {
       new Negentropy(storageFromEvents(alice)),
       new Negentropy(storageFromEvents(bob)),
     );
-    expect(have.sort()).toStrictEqual([alice[7]!.id, alice[33]!.id].sort());
+    expect(have.toSorted()).toStrictEqual([alice[7]!.id, alice[33]!.id].toSorted());
     expect(need).toStrictEqual([extra.id]);
   });
 
@@ -196,7 +196,7 @@ describe("Negentropy algorithm", () => {
         const out = resp.reconcile(hex);
         incoming = out.nextMessage ?? PROTOCOL_VERSION.toString(16);
       },
-      next: async () => {
+      next: () => {
         if (incoming === undefined) {throw new Error("missing incoming");}
         return incoming;
       },
@@ -214,7 +214,7 @@ describe("Negentropy algorithm", () => {
       storage,
       openingSend: () => {},
       msgSend: () => {},
-      next: async () => {
+      next: () => {
         nextCalls += 1;
         return mismatch;
       },
@@ -285,9 +285,9 @@ describe("Relay.negReconcile + Client.sync", () => {
   test("fake relay answers an unsupported NEG version with NEG-MSG 61", async () => {
     net.relay("wss://neg.example");
     const ws = new net.websocketImplementation("wss://neg.example") as unknown as {
-      addEventListener(t: string, l: (ev: { data: string }) => void): void;
-      send(data: string): void;
-      close(): void;
+      addEventListener: (t: string, l: (ev: { data: string }) => void) => void
+      send: (data: string) => void
+      close: () => void
     };
     const reply = new Promise<unknown>((resolve) => {
       ws.addEventListener("message", (ev) => resolve(JSON.parse(ev.data)));
@@ -586,7 +586,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         return out;
       },
       get:  async (id) => inner.get(id),
-      query: async () => {
+      query: () => {
         throw new Error("query should not be called");
       },
       count:  async (filters) => inner.count(filters),
@@ -622,32 +622,22 @@ describe("Relay.negReconcile + Client.sync", () => {
     net.relay("wss://neg.example").seed([remote]);
     let method = "";
     const store: EventStore = {
-      async put(_event: Event): Promise<PutResult> {
+      put: (_event: Event): Promise<PutResult> => {
         method = "put";
-        throw new Error("disk full");
+        return Promise.reject(new Error("disk full"));
       },
-      async putMany(_events: ReadonlyArray<Event>): Promise<PutResult[]> {
+      putMany: (_events: ReadonlyArray<Event>): Promise<PutResult[]> => {
         method = "putMany";
-        throw new Error("disk full");
+        return Promise.reject(new Error("disk full"));
       },
-      async get() {
-        return undefined;
-      },
-      async query(_filters: Filter[]) {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
+      get: () => Promise.resolve(undefined),
+      query: (_filters: Filter[]) => Promise.resolve([]),
+      count: () => Promise.resolve(0),
+      negentropyItems: () => Promise.resolve([]),
+      remove: () => Promise.resolve(0),
+      clear: () => Promise.resolve(),
+      getOutboxBound: () => Promise.resolve(undefined),
+      setOutboxBound: () => Promise.resolve(),
     };
     const client = Client.builder()
       .storage(store)
@@ -674,32 +664,22 @@ describe("Relay.negReconcile + Client.sync", () => {
     net.relay("wss://neg.example").seed([remote]);
     let method = "";
     const store: EventStore = {
-      async put(_event: Event): Promise<PutResult> {
+      put: (_event: Event): Promise<PutResult> => {
         method = "put";
-        throw new Error("disk full");
+        return Promise.reject(new Error("disk full"));
       },
-      async putMany(_events: ReadonlyArray<Event>): Promise<PutResult[]> {
+      putMany: (_events: ReadonlyArray<Event>): Promise<PutResult[]> => {
         method = "putMany";
-        throw new Error("disk full");
+        return Promise.reject(new Error("disk full"));
       },
-      async get() {
-        return undefined;
-      },
-      async query(_filters: Filter[]) {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
+      get: () => Promise.resolve(undefined),
+      query: (_filters: Filter[]) => Promise.resolve([]),
+      count: () => Promise.resolve(0),
+      negentropyItems: () => Promise.resolve([]),
+      remove: () => Promise.resolve(0),
+      clear: () => Promise.resolve(),
+      getOutboxBound: () => Promise.resolve(undefined),
+      setOutboxBound: () => Promise.resolve(),
     };
     const client = Client.builder()
       .storage(store)
@@ -729,7 +709,7 @@ describe("Relay.negReconcile + Client.sync", () => {
     const inner = new MemoryEventStore();
     let putManyCalls = 0;
     const store = wrapEventStore(inner, {
-      putMany: async () => {
+      putMany: () => {
         putManyCalls += 1;
         throw new Error("disk full");
       },
@@ -761,7 +741,7 @@ describe("Relay.negReconcile + Client.sync", () => {
     expect(summary.received).toStrictEqual([]);
     expect(summary.remote).toHaveLength(200);
     expect(new Set(summary.remote)).toStrictEqual(new Set(remotes.map((event) => event.id)));
-    expect(Object.keys(summary.persistFailures).sort()).toStrictEqual([...fetchedIds].sort());
+    expect(Object.keys(summary.persistFailures).toSorted()).toStrictEqual([...fetchedIds].toSorted());
     for (const id of fetchedIds) {
       expect(summary.persistFailures[id]).toBe("disk full");
     }
@@ -973,30 +953,16 @@ describe("Relay.negReconcile + Client.sync", () => {
       return false;
     };
     const store: EventStore = {
-      async put() {
-        return "rejected";
-      },
-      async putMany(events) {
-        return events.map(() => "rejected");
-      },
-      async get() {
-        return undefined;
-      },
-      async query() {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
+      put: () => Promise.resolve<PutResult>("rejected"),
+      putMany: (events) => Promise.resolve(events.map((): PutResult => "rejected")),
+      get: () => Promise.resolve(undefined),
+      query: () => Promise.resolve([]),
+      count: () => Promise.resolve(0),
+      negentropyItems: () => Promise.resolve([]),
+      remove: () => Promise.resolve(0),
+      clear: () => Promise.resolve(),
+      getOutboxBound: () => Promise.resolve(undefined),
+      setOutboxBound: () => Promise.resolve(),
     };
     const client = Client.builder()
       .storage(store)
