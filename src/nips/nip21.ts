@@ -8,7 +8,8 @@ import { decode } from "./nip19.ts";
 import type { DecodedResult } from "./nip19.ts";
 
 /** Matches `nostr:<bech32>` (not anchored). */
-export const NOSTR_URI_REGEX = /nostr:([a-z0-9]+1[02-9ac-hj-np-z]+)/i;
+// oxlint-disable-next-line no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
+export const NOSTR_URI_REGEX: RegExp = /nostr:([a-z0-9]+1[02-9ac-hj-np-z]+)/i;
 
 export type NostrURI = {
   /** Full URI including `nostr:` */

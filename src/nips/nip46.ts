@@ -7,7 +7,8 @@ import { NostrError } from "../core/error.ts";
  */
 import { assertHex32, isHex32 } from "../core/util.ts";
 
-export const BUNKER_REGEX = /^bunker:\/\/([0-9a-fA-F]{64})\??([?/\w:.=&%-]*)$/;
+// oxlint-disable-next-line no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
+export const BUNKER_REGEX: RegExp = /^bunker:\/\/([0-9a-fA-F]{64})\??([?/\w:.=&%-]*)$/;
 
 export type BunkerPointer = {
   /** Remote signer / bunker public key (hex). */

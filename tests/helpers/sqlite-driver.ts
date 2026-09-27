@@ -75,21 +75,21 @@ export class SqliteTestDriver implements SqlDriver {
     throw injected.error;
   }
 
-  // oxlint-disable-next-line typescript/require-await -- implements the async SqlDriver interface
   async exec(sql: string): Promise<void> {
+    await Promise.resolve();
     this.#guard(sql);
     this.#db.exec(sql);
   }
 
-  // oxlint-disable-next-line typescript/require-await -- implements the async SqlDriver interface
   async run(sql: string, params: ReadonlyArray<SqlValue> = []): Promise<{ changes: number }> {
+    await Promise.resolve();
     this.#guard(sql);
     const result = this.#db.prepare(sql).run(...params);
     return { changes: Number(result.changes) };
   }
 
-  // oxlint-disable-next-line typescript/require-await -- implements the async SqlDriver interface
   async all<Row>(sql: string, params: ReadonlyArray<SqlValue> = []): Promise<Row[]> {
+    await Promise.resolve();
     this.#guard(sql);
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- row shape is the caller-declared Row, same as SqlDriver.all
     return this.#db.prepare(sql).all(...params) as Row[];

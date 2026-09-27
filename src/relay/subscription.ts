@@ -45,7 +45,7 @@ export class Subscription {
   /** Inclusive NIP-01 `since` watermark from verified EVENTs. */
   lastCreatedAt: number | undefined;
   /** Event ids at `lastCreatedAt` (same-second reconnect dedup). Not all seen ids. */
-  readonly idsAtWatermark = new Set<string>();
+  readonly idsAtWatermark: Set<string> = new Set<string>();
   readonly #sendClose: (id: string) => void;
   readonly #abort: (() => void) | undefined;
 

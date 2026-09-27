@@ -72,9 +72,9 @@ export function planDeletion(
 
 /** In-memory NIP-09 tombstones shared by MemoryEventStore and IndexedDbEventStore. */
 export class DeletionState {
-  readonly ids = new Set<string>();
-  readonly pending = new Map<string, string>();
-  readonly coordinates = new Map<string, number>();
+  readonly ids: Set<string> = new Set<string>();
+  readonly pending: Map<string, string> = new Map<string, string>();
+  readonly coordinates: Map<string, number> = new Map<string, number>();
 
   clear(): void {
     this.ids.clear();

@@ -15,5 +15,5 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "wasm-tests"]
 }
