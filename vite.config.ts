@@ -122,12 +122,20 @@ const config: UserConfig = defineConfig({
   test: {
     include: wasmTest
       ? ["wasm-tests/**/*.ts"]
-      : (storeBench
+      : storeBench
         ? ["bench/**/*.ts"]
-        : ["tests/**/*.{test,spec}.ts"]),
+        : ["tests/**/*.{test,spec}.ts"],
     exclude: ["3rdparty/**", "node_modules/**", "dist/**"],
   },
   lint: merge(lintConfig, {
+    rules: {
+      // oxfmt normalizes hex literals to lowercase, so the linter's
+      // uppercase-only rule can never be satisfied together with `vp fmt`.
+      "unicorn/number-literal-case": "off",
+      // oxfmt strips "unnecessary" parentheses, including the ones this rule
+      // requires around nested ternaries — the two can never both pass.
+      "unicorn/no-nested-ternary": "off",
+    },
     ignorePatterns: [
       ...lintConfig.ignorePatterns,
       "3rdparty/**",
