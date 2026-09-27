@@ -5,13 +5,21 @@ import type { NostrSigner } from "../signer/types.ts";
 import type { StorageError } from "../storage/error.ts";
 import type { EventStore } from "../storage/types.ts";
 import type { ReactiveEventStore } from "../store/reactive.ts";
-// oxlint-disable-next-line import/no-cycle -- Client is used only inside build(), after module init
-import { Client } from "./client.ts";
+import type { Client } from "./client.ts";
 import type { ClientOptions } from "./types.ts";
 
-/** Fluent constructor for {@link Client}. */
+/**
+ * Fluent constructor for {@link Client}. The constructor is supplied by {@link Client.builder} so
+ * this module never imports the `Client` value, keeping the client/builder dependency
+ * one-directional.
+ */
 export class ClientBuilder {
   #opts: ClientOptions = {};
+  readonly #newClient: (opts: ClientOptions) => Client;
+
+  constructor(newClient: (opts: ClientOptions) => Client) {
+    this.#newClient = newClient;
+  }
 
   signer(signer: NostrSigner): this {
     this.#opts = { ...this.#opts, signer };
@@ -138,6 +146,6 @@ export class ClientBuilder {
   }
 
   build(): Client {
-    return new Client(this.#opts);
+    return this.#newClient(this.#opts);
   }
 }

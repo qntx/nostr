@@ -22,7 +22,6 @@ import { MemoryIndex } from "../storage/memory-index.ts";
 import { MemoryEventStore } from "../storage/memory.ts";
 import type { EventStore } from "../storage/types.ts";
 import { ReactiveEventStore } from "../store/reactive.ts";
-// oxlint-disable-next-line import/no-cycle -- ClientBuilder is used only inside the static builder(), after module init
 import { ClientBuilder } from "./builder.ts";
 import {
   fetchPrivateMessages,
@@ -117,7 +116,7 @@ export class Client {
   }
 
   static builder(): ClientBuilder {
-    return new ClientBuilder();
+    return new ClientBuilder((opts) => new Client(opts));
   }
 
   get signer(): NostrSigner | undefined {
