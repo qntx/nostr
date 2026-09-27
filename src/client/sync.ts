@@ -1,12 +1,12 @@
 import type { Event } from "../core/event.ts";
-import { canonicalizeFilter } from '../core/filter.ts';
-import type { Filter } from '../core/filter.ts';
-import { storageFromItems } from '../nips/nip77.ts';
-import type { NegentropyStorageVector } from '../nips/nip77.ts';
+import { canonicalizeFilter } from "../core/filter.ts";
+import type { Filter } from "../core/filter.ts";
+import { storageFromItems } from "../nips/nip77.ts";
+import type { NegentropyStorageVector } from "../nips/nip77.ts";
 import type { Pool } from "../relay/pool.ts";
 import type { EventStore, PutResult } from "../storage/types.ts";
-import { SyncDirection } from './types.ts';
-import type { SyncOptions, SyncSummary } from './types.ts';
+import { SyncDirection } from "./types.ts";
+import type { SyncOptions, SyncSummary } from "./types.ts";
 
 export type SyncDeps = {
   pool: Pool;
@@ -70,11 +70,11 @@ export async function syncToRelay(
   deps.assertAlive();
   deps.throwIfAborted(opts?.signal);
   const direction = opts?.direction ?? SyncDirection.Down;
-  filter = canonicalizeFilter(filter);
-  const items = await deps.storage.negentropyItems(filter);
+  const canon = canonicalizeFilter(filter);
+  const items = await deps.storage.negentropyItems(canon);
   const storage: NegentropyStorageVector = storageFromItems(items);
   const relay = await deps.pool.ensureRelay(url, { signal: opts?.signal });
-  const { have, need } = await relay.negReconcile(filter, storage, {
+  const { have, need } = await relay.negReconcile(canon, storage, {
     timeoutMs: opts?.timeoutMs,
     signal: opts?.signal,
   });
@@ -88,38 +88,40 @@ export async function syncToRelay(
     persistFailures: {},
   };
 
-  if (opts?.dryRun) {return summary;}
+  if (opts?.dryRun === true) {
+    return summary;
+  }
 
-  if (direction === SyncDirection.Up || direction === SyncDirection.Both) {
-    if (have.length > 0) {
-      const found = await deps.storage.query([{ ids: have }]);
-      const foundById = new Map(found.map((event) => [event.id, event]));
-      for (const id of have) {
-        if (!foundById.has(id)) {
-          summary.sendFailures[id] = "event not found in local store";
-        }
+  if ((direction === SyncDirection.Up || direction === SyncDirection.Both) && have.length > 0) {
+    const found = await deps.storage.query([{ ids: have }]);
+    const foundById = new Map(found.map((event) => [event.id, event]));
+    for (const id of have) {
+      if (!foundById.has(id)) {
+        summary.sendFailures[id] = "event not found in local store";
       }
-      for (let i = 0; i < found.length; i += SYNC_UPLOAD_CONCURRENCY) {
-        const chunk = found.slice(i, i + SYNC_UPLOAD_CONCURRENCY);
-        await Promise.all(
-          chunk.map(async (event) => {
-            try {
-              const results = await deps.pool.publish([url], event, {
-                timeoutMs: opts?.timeoutMs,
-              });
-              const ok = results.some((r) => r.result?.ok);
-              if (ok) {summary.sent.push(event.id);}
-              else {
-                summary.sendFailures[event.id] =
-                  results[0]?.error ?? results[0]?.result?.message ?? "publish failed";
-              }
-            } catch (error) {
+    }
+    for (let i = 0; i < found.length; i += SYNC_UPLOAD_CONCURRENCY) {
+      const chunk = found.slice(i, i + SYNC_UPLOAD_CONCURRENCY);
+      // Upload chunks are rate-limited serially.
+      // oxlint-disable-next-line no-await-in-loop
+      await Promise.all(
+        chunk.map(async (event) => {
+          try {
+            const results = await deps.pool.publish([url], event, {
+              timeoutMs: opts?.timeoutMs,
+            });
+            const ok = results.some((r) => r.result?.ok === true);
+            if (ok) {
+              summary.sent.push(event.id);
+            } else {
               summary.sendFailures[event.id] =
-                error instanceof Error ? error.message : String(error);
+                results[0]?.error ?? results[0]?.result?.message ?? "publish failed";
             }
-          }),
-        );
-      }
+          } catch (error) {
+            summary.sendFailures[event.id] = error instanceof Error ? error.message : String(error);
+          }
+        }),
+      );
     }
   }
 
@@ -130,25 +132,34 @@ export async function syncToRelay(
       deps.throwIfAborted(opts?.signal);
       // Every relay that delivered an event is recorded once it is ingested.
       const urlsById = new Map<string, string[]>();
+      // Id batches are fetched serially so backpressure stays bounded.
+      // oxlint-disable-next-line no-await-in-loop
       const events = await deps.pool.fetch([url], [{ ids: batch }], {
         timeoutMs: opts?.timeoutMs,
         signal: opts?.signal,
         onevent: shouldObserve
           ? (event, relayUrl) => {
               const urls = urlsById.get(event.id);
-              if (urls === undefined) {urlsById.set(event.id, [relayUrl]);}
-              else if (!urls.includes(relayUrl)) {urls.push(relayUrl);}
+              if (urls === undefined) {
+                urlsById.set(event.id, [relayUrl]);
+              } else if (!urls.includes(relayUrl)) {
+                urls.push(relayUrl);
+              }
             }
           : undefined,
       });
       if (!shouldObserve) {
-        for (const event of events) {summary.received.push(event.id);}
+        for (const event of events) {
+          summary.received.push(event.id);
+        }
         continue;
       }
       const ingestAll = (event: Event): void => {
         const urls = urlsById.get(event.id) ?? [];
         deps.ingest(event, urls[0], { persist: false });
-        for (let u = 1; u < urls.length; u++) {deps.markSeen(event.id, urls[u]!);}
+        for (const url of urls.slice(1)) {
+          deps.markSeen(event.id, url);
+        }
       };
       if (!deps.persistEvents) {
         for (const event of events) {
@@ -161,15 +172,20 @@ export async function syncToRelay(
       // through the ingest path with persistence already done.
       let results: PutResult[];
       try {
+        // Persisted serially per batch so failures land on the right ids.
+        // oxlint-disable-next-line no-await-in-loop
         results = await deps.storage.putMany(events);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        for (const event of events) {summary.persistFailures[event.id] = message;}
+        for (const event of events) {
+          summary.persistFailures[event.id] = message;
+        }
         break;
       }
-      for (let j = 0; j < events.length; j++) {
-        const event = events[j]!;
-        if (results[j] === "rejected" || results[j] === "invalid") {continue;}
+      for (const [j, event] of events.entries()) {
+        if (results[j] === "rejected" || results[j] === "invalid") {
+          continue;
+        }
         ingestAll(event);
         summary.received.push(event.id);
       }
@@ -191,7 +207,9 @@ export async function sync(
 ): Promise<SyncSummary> {
   deps.assertAlive();
   const urls = deps.defaultRelays(opts?.relays ? [...opts.relays] : undefined);
-  const results = await Promise.allSettled(urls.map( async (url) => syncToRelay(deps, url, filter, opts)));
+  const results = await Promise.allSettled(
+    urls.map(async (url) => syncToRelay(deps, url, filter, opts)),
+  );
   let merged = emptySummary();
   let fulfilled = 0;
   let firstRejection: unknown;
@@ -203,6 +221,8 @@ export async function sync(
       firstRejection ??= result.reason;
     }
   }
-  if (urls.length > 0 && fulfilled === 0) {throw firstRejection;}
+  if (urls.length > 0 && fulfilled === 0) {
+    throw firstRejection;
+  }
   return merged;
 }

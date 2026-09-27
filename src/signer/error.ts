@@ -5,4 +5,6 @@ import { NostrError } from "../core/error.ts";
  * {@link import("../relay/relay.ts").Relay} catches it and ignores the challenge: no AUTH frame is
  * sent and the connection stays open.
  */
-export class NoSignerError extends NostrError {}
+export class NoSignerError extends NostrError {
+  override name = "NoSignerError";
+}

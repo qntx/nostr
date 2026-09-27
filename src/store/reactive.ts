@@ -1,5 +1,5 @@
-import { itemCompare } from '../core/event.ts';
-import type { Event } from '../core/event.ts';
+import { itemCompare } from "../core/event.ts";
+import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { filterFingerprint, matchFilters } from "../core/filter.ts";
 import { invokeSafely } from "../core/report.ts";
@@ -10,9 +10,9 @@ import type { PutResult } from "../storage/types.ts";
 
 /** A reactive snapshot source compatible with `useSyncExternalStore`. */
 export type Watch<T> = {
-  subscribe(onChange: () => void): () => void;
-  getSnapshot(): T;
-}
+  subscribe: (onChange: () => void) => () => void;
+  getSnapshot: () => T;
+};
 
 /** Capacity options for {@link ReactiveEventStore}. */
 export type ReactiveEventStoreOptions = {
@@ -33,12 +33,12 @@ type WatchKind = "event" | "replaceable" | "query";
 type WatchHandle = {
   readonly kind: WatchKind;
   readonly key: string;
-  readonly filters: readonly Filter[] | undefined;
+  readonly filters: ReadonlyArray<Filter> | undefined;
   readonly subscribed: boolean;
-  readonly pinnedIds: readonly string[];
-  _markDirty(): void;
-  _notify(): void;
-}
+  readonly pinnedIds: ReadonlyArray<string>;
+  _markDirty: () => void;
+  _notify: () => void;
+};
 
 class WatchImpl<T> implements Watch<T>, WatchHandle {
   readonly store: ReactiveEventStore;
@@ -87,14 +87,20 @@ class WatchImpl<T> implements Watch<T>, WatchHandle {
     this.#subscribers.add(onChange);
     this.#pendingRemove = false;
     // Writes that landed while unregistered must not be lost.
-    if (wasUnsubscribed && this.#version !== this.store._version) {this.#dirty = true;}
+    if (wasUnsubscribed && this.#version !== this.store._version) {
+      this.#dirty = true;
+    }
     this.store._register(this);
     return () => {
       this.#subscribers.delete(onChange);
-      if (this.#subscribers.size > 0 || this.#pendingRemove) {return;}
+      if (this.#subscribers.size > 0 || this.#pendingRemove) {
+        return;
+      }
       this.#pendingRemove = true;
       queueMicrotask(() => {
-        if (this.#pendingRemove) {this.store._unregister(this);}
+        if (this.#pendingRemove) {
+          this.store._unregister(this);
+        }
       });
     };
   }
@@ -102,7 +108,9 @@ class WatchImpl<T> implements Watch<T>, WatchHandle {
   getSnapshot(): T {
     if (this.subscribed ? this.#dirty : this.#version !== this.store._version) {
       const next = this.compute();
-      if (!this.equal(next, this.#snapshot)) {this.#snapshot = next;}
+      if (!this.equal(next, this.#snapshot)) {
+        this.#snapshot = next;
+      }
       this.#version = this.store._version;
       this.#dirty = false;
     }
@@ -132,8 +140,14 @@ function sameRef(a: Event | undefined, b: Event | undefined): boolean {
 }
 
 function sameList(a: ReadonlyArray<Event>, b: ReadonlyArray<Event>): boolean {
-  if (a.length !== b.length) {return false;}
-  for (let i = 0; i < a.length; i++) {if (a[i] !== b[i]) return false;}
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -179,7 +193,7 @@ export class ReactiveEventStore {
   add(event: Event, relayUrl?: string): PutResult {
     const result = this.#index.put(event);
     // Stored events are canonical; seenOn keys are their lowercase ids.
-    const {id} = event;
+    const { id } = event;
     if (
       relayUrl !== undefined &&
       result !== "ephemeral" &&
@@ -196,14 +210,18 @@ export class ReactiveEventStore {
 
   addMany(events: ReadonlyArray<Event>, relayUrl?: string): PutResult[] {
     const results: PutResult[] = [];
-    for (const event of events) {results.push(this.add(event, relayUrl));}
+    for (const event of events) {
+      results.push(this.add(event, relayUrl));
+    }
     return results;
   }
 
   /** Record a relay sighting for an id already in the index. No notification. */
   markSeen(id: string, relayUrl: string): boolean {
     const key = id.toLowerCase();
-    if (this.#index.get(key) === undefined) {return false;}
+    if (this.#index.get(key) === undefined) {
+      return false;
+    }
     this.#recordSeen(key, relayUrl);
     return true;
   }
@@ -211,8 +229,10 @@ export class ReactiveEventStore {
   /** Bulk load (initial hydration): no seenOn, one batched notification. */
   hydrate(events: ReadonlyArray<Event>): void {
     // Insert oldest-first so recency ends with the newest entries hottest.
-    const sorted = [...events].sort(itemCompare);
-    for (const event of sorted) {this.#index.put(event);}
+    const sorted = [...events].toSorted(itemCompare);
+    for (const event of sorted) {
+      this.#index.put(event);
+    }
     this.#evictIfNeeded();
   }
 
@@ -230,7 +250,9 @@ export class ReactiveEventStore {
 
   get(id: string): Event | undefined {
     const event = this.#index.get(id);
-    if (event) {this.#touch(event.id);}
+    if (event) {
+      this.#touch(event.id);
+    }
     return event;
   }
 
@@ -240,7 +262,9 @@ export class ReactiveEventStore {
 
   getByAddress(address: string): Event | undefined {
     const event = this.#index.getByAddress(address);
-    if (event) {this.#touch(event.id);}
+    if (event) {
+      this.#touch(event.id);
+    }
     return event;
   }
 
@@ -248,7 +272,9 @@ export class ReactiveEventStore {
     const events = this.#index.query(filters);
     // Results come back newest-first; touch oldest→newest so the newest
     // entries end up hottest in the recency order.
-    for (let i = events.length - 1; i >= 0; i -= 1) {this.#touch(events[i]!.id);}
+    for (const event of events.toReversed()) {
+      this.#touch(event.id);
+    }
     return events;
   }
 
@@ -310,12 +336,13 @@ export class ReactiveEventStore {
         return;
       case "query":
         this.#queryRegistry.add(watch);
-        return;
     }
   }
 
   _unregister(watch: WatchHandle): void {
-    if (watch.subscribed) {return;}
+    if (watch.subscribed) {
+      return;
+    }
     switch (watch.kind) {
       case "event":
         removeWatch(this.#idWatches, watch.key, watch);
@@ -325,14 +352,18 @@ export class ReactiveEventStore {
         return;
       case "query":
         this.#queryRegistry.delete(watch);
-        if (this.#queryCache.get(watch.key) === watch) {this.#queryCache.delete(watch.key);}
-        return;
+        if (this.#queryCache.get(watch.key) === watch) {
+          this.#queryCache.delete(watch.key);
+        }
     }
   }
 
   #touch(id: string): void {
-    if (this.#recency.delete(id)) {this.#recency.add(id);}
-    else {this.#recency.add(id);}
+    if (this.#recency.delete(id)) {
+      this.#recency.add(id);
+    } else {
+      this.#recency.add(id);
+    }
   }
 
   #recordSeen(id: string, relayUrl: string): void {
@@ -342,11 +373,15 @@ export class ReactiveEventStore {
       urls = [];
       this.#seenOn.set(id, urls);
     }
-    if (!urls.includes(url) && urls.length < SEEN_ON_PER_ID) {urls.push(url);}
+    if (!urls.includes(url) && urls.length < SEEN_ON_PER_ID) {
+      urls.push(url);
+    }
     while (this.#seenOn.size > this.#maxSeenOnEntries) {
-      const oldest = this.#seenOn.keys().next();
-      if (oldest.done) {break;}
-      this.#seenOn.delete(oldest.value);
+      const oldest = this.#seenOn.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.#seenOn.delete(oldest);
     }
   }
 
@@ -367,11 +402,19 @@ export class ReactiveEventStore {
 
   #invalidateByEvent(event: Event): void {
     const byId = this.#idWatches.get(event.id);
-    if (byId) {for (const watch of byId) this.#markDirty(watch);}
+    if (byId) {
+      for (const watch of byId) {
+        this.#markDirty(watch);
+      }
+    }
     const address = eventAddress(event);
-    if (address) {
+    if (address !== undefined) {
       const byAddress = this.#addressWatches.get(address);
-      if (byAddress) {for (const watch of byAddress) this.#markDirty(watch);}
+      if (byAddress) {
+        for (const watch of byAddress) {
+          this.#markDirty(watch);
+        }
+      }
     }
     for (const watch of this.#queryRegistry) {
       if (watch.filters !== undefined && matchFilters(watch.filters, event)) {
@@ -382,12 +425,18 @@ export class ReactiveEventStore {
 
   #invalidateAll(): void {
     for (const watches of this.#idWatches.values()) {
-      for (const watch of watches) {this.#markDirty(watch);}
+      for (const watch of watches) {
+        this.#markDirty(watch);
+      }
     }
     for (const watches of this.#addressWatches.values()) {
-      for (const watch of watches) {this.#markDirty(watch);}
+      for (const watch of watches) {
+        this.#markDirty(watch);
+      }
     }
-    for (const watch of this.#queryRegistry) {this.#markDirty(watch);}
+    for (const watch of this.#queryRegistry) {
+      this.#markDirty(watch);
+    }
     this.#scheduleFlush();
   }
 
@@ -398,7 +447,9 @@ export class ReactiveEventStore {
   }
 
   #scheduleFlush(): void {
-    if (this.#flushScheduled) {return;}
+    if (this.#flushScheduled) {
+      return;
+    }
     this.#flushScheduled = true;
     queueMicrotask(() => {
       // Keep the flag set while flushing: writes re-entered from a
@@ -406,7 +457,9 @@ export class ReactiveEventStore {
       while (this.#dirty.size > 0) {
         const batch = [...this.#dirty];
         this.#dirty.clear();
-        for (const watch of batch) {watch._notify();}
+        for (const watch of batch) {
+          watch._notify();
+        }
       }
       this.#flushScheduled = false;
     });
@@ -415,33 +468,51 @@ export class ReactiveEventStore {
   #pinnedIds(): Set<string> {
     const pinned = new Set<string>();
     const collect = (watch: WatchHandle): void => {
-      for (const id of watch.pinnedIds) {pinned.add(id);}
+      for (const id of watch.pinnedIds) {
+        pinned.add(id);
+      }
     };
     for (const watches of this.#idWatches.values()) {
-      for (const watch of watches) {collect(watch);}
+      for (const watch of watches) {
+        collect(watch);
+      }
     }
     for (const watches of this.#addressWatches.values()) {
-      for (const watch of watches) {collect(watch);}
+      for (const watch of watches) {
+        collect(watch);
+      }
     }
-    for (const watch of this.#queryRegistry) {collect(watch);}
+    for (const watch of this.#queryRegistry) {
+      collect(watch);
+    }
     return pinned;
   }
 
   #evictIfNeeded(protectedId?: string): void {
-    if (this.#index.size <= this.#maxEvents) {return;}
+    if (this.#index.size <= this.#maxEvents) {
+      return;
+    }
     const pinned = this.#pinnedIds();
     const evicting: string[] = [];
     for (const id of this.#recency) {
-      if (this.#index.size - evicting.length <= this.#maxEvents) {break;}
-      if (pinned.has(id) || id === protectedId) {continue;}
+      if (this.#index.size - evicting.length <= this.#maxEvents) {
+        break;
+      }
+      if (pinned.has(id) || id === protectedId) {
+        continue;
+      }
       const event = this.#index.get(id);
-      if (event === undefined) {continue;}
+      if (event === undefined) {
+        continue;
+      }
       // Replaceable/addressable winners evict like any other event; the index
       // records a watermark so stale versions stay rejected afterwards.
       evicting.push(id);
     }
     this.#index.evict(evicting);
-    for (const id of evicting) {this.#recency.delete(id);}
+    for (const id of evicting) {
+      this.#recency.delete(id);
+    }
   }
 }
 
@@ -456,7 +527,11 @@ function addWatch(map: Map<string, Set<WatchHandle>>, key: string, watch: WatchH
 
 function removeWatch(map: Map<string, Set<WatchHandle>>, key: string, watch: WatchHandle): void {
   const set = map.get(key);
-  if (!set) {return;}
+  if (!set) {
+    return;
+  }
   set.delete(watch);
-  if (set.size === 0) {map.delete(key);}
+  if (set.size === 0) {
+    map.delete(key);
+  }
 }

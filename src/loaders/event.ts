@@ -2,8 +2,8 @@ import type { Event } from "../core/event.ts";
 import { isAddressableKind } from "../core/kind.ts";
 import { formatEventAddress } from "../core/tag.ts";
 import { isHex32 } from "../core/util.ts";
-import { decode, Nip19Error } from '../nips/nip19.ts';
-import type { AddressPointer, EventPointer } from '../nips/nip19.ts';
+import { decode, Nip19Error } from "../nips/nip19.ts";
+import type { AddressPointer, EventPointer } from "../nips/nip19.ts";
 import type { LoaderContext } from "./context.ts";
 
 export type EventRef = string | EventPointer | AddressPointer;
@@ -17,7 +17,9 @@ type ParsedRef = {
 };
 
 function dFilter(kind: number, identifier: string): { "#d"?: string[] } {
-  if (isAddressableKind(kind)) {return { "#d": [identifier] };}
+  if (isAddressableKind(kind)) {
+    return { "#d": [identifier] };
+  }
   return {};
 }
 
@@ -96,28 +98,41 @@ function parseRef(ref: EventRef): ParsedRef {
  * index, fetching from relays on a miss. The index is the durable store — the loader keeps only
  * in-flight coalescing, so a miss never blocks a later retry.
  */
-export function createEventLoader(ctx: LoaderContext) {
+export type EventLoader = {
+  load: (ref: EventRef) => Promise<Event | undefined>;
+};
+
+export function createEventLoader(ctx: LoaderContext): EventLoader {
   const inflight = new Map<string, Promise<Event | undefined>>();
   return {
-     async load(ref: EventRef): Promise<Event | undefined> {
+    // oxlint-disable-next-line typescript/promise-function-async -- parseRef must throw synchronously on malformed refs
+    load(ref: EventRef): Promise<Event | undefined> {
       const parsed = parseRef(ref);
       const hit = parsed.lookup(ctx);
-      if (hit !== undefined) {return Promise.resolve(hit);}
+      if (hit !== undefined) {
+        return Promise.resolve(hit);
+      }
       const pending = inflight.get(parsed.cacheKey);
-      if (pending) {return pending;}
-      const p = (async () => {
-        const relays = [...new Set([...parsed.hints, ...ctx.relays])];
-        if (relays.length === 0) {return undefined;}
-        await ctx.pool.fetch(relays, [parsed.filter], {
-          timeoutMs: ctx.fetchTimeoutMs,
-          onevent: (event, relayUrl) => ctx.ingest(event, relayUrl),
-        });
-        return parsed.lookup(ctx);
-      })().finally(() => inflight.delete(parsed.cacheKey));
+      if (pending !== undefined) {
+        return pending;
+      }
+      const p = (async (): Promise<Event | undefined> => {
+        try {
+          const relays = [...new Set([...parsed.hints, ...ctx.relays])];
+          if (relays.length === 0) {
+            return undefined;
+          }
+          await ctx.pool.fetch(relays, [parsed.filter], {
+            timeoutMs: ctx.fetchTimeoutMs,
+            onevent: (event, relayUrl) => ctx.ingest(event, relayUrl),
+          });
+          return parsed.lookup(ctx);
+        } finally {
+          inflight.delete(parsed.cacheKey);
+        }
+      })();
       inflight.set(parsed.cacheKey, p);
       return p;
     },
   };
 }
-
-export type EventLoader = ReturnType<typeof createEventLoader>;

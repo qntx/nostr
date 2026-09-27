@@ -42,7 +42,9 @@ export class LoaderContext {
   }
 
   addRelay(url: string): void {
-    if (!this.#relays.includes(url)) {this.#relays.push(url);}
+    if (!this.#relays.includes(url)) {
+      this.#relays.push(url);
+    }
   }
 
   removeRelay(url: string): void {

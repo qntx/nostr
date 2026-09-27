@@ -9,15 +9,21 @@ import { invokeSafely } from "../core/report.ts";
 import { Tag } from "../core/tag.ts";
 import { bytesToHex, isHex32 } from "../core/util.ts";
 import { decrypt, encrypt, getConversationKey } from "../nips/nip44.ts";
-import { Nip46Error, decodeNip46Response, encodeNip46Request, parseBunkerURL, parseNostrConnectURI } from '../nips/nip46.ts';
-import type { BunkerPointer, ClientMetadata, Nip46Request } from '../nips/nip46.ts';
+import {
+  Nip46Error,
+  decodeNip46Response,
+  encodeNip46Request,
+  parseBunkerURL,
+  parseNostrConnectURI,
+} from "../nips/nip46.ts";
+import type { BunkerPointer, ClientMetadata, Nip46Request } from "../nips/nip46.ts";
 import type { NostrSigner } from "./types.ts";
 
 /** Subscribe options used by NIP-46 transport (structural subset of Pool). */
 export type Nip46SubscribeOptions = {
-  signal?: AbortSignal;
-  onevent?: (event: Event) => void;
-  onclose?: (reason: string) => void;
+  signal?: AbortSignal | undefined;
+  onevent?: ((event: Event) => void) | undefined;
+  onclose?: ((reason: string) => void) | undefined;
 };
 
 /**
@@ -25,16 +31,16 @@ export type Nip46SubscribeOptions = {
  * constructed above the signer layer so `signer` never imports `relay` (ADR-0001).
  */
 export type Nip46Transport = {
-  subscribe(
+  subscribe: (
     relays: string[],
     filters: Filter[],
     opts?: Nip46SubscribeOptions,
-  ): { close: (reason?: string) => void };
-  publish(
+  ) => { close: (reason?: string) => void };
+  publish: (
     relays: string[],
     event: Event,
-  ): Promise<ReadonlyArray<{ result?: { ok: boolean; message: string }; error?: string }>>;
-  close(urls?: string[]): void;
+  ) => Promise<ReadonlyArray<{ result?: { ok: boolean; message: string }; error?: string }>>;
+  close: (urls?: string[]) => void;
 };
 
 /** Options for {@link Nip46Signer}: transport, timeouts, and relay hints. */
@@ -52,7 +58,7 @@ export type Nip46SignerOptions = {
    */
   relays?: string[];
   /** Bunker connection secret when the pointer or bunker:// URL has none. */
-  secret?: string | null;
+  secret?: string | undefined;
   /** Local client key used to encrypt RPC (not the remote user key). */
   clientSecretKey?: SecretKey | Uint8Array | string;
   /** Called when bunker returns `auth_url` for a pending request. */
@@ -71,15 +77,25 @@ export type Nip46SignerOptions = {
 };
 
 function resolveClientSecret(key?: SecretKey | Uint8Array | string): SecretKey {
-  if (key === undefined) {return SecretKey.generate();}
-  if (key instanceof SecretKey) {return key;}
-  if (typeof key === "string") {return SecretKey.fromHex(key);}
+  if (key === undefined) {
+    return SecretKey.generate();
+  }
+  if (key instanceof SecretKey) {
+    return key;
+  }
+  if (typeof key === "string") {
+    return SecretKey.fromHex(key);
+  }
   return SecretKey.fromBytes(key);
 }
 
 function resolveTransport(opts: Nip46SignerOptions): { pool: Nip46Transport; ownsPool: boolean } {
-  if (opts.pool) {return { pool: opts.pool, ownsPool: false };}
-  if (opts.createPool) {return { pool: opts.createPool(), ownsPool: true };}
+  if (opts.pool) {
+    return { pool: opts.pool, ownsPool: false };
+  }
+  if (opts.createPool) {
+    return { pool: opts.createPool(), ownsPool: true };
+  }
   throw new Nip46Error(
     "Nip46Signer requires pool or createPool (inject Pool from @qntx/nostr/relay)",
   );
@@ -91,7 +107,7 @@ function applyPointerOpts(pointer: BunkerPointer, opts: Nip46SignerOptions): Bun
     relays: [...pointer.relays],
     secret: pointer.secret,
   };
-  if (opts.secret !== undefined && next.secret == null) {
+  if (opts.secret !== undefined && next.secret === undefined) {
     next = { ...next, secret: opts.secret };
   }
 
@@ -99,10 +115,12 @@ function applyPointerOpts(pointer: BunkerPointer, opts: Nip46SignerOptions): Bun
   if (relays.length === 0) {
     throw new Nip46Error("no relays for bunker connection");
   }
-  if (next.relays.length > 0 && opts.relays?.length) {
+  if (next.relays.length > 0 && opts.relays !== undefined && opts.relays.length > 0) {
     const merged = [...next.relays];
     for (const r of opts.relays) {
-      if (!merged.includes(r)) {merged.push(r);}
+      if (!merged.includes(r)) {
+        merged.push(r);
+      }
     }
     return { ...next, relays: merged };
   }
@@ -119,7 +137,9 @@ function resolveBunkerPointer(input: string | BunkerPointer): BunkerPointer {
   }
 
   const bunker = parseBunkerURL(input);
-  if (bunker) {return bunker;}
+  if (bunker) {
+    return bunker;
+  }
 
   throw new Nip46Error("invalid bunker input (expected bunker:// URL or BunkerPointer)");
 }
@@ -269,12 +289,16 @@ export class Nip46Signer implements NostrSigner {
     return new Promise((resolve, reject) => {
       let settled = false;
       const finish = (err?: Error, signer?: Nip46Signer) => {
-        if (settled) {return;}
+        if (settled) {
+          return;
+        }
         settled = true;
         clearTimeout(timer);
         sub.close(err ? "failed" : "connected");
         if (err) {
-          if (ownsPool) {pool.close();}
+          if (ownsPool) {
+            pool.close();
+          }
           reject(err);
         } else if (signer) {
           resolve(signer);
@@ -295,7 +319,9 @@ export class Nip46Signer implements NostrSigner {
               const convKey = getConversationKey(sk.bytes, event.pubkey);
               const payload = decrypt(event.content, convKey);
               const response = decodeNip46Response(payload);
-              if (response.result !== params.secret) {return;}
+              if (response.result !== params.secret) {
+                return;
+              }
 
               const pointer: BunkerPointer = {
                 pubkey: event.pubkey.toLowerCase(),
@@ -304,12 +330,19 @@ export class Nip46Signer implements NostrSigner {
               };
               const signer = new Nip46Signer(sk, pointer, pool, ownsPool, opts);
               signer.#startSubscription();
-              void signer
-                .switchRelays()
-                .catch(() => undefined)
-                .then( async () => signer.getPublicKey())
-                .then(() => finish(undefined, signer))
-                .catch((error) => finish(error instanceof Error ? error : new Nip46Error(String(error))));
+              void (async () => {
+                try {
+                  await signer.switchRelays();
+                } catch {
+                  // Relay switch at connect time is best-effort.
+                }
+                try {
+                  await signer.getPublicKey();
+                  finish(undefined, signer);
+                } catch (error: unknown) {
+                  finish(error instanceof Error ? error : new Nip46Error(String(error)));
+                }
+              })();
             } catch {
               // ignore non-matching events
             }
@@ -344,18 +377,28 @@ export class Nip46Signer implements NostrSigner {
 
             if (result === "auth_url" && this.#listeners.has(id)) {
               const listener = this.#listeners.get(id);
-              if (!listener) {return;}
-              if (error) {invokeSafely(() => this.#onAuthUrl?.(error));}
+              if (!listener) {
+                return;
+              }
+              if (error !== undefined && error !== "") {
+                invokeSafely(() => this.#onAuthUrl?.(error));
+              }
               clearTimeout(listener.timer);
               listener.timer = this.#requestTimer(id, listener, this.#authTimeoutMs);
               return;
             }
 
             const listener = this.#dropRequest(id);
-            if (!listener) {return;}
-            if (error) {listener.reject(new Nip46Error(error));}
-            else if (result === undefined) {listener.reject(new Nip46Error("empty NIP-46 response"));}
-            else {listener.resolve(result);}
+            if (!listener) {
+              return;
+            }
+            if (error !== undefined && error !== "") {
+              listener.reject(new Nip46Error(error));
+            } else if (result === undefined) {
+              listener.reject(new Nip46Error("empty NIP-46 response"));
+            } else {
+              listener.resolve(result);
+            }
           } catch {
             // ignore decrypt failures from unrelated events
           }
@@ -372,15 +415,21 @@ export class Nip46Signer implements NostrSigner {
     const metadata = overrides?.metadata ?? this.#metadata;
     const perms = overrides?.perms ?? this.#perms;
     const params = [this.#pointer.pubkey, this.#pointer.secret ?? ""];
-    if (perms?.length || metadata) {
-      params.push(perms?.length ? perms.join(",") : "");
+    const hasPerms = perms !== undefined && perms.length > 0;
+    if (hasPerms || metadata !== undefined) {
+      params.push(hasPerms ? perms.join(",") : "");
     }
-    if (metadata) {
+    if (metadata !== undefined) {
       params.push(JSON.stringify(metadata));
     }
     const result = await this.#sendRequest("connect", params);
-    if (result === "ack") {return;}
-    if (this.#pointer.secret && result === this.#pointer.secret) {return;}
+    if (result === "ack") {
+      return;
+    }
+    const { secret } = this.#pointer;
+    if (secret !== undefined && secret !== "" && result === secret) {
+      return;
+    }
     throw new Nip46Error(`connect result is not ack or secret: ${result}`);
   }
 
@@ -388,9 +437,11 @@ export class Nip46Signer implements NostrSigner {
    * Ask the bunker for its preferred relay list and resubscribe when it changes. Spec result is a
    * JSON array of URLs, or `null` when nothing changes.
    */
-  async switchRelays(): Promise<string[] | null> {
+  async switchRelays(): Promise<string[] | undefined> {
     const resp = await this.#sendRequest("switch_relays", []);
-    if (resp === "null") {return null;}
+    if (resp === "null") {
+      return undefined;
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(resp);
@@ -415,7 +466,9 @@ export class Nip46Signer implements NostrSigner {
   async logout(): Promise<void> {
     try {
       const resp = await this.#sendRequest("logout", []);
-      if (resp !== "ack") {throw new Nip46Error(`logout result is not ack: ${resp}`);}
+      if (resp !== "ack") {
+        throw new Nip46Error(`logout result is not ack: ${resp}`);
+      }
     } finally {
       await this.close();
     }
@@ -423,13 +476,17 @@ export class Nip46Signer implements NostrSigner {
 
   async ping(): Promise<void> {
     const resp = await this.#sendRequest("ping", []);
-    if (resp !== "pong") {throw new Nip46Error(`ping result is not pong: ${resp}`);}
+    if (resp !== "pong") {
+      throw new Nip46Error(`ping result is not pong: ${resp}`);
+    }
   }
 
   async getPublicKey(): Promise<string> {
-    if (!this.#cachedRemotePubkey) {
+    if (this.#cachedRemotePubkey === undefined) {
       const pk = await this.#sendRequest("get_public_key", []);
-      if (!isHex32(pk.toLowerCase())) {throw new Nip46Error("bunker returned invalid pubkey");}
+      if (!isHex32(pk.toLowerCase())) {
+        throw new Nip46Error("bunker returned invalid pubkey");
+      }
       this.#cachedRemotePubkey = pk.toLowerCase();
     }
     return this.#cachedRemotePubkey;
@@ -476,6 +533,7 @@ export class Nip46Signer implements NostrSigner {
     return this.#sendRequest("nip44_decrypt", [peer, payload]);
   }
 
+  // oxlint-disable-next-line typescript/require-await -- NostrSigner is async; teardown is synchronous
   async close(): Promise<void> {
     this.#open = false;
     for (const [, listener] of this.#listeners) {
@@ -485,12 +543,18 @@ export class Nip46Signer implements NostrSigner {
     this.#listeners.clear();
     this.#sub?.close("signer closed");
     this.#sub = undefined;
-    if (this.#ownsPool) {this.#pool.close();}
+    if (this.#ownsPool) {
+      this.#pool.close();
+    }
   }
 
   async #sendRequest(method: string, params: string[]): Promise<string> {
-    if (!this.#open) {throw new Nip46Error("signer is closed");}
-    if (!this.#sub) {this.#startSubscription();}
+    if (!this.#open) {
+      throw new Nip46Error("signer is closed");
+    }
+    if (!this.#sub) {
+      this.#startSubscription();
+    }
 
     const id = bytesToHex(randomBytes(16));
     const req: Nip46Request = { id, method, params };
@@ -519,7 +583,7 @@ export class Nip46Signer implements NostrSigner {
       this.#dropRequest(id);
       throw error;
     }
-    if (!replies.some((reply) => reply.result?.ok)) {
+    if (!replies.some((reply) => reply.result?.ok === true)) {
       const listener = this.#dropRequest(id);
       const detail = replies
         .map((reply) => reply.error ?? reply.result?.message)
@@ -532,7 +596,9 @@ export class Nip46Signer implements NostrSigner {
 
   #dropRequest(id: string): PendingRequest | undefined {
     const listener = this.#listeners.get(id);
-    if (!listener) {return undefined;}
+    if (!listener) {
+      return undefined;
+    }
     clearTimeout(listener.timer);
     this.#listeners.delete(id);
     return listener;

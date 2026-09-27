@@ -196,4 +196,6 @@ export type SubscribePrivateMessagesOptions = {
 };
 
 /** Client lifecycle, configuration, or abort failure (not cryptographic). */
-export class ClientError extends NostrError {}
+export class ClientError extends NostrError {
+  override name = "ClientError";
+}

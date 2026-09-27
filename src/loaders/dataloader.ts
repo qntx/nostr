@@ -1,6 +1,8 @@
 import { NostrError } from "../core/error.ts";
 
-export class LoaderError extends NostrError {}
+export class LoaderError extends NostrError {
+  override name = "LoaderError";
+}
 
 /** Minimal request coalescer. Batches keys within a microtask; no global state. */
 export type BatchLoadFn<K, V> = (keys: ReadonlyArray<K>) => Promise<ReadonlyArray<V | Error>>;
@@ -28,21 +30,26 @@ export class DataLoader<K, V, C = K> {
 
   constructor(batchLoadFn: BatchLoadFn<K, V>, options: DataLoaderOptions<K, C> = {}) {
     this.#batchLoadFn = batchLoadFn;
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the default C = K makes this the identity for callers that omit cacheKeyFn
     this.#cacheKeyFn = options.cacheKeyFn ?? ((k: K) => k as unknown as C);
     this.#maxBatchSize = options.maxBatchSize ?? Number.POSITIVE_INFINITY;
     this.#useCache = options.cache !== false;
   }
 
-   async load(key: K): Promise<V> {
+  async load(key: K): Promise<V> {
     const cacheKey = this.#cacheKeyFn(key);
     if (this.#useCache) {
       const cached = this.#cache.get(cacheKey);
-      if (cached) {return cached;}
+      if (cached) {
+        return cached;
+      }
     }
     const inflight = this.#inflight.get(cacheKey);
-    if (inflight) {return inflight;}
+    if (inflight) {
+      return inflight;
+    }
 
-    const promise = new Promise<V>((resolve, reject) => {
+    const pending = new Promise<V>((resolve, reject) => {
       this.#queue.push({ key, resolve, reject });
       if (this.#queue.length >= this.#maxBatchSize) {
         this.#dispatch();
@@ -50,12 +57,19 @@ export class DataLoader<K, V, C = K> {
         this.#scheduled = true;
         queueMicrotask(() => this.#dispatch());
       }
-    }).finally(() => {
-      this.#inflight.delete(cacheKey);
     });
+    const promise = (async (): Promise<V> => {
+      try {
+        return await pending;
+      } finally {
+        this.#inflight.delete(cacheKey);
+      }
+    })();
 
     this.#inflight.set(cacheKey, promise);
-    if (this.#useCache) {this.#cache.set(cacheKey, promise);}
+    if (this.#useCache) {
+      this.#cache.set(cacheKey, promise);
+    }
     return promise;
   }
 
@@ -72,27 +86,42 @@ export class DataLoader<K, V, C = K> {
   #dispatch(): void {
     this.#scheduled = false;
     const batch = this.#queue.splice(0, this.#maxBatchSize);
-    if (batch.length === 0) {return;}
+    if (batch.length === 0) {
+      return;
+    }
 
     const keys = batch.map((b) => b.key);
-    void this.#batchLoadFn(keys)
-      .then((values) => {
-        if (values.length !== keys.length) {
-          const err = new LoaderError(
-            `DataLoader batch function must return array of length ${keys.length}, got ${values.length}`,
-          );
-          for (const item of batch) {item.reject(err);}
-          return;
+    void (async () => {
+      let values: ReadonlyArray<V | Error>;
+      try {
+        values = await this.#batchLoadFn(keys);
+      } catch (error: unknown) {
+        for (const item of batch) {
+          item.reject(error);
         }
-        for (let i = 0; i < batch.length; i++) {
-          const value = values[i]!;
-          if (value instanceof Error) {batch[i]!.reject(value);}
-          else {batch[i]!.resolve(value);}
+        return;
+      }
+      if (values.length !== keys.length) {
+        const err = new LoaderError(
+          `DataLoader batch function must return array of length ${keys.length}, got ${values.length}`,
+        );
+        for (const item of batch) {
+          item.reject(err);
         }
-      })
-      .catch((error) => {
-        for (const item of batch) item.reject(error);
-      });
+        return;
+      }
+      for (const [i, value] of values.entries()) {
+        const item = batch[i];
+        if (item === undefined) {
+          continue;
+        }
+        if (value instanceof Error) {
+          item.reject(value);
+        } else {
+          item.resolve(value);
+        }
+      }
+    })();
 
     if (this.#queue.length > 0) {
       this.#scheduled = true;

@@ -4,8 +4,8 @@ import type { Filter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
 import { normalizeURL } from "../core/util.ts";
 import { parseDmRelayList } from "../nips/nip17.ts";
-import { parseRelayList } from '../nips/nip65.ts';
-import type { RelayListItem } from '../nips/nip65.ts';
+import { parseRelayList } from "../nips/nip65.ts";
+import type { RelayListItem } from "../nips/nip65.ts";
 
 /** Relay routing state for one pubkey: NIP-65 outbox/inbox plus NIP-17 DM relays. */
 export type PubkeyRoutes = {
@@ -20,9 +20,9 @@ export type PubkeyRoutes = {
   /** `created_at` of the last accepted kind:10050 list. */
   dmUpdatedAt: number;
   /** Event id of the last accepted kind:10002 (NIP-01 equal-timestamp tie-break). */
-  relayListId?: string;
+  relayListId?: string | undefined;
   /** Event id of the last accepted kind:10050. */
-  dmListId?: string;
+  dmListId?: string | undefined;
 };
 
 /** A filter split by gossip routes: per-relay narrowed filters plus the unrouted remainder. */
@@ -105,10 +105,12 @@ export class Gossip {
   ): boolean {
     const pk = pubkey.toLowerCase();
     const prev = this.#lookup(pk) ?? emptyRoutes();
-    if (prev.updatedAt > updatedAt) {return false;}
+    if (prev.updatedAt > updatedAt) {
+      return false;
+    }
     if (
-      eventId &&
-      prev.relayListId &&
+      eventId !== undefined &&
+      prev.relayListId !== undefined &&
       prev.updatedAt === updatedAt &&
       !isReplaceableWinner(
         { created_at: updatedAt, id: eventId },
@@ -127,8 +129,12 @@ export class Gossip {
       } catch {
         continue;
       }
-      if (item.write && !write.includes(url)) {write.push(url);}
-      if (item.read && !read.includes(url)) {read.push(url);}
+      if (item.write && !write.includes(url)) {
+        write.push(url);
+      }
+      if (item.read && !read.includes(url)) {
+        read.push(url);
+      }
     }
 
     this.#put(pk, {
@@ -151,10 +157,12 @@ export class Gossip {
   ): boolean {
     const pk = pubkey.toLowerCase();
     const prev = this.#lookup(pk) ?? emptyRoutes();
-    if (prev.dmUpdatedAt > updatedAt) {return false;}
+    if (prev.dmUpdatedAt > updatedAt) {
+      return false;
+    }
     if (
-      eventId &&
-      prev.dmListId &&
+      eventId !== undefined &&
+      prev.dmListId !== undefined &&
       prev.dmUpdatedAt === updatedAt &&
       !isReplaceableWinner(
         { created_at: updatedAt, id: eventId },
@@ -172,7 +180,9 @@ export class Gossip {
       } catch {
         continue;
       }
-      if (!dm.includes(url)) {dm.push(url);}
+      if (!dm.includes(url)) {
+        dm.push(url);
+      }
     }
 
     this.#put(pk, {
@@ -205,8 +215,11 @@ export class Gossip {
   }
 
   clear(pubkey?: string): void {
-    if (pubkey) {this.#routes.delete(pubkey.toLowerCase());}
-    else {this.#routes.clear();}
+    if (pubkey !== undefined && pubkey !== "") {
+      this.#routes.delete(pubkey.toLowerCase());
+    } else {
+      this.#routes.clear();
+    }
   }
 
   get size(): number {
@@ -232,12 +245,8 @@ export class Gossip {
     }
 
     if (pTags && pTags.length > 0 && (!authors || authors.length === 0)) {
-      return this.#breakAuthors(
-        { ...filter, authors: undefined },
-        pTags,
-        "read",
-        (base, pubkeys) => ({ ...base, "#p": pubkeys }),
-      );
+      const { authors: _authors, ...base } = filter;
+      return this.#breakAuthors(base, pTags, "read", (b, pubkeys) => ({ ...b, "#p": pubkeys }));
     }
 
     // both authors and #p: send full filter to union of routes
@@ -251,11 +260,17 @@ export class Gossip {
         anyUnrouted = true;
         continue;
       }
-      for (const u of urls) {relays.add(u);}
+      for (const u of urls) {
+        relays.add(u);
+      }
     }
-    if (relays.size === 0) {return { perRelay: new Map(), remainder: filter };}
+    if (relays.size === 0) {
+      return { perRelay: new Map(), remainder: filter };
+    }
     const map = new Map<string, Filter>();
-    for (const url of relays) {map.set(url, { ...filter });}
+    for (const url of relays) {
+      map.set(url, { ...filter });
+    }
     return anyUnrouted ? { perRelay: map, remainder: filter } : { perRelay: map };
   }
 
@@ -287,7 +302,9 @@ export class Gossip {
       }
     }
 
-    if (!anyRoute) {return { perRelay: new Map(), remainder: filter };}
+    if (!anyRoute) {
+      return { perRelay: new Map(), remainder: filter };
+    }
 
     const map = new Map<string, Filter>();
     for (const [url, pks] of perRelay) {
@@ -313,9 +330,11 @@ export class Gossip {
     this.#routes.delete(pk);
     this.#routes.set(pk, routes);
     while (this.#routes.size > this.#maxPubkeys) {
-      const oldest = this.#routes.keys().next();
-      if (oldest.done) {break;}
-      this.#routes.delete(oldest.value);
+      const oldest = this.#routes.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.#routes.delete(oldest);
     }
   }
 }

@@ -5,6 +5,7 @@ import type { NostrSigner } from "../signer/types.ts";
 import type { StorageError } from "../storage/error.ts";
 import type { EventStore } from "../storage/types.ts";
 import type { ReactiveEventStore } from "../store/reactive.ts";
+// oxlint-disable-next-line import/no-cycle -- Client is used only inside build(), after module init
 import { Client } from "./client.ts";
 import type { ClientOptions } from "./types.ts";
 

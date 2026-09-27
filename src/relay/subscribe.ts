@@ -367,9 +367,13 @@ export async function fetchFilters(
       }
       settled = true;
       clearTimeout(timer);
-      sub.close(
-        err instanceof Error ? err.message : err === undefined ? "fetch complete" : "aborted",
-      );
+      let reason = "aborted";
+      if (err instanceof Error) {
+        reason = err.message;
+      } else if (err === undefined) {
+        reason = "fetch complete";
+      }
+      sub.close(reason);
       if (err === undefined) {
         resolve();
       } else {

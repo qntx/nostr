@@ -3,10 +3,17 @@ import type { Event } from "../core/event.ts";
 import { itemCompare } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Gossip } from "../gossip/gossip.ts";
-import { Nip17Error, buildChatMessageRumor, dmRelayListEventBuilder, normalizeRecipients, requireDmRelays, wrapDirectMessage } from '../nips/nip17.ts';
-import type { Recipient } from '../nips/nip17.ts';
-import { unwrap } from '../nips/nip59.ts';
-import type { Nip59Crypto } from '../nips/nip59.ts';
+import {
+  Nip17Error,
+  buildChatMessageRumor,
+  dmRelayListEventBuilder,
+  normalizeRecipients,
+  requireDmRelays,
+  wrapDirectMessage,
+} from "../nips/nip17.ts";
+import type { Recipient } from "../nips/nip17.ts";
+import { unwrap } from "../nips/nip59.ts";
+import type { Nip59Crypto } from "../nips/nip59.ts";
 import type { Pool, PoolPublishResult } from "../relay/pool.ts";
 import type {
   FetchPrivateMessagesOptions,
@@ -36,15 +43,18 @@ export type DmDeps = {
 export function giftWrapRelays(gossip: Gossip, event: Event): string[] {
   const targets: string[] = [];
   for (const tag of event.tags) {
-    if (tag[0] === "p" && tag[1]) {targets.push(tag[1].toLowerCase());}
+    if (tag[0] === "p" && tag[1] !== undefined) {
+      targets.push(tag[1].toLowerCase());
+    }
   }
   if (targets.length === 0) {
     throw new Nip17Error("gift wrap has no p-tag recipient");
   }
-  if (targets.length !== 1) {
+  const [target] = targets;
+  if (targets.length !== 1 || target === undefined) {
     throw new Nip17Error("gift wrap must have exactly one p-tag recipient");
   }
-  const relays = gossip.dmRelays(targets[0]!);
+  const relays = gossip.dmRelays(target);
   if (relays.length === 0) {
     throw new Nip17Error("no kind 10050 in gossip; use sendPrivateMessage or pass relays");
   }
@@ -89,7 +99,7 @@ export async function sendPrivateMessage(
     wraps.map(async ({ recipient, wrap }) => {
       const relays = requireDmRelays(recipient, deps.gossip.dmRelays(recipient));
       const results = await deps.pool.publish(relays, wrap, { timeoutMs: opts?.timeoutMs });
-      if (results.some((r) => r.result?.ok) && deps.wantObserve(opts?.observe)) {
+      if (results.some((r) => r.result?.ok === true) && deps.wantObserve(opts?.observe)) {
         deps.ingest(wrap);
       }
       return { recipient, wrap, results };
@@ -125,7 +135,9 @@ export async function fetchPrivateMessages(
       signal: opts?.signal,
       onevent: (event, relayUrl) => {
         let set = urls.get(event.id);
-        if (!set) {urls.set(event.id, (set = new Set()));}
+        if (!set) {
+          urls.set(event.id, (set = new Set()));
+        }
         set.add(relayUrl);
       },
     },
@@ -134,6 +146,7 @@ export async function fetchPrivateMessages(
   const byRumor = new Map<string, ReceivedPrivateMessage>();
   for (const wrap of events) {
     try {
+      // oxlint-disable-next-line no-await-in-loop -- unwraps run serially so ingest/seenOn keep relay order
       const rumor = await unwrap(crypto, wrap);
       const wrapUrls = urls.get(wrap.id);
       const firstUrl = wrapUrls?.values().next().value;
@@ -142,17 +155,23 @@ export async function fetchPrivateMessages(
         // Every other relay that delivered the same wrap is recorded too.
         if (wrapUrls) {
           for (const url of wrapUrls) {
-            if (url !== firstUrl) {deps.markSeen(wrap.id, url);}
+            if (url !== firstUrl) {
+              deps.markSeen(wrap.id, url);
+            }
           }
         }
       }
-      byRumor.set(rumor.id, { wrap, rumor, relayUrl: firstUrl });
+      byRumor.set(rumor.id, {
+        wrap,
+        rumor,
+        ...(firstUrl === undefined ? {} : { relayUrl: firstUrl }),
+      });
     } catch {
       // junk / forgery / key mismatch — not stored
     }
   }
 
-  return [...byRumor.values()].sort((a, b) => itemCompare(a.rumor, b.rumor));
+  return [...byRumor.values()].toSorted((a, b) => itemCompare(a.rumor, b.rumor));
 }
 
 export async function subscribePrivateMessages(
@@ -175,17 +194,24 @@ export async function subscribePrivateMessages(
   const flushSeen = (wrapId: string): void => {
     processed.add(wrapId);
     const extra = pendingUrls.get(wrapId);
-    if (extra === undefined) {return;}
+    if (extra === undefined) {
+      return;
+    }
     pendingUrls.delete(wrapId);
-    for (const url of extra) {deps.markSeen(wrapId, url);}
+    for (const url of extra) {
+      deps.markSeen(wrapId, url);
+    }
   };
   let tail = Promise.resolve();
   let closed = false;
   const markClosed = (): void => {
     closed = true;
   };
-  if (opts?.signal?.aborted) {markClosed();}
-  else {opts?.signal?.addEventListener("abort", markClosed, { once: true });}
+  if (opts?.signal?.aborted === true) {
+    markClosed();
+  } else {
+    opts?.signal?.addEventListener("abort", markClosed, { once: true });
+  }
 
   const inner = deps.pool.subscribe(
     relays,
@@ -200,38 +226,55 @@ export async function subscribePrivateMessages(
       },
       eoseTimeoutMs: opts?.eoseTimeoutMs,
       receivedEvent: (id, relayUrl) => {
-        if (closed) {return;}
+        if (closed) {
+          return;
+        }
         if (processed.has(id)) {
           deps.markSeen(id, relayUrl);
           return;
         }
         const list = pendingUrls.get(id);
-        if (list === undefined) {pendingUrls.set(id, [relayUrl]);}
-        else if (!list.includes(relayUrl)) {list.push(relayUrl);}
+        if (list === undefined) {
+          pendingUrls.set(id, [relayUrl]);
+        } else if (!list.includes(relayUrl)) {
+          list.push(relayUrl);
+        }
       },
       onevent: (wrap, relayUrl) => {
-        if (closed) {return;}
-        tail = tail
-          .then(async () => {
-            if (closed) {return;}
-            try {
-              const rumor = await unwrap(crypto, wrap);
-              if (closed) {return;}
-              if (seen.has(rumor.id)) {
-                flushSeen(wrap.id);
-                return;
-              }
-              seen.add(rumor.id);
-              if (deps.wantObserve(opts?.observe)) {deps.ingest(wrap, relayUrl);}
-              flushSeen(wrap.id);
-              opts?.onevent?.({ wrap, rumor, relayUrl });
-            } catch {
-              // junk / forgery — not stored
+        if (closed) {
+          return;
+        }
+        const prev = tail;
+        let release: (() => void) | undefined;
+        tail = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        void (async () => {
+          await prev;
+          try {
+            if (closed) {
+              return;
             }
-          })
-          .catch(() => {
-            // keep the queue alive if a handler throws
-          });
+            const rumor = await unwrap(crypto, wrap);
+            if (closed) {
+              return;
+            }
+            if (seen.has(rumor.id)) {
+              flushSeen(wrap.id);
+              return;
+            }
+            seen.add(rumor.id);
+            if (deps.wantObserve(opts?.observe)) {
+              deps.ingest(wrap, relayUrl);
+            }
+            flushSeen(wrap.id);
+            opts?.onevent?.({ wrap, rumor, relayUrl });
+          } catch {
+            // junk / forgery — not stored; keep the queue alive if a handler throws
+          } finally {
+            release?.();
+          }
+        })();
       },
     },
   );

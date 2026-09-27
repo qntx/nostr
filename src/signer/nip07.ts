@@ -11,15 +11,15 @@ import type { NostrSigner } from "./types.ts";
  * @see https://github.com/nostr-protocol/nips/blob/master/07.md
  */
 export type WindowNostr = {
-  getPublicKey(): Promise<string>;
-  signEvent(event: EventTemplate): Promise<Event>;
+  getPublicKey: () => Promise<string>;
+  signEvent: (event: EventTemplate) => Promise<Event>;
   nip04?: {
-    encrypt(pubkey: string, plaintext: string): Promise<string>;
-    decrypt(pubkey: string, ciphertext: string): Promise<string>;
+    encrypt: (pubkey: string, plaintext: string) => Promise<string>;
+    decrypt: (pubkey: string, ciphertext: string) => Promise<string>;
   };
   nip44?: {
-    encrypt(pubkey: string, plaintext: string): Promise<string>;
-    decrypt(pubkey: string, ciphertext: string): Promise<string>;
+    encrypt: (pubkey: string, plaintext: string) => Promise<string>;
+    decrypt: (pubkey: string, ciphertext: string) => Promise<string>;
   };
 };
 
@@ -74,7 +74,13 @@ export class Nip07Signer implements NostrSigner {
     const provider = this.#resolve();
     const template: EventTemplate = {
       kind: unsigned.kind,
-      tags: unsigned.tags.map((t) => [...t] as [string, ...string[]]),
+      tags: unsigned.tags.map((t) => {
+        const [name, ...rest] = t;
+        if (name === undefined) {
+          throw new CryptoError("unsigned event has an empty tag");
+        }
+        return [name, ...rest];
+      }),
       content: unsigned.content,
       created_at: unsigned.created_at,
     };
@@ -93,26 +99,34 @@ export class Nip07Signer implements NostrSigner {
   }
 
   async nip04Encrypt(peer: string, plaintext: string): Promise<string> {
-    const {nip04} = this.#resolve();
-    if (!nip04?.encrypt) {throw new CryptoError("NIP-07 provider does not support nip04.encrypt");}
+    const { nip04 } = this.#resolve();
+    if (!nip04?.encrypt) {
+      throw new CryptoError("NIP-07 provider does not support nip04.encrypt");
+    }
     return nip04.encrypt(peer, plaintext);
   }
 
   async nip04Decrypt(peer: string, ciphertext: string): Promise<string> {
-    const {nip04} = this.#resolve();
-    if (!nip04?.decrypt) {throw new CryptoError("NIP-07 provider does not support nip04.decrypt");}
+    const { nip04 } = this.#resolve();
+    if (!nip04?.decrypt) {
+      throw new CryptoError("NIP-07 provider does not support nip04.decrypt");
+    }
     return nip04.decrypt(peer, ciphertext);
   }
 
   async nip44Encrypt(peer: string, plaintext: string): Promise<string> {
-    const {nip44} = this.#resolve();
-    if (!nip44?.encrypt) {throw new CryptoError("NIP-07 provider does not support nip44.encrypt");}
+    const { nip44 } = this.#resolve();
+    if (!nip44?.encrypt) {
+      throw new CryptoError("NIP-07 provider does not support nip44.encrypt");
+    }
     return nip44.encrypt(peer, plaintext);
   }
 
   async nip44Decrypt(peer: string, payload: string): Promise<string> {
-    const {nip44} = this.#resolve();
-    if (!nip44?.decrypt) {throw new CryptoError("NIP-07 provider does not support nip44.decrypt");}
+    const { nip44 } = this.#resolve();
+    if (!nip44?.decrypt) {
+      throw new CryptoError("NIP-07 provider does not support nip44.decrypt");
+    }
     return nip44.decrypt(peer, payload);
   }
 }

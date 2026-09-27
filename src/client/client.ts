@@ -1,35 +1,54 @@
 import { throwIfAborted } from "../core/abort.ts";
 import { EventBuilder } from "../core/builder.ts";
-import { sortedEvents } from '../core/event.ts';
-import type { Event, EventTemplate, UnsignedEvent } from '../core/event.ts';
-import { canonicalizeFilters, matchFilters } from '../core/filter.ts';
-import type { Filter } from '../core/filter.ts';
+import { sortedEvents } from "../core/event.ts";
+import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
+import { canonicalizeFilters, matchFilters } from "../core/filter.ts";
+import type { Filter } from "../core/filter.ts";
 import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
 import { Gossip } from "../gossip/index.ts";
-import { createLoaders, createOutboxFeed } from '../loaders/index.ts';
-import type { Loaders, OutboxFeed } from '../loaders/index.ts';
+import { createLoaders, createOutboxFeed } from "../loaders/index.ts";
+import type { Loaders, OutboxFeed } from "../loaders/index.ts";
 import type { Recipient } from "../nips/nip17.ts";
-import { isGiftWrapKind, requireNip59Crypto } from '../nips/nip59.ts';
-import type { Nip59Crypto } from '../nips/nip59.ts';
-import { Pool } from '../relay/pool.ts';
-import type { PoolPublishResult } from '../relay/pool.ts';
+import { isGiftWrapKind, requireNip59Crypto } from "../nips/nip59.ts";
+import type { Nip59Crypto } from "../nips/nip59.ts";
+import { Pool } from "../relay/pool.ts";
+import type { PoolPublishResult } from "../relay/pool.ts";
 import { NoSignerError } from "../signer/error.ts";
 import type { NostrSigner } from "../signer/types.ts";
-import { toStorageError } from '../storage/error.ts';
-import type { StorageError } from '../storage/error.ts';
+import { toStorageError } from "../storage/error.ts";
+import type { StorageError } from "../storage/error.ts";
 import { MemoryIndex } from "../storage/memory-index.ts";
 import { MemoryEventStore } from "../storage/memory.ts";
 import type { EventStore } from "../storage/types.ts";
 import { ReactiveEventStore } from "../store/reactive.ts";
+// oxlint-disable-next-line import/no-cycle -- ClientBuilder is used only inside the static builder(), after module init
 import { ClientBuilder } from "./builder.ts";
-import { fetchPrivateMessages, giftWrapRelays, sendPrivateMessage, setDmRelays, subscribePrivateMessages } from './dm.ts';
-import type { DmDeps } from './dm.ts';
+import {
+  fetchPrivateMessages,
+  giftWrapRelays,
+  sendPrivateMessage,
+  setDmRelays,
+  subscribePrivateMessages,
+} from "./dm.ts";
+import type { DmDeps } from "./dm.ts";
 import { fetchGossip, subscribeGossip } from "./gossip-io.ts";
-import { sync, syncToRelay } from './sync.ts';
-import type { SyncDeps } from './sync.ts';
-import { ClientError } from './types.ts';
-import type { ClientOptions, FetchEventsOptions, FetchPrivateMessagesOptions, PrivateMessageSendResult, PublishOptions, ReceivedPrivateMessage, SendPrivateMessageOptions, SubscribeOptions, SubscribePrivateMessagesOptions, SyncOptions, SyncSummary } from './types.ts';
+import { sync, syncToRelay } from "./sync.ts";
+import type { SyncDeps } from "./sync.ts";
+import { ClientError } from "./types.ts";
+import type {
+  ClientOptions,
+  FetchEventsOptions,
+  FetchPrivateMessagesOptions,
+  PrivateMessageSendResult,
+  PublishOptions,
+  ReceivedPrivateMessage,
+  SendPrivateMessageOptions,
+  SubscribeOptions,
+  SubscribePrivateMessagesOptions,
+  SyncOptions,
+  SyncSummary,
+} from "./types.ts";
 
 /** Layer-5 facade: signer + default relays + pool + loaders + gossip + event store. */
 export class Client {
@@ -38,7 +57,7 @@ export class Client {
   readonly gossip: Gossip;
   readonly storage: EventStore;
   readonly index: ReactiveEventStore;
-  onstorageerror: ((err: StorageError) => void) | null;
+  onstorageerror: ((err: StorageError) => void) | undefined;
   #signer: NostrSigner | undefined;
   #relays: string[];
   #shutdown = false;
@@ -51,13 +70,15 @@ export class Client {
     this.#relays = [];
     for (const raw of opts.relays ?? []) {
       const url = normalizeURL(raw);
-      if (!this.#relays.includes(url)) {this.#relays.push(url);}
+      if (!this.#relays.includes(url)) {
+        this.#relays.push(url);
+      }
     }
     this.gossip = opts.gossip ?? new Gossip();
     this.storage = opts.storage ?? new MemoryEventStore();
     this.index = opts.index ?? new ReactiveEventStore();
     this.#persistEvents = opts.persistEvents ?? true;
-    this.onstorageerror = opts.onstorageerror ?? null;
+    this.onstorageerror = opts.onstorageerror;
     this.pool = new Pool({
       websocketImplementation: opts.websocketImplementation,
       verifyEvent: opts.verifyEvent,
@@ -79,7 +100,9 @@ export class Client {
         (opts.automaticAuth ?? true)
           ? () => async (template) => {
               const signer = this.#signer;
-              if (!signer) {throw new NoSignerError("no signer configured for AUTH");}
+              if (!signer) {
+                throw new NoSignerError("no signer configured for AUTH");
+              }
               const pk = await signer.getPublicKey();
               return signer.signEvent({ ...template, pubkey: pk });
             }
@@ -134,23 +157,30 @@ export class Client {
   async connect(opts?: { signal?: AbortSignal }): Promise<void> {
     this.#assertAlive();
     await Promise.allSettled(
-      this.#relays.map( async (url) => this.pool.ensureRelay(url, { signal: opts?.signal })),
+      this.#relays.map(async (url) => this.pool.ensureRelay(url, { signal: opts?.signal })),
     );
   }
 
   async shutdown(): Promise<void> {
     this.#shutdown = true;
-    while (this.#flushing) {await this.#flushing;}
+    while (this.#flushing !== undefined) {
+      // oxlint-disable-next-line no-await-in-loop -- waits for the current flush to settle before closing
+      await this.#flushing;
+    }
     this.pool.close();
   }
 
   #assertAlive(): void {
-    if (this.#shutdown) {throw new ClientError("client is shut down");}
+    if (this.#shutdown) {
+      throw new ClientError("client is shut down");
+    }
   }
 
   #defaultRelays(urls?: string[]): string[] {
     const list = urls ?? this.#relays;
-    if (list.length === 0) {throw new ClientError("no relays configured");}
+    if (list.length === 0) {
+      throw new ClientError("no relays configured");
+    }
     return list;
   }
 
@@ -167,7 +197,9 @@ export class Client {
   observeAll(events: ReadonlyArray<Event>): void {
     const seen = new Set<string>();
     for (const event of events) {
-      if (seen.has(event.id)) {continue;}
+      if (seen.has(event.id)) {
+        continue;
+      }
       seen.add(event.id);
       this.#ingest(event);
     }
@@ -181,8 +213,12 @@ export class Client {
    */
   #ingest(event: Event, relayUrl?: string, opts?: { persist?: boolean; meta?: boolean }): void {
     this.index.add(event, relayUrl);
-    if (opts?.meta !== false) {this.#ingestMeta(event);}
-    if (opts?.persist === false || !this.#persistEvents) {return;}
+    if (opts?.meta !== false) {
+      this.#ingestMeta(event);
+    }
+    if (opts?.persist === false || !this.#persistEvents) {
+      return;
+    }
     this.#persistQueue.push(event);
     this.#armFlush();
   }
@@ -197,7 +233,9 @@ export class Client {
   }
 
   #armFlush(): void {
-    if (this.#flushing) {return;}
+    if (this.#flushing) {
+      return;
+    }
     this.#flushing = this.#flushLoop();
   }
 
@@ -209,6 +247,7 @@ export class Client {
       while (this.#persistQueue.length > 0) {
         const batch = this.#persistQueue.splice(0);
         try {
+          // oxlint-disable-next-line no-await-in-loop -- queued batches are persisted in order
           await this.storage.putMany(batch);
         } catch (error) {
           invokeSafely(() => this.onstorageerror?.(toStorageError(error)));
@@ -216,7 +255,9 @@ export class Client {
       }
     } finally {
       this.#flushing = undefined;
-      if (this.#persistQueue.length > 0) {this.#armFlush();}
+      if (this.#persistQueue.length > 0) {
+        this.#armFlush();
+      }
     }
   }
 
@@ -231,13 +272,17 @@ export class Client {
     this.#assertAlive();
     await Promise.all(
       pubkeys.map(async (pk) => {
-        const style = opts?.force ? "force" : "default";
+        const style = opts?.force === true ? "force" : "default";
         const [relayList, dmList] = await Promise.all([
           this.loaders.relayList(pk, { hints: opts?.hints, style }),
           this.loaders.dmRelayList(pk, { hints: opts?.hints, style }),
         ]);
-        if (relayList.event) {this.observe(relayList.event);}
-        if (dmList.event) {this.observe(dmList.event);}
+        if (relayList.event) {
+          this.observe(relayList.event);
+        }
+        if (dmList.event) {
+          this.observe(dmList.event);
+        }
       }),
     );
   }
@@ -266,41 +311,52 @@ export class Client {
       seen: (event, relayUrl) => this.#ingest(event, relayUrl, { persist: false, meta: false }),
       applySync: async (events) => {
         if (!this.#persistEvents) {
-          for (const event of events) {this.#ingest(event, undefined, { persist: false });}
+          for (const event of events) {
+            this.#ingest(event, undefined, { persist: false });
+          }
           return [];
         }
         const results = await this.storage.putMany(events);
         const applied: Event[] = [];
-        for (let i = 0; i < events.length; i++) {
-          if (results[i] === "rejected" || results[i] === "ephemeral" || results[i] === "invalid") {
+        for (const [i, event] of events.entries()) {
+          const result = results[i];
+          if (result === "rejected" || result === "ephemeral" || result === "invalid") {
             continue;
           }
-          this.#ingest(events[i]!, undefined, { persist: false });
-          applied.push(events[i]!);
+          this.#ingest(event, undefined, { persist: false });
+          applied.push(event);
         }
         return applied;
       },
-      hydrate:  async (pubkeys) => this.hydrateGossip(pubkeys),
+      hydrate: async (pubkeys) => this.hydrateGossip(pubkeys),
     });
   }
 
   async getPublicKey(): Promise<string> {
-    if (!this.#signer) {throw new ClientError("no signer configured");}
+    if (!this.#signer) {
+      throw new ClientError("no signer configured");
+    }
     return this.#signer.getPublicKey();
   }
 
   async signEvent(unsigned: UnsignedEvent): Promise<Event> {
-    if (!this.#signer) {throw new ClientError("no signer configured");}
+    if (!this.#signer) {
+      throw new ClientError("no signer configured");
+    }
     return this.#signer.signEvent(unsigned);
   }
 
   async signEventBuilder(builder: EventBuilder): Promise<Event> {
-    if (!this.#signer) {throw new ClientError("no signer configured");}
+    if (!this.#signer) {
+      throw new ClientError("no signer configured");
+    }
     return builder.sign(this.#signer);
   }
 
   async signTemplate(template: EventTemplate): Promise<Event> {
-    if (!this.#signer) {throw new ClientError("no signer configured");}
+    if (!this.#signer) {
+      throw new ClientError("no signer configured");
+    }
     const pubkey = await this.#signer.getPublicKey();
     return this.#signer.signEvent({ ...template, pubkey });
   }
@@ -323,21 +379,29 @@ export class Client {
     let relays = opts?.relays;
     if (!relays && isGiftWrapKind(event.kind)) {
       relays = giftWrapRelays(this.gossip, event);
-    } else if (!relays && opts?.gossip) {
+    } else if (!relays && opts?.gossip === true) {
       const urls: string[] = [];
       const add = (list: ReadonlyArray<string>) => {
         for (const url of list) {
-          if (!urls.includes(url)) {urls.push(url);}
+          if (!urls.includes(url)) {
+            urls.push(url);
+          }
         }
       };
       add(this.gossip.outboxRelays(event.pubkey));
       for (const tag of event.tags) {
-        if (tag[0] === "p" && tag[1]) {add(this.gossip.inboxRelays(tag[1]));}
+        if (tag[0] === "p" && tag[1] !== undefined) {
+          add(this.gossip.inboxRelays(tag[1]));
+        }
       }
       let hintCount = 0;
       for (const tag of event.tags) {
-        if (hintCount >= 5) {break;}
-        if ((tag[0] !== "e" && tag[0] !== "a") || !tag[2]) {continue;}
+        if (hintCount >= 5) {
+          break;
+        }
+        if ((tag[0] !== "e" && tag[0] !== "a") || tag[2] === undefined) {
+          continue;
+        }
         try {
           const url = normalizeURL(tag[2]);
           if (!urls.includes(url)) {
@@ -348,13 +412,15 @@ export class Client {
           // not a relay URL
         }
       }
-      if (urls.length > 0) {relays = urls;}
+      if (urls.length > 0) {
+        relays = urls;
+      }
     }
     const results = await this.pool.publish(this.#defaultRelays(relays), event, {
       timeoutMs: opts?.timeoutMs,
     });
 
-    const anyOk = results.some((r) => r.result?.ok);
+    const anyOk = results.some((r) => r.result?.ok === true);
     if (anyOk && this.#wantObserve(opts?.observe)) {
       this.observe(event);
     }
@@ -371,14 +437,16 @@ export class Client {
     const shouldObserve = this.#wantObserve(opts?.observe);
     const candidates: Event[] = [];
 
-    if (opts?.localFirst) {
+    if (opts?.localFirst === true) {
       // Persisted storage is merged with the index below; storage may hold a
       // stale replaceable version, so it is only a candidate — the index wins.
       try {
         const local = await this.storage.query(filters);
         for (const e of local) {
           candidates.push(e);
-          if (shouldObserve) {this.#ingest(e, undefined, { persist: false, meta: false });}
+          if (shouldObserve) {
+            this.#ingest(e, undefined, { persist: false, meta: false });
+          }
         }
       } catch (error) {
         invokeSafely(() => this.onstorageerror?.(toStorageError(error)));
@@ -388,12 +456,14 @@ export class Client {
     // Every inbound event lands in the index (with its relay URL) before the
     // caller's onevent runs; the batch below re-ingests for persistence.
     const onevent = (event: Event, relayUrl: string) => {
-      if (shouldObserve) {this.#ingest(event, relayUrl, { persist: false, meta: false });}
+      if (shouldObserve) {
+        this.#ingest(event, relayUrl, { persist: false, meta: false });
+      }
       opts?.onevent?.(event, relayUrl);
     };
 
     const batch =
-      !opts?.gossip || opts.relays
+      opts?.gossip !== true || opts.relays !== undefined
         ? await this.pool.fetch(this.#defaultRelays(opts?.relays), filters, {
             timeoutMs: opts?.timeoutMs,
             signal: opts?.signal,
@@ -406,7 +476,9 @@ export class Client {
           });
     for (const e of batch) {
       candidates.push(e);
-      if (shouldObserve) {this.observe(e);}
+      if (shouldObserve) {
+        this.observe(e);
+      }
     }
 
     // Merge through a scratch index so NIP-01 replaceable winners, kind-5
@@ -414,9 +486,12 @@ export class Client {
     // Ephemeral kinds are never stored; matching ones join the result directly.
     const tmp = new MemoryIndex();
     const ephemeral = new Map<string, Event>();
-    const merged = opts?.localFirst ? [...this.index.query(filters), ...candidates] : candidates;
+    const merged =
+      opts?.localFirst === true ? [...this.index.query(filters), ...candidates] : candidates;
     for (const e of merged) {
-      if (tmp.put(e) === "ephemeral" && matchFilters(filters, e)) {ephemeral.set(e.id, e);}
+      if (tmp.put(e) === "ephemeral" && matchFilters(filters, e)) {
+        ephemeral.set(e.id, e);
+      }
     }
     return sortedEvents([...tmp.query(filters), ...ephemeral.values()]);
   }
@@ -437,16 +512,20 @@ export class Client {
     const shouldObserve = this.#wantObserve(opts?.observe);
 
     const wrapEvent = (event: Event, relayUrl: string) => {
-      if (shouldObserve) {this.observe(event, relayUrl);}
+      if (shouldObserve) {
+        this.observe(event, relayUrl);
+      }
       opts?.onevent?.(event, relayUrl);
     };
 
     const wrapReceived = (id: string, relayUrl: string) => {
-      if (shouldObserve) {this.#markSeen(id, relayUrl);}
+      if (shouldObserve) {
+        this.#markSeen(id, relayUrl);
+      }
       opts?.receivedEvent?.(id, relayUrl);
     };
 
-    if (!opts?.gossip || opts.relays) {
+    if (opts?.gossip !== true || opts.relays !== undefined) {
       return this.pool.subscribe(this.#defaultRelays(opts?.relays), filters, {
         onevent: wrapEvent,
         receivedEvent: wrapReceived,
@@ -469,7 +548,9 @@ export class Client {
   }
 
   #requireNip59Crypto(): Nip59Crypto {
-    if (!this.#signer) {throw new ClientError("no signer configured");}
+    if (!this.#signer) {
+      throw new ClientError("no signer configured");
+    }
     return requireNip59Crypto(this.#signer);
   }
 
@@ -481,14 +562,14 @@ export class Client {
     return {
       pool: this.pool,
       gossip: this.gossip,
-      hydrateGossip:  async (pubkeys) => this.hydrateGossip(pubkeys),
+      hydrateGossip: async (pubkeys) => this.hydrateGossip(pubkeys),
       ingest: (event, relayUrl) => this.#ingest(event, relayUrl),
       markSeen: (id, relayUrl) => this.#markSeen(id, relayUrl),
       assertAlive: () => this.#assertAlive(),
       requireNip59Crypto: () => this.#requireNip59Crypto(),
       throwIfAborted: (signal) => this.#throwIfAborted(signal),
       wantObserve: (flag) => this.#wantObserve(flag),
-      publish:  async (eventOrBuilder, opts) => this.publish(eventOrBuilder, opts),
+      publish: async (eventOrBuilder, opts) => this.publish(eventOrBuilder, opts),
     };
   }
 
