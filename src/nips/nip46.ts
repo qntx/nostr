@@ -211,7 +211,9 @@ export function decodeNip46Response(json: string): Nip46Response {
   if (!isRecord(data) || typeof data["id"] !== "string") {
     throw new Nip46Error("invalid NIP-46 response shape");
   }
-  const { result, error } = data;
+  // Some remote signers send explicit nulls for absent fields.
+  const result = data["result"] === null ? undefined : data["result"];
+  const error = data["error"] === null ? undefined : data["error"];
   if (result !== undefined && typeof result !== "string") {
     throw new Nip46Error("invalid NIP-46 response result");
   }
