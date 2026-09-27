@@ -75,6 +75,7 @@ const config: UserConfig = defineConfig({
     "*": "vp check --fix",
   },
   pack: {
+    deps: { resolveDepSubpath: true },
     plugins: packWasm ? [wasmUrlAsset()] : [],
     entry: {
       index: "src/index.ts",
@@ -112,7 +113,7 @@ const config: UserConfig = defineConfig({
       ...(packWasm ? { wasm: "src/wasm/index.ts" } : {}),
     },
     dts: {
-      tsgo: true,
+      generator: "tsgo",
     },
     sourcemap: true,
     exports: {

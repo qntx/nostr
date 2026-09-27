@@ -188,17 +188,17 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@qntx/oxfmt": "^1.0.2",
-    "@qntx/oxlint": "^1.0.2",
+    "@qntx/oxfmt": "^1.0.4",
+    "@qntx/oxlint": "^1.0.4",
     "@qntx/tsconfig": "^1.0.1",
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.3",
     "@types/ws": "8.18.1",
     "buffer": "6.0.3",
     "bumpp": "^12.3.0",
     "publint": "^0.3.24",
     "typescript": "^7.0.2",
-    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9",
-    "vite-plus": "^0.3.0",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.3",
+    "vite-plus": "0.3.3",
     "whatwg-url": "7.1.0",
     "ws": "8.21.3"
   },
@@ -211,7 +211,7 @@
     }
   },
   "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9"
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.3"
   },
   "devEngines": {
     "packageManager": {
