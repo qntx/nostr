@@ -1,10 +1,10 @@
-import { FakeRelayCore } from './relay-core.ts';
-import type { FakeRelay, FakeRelayOptions, RelayTransport } from './relay-core.ts';
+import { FakeRelayCore } from "./relay-core.ts";
+import type { FakeRelay, FakeRelayOptions, RelayTransport } from "./relay-core.ts";
 
 export type ServedFakeRelay = {
   url: string;
   relay: FakeRelay;
-  close: () => Promise<void>
+  close: () => Promise<void>;
 };
 
 /**
@@ -43,10 +43,12 @@ export async function serveFakeRelay(
   return {
     url,
     relay: core,
-    close:  async () =>
+    close: async () =>
       new Promise((resolve) => {
         core.disconnect();
-        for (const client of wss.clients) {client.terminate();}
+        for (const client of wss.clients) {
+          client.terminate();
+        }
         wss.close(() => resolve());
       }),
   };

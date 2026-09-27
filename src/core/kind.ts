@@ -28,10 +28,18 @@ export type KindClassification =
 
 /** Classify a kind number into its NIP-01 storage class (`"unknown"` outside all ranges). */
 export function classifyKind(kind: number): KindClassification {
-  if (isRegularKind(kind)) {return "regular";}
-  if (isReplaceableKind(kind)) {return "replaceable";}
-  if (isEphemeralKind(kind)) {return "ephemeral";}
-  if (isAddressableKind(kind)) {return "addressable";}
+  if (isRegularKind(kind)) {
+    return "regular";
+  }
+  if (isReplaceableKind(kind)) {
+    return "replaceable";
+  }
+  if (isEphemeralKind(kind)) {
+    return "ephemeral";
+  }
+  if (isAddressableKind(kind)) {
+    return "addressable";
+  }
   return "unknown";
 }
 

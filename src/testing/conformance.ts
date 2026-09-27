@@ -1,11 +1,12 @@
-export { type Filter } from '../core/filter.ts';
-import { EventBuilder, Keys } from '../core/index.ts';
-import type { Event } from '../core/index.ts';
+import { EventBuilder, Keys } from "../core/index.ts";
+import type { Event } from "../core/index.ts";
 import type { EventStore } from "../storage/types.ts";
+
+export { type Filter } from "../core/filter.ts";
 
 export type EventStoreConformanceCase = {
   name: string;
-  run: (store: EventStore) => Promise<void>
+  run: (store: EventStore) => Promise<void>;
 };
 
 const ALICE_SK = "0000000000000000000000000000000000000000000000000000000000000101";
@@ -111,8 +112,8 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
       eq(await store.put(other), "accepted", "different address independent");
       eq(await store.get(v1.id), undefined, "v1 gone");
       eq(
-        ids(await store.query([{ kinds: [30001], authors: [alice().publicKey] }])).sort(),
-        [other.id, v2.id].sort(),
+        ids(await store.query([{ kinds: [30001], authors: [alice().publicKey] }])).toSorted(),
+        [other.id, v2.id].toSorted(),
         "independent addresses",
       );
     },
@@ -189,8 +190,8 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
       eq(ids(await store.query([{ kinds: [1], since: 2 }])), [plain.id, tagged.id], "since");
       eq(ids(await store.query([{ kinds: [1], until: 2 }])), [tagged.id, target.id], "until");
       eq(
-        ids(await store.query([{ ids: [target.id, tagged.id] }])).sort(),
-        [tagged.id, target.id].sort(),
+        ids(await store.query([{ ids: [target.id, tagged.id] }])).toSorted(),
+        [tagged.id, target.id].toSorted(),
         "ids filter",
       );
     },
@@ -227,8 +228,9 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
         [b.id, a.id, c.id],
         "created_at asc ordering",
       );
+      const limited = await store.negentropyItems({ kinds: [1], limit: 2 });
       eq(
-        (await store.negentropyItems({ kinds: [1], limit: 2 })).map((i) => i.id),
+        limited.map((i) => i.id),
         [a.id, c.id],
         "limit keeps newest two, presented ascending",
       );
@@ -280,5 +282,3 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
     },
   },
 ];
-
-

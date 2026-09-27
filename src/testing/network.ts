@@ -1,15 +1,16 @@
 import { normalizeURL } from "../core/util.ts";
 import type { WebSocketConstructor } from "../relay/websocket.ts";
-import { FakeRelayCore } from './relay-core.ts';
-import type {FakeRelay, FakeRelayOptions, RelayTransport} from './relay-core.ts';
-export { type FakeRelay, type FakeRelayOptions } from './relay-core.ts';
+import { FakeRelayCore } from "./relay-core.ts";
+import type { FakeRelay, FakeRelayOptions, RelayTransport } from "./relay-core.ts";
+
+export { type FakeRelay, type FakeRelayOptions } from "./relay-core.ts";
 export type FakeRelayNetwork = {
   /** Pass to `Client` / `Pool` / `useWebSocketImplementation`. */
   readonly websocketImplementation: WebSocketConstructor;
   /** Get-or-create a relay handle by normalized URL. */
-  relay: (url: string, opts?: FakeRelayOptions) => FakeRelay
-  close: () => void
-}
+  relay: (url: string, opts?: FakeRelayOptions) => FakeRelay;
+  close: () => void;
+};
 
 type Listener = (ev: unknown) => void;
 
@@ -54,7 +55,9 @@ export function createFakeRelayNetwork(defaults: FakeRelayOptions = {}): FakeRel
     }
 
     #open(): void {
-      if (this.readyState !== FakeSocket.CONNECTING) {return;}
+      if (this.readyState !== FakeSocket.CONNECTING) {
+        return;
+      }
       this.readyState = FakeSocket.OPEN;
       const transport: RelayTransport = {
         send: (data) => this.#emit("message", { data }),
@@ -66,14 +69,21 @@ export function createFakeRelayNetwork(defaults: FakeRelayOptions = {}): FakeRel
       this.#session = this.#core.connect(transport);
       const queued = this.#queuedSends;
       this.#queuedSends = [];
-      for (const data of queued) {this.#core.handleMessage(this.#session, data);}
+      for (const data of queued) {
+        this.#core.handleMessage(this.#session, data);
+      }
     }
 
     send(data: string): void {
-      if (this.readyState !== FakeSocket.OPEN) {return;}
+      if (this.readyState !== FakeSocket.OPEN) {
+        return;
+      }
       this.sent.push(data);
-      if (this.#session) {this.#core.handleMessage(this.#session, data);}
-      else {this.#queuedSends.push(data);}
+      if (this.#session) {
+        this.#core.handleMessage(this.#session, data);
+      } else {
+        this.#queuedSends.push(data);
+      }
     }
 
     close(): void {
@@ -88,7 +98,9 @@ export function createFakeRelayNetwork(defaults: FakeRelayOptions = {}): FakeRel
       this.readyState = FakeSocket.CLOSED;
       const session = this.#session;
       this.#session = undefined;
-      if (session) {this.#core.detach(session);}
+      if (session) {
+        this.#core.detach(session);
+      }
       this.#emit("close", {});
     }
 
@@ -106,7 +118,9 @@ export function createFakeRelayNetwork(defaults: FakeRelayOptions = {}): FakeRel
     }
 
     #emit(type: string, ev: unknown): void {
-      for (const listener of this.#listeners.get(type) ?? []) {listener(ev);}
+      for (const listener of this.#listeners.get(type) ?? []) {
+        listener(ev);
+      }
     }
   }
 
@@ -114,10 +128,10 @@ export function createFakeRelayNetwork(defaults: FakeRelayOptions = {}): FakeRel
     websocketImplementation: FakeSocket,
     relay: coreFor,
     close() {
-      for (const core of cores.values()) {core.disconnect();}
+      for (const core of cores.values()) {
+        core.disconnect();
+      }
       cores.clear();
     },
   };
 }
-
-

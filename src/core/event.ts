@@ -3,7 +3,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { EventValidationError } from "./error.ts";
 import type { Tag } from "./tag.ts";
 import { isTag } from "./tag.ts";
-import { isHex32, isHex64, utf8Encoder,bytesToHex } from "./util.ts";
+import { isHex32, isHex64, utf8Encoder, bytesToHex } from "./util.ts";
 
 /** Wire event template before pubkey/id/sig. */
 export type EventTemplate = {
@@ -56,7 +56,9 @@ const isRecord = (obj: unknown): obj is Record<string, unknown> =>
 
 /** Structural validation of an unsigned event (no crypto). */
 export function validateEvent(event: unknown): event is UnsignedEvent {
-  if (!isRecord(event)) {return false;}
+  if (!isRecord(event)) {
+    return false;
+  }
   if (
     typeof event["kind"] !== "number" ||
     !Number.isInteger(event["kind"]) ||
@@ -65,22 +67,38 @@ export function validateEvent(event: unknown): event is UnsignedEvent {
   ) {
     return false;
   }
-  if (typeof event["content"] !== "string") {return false;}
-  if (typeof event["created_at"] !== "number" || !Number.isInteger(event["created_at"])) {return false;}
-  if (typeof event["pubkey"] !== "string" || !isHex32(event["pubkey"])) {return false;}
-  if (!Array.isArray(event["tags"])) {return false;}
+  if (typeof event["content"] !== "string") {
+    return false;
+  }
+  if (typeof event["created_at"] !== "number" || !Number.isInteger(event["created_at"])) {
+    return false;
+  }
+  if (typeof event["pubkey"] !== "string" || !isHex32(event["pubkey"])) {
+    return false;
+  }
+  if (!Array.isArray(event["tags"])) {
+    return false;
+  }
   for (const tag of event["tags"]) {
-    if (!isTag(tag)) {return false;}
+    if (!isTag(tag)) {
+      return false;
+    }
   }
   return true;
 }
 
 /** Structural validation of a full event including id and sig hex shape. */
 export function validateSignedEvent(event: unknown): event is Event {
-  if (!validateEvent(event)) {return false;}
+  if (!validateEvent(event)) {
+    return false;
+  }
   const e = event as Record<string, unknown>;
-  if (typeof e["id"] !== "string" || !isHex32(e["id"])) {return false;}
-  if (typeof e["sig"] !== "string" || !isHex64(e["sig"])) {return false;}
+  if (typeof e["id"] !== "string" || !isHex32(e["id"])) {
+    return false;
+  }
+  if (typeof e["sig"] !== "string" || !isHex64(e["sig"])) {
+    return false;
+  }
   return true;
 }
 
@@ -109,9 +127,15 @@ export function compareEventsDesc(
   a: { id: string; created_at: number },
   b: { id: string; created_at: number },
 ): number {
-  if (a.created_at !== b.created_at) {return b.created_at - a.created_at;}
-  if (a.id < b.id) {return -1;}
-  if (a.id > b.id) {return 1;}
+  if (a.created_at !== b.created_at) {
+    return b.created_at - a.created_at;
+  }
+  if (a.id < b.id) {
+    return -1;
+  }
+  if (a.id > b.id) {
+    return 1;
+  }
   return 0;
 }
 
@@ -137,9 +161,15 @@ export function itemCompare(
   a: { id: string; created_at: number },
   b: { id: string; created_at: number },
 ): number {
-  if (a.created_at !== b.created_at) {return a.created_at - b.created_at;}
-  if (a.id < b.id) {return -1;}
-  if (a.id > b.id) {return 1;}
+  if (a.created_at !== b.created_at) {
+    return a.created_at - b.created_at;
+  }
+  if (a.id < b.id) {
+    return -1;
+  }
+  if (a.id > b.id) {
+    return 1;
+  }
   return 0;
 }
 
@@ -159,10 +189,18 @@ export function isReplaceableWinner(
 
 /** True when a signed event is the signed form of `unsigned` (kind/tags/content/time/pubkey). */
 export function signedMatchesUnsigned(signed: Event, unsigned: UnsignedEvent): boolean {
-  if (signed.kind !== unsigned.kind) {return false;}
-  if (signed.content !== unsigned.content) {return false;}
-  if (signed.created_at !== unsigned.created_at) {return false;}
-  if (JSON.stringify(signed.tags) !== JSON.stringify(unsigned.tags)) {return false;}
+  if (signed.kind !== unsigned.kind) {
+    return false;
+  }
+  if (signed.content !== unsigned.content) {
+    return false;
+  }
+  if (signed.created_at !== unsigned.created_at) {
+    return false;
+  }
+  if (JSON.stringify(signed.tags) !== JSON.stringify(unsigned.tags)) {
+    return false;
+  }
   if (unsigned.pubkey && signed.pubkey.toLowerCase() !== unsigned.pubkey.toLowerCase()) {
     return false;
   }

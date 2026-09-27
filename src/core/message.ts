@@ -18,7 +18,9 @@ export function assertSubscriptionId(id: string): SubscriptionId {
 
 /** Validate the given id, or mint a random 16-hex-char subscription id. */
 export function createSubscriptionId(id?: string): SubscriptionId {
-  if (id !== undefined) {return assertSubscriptionId(id);}
+  if (id !== undefined) {
+    return assertSubscriptionId(id);
+  }
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
   return bytesToHex(bytes);
@@ -75,7 +77,9 @@ export function mergeCountHll(hexes: ReadonlyArray<string>): string {
     const bytes = hexToBytes(hex);
     for (const [i, b] of bytes.entries()) {
       const m = merged[i];
-      if (m !== undefined && b > m) {merged[i] = b;}
+      if (m !== undefined && b > m) {
+        merged[i] = b;
+      }
     }
   }
   return bytesToHex(merged);
@@ -105,37 +109,37 @@ export function parseClientMessage(raw: string): ClientMessage {
   const items: unknown[] = data;
   const [type] = items;
   switch (type) {
-    case "EVENT": 
+    case "EVENT":
       if (data.length !== 2 || !validateSignedEvent(data[1])) {
         throw new MessageError("invalid EVENT client message");
       }
       return ["EVENT", data[1]];
-    
-    case "REQ": 
+
+    case "REQ":
       if (data.length < 3 || typeof data[1] !== "string") {
         throw new MessageError("invalid REQ client message");
       }
       return ["REQ", data[1], ...parseWireFilters(data.slice(2), "REQ")];
-    
-    case "CLOSE": 
+
+    case "CLOSE":
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid CLOSE client message");
       }
       return ["CLOSE", data[1]];
-    
-    case "AUTH": 
+
+    case "AUTH":
       if (data.length !== 2 || !validateSignedEvent(data[1])) {
         throw new MessageError("invalid AUTH client message");
       }
       return ["AUTH", data[1]];
-    
-    case "COUNT": 
+
+    case "COUNT":
       if (data.length < 3 || typeof data[1] !== "string") {
         throw new MessageError("invalid COUNT client message");
       }
       return ["COUNT", data[1], ...parseWireFilters(data.slice(2), "COUNT")];
-    
-    case "NEG-OPEN": 
+
+    case "NEG-OPEN":
       if (data.length === 5) {
         throw new MessageError("obsolete 5-element NEG-OPEN; expected [NEG-OPEN, id, filter, hex]");
       }
@@ -148,19 +152,19 @@ export function parseClientMessage(raw: string): ClientMessage {
         throw new MessageError("invalid NEG-OPEN client message");
       }
       return ["NEG-OPEN", data[1], data[2], data[3].toLowerCase()];
-    
-    case "NEG-MSG": 
+
+    case "NEG-MSG":
       if (data.length !== 3 || typeof data[1] !== "string" || !isNegHex(data[2])) {
         throw new MessageError("invalid NEG-MSG client message");
       }
       return ["NEG-MSG", data[1], data[2].toLowerCase()];
-    
-    case "NEG-CLOSE": 
+
+    case "NEG-CLOSE":
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid NEG-CLOSE client message");
       }
       return ["NEG-CLOSE", data[1]];
-    
+
     default:
       throw new MessageError(`unknown client message type: ${String(type)}`);
   }
@@ -180,13 +184,13 @@ export function parseRelayMessage(raw: string): RelayMessage {
   const items: unknown[] = data;
   const [type] = items;
   switch (type) {
-    case "EVENT": 
+    case "EVENT":
       if (data.length !== 3 || typeof data[1] !== "string" || !validateSignedEvent(data[2])) {
         throw new MessageError("invalid EVENT relay message");
       }
       return ["EVENT", data[1], data[2]];
-    
-    case "OK": 
+
+    case "OK":
       if (
         data.length !== 4 ||
         typeof data[1] !== "string" ||
@@ -196,31 +200,31 @@ export function parseRelayMessage(raw: string): RelayMessage {
         throw new MessageError("invalid OK relay message");
       }
       return ["OK", data[1], data[2], data[3]];
-    
-    case "EOSE": 
+
+    case "EOSE":
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid EOSE relay message");
       }
       return ["EOSE", data[1]];
-    
-    case "CLOSED": 
+
+    case "CLOSED":
       if (data.length !== 3 || typeof data[1] !== "string" || typeof data[2] !== "string") {
         throw new MessageError("invalid CLOSED relay message");
       }
       return ["CLOSED", data[1], data[2]];
-    
-    case "NOTICE": 
+
+    case "NOTICE":
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid NOTICE relay message");
       }
       return ["NOTICE", data[1]];
-    
-    case "AUTH": 
+
+    case "AUTH":
       if (data.length !== 2 || typeof data[1] !== "string") {
         throw new MessageError("invalid AUTH relay message");
       }
       return ["AUTH", data[1]];
-    
+
     case "COUNT": {
       const payload = items.at(2);
       if (
@@ -236,16 +240,18 @@ export function parseRelayMessage(raw: string): RelayMessage {
         result.approximate = payload["approximate"];
       }
       const hll = parseCountHll(payload["hll"]);
-      if (hll !== undefined) {result.hll = hll;}
+      if (hll !== undefined) {
+        result.hll = hll;
+      }
       return ["COUNT", data[1], result];
     }
-    case "NEG-MSG": 
+    case "NEG-MSG":
       if (data.length !== 3 || typeof data[1] !== "string" || !isNegHex(data[2])) {
         throw new MessageError("invalid NEG-MSG relay message");
       }
       return ["NEG-MSG", data[1], data[2].toLowerCase()];
-    
-    case "NEG-ERR": 
+
+    case "NEG-ERR":
       if (
         (data.length !== 3 && data.length !== 4) ||
         typeof data[1] !== "string" ||
@@ -254,7 +260,7 @@ export function parseRelayMessage(raw: string): RelayMessage {
         throw new MessageError("invalid NEG-ERR relay message");
       }
       return ["NEG-ERR", data[1], data[2]];
-    
+
     default:
       throw new MessageError(`unknown relay message type: ${String(type)}`);
   }
@@ -270,7 +276,9 @@ function parseCountHll(value: unknown): string | undefined {
 function parseWireFilters(items: unknown[], kind: string): Filter[] {
   const filters: Filter[] = [];
   for (const item of items) {
-    if (!isFilterObject(item)) {throw new MessageError(`invalid ${kind} filter`);}
+    if (!isFilterObject(item)) {
+      throw new MessageError(`invalid ${kind} filter`);
+    }
     filters.push(item);
   }
   return filters;

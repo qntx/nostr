@@ -59,8 +59,8 @@ export type PoolPublishResult = {
 
 /** Multi-relay subscribe options: callbacks also receive the normalized relay URL. */
 export type PoolSubscribeOptions = Omit<SubscribeOptions, "onevent" | "receivedEvent"> & {
-  onevent?: (event: Event, relayUrl: string) => void;
-  receivedEvent?: (id: string, relayUrl: string) => void;
+  onevent?: ((event: Event, relayUrl: string) => void) | undefined;
+  receivedEvent?: ((id: string, relayUrl: string) => void) | undefined;
 };
 
 /** Per-relay NIP-45 COUNT result (or its error). */

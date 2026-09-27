@@ -8,7 +8,9 @@ import { normalizeURL } from "./util.ts";
 
 function hasProtectedTag(event: Event): boolean {
   for (const tag of event.tags) {
-    if (tag[0] === "-") {return true;}
+    if (tag[0] === "-") {
+      return true;
+    }
   }
   return false;
 }
@@ -61,7 +63,9 @@ export class EventBuilder {
 
   static contacts(pubkeys: string[]): EventBuilder {
     const b = new EventBuilder(Kind.Contacts, "");
-    for (const pk of pubkeys) {b.#tags.push(Tag.p(pk));}
+    for (const pk of pubkeys) {
+      b.#tags.push(Tag.p(pk));
+    }
     return b;
   }
 
@@ -82,14 +86,20 @@ export class EventBuilder {
       }
       if ("address" in target) {
         const parsed = parseEventAddress(target.address);
-        if (parsed) {kinds.add(parsed.kind);}
+        if (parsed) {
+          kinds.add(parsed.kind);
+        }
         b.#tags.push(Tag.a(target.address));
         continue;
       }
       b.#tags.push(Tag.e(target.id));
-      if (target.kind !== undefined) {kinds.add(target.kind);}
+      if (target.kind !== undefined) {
+        kinds.add(target.kind);
+      }
     }
-    for (const kind of kinds) {b.#tags.push(Tag.k(kind));}
+    for (const kind of kinds) {
+      b.#tags.push(Tag.k(kind));
+    }
     return b;
   }
 
@@ -167,7 +177,9 @@ export class EventBuilder {
   }
 
   tags(tags: Iterable<Tag>): this {
-    for (const t of tags) {this.#tags.push(t);}
+    for (const t of tags) {
+      this.#tags.push(t);
+    }
     return this;
   }
 
@@ -224,8 +236,8 @@ export class EventBuilder {
    * the signer module.
    */
   async sign(signer: {
-    getPublicKey: () => Promise<string>
-    signEvent: (unsigned: UnsignedEvent) => Promise<Event>
+    getPublicKey: () => Promise<string>;
+    signEvent: (unsigned: UnsignedEvent) => Promise<Event>;
   }): Promise<Event> {
     const pubkey = await signer.getPublicKey();
     return signer.signEvent(this.buildUnsigned(pubkey));

@@ -1,8 +1,16 @@
 import { schnorr } from "@noble/curves/secp256k1.js";
 
 import { CryptoError } from "./error.ts";
-import { getEventHash, isMarkedFailed, isMarkedVerified, markUnverified, markVerified, validateEvent, validateSignedEvent } from './event.ts';
-import type { Event, EventTemplate, UnsignedEvent } from './event.ts';
+import {
+  getEventHash,
+  isMarkedFailed,
+  isMarkedVerified,
+  markUnverified,
+  markVerified,
+  validateEvent,
+  validateSignedEvent,
+} from "./event.ts";
+import type { Event, EventTemplate, UnsignedEvent } from "./event.ts";
 import { assertHex32, assertSecretKeyBytes, bytesToHex, hexToBytes } from "./util.ts";
 
 /** 32-byte secret key held as bytes; prefer zeroize when done. */
@@ -27,7 +35,9 @@ export class SecretKey {
   }
 
   get bytes(): Uint8Array {
-    if (!this.#bytes) {throw new CryptoError("secret key has been zeroized");}
+    if (!this.#bytes) {
+      throw new CryptoError("secret key has been zeroized");
+    }
     return new Uint8Array(this.#bytes);
   }
 
@@ -57,9 +67,9 @@ export function getPublicKey(secretKey: SecretKey | Uint8Array | string): Public
   const bytes =
     secretKey instanceof SecretKey
       ? secretKey.bytes
-      : (typeof secretKey === "string"
+      : typeof secretKey === "string"
         ? hexToBytes(assertHex32(secretKey, "secret key"))
-        : (assertSecretKeyBytes(secretKey), secretKey));
+        : (assertSecretKeyBytes(secretKey), secretKey);
   return bytesToHex(schnorr.getPublicKey(bytes));
 }
 
@@ -81,16 +91,20 @@ export class Keys {
     const sk =
       secretKey instanceof SecretKey
         ? secretKey
-        : (typeof secretKey === "string"
+        : typeof secretKey === "string"
           ? SecretKey.fromHex(secretKey)
-          : SecretKey.fromBytes(secretKey));
+          : SecretKey.fromBytes(secretKey);
     return new Keys(sk);
   }
 }
 
 function resolveSecretKeyBytes(secretKey: SecretKey | Uint8Array | string): Uint8Array {
-  if (secretKey instanceof SecretKey) {return secretKey.bytes;}
-  if (typeof secretKey === "string") {return hexToBytes(assertHex32(secretKey, "secret key"));}
+  if (secretKey instanceof SecretKey) {
+    return secretKey.bytes;
+  }
+  if (typeof secretKey === "string") {
+    return hexToBytes(assertHex32(secretKey, "secret key"));
+  }
   assertSecretKeyBytes(secretKey);
   return secretKey;
 }
@@ -157,8 +171,12 @@ export function signEvent(
 
 /** Verify event id and BIP-340 signature. Uses WeakSet cache (does not mutate the event). */
 export function verifyEvent(event: Event): boolean {
-  if (isMarkedVerified(event)) {return true;}
-  if (isMarkedFailed(event)) {return false;}
+  if (isMarkedVerified(event)) {
+    return true;
+  }
+  if (isMarkedFailed(event)) {
+    return false;
+  }
 
   if (!validateSignedEvent(event)) {
     markUnverified(event);
@@ -172,8 +190,11 @@ export function verifyEvent(event: Event): boolean {
       return false;
     }
     const ok = schnorr.verify(hexToBytes(event.sig), hexToBytes(hash), hexToBytes(event.pubkey));
-    if (ok) {markVerified(event);}
-    else {markUnverified(event);}
+    if (ok) {
+      markVerified(event);
+    } else {
+      markUnverified(event);
+    }
     return ok;
   } catch {
     markUnverified(event);

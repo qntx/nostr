@@ -66,10 +66,15 @@ export function assertSecretKeyBytes(bytes: Uint8Array): void {
 export function normalizeURL(url: string): string {
   try {
     let input = url;
-    if (!input.includes("://")) {input = `wss://${input}`;}
+    if (!input.includes("://")) {
+      input = `wss://${input}`;
+    }
     const p = new URL(input);
-    if (p.protocol === "http:") {p.protocol = "ws:";}
-    else if (p.protocol === "https:") {p.protocol = "wss:";}
+    if (p.protocol === "http:") {
+      p.protocol = "ws:";
+    } else if (p.protocol === "https:") {
+      p.protocol = "wss:";
+    }
     if (p.protocol !== "ws:" && p.protocol !== "wss:") {
       throw new UrlError(`unsupported relay URL scheme: ${p.protocol}`);
     }
@@ -84,7 +89,9 @@ export function normalizeURL(url: string): string {
     p.hash = "";
     return p.toString();
   } catch (error) {
-    if (error instanceof UrlError) {throw error;}
+    if (error instanceof UrlError) {
+      throw error;
+    }
     throw new UrlError(`invalid URL: ${url}`, {
       cause: error instanceof Error ? error : undefined,
     });

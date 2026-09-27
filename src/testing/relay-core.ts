@@ -1,7 +1,7 @@
 import type { Event } from "../core/event.ts";
 import { compareEventsDesc, validateSignedEvent } from "../core/event.ts";
-import { matchFilter } from '../core/filter.ts';
-import type { Filter } from '../core/filter.ts';
+import { matchFilter } from "../core/filter.ts";
+import type { Filter } from "../core/filter.ts";
 import { verifyEvent } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import { bytesToHex, normalizeURL } from "../core/util.ts";
@@ -62,7 +62,9 @@ function isFilter(value: unknown): value is Filter {
 }
 
 function searchMatch(filter: Filter, event: Event): boolean {
-  if (filter.search === undefined) {return true;}
+  if (filter.search === undefined) {
+    return true;
+  }
   return event.content.toLowerCase().includes(filter.search.toLowerCase());
 }
 
@@ -104,7 +106,9 @@ export class FakeRelayCore implements FakeRelay {
   }
 
   seed(events: ReadonlyArray<Event>): void {
-    for (const event of events) {this.#mirror.set(event.id, event);}
+    for (const event of events) {
+      this.#mirror.set(event.id, event);
+    }
     this.#pending = (async (): Promise<void> => {
       await this.#pending;
       for (const event of events) {
@@ -125,14 +129,18 @@ export class FakeRelayCore implements FakeRelay {
       await this.#pending;
       const result = await this.#store.put(event);
       await this.#refreshMirror();
-      if (isLivePut(result)) {this.#deliver(event);}
+      if (isLivePut(result)) {
+        this.#deliver(event);
+      }
     })();
   }
 
   disconnect(): void {
     const sessions: FakeRelaySession[] = [...this.#sessions];
     this.#sessions.clear();
-    for (const session of sessions) {session.transport.close();}
+    for (const session of sessions) {
+      session.transport.close();
+    }
   }
 
   closeSubscriptions(reason: string): void {
@@ -159,7 +167,9 @@ export class FakeRelayCore implements FakeRelay {
       queue: Promise.resolve(),
     };
     this.#sessions.add(session);
-    if (this.#opts.auth) {this.#send(session, ["AUTH", this.#opts.auth.challenge]);}
+    if (this.#opts.auth) {
+      this.#send(session, ["AUTH", this.#opts.auth.challenge]);
+    }
     return session;
   }
 
@@ -192,7 +202,7 @@ export class FakeRelayCore implements FakeRelay {
 
   #send(session: FakeRelaySession, message: unknown[]): void {
     const payload = JSON.stringify(message);
-    const {latencyMs} = this.#opts;
+    const { latencyMs } = this.#opts;
     if (latencyMs !== undefined && latencyMs > 0) {
       setTimeout(() => session.transport.send(payload), latencyMs);
       return;
@@ -203,7 +213,9 @@ export class FakeRelayCore implements FakeRelay {
   #deliver(event: Event): void {
     for (const session of this.#sessions) {
       for (const [id, filters] of session.subs) {
-        if (subMatches(filters, event)) {this.#send(session, ["EVENT", id, event]);}
+        if (subMatches(filters, event)) {
+          this.#send(session, ["EVENT", id, event]);
+        }
       }
     }
   }
@@ -224,7 +236,9 @@ export class FakeRelayCore implements FakeRelay {
     const seen = new Map<string, Event>();
     for (const kept of keptPerFilter) {
       for (const event of kept) {
-        if (!seen.has(event.id)) {seen.set(event.id, event);}
+        if (!seen.has(event.id)) {
+          seen.set(event.id, event);
+        }
       }
     }
     const matched = [...seen.values()];
@@ -311,14 +325,22 @@ export class FakeRelayCore implements FakeRelay {
         }
         session.subs.set(id, filters);
         const matched = await this.#matched(filters);
-        if (this.#opts.eoseBeforeEvents === true) {this.#send(session, ["EOSE", id]);}
-        for (const event of matched) {this.#send(session, ["EVENT", id, event]);}
-        if (this.#opts.eoseBeforeEvents !== true) {this.#send(session, ["EOSE", id]);}
+        if (this.#opts.eoseBeforeEvents === true) {
+          this.#send(session, ["EOSE", id]);
+        }
+        for (const event of matched) {
+          this.#send(session, ["EVENT", id, event]);
+        }
+        if (this.#opts.eoseBeforeEvents !== true) {
+          this.#send(session, ["EOSE", id]);
+        }
         return;
       }
       case "CLOSE": {
         const [, id] = items;
-        if (typeof id === "string") {session.subs.delete(id);}
+        if (typeof id === "string") {
+          session.subs.delete(id);
+        }
         return;
       }
       case "COUNT": {
@@ -333,7 +355,7 @@ export class FakeRelayCore implements FakeRelay {
         return;
       }
       case "AUTH": {
-        const {auth} = this.#opts;
+        const { auth } = this.#opts;
         const [, rawAuth] = items;
         if (!validateSignedEvent(rawAuth)) {
           this.#send(session, ["OK", "0".repeat(64), false, "error: invalid auth event"]);
@@ -424,7 +446,9 @@ export class FakeRelayCore implements FakeRelay {
       }
       case "NEG-CLOSE": {
         const [, id] = items;
-        if (typeof id === "string") {session.negs.delete(id);}
+        if (typeof id === "string") {
+          session.negs.delete(id);
+        }
         return;
       }
       default:
