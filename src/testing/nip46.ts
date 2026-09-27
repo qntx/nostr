@@ -1,6 +1,7 @@
 import { Keys, finalizeEvent } from "../core/index.ts";
 import { Kind } from "../core/kind.ts";
 import { isTag } from "../core/tag.ts";
+import { isRecord } from "../core/util.ts";
 import {
   getConversationKey,
   decrypt as nip44Decrypt,
@@ -49,10 +50,6 @@ export type FakeNip46Signer = {
   confirmHandshake: (secret: string) => void;
   close: () => void;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * In-process NIP-46 remote signer: subscribes to kind:24133 requests on `relayUrl` and answers as a

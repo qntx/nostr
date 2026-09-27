@@ -1,5 +1,6 @@
 // oxlint-disable unicorn/prefer-add-event-listener -- the *Like driver interfaces model only the `on*` handler surface
 import type { Event } from "../core/event.ts";
+import { isRecord } from "../core/util.ts";
 import type { DeletionPlan, DeletionState } from "./deletion.ts";
 import { StorageError } from "./error.ts";
 import { ADDRESSES, EVENTS, TAG_REFS, TOMBSTONES } from "./idb-types.ts";
@@ -61,10 +62,6 @@ export async function walkCursor(
 
 export function tagRefKey(name: string, value: string, id: string): string {
   return `${name}:${value.toLowerCase()}:${id}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function writeTagRefs(store: IDBObjectStoreLike, event: Event): void {

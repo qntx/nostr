@@ -13,7 +13,7 @@ import { Keys, finalizeEvent, verifyEvent } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
-import { assertHex32 } from "../core/util.ts";
+import { assertHex32, isRecord } from "../core/util.ts";
 import { encryptToPubkey } from "./nip44.ts";
 
 /** Unsigned event with a computed id. Never has `sig`. */
@@ -230,10 +230,6 @@ function parseJson(text: string): unknown {
   } catch (error) {
     throw new Nip59Error("invalid JSON", { cause: error });
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseRumor(value: unknown): Rumor {

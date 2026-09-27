@@ -5,6 +5,7 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/96.md
  */
 import { NostrError } from "../core/error.ts";
+import { isRecord } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 
@@ -29,10 +30,6 @@ export class Nip96Error extends NostrError {
 
 function serverInfoUrl(serviceUrl: string): string {
   return `${serviceUrl.replace(/\/+$/, "")}${WELL_KNOWN_PATH}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function errorMessageFromBody(json: unknown): string | undefined {

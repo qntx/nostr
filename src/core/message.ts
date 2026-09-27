@@ -3,7 +3,7 @@ import type { Event } from "./event.ts";
 import { validateSignedEvent } from "./event.ts";
 import type { Filter } from "./filter.ts";
 import { SUBSCRIPTION_ID_MAX_CHARS } from "./limits.ts";
-import { bytesToHex, hexToBytes } from "./util.ts";
+import { bytesToHex, hexToBytes, isRecord } from "./util.ts";
 
 /** NIP-01 subscription id: 1..64 chars. */
 export type SubscriptionId = string;
@@ -230,7 +230,7 @@ export function parseRelayMessage(raw: string): RelayMessage {
       if (
         data.length !== 3 ||
         typeof data[1] !== "string" ||
-        !isWireRecord(payload) ||
+        !isRecord(payload) ||
         typeof payload["count"] !== "number"
       ) {
         throw new MessageError("invalid COUNT relay message");
@@ -284,12 +284,8 @@ function parseWireFilters(items: unknown[], kind: string): Filter[] {
   return filters;
 }
 
-function isWireRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isFilterObject(value: unknown): value is Filter {
-  return isWireRecord(value);
+  return isRecord(value);
 }
 
 function isNegHex(value: unknown): value is string {

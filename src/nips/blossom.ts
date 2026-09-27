@@ -13,7 +13,7 @@ import { EventValidationError, NostrError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
-import { assertHex32, bytesToHex, utf8Encoder } from "../core/util.ts";
+import { assertHex32, bytesToHex, isRecord, utf8Encoder } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch, sendManual } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 
@@ -520,10 +520,6 @@ async function readJson(res: ManualResponse): Promise<unknown> {
       status: res.status,
     });
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseBlobDescriptor(json: unknown): BlobDescriptor {
