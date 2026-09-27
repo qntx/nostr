@@ -3,8 +3,8 @@ import { arch, cpus, hostname, platform } from "node:os";
 import { describe, expect, test } from "vite-plus/test";
 
 import { Kind } from "../src/core/kind.ts";
-import { finalizeEvent, verifyEvent } from '../src/index.ts';
-import type { Event } from '../src/index.ts';
+import { finalizeEvent, verifyEvent } from "../src/index.ts";
+import type { Event } from "../src/index.ts";
 import { loadNostrWasm } from "../src/wasm/load.ts";
 import { readBuiltWasm } from "./read-wasm.ts";
 
@@ -25,7 +25,9 @@ function fixture(): Event {
 
 function timeOps(n: number, run: () => void): { ms: number; ops: number } {
   const t0 = performance.now();
-  for (let i = 0; i < n; i++) {run();}
+  for (let i = 0; i < n; i++) {
+    run();
+  }
   const ms = performance.now() - t0;
   return { ms, ops: ms === 0 ? Number.POSITIVE_INFINITY : (n / ms) * 1000 };
 }

@@ -10,69 +10,80 @@ import { fileURLToPath } from "node:url";
 // The repo does not depend on @types/bun; declare the used surface.
 type BunBuildOutput = {
   success: boolean;
-  logs: readonly { toString(): string }[];
-  outputs: readonly { kind: string }[];
-}
+  logs: ReadonlyArray<{ toString: () => string }>;
+  outputs: ReadonlyArray<{ kind: string }>;
+};
 type BunResolver = {
-  onResolve(args: { filter: RegExp }, callback: () => { path: string }): void;
-}
+  onResolve: (args: { filter: RegExp }, callback: () => { path: string }) => void;
+};
 declare const Bun: {
-  build(options: {
+  build: (options: {
     entrypoints: string[];
     target: "browser";
     format: "iife";
-    plugins?: Array<{ name: string; setup(build: BunResolver): void }>;
-  }): Promise<BunBuildOutput>;
-  write(path: string, data: unknown): Promise<unknown>;
-  spawnSync(
+    plugins?: Array<{ name: string; setup: (build: BunResolver) => void }>;
+  }) => Promise<BunBuildOutput>;
+  write: (path: string, data: unknown) => Promise<unknown>;
+  spawnSync: (
     cmd: ReadonlyArray<string>,
     options: { stdout: "pipe"; stderr: "pipe" },
-  ): { exitCode: number; stdout: { toString(): string }; stderr: { toString(): string } };
+  ) => {
+    exitCode: number;
+    stdout: { toString: () => string };
+    stderr: { toString: () => string };
+  };
 };
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const outfile = resolve(root, ".hermes-smoke.iife.js");
 
-const hermes = process.env.HERMES;
-if (!hermes) {
-  console.error("set HERMES to the hermes binary");
-  process.exit(1);
-}
+async function main(): Promise<number> {
+  const hermes = process.env.HERMES;
+  if (hermes === undefined || hermes === "") {
+    console.error("set HERMES to the hermes binary");
+    return 1;
+  }
 
-const result = await Bun.build({
-  entrypoints: [resolve(root, "tests/hermes/smoke.ts")],
-  target: "browser",
-  format: "iife",
-  plugins: [
-    {
-      name: "punycode-cjs",
-      setup(build: BunResolver) {
-        // tr46 (whatwg-url dependency) `require("punycode")`s; bun build maps
-        // the specifier to its `node:punycode` ESM shim (default-only export),
-        // so `punycode.ucs2` is undefined at runtime. Resolve to the installed
-        // CJS implementation instead.
-        build.onResolve({ filter: /^(node:)?punycode$/ }, () => ({
-          path: resolve(root, "node_modules/punycode/punycode.js"),
-        }));
+  const result = await Bun.build({
+    entrypoints: [resolve(root, "tests/hermes/smoke.ts")],
+    target: "browser",
+    format: "iife",
+    plugins: [
+      {
+        name: "punycode-cjs",
+        setup(build: BunResolver) {
+          // tr46 (whatwg-url dependency) `require("punycode")`s; bun build maps
+          // the specifier to its `node:punycode` ESM shim (default-only export),
+          // so `punycode.ucs2` is undefined at runtime. Resolve to the installed
+          // CJS implementation instead.
+          build.onResolve({ filter: /^(node:)?punycode$/ }, () => ({
+            path: resolve(root, "node_modules/punycode/punycode.js"),
+          }));
+        },
       },
-    },
-  ],
-});
-if (!result.success) {
-  for (const log of result.logs) {console.error(String(log));}
-  process.exit(1);
-}
-const bundle = result.outputs.find((o: { kind: string }) => o.kind === "entry-point");
-if (!bundle) {
-  console.error("bun build produced no entry-point output");
-  process.exit(1);
-}
-await Bun.write(outfile, bundle);
+    ],
+  });
+  if (!result.success) {
+    for (const log of result.logs) {
+      console.error(String(log));
+    }
+    return 1;
+  }
+  const bundle = result.outputs.find((o: { kind: string }) => o.kind === "entry-point");
+  if (!bundle) {
+    console.error("bun build produced no entry-point output");
+    return 1;
+  }
+  await Bun.write(outfile, bundle);
 
-const proc = Bun.spawnSync([hermes, outfile], { stdout: "pipe", stderr: "pipe" });
-const out = proc.stdout.toString() + proc.stderr.toString();
-process.stdout.write(out);
-if (proc.exitCode !== 0 || !out.includes("HERMES_SMOKE_OK")) {
-  console.error(`hermes smoke failed (exit ${proc.exitCode}): no HERMES_SMOKE_OK`);
-  process.exit(1);
+  const proc = Bun.spawnSync([hermes, outfile], { stdout: "pipe", stderr: "pipe" });
+  const out = proc.stdout.toString() + proc.stderr.toString();
+  process.stdout.write(out);
+  if (proc.exitCode !== 0 || !out.includes("HERMES_SMOKE_OK")) {
+    console.error(`hermes smoke failed (exit ${proc.exitCode}): no HERMES_SMOKE_OK`);
+    return 1;
+  }
+  return 0;
 }
+
+process.exitCode = await main();

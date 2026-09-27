@@ -1,11 +1,10 @@
 import { describe, expect, test } from "vite-plus/test";
 
-// Packed entry exists only after `build:wasm`; keep this file out of default typecheck.
-// @ts-expect-error
+// Packed entry exists only after `build:wasm`.
 import { loadNostrWasm } from "../dist/wasm.mjs";
 import { Kind } from "../src/core/kind.ts";
-import { finalizeEvent } from '../src/index.ts';
-import type { Event } from '../src/index.ts';
+import { finalizeEvent } from "../src/index.ts";
+import type { Event } from "../src/index.ts";
 import { readBuiltWasm } from "./read-wasm.ts";
 
 const SK_HEX = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";

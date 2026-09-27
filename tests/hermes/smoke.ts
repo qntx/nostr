@@ -1,5 +1,24 @@
-import { EventBuilder, Keys, KeysSigner, Kind, MemoryEventStore, ReactiveEventStore, bytesToHex, finalizeEvent, getEventHash, hexToBytes, matchFilter, nip19Decode, normalizeURL, noteEncode, npubEncode, nsecEncode, serializeEvent, verifyEvent } from '../../src/index.ts';
-import type { Event } from '../../src/index.ts';
+import {
+  EventBuilder,
+  Keys,
+  KeysSigner,
+  Kind,
+  MemoryEventStore,
+  ReactiveEventStore,
+  bytesToHex,
+  finalizeEvent,
+  getEventHash,
+  hexToBytes,
+  matchFilter,
+  nip19Decode,
+  normalizeURL,
+  noteEncode,
+  npubEncode,
+  nsecEncode,
+  serializeEvent,
+  verifyEvent,
+} from "../../src/index.ts";
+import type { Event } from "../../src/index.ts";
 import {
   decrypt as nip44Decrypt,
   decryptFromPubkey,
@@ -23,8 +42,10 @@ import { hermesGlobalsInstalled } from "./globals.ts";
 declare function print(msg: string): void;
 declare function quit(code: number): void;
 
-function assert(cond: boolean, name: string): void {
-  if (!cond) {throw new Error(`smoke: ${name}`);}
+function assert(cond: boolean, name: string): asserts cond {
+  if (!cond) {
+    throw new Error(`smoke: ${name}`);
+  }
 }
 function eq<T>(got: T, want: T, name: string): void {
   if (JSON.stringify(got) !== JSON.stringify(want)) {
@@ -107,7 +128,7 @@ async function main(): Promise<void> {
   const nsec = nsecEncode(keys.secretKey.bytes);
   const decodedNsec = nip19Decode(nsec);
   assert(decodedNsec.type === "nsec", "nsec type");
-  eq(bytesToHex(decodedNsec.data as Uint8Array), SK, "nsec round trip");
+  eq(bytesToHex(decodedNsec.data), SK, "nsec round trip");
   const npub = npubEncode(keys.publicKey);
   eq(nip19Decode(npub), { type: "npub", data: keys.publicKey }, "npub round trip");
   const note = noteEncode(signed.id);
@@ -154,7 +175,8 @@ async function main(): Promise<void> {
   const mem = new MemoryEventStore();
   eq(await mem.put(built), "accepted", "mem.put");
   eq(await mem.put(built), "duplicate", "mem.put duplicate");
-  eq((await mem.query([{ ids: [built.id] }]))[0]?.id, built.id, "mem.query");
+  const memRows = await mem.query([{ ids: [built.id] }]);
+  eq(memRows.at(0)?.id, built.id, "mem.query");
   eq(await mem.count([{ kinds: [1] }]), 1, "mem.count");
 
   // NIP-59 gift wrap round trip via KeysSigner (async, NIP-44 under the hood).
@@ -174,12 +196,12 @@ async function main(): Promise<void> {
   eq(inner.pubkey, keys.publicKey, "nip59 unwrap pubkey");
 }
 
-main().then(
-  () => {
-    print("HERMES_SMOKE_OK");
-  },
-  (error: unknown) => {
-    print(`HERMES_SMOKE_FAIL: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
-    quit(1);
-  },
-);
+try {
+  await main();
+  print("HERMES_SMOKE_OK");
+} catch (error) {
+  print(
+    `HERMES_SMOKE_FAIL: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+  );
+  quit(1);
+}
