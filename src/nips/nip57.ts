@@ -4,12 +4,13 @@
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/57.md
  */
+import { equalBytes } from "@noble/ciphers/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bech32 } from "@scure/base";
 
 import { EventValidationError } from "../core/error.ts";
-import { validateSignedEvent } from '../core/event.ts';
-import type { Event, EventTemplate } from '../core/event.ts';
+import { validateSignedEvent } from "../core/event.ts";
+import type { Event, EventTemplate } from "../core/event.ts";
 import { verifyEvent } from "../core/key.ts";
 import { isAddressableKind, Kind } from "../core/kind.ts";
 import { eventAddress, getDTag, parseEventAddress, Tag } from "../core/tag.ts";
@@ -50,14 +51,20 @@ export function makeZapRequest(params: ProfileZapRequest | EventZapRequest): Eve
     tags.push(Tag.e(event.id));
     if (isAddressableKind(event.kind)) {
       const d = getDTag(event.tags);
-      if (d === undefined) {throw new EventValidationError("d tag not found");}
+      if (d === undefined) {
+        throw new EventValidationError("d tag not found");
+      }
       const addr = eventAddress(event);
-      if (addr) {tags.push(["a", addr]);}
+      if (addr !== undefined) {
+        tags.push(["a", addr]);
+      }
     }
     tags.push(["k", event.kind.toString()]);
   }
 
-  if (params.lnurl) {tags.push(["lnurl", params.lnurl]);}
+  if (params.lnurl !== undefined && params.lnurl !== "") {
+    tags.push(["lnurl", params.lnurl]);
+  }
 
   return {
     kind: Kind.ZapRequest,
@@ -87,16 +94,11 @@ export type Bolt11Fields = {
 
 function firstTagValue(tags: ReadonlyArray<Tag>, name: string): string | undefined {
   for (const tag of tags) {
-    if (tag[0] === name && tag[1] !== undefined) {return tag[1];}
+    if (tag[0] === name && tag[1] !== undefined) {
+      return tag[1];
+    }
   }
   return undefined;
-}
-
-function bytesEq(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) {return false;}
-  let x = 0;
-  for (let i = 0; i < a.length; i++) {x |= a[i]! ^ b[i]!;}
-  return x === 0;
 }
 
 function fail(reason: string): ZapReceiptValidation {
@@ -110,31 +112,53 @@ const MSATS_PER_NANO = 100;
 
 /** Amount is digits after `ln` + currency letters, optional m/u/n/p. Non-integer pico is omitted. */
 function amountMsatsFromHrp(hrp: string): number | undefined {
-  if (!hrp.startsWith("ln")) {return undefined;}
+  if (!hrp.startsWith("ln")) {
+    return undefined;
+  }
   let i = 2;
   while (i < hrp.length) {
-    const c = hrp.charCodeAt(i);
-    if (c < 97 || c > 122) {break;}
+    const c = hrp.codePointAt(i);
+    if (c === undefined || c < 97 || c > 122) {
+      break;
+    }
     i++;
   }
-  if (i === hrp.length) {return undefined;}
+  if (i === hrp.length) {
+    return undefined;
+  }
   const rest = hrp.slice(i);
   const m = /^([0-9]+)([munp])?$/.exec(rest);
-  if (!m) {return undefined;}
+  if (!m) {
+    return undefined;
+  }
   const n = Number(m[1]);
-  if (!Number.isSafeInteger(n)) {return undefined;}
-  const mul = m[2];
-  if (mul === undefined) {return n * MSATS_PER_BTC;}
-  if (mul === "m") {return n * MSATS_PER_MILLI;}
-  if (mul === "u") {return n * MSATS_PER_MICRO;}
-  if (mul === "n") {return n * MSATS_PER_NANO;}
+  if (!Number.isSafeInteger(n)) {
+    return undefined;
+  }
+  const mul = m.at(2);
+  if (mul === undefined) {
+    return n * MSATS_PER_BTC;
+  }
+  if (mul === "m") {
+    return n * MSATS_PER_MILLI;
+  }
+  if (mul === "u") {
+    return n * MSATS_PER_MICRO;
+  }
+  if (mul === "n") {
+    return n * MSATS_PER_NANO;
+  }
   // p: 0.1 msat; drop amounts that are not whole millisats
-  if (n % 10 !== 0) {return undefined;}
+  if (n % 10 !== 0) {
+    return undefined;
+  }
   return n / 10;
 }
 
 function parseMsatsTag(value: string): number | undefined {
-  if (!/^[0-9]+$/.test(value)) {return undefined;}
+  if (!/^[0-9]+$/.test(value)) {
+    return undefined;
+  }
   const n = Number(value);
   return Number.isSafeInteger(n) ? n : undefined;
 }
@@ -142,7 +166,9 @@ function parseMsatsTag(value: string): number | undefined {
 function countTags(tags: ReadonlyArray<Tag>, name: string): number {
   let n = 0;
   for (const tag of tags) {
-    if (tag[0] === name) {n++;}
+    if (tag[0] === name) {
+      n++;
+    }
   }
   return n;
 }
@@ -150,16 +176,22 @@ function countTags(tags: ReadonlyArray<Tag>, name: string): number {
 function hasHexTagValue(tags: ReadonlyArray<Tag>, name: string, value: string): boolean {
   const needle = value.toLowerCase();
   for (const tag of tags) {
-    if (tag[0] === name && tag[1] !== undefined && tag[1].toLowerCase() === needle) {return true;}
+    if (tag[0] === name && tag[1] !== undefined && tag[1].toLowerCase() === needle) {
+      return true;
+    }
   }
   return false;
 }
 
 function hasAddressTag(tags: ReadonlyArray<Tag>, value: string): boolean {
   const want = parseEventAddress(value);
-  if (!want) {return false;}
+  if (!want) {
+    return false;
+  }
   for (const tag of tags) {
-    if (tag[0] !== "a" || tag[1] === undefined) {continue;}
+    if (tag[0] !== "a" || tag[1] === undefined) {
+      continue;
+    }
     const got = parseEventAddress(tag[1]);
     if (
       got &&
@@ -182,29 +214,51 @@ const HASH_BYTES = 32;
 export function parseBolt11(pr: string): Bolt11Fields | undefined {
   try {
     // Invoices exceed bech32's default 90-char limit.
-    const { prefix, words } = bech32.decode(pr.toLowerCase() as `${string}1${string}`, false);
-    if (!prefix.startsWith("ln")) {return undefined;}
+    const { prefix, words } = bech32.decode(pr.toLowerCase(), false);
+    if (!prefix.startsWith("ln")) {
+      return undefined;
+    }
     // timestamp (7) + tagged fields + secp256k1 signature (104)
-    if (words.length < BOLT11_TIMESTAMP_WORDS + BOLT11_SIGNATURE_WORDS) {return undefined;}
+    if (words.length < BOLT11_TIMESTAMP_WORDS + BOLT11_SIGNATURE_WORDS) {
+      return undefined;
+    }
     const fields: Bolt11Fields = {};
     const amountMsats = amountMsatsFromHrp(prefix);
-    if (amountMsats !== undefined) {fields.amountMsats = amountMsats;}
+    if (amountMsats !== undefined) {
+      fields.amountMsats = amountMsats;
+    }
     const tlvEnd = words.length - BOLT11_SIGNATURE_WORDS;
     let i = BOLT11_TIMESTAMP_WORDS;
     while (i + 3 <= tlvEnd) {
-      const type = words[i]!;
-      const dataLen = (words[i + 1]! << 5) | words[i + 2]!;
+      const type = words[i];
+      const lenHigh = words[i + 1];
+      const lenLow = words[i + 2];
+      if (type === undefined || lenHigh === undefined || lenLow === undefined) {
+        break;
+      }
+      const dataLen = lenHigh * 32 + lenLow;
       i += 3;
-      if (i + dataLen > tlvEnd) {break;}
+      if (i + dataLen > tlvEnd) {
+        break;
+      }
       const data = words.slice(i, i + dataLen);
       i += dataLen;
-      if ((type !== 1 && type !== 23) || dataLen !== BOLT11_HASH_WORDS) {continue;}
+      if ((type !== 1 && type !== 23) || dataLen !== BOLT11_HASH_WORDS) {
+        continue;
+      }
       const bytes = bech32.fromWordsUnsafe(data);
-      if (!bytes || bytes.length !== HASH_BYTES) {continue;}
-      if (type === 1) {fields.paymentHash ??= bytes;}
-      else {fields.descriptionHash ??= bytes;}
+      if (!bytes || bytes.length !== HASH_BYTES) {
+        continue;
+      }
+      if (type === 1) {
+        fields.paymentHash ??= bytes;
+      } else {
+        fields.descriptionHash ??= bytes;
+      }
     }
-    if (!fields.paymentHash) {return undefined;}
+    if (!fields.paymentHash) {
+      return undefined;
+    }
     return fields;
   } catch {
     return undefined;
@@ -215,10 +269,16 @@ export function parseBolt11(pr: string): Bolt11Fields | undefined {
 export function parseZapRequestFromReceipt(receipt: Event): Event | undefined {
   try {
     const raw = firstTagValue(receipt.tags, "description");
-    if (raw === undefined) {return undefined;}
+    if (raw === undefined) {
+      return undefined;
+    }
     const parsed: unknown = JSON.parse(raw);
-    if (!validateSignedEvent(parsed) || parsed.kind !== Kind.ZapRequest) {return undefined;}
-    if (!verifyEvent(parsed)) {return undefined;}
+    if (!validateSignedEvent(parsed) || parsed.kind !== Kind.ZapRequest) {
+      return undefined;
+    }
+    if (!verifyEvent(parsed)) {
+      return undefined;
+    }
     return parsed;
   } catch {
     return undefined;
@@ -237,21 +297,38 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
 
     const descriptionRaw = firstTagValue(receipt.tags, "description");
     const request = parseZapRequestFromReceipt(receipt);
-    if (descriptionRaw === undefined || !request) {return fail("invalid zap request");}
-    if (countTags(request.tags, "p") !== 1) {return fail("invalid p count");}
-    if (countTags(request.tags, "e") > 1) {return fail("too many e tags");}
-    if (!firstTagValue(request.tags, "relays")) {return fail("missing relays");}
+    if (descriptionRaw === undefined || !request) {
+      return fail("invalid zap request");
+    }
+    if (countTags(request.tags, "p") !== 1) {
+      return fail("invalid p count");
+    }
+    if (countTags(request.tags, "e") > 1) {
+      return fail("too many e tags");
+    }
+    const relaysValue = firstTagValue(request.tags, "relays");
+    if (relaysValue === undefined || relaysValue === "") {
+      return fail("missing relays");
+    }
 
     for (const tag of request.tags) {
-      if (tag[0] !== "a") {continue;}
-      if (tag[1] === undefined) {return fail("invalid a");}
+      if (tag[0] !== "a") {
+        continue;
+      }
+      if (tag[1] === undefined) {
+        return fail("invalid a");
+      }
       const parsed = parseEventAddress(tag[1]);
-      if (!parsed || !isAddressableKind(parsed.kind)) {return fail("invalid a");}
+      if (!parsed || !isAddressableKind(parsed.kind)) {
+        return fail("invalid a");
+      }
     }
 
     // Request P is the LNURL provider (receipt pubkey), not the zap sender.
     const requestPCount = countTags(request.tags, "P");
-    if (requestPCount > 1) {return fail("too many P tags");}
+    if (requestPCount > 1) {
+      return fail("too many P tags");
+    }
     if (requestPCount === 1) {
       const requestP = firstTagValue(request.tags, "P");
       if (requestP === undefined || requestP.toLowerCase() !== receipt.pubkey.toLowerCase()) {
@@ -260,23 +337,35 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
     }
 
     const bolt11Tag = firstTagValue(receipt.tags, "bolt11");
-    if (bolt11Tag === undefined) {return fail("missing bolt11");}
+    if (bolt11Tag === undefined) {
+      return fail("missing bolt11");
+    }
     const bolt11 = parseBolt11(bolt11Tag);
-    if (!bolt11 || !bolt11.descriptionHash) {return fail("invalid bolt11");}
+    if (!bolt11 || !bolt11.descriptionHash) {
+      return fail("invalid bolt11");
+    }
 
     const requestAmount = firstTagValue(request.tags, "amount");
     if (requestAmount !== undefined) {
       const msats = parseMsatsTag(requestAmount);
-      if (msats === undefined || bolt11.amountMsats !== msats) {return fail("amount mismatch");}
+      if (msats === undefined || bolt11.amountMsats !== msats) {
+        return fail("amount mismatch");
+      }
     }
 
     // Hash the tag payload, not JSON.stringify(parsed) (key order may differ).
     const digest = sha256(utf8Encoder.encode(descriptionRaw));
-    if (!bytesEq(digest, bolt11.descriptionHash)) {return fail("description hash mismatch");}
+    if (!equalBytes(digest, bolt11.descriptionHash)) {
+      return fail("description hash mismatch");
+    }
 
     const requestLnurl = firstTagValue(request.tags, "lnurl");
-    if (requestLnurl !== undefined && ctx.lnurl !== undefined) {
-      if (requestLnurl.toLowerCase() !== ctx.lnurl.toLowerCase()) {return fail("lnurl mismatch");}
+    if (
+      requestLnurl !== undefined &&
+      ctx.lnurl !== undefined &&
+      requestLnurl.toLowerCase() !== ctx.lnurl.toLowerCase()
+    ) {
+      return fail("lnurl mismatch");
     }
 
     const preimageHex = firstTagValue(receipt.tags, "preimage");
@@ -287,7 +376,9 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
       } catch {
         return fail("preimage mismatch");
       }
-      if (!bytesEq(sha256(preimage), bolt11.paymentHash)) {return fail("preimage mismatch");}
+      if (!equalBytes(sha256(preimage), bolt11.paymentHash)) {
+        return fail("preimage mismatch");
+      }
     }
 
     const recipient = firstTagValue(request.tags, "p");
@@ -299,13 +390,19 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
       return fail("missing e");
     }
     for (const tag of request.tags) {
-      if (tag[0] !== "a" || tag[1] === undefined) {continue;}
-      if (!hasAddressTag(receipt.tags, tag[1])) {return fail("missing a");}
+      if (tag[0] !== "a" || tag[1] === undefined) {
+        continue;
+      }
+      if (!hasAddressTag(receipt.tags, tag[1])) {
+        return fail("missing a");
+      }
     }
 
     // Receipt P is the zap sender (request pubkey). Do not copy request tag P.
     for (const tag of receipt.tags) {
-      if (tag[0] !== "P") {continue;}
+      if (tag[0] !== "P") {
+        continue;
+      }
       if (tag[1] === undefined || tag[1].toLowerCase() !== request.pubkey.toLowerCase()) {
         return fail("receipt P mismatch");
       }

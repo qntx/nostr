@@ -17,16 +17,18 @@ import { bytesToHex, utf8Decoder, utf8Encoder } from "../core/util.ts";
 const AUTHORIZATION_SCHEME = "Nostr ";
 const DEFAULT_MAX_SKEW_SEC = 60;
 
-export class Nip98Error extends NostrError {}
+export class Nip98Error extends NostrError {
+  override name = "Nip98Error";
+}
 
 /** SHA-256 of the request body: raw bytes for string/Uint8Array, else JSON.stringify. */
 function hashPayload(payload: unknown): string {
   const bytes =
     typeof payload === "string"
       ? utf8Encoder.encode(payload)
-      : (payload instanceof Uint8Array
+      : payload instanceof Uint8Array
         ? payload
-        : utf8Encoder.encode(JSON.stringify(payload)));
+        : utf8Encoder.encode(JSON.stringify(payload));
   return bytesToHex(sha256(bytes));
 }
 
@@ -73,12 +75,12 @@ export async function getToken(
   });
 
   const encoded = base64.encode(utf8Encoder.encode(JSON.stringify(signed)));
-  return opts?.includeAuthorizationScheme ? AUTHORIZATION_SCHEME + encoded : encoded;
+  return opts?.includeAuthorizationScheme === true ? AUTHORIZATION_SCHEME + encoded : encoded;
 }
 
 /** Decode a NIP-98 token (with or without the `Nostr ` scheme) into an event. */
 export function unpackEventFromToken(token: string): Event {
-  if (!token) {
+  if (token === "") {
     throw new Nip98Error("missing token");
   }
 
@@ -88,7 +90,7 @@ export function unpackEventFromToken(token: string): Event {
   try {
     json = utf8Decoder.decode(decodeStandardBase64(encoded));
   } catch (error) {
-    throw new Nip98Error("invalid token encoding", { error });
+    throw new Nip98Error("invalid token encoding", { cause: error });
   }
   if (!json.startsWith("{")) {
     throw new Nip98Error("invalid token");
@@ -98,7 +100,7 @@ export function unpackEventFromToken(token: string): Event {
   try {
     parsed = JSON.parse(json);
   } catch (error) {
-    throw new Nip98Error("invalid token JSON", { error });
+    throw new Nip98Error("invalid token JSON", { cause: error });
   }
   if (!validateSignedEvent(parsed)) {
     throw new Nip98Error("token is not a signed event");
@@ -116,22 +118,34 @@ export function validateAuthEvent(
   method: string,
   opts?: { payload?: unknown; maxSkewSec?: number },
 ): boolean {
-  if (!verifyEvent(event)) {return false;}
-  if (event.kind !== Kind.HttpAuth) {return false;}
+  if (!verifyEvent(event)) {
+    return false;
+  }
+  if (event.kind !== Kind.HttpAuth) {
+    return false;
+  }
 
   const maxSkewSec = opts?.maxSkewSec ?? DEFAULT_MAX_SKEW_SEC;
   const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - event.created_at) > maxSkewSec) {return false;}
+  if (Math.abs(now - event.created_at) > maxSkewSec) {
+    return false;
+  }
 
   const u = event.tags.find((t) => t[0] === "u")?.[1];
-  if (u !== url) {return false;}
+  if (u !== url) {
+    return false;
+  }
 
   const m = event.tags.find((t) => t[0] === "method")?.[1];
-  if (m === undefined || m.toLowerCase() !== method.toLowerCase()) {return false;}
+  if (m === undefined || m.toLowerCase() !== method.toLowerCase()) {
+    return false;
+  }
 
   if (opts?.payload !== undefined) {
     const payloadTag = event.tags.find((t) => t[0] === "payload")?.[1];
-    if (payloadTag !== hashPayload(opts.payload)) {return false;}
+    if (payloadTag !== hashPayload(opts.payload)) {
+      return false;
+    }
   }
 
   return true;

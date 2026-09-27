@@ -24,7 +24,9 @@ const LOGN_MAX = 22;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 
-export class Nip49Error extends NostrError {}
+export class Nip49Error extends NostrError {
+  override name = "Nip49Error";
+}
 
 function assertLogn(logn: number): void {
   if (!Number.isInteger(logn) || logn < LOGN_MIN || logn > LOGN_MAX) {
@@ -49,7 +51,7 @@ function deriveKey(password: string, salt: Uint8Array, logn: number): Uint8Array
 export function encrypt(
   secretKey: Uint8Array,
   password: string,
-  logn: number = 16,
+  logn = 16,
   ksb: KeySecurityByte = 0x02,
 ): Ncryptsec {
   assertSecretKeyBytes(secretKey);
@@ -74,8 +76,8 @@ export function decrypt(ncryptsec: string, password: string): Uint8Array {
   let prefix: string;
   let b: Uint8Array;
   try {
-    const decoded = bech32.decode(ncryptsec as `${string}1${string}`, Bech32MaxSize);
-    prefix = decoded.prefix;
+    const decoded = bech32.decode(ncryptsec, Bech32MaxSize);
+    ({ prefix } = decoded);
     b = new Uint8Array(bech32.fromWords(decoded.words));
   } catch (error) {
     throw new Nip49Error("invalid ncryptsec", {
@@ -88,21 +90,32 @@ export function decrypt(ncryptsec: string, password: string): Uint8Array {
   if (b.length !== PAYLOAD_LEN) {
     throw new Nip49Error("invalid ncryptsec length");
   }
-  const version = b[0]!;
+  const version = b.at(0);
+  if (version === undefined) {
+    throw new Nip49Error("invalid ncryptsec length");
+  }
   if (version !== VERSION) {
     throw new Nip49Error(`invalid version ${version}, expected 0x02`);
   }
-  const logn = b[1]!;
+  const logn = b.at(1);
+  if (logn === undefined) {
+    throw new Nip49Error("invalid ncryptsec length");
+  }
   const salt = b.subarray(2, 2 + SALT_LEN);
   const nonce = b.subarray(2 + SALT_LEN, 2 + SALT_LEN + NONCE_LEN);
-  const ksb = b[2 + SALT_LEN + NONCE_LEN]!;
+  const ksb = b.at(2 + SALT_LEN + NONCE_LEN);
+  if (ksb === undefined) {
+    throw new Nip49Error("invalid ncryptsec length");
+  }
   const aad = Uint8Array.from([ksb]);
   const ciphertext = b.subarray(2 + SALT_LEN + NONCE_LEN + 1);
   try {
     const key = deriveKey(password, salt, logn);
     return xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
   } catch (error) {
-    if (error instanceof Nip49Error) throw error;
+    if (error instanceof Nip49Error) {
+      throw error;
+    }
     throw new Nip49Error("failed to decrypt", {
       cause: error instanceof Error ? error : undefined,
     });

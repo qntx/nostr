@@ -7,26 +7,26 @@ import { NostrError } from "../core/error.ts";
  */
 import { assertHex32, isHex32 } from "../core/util.ts";
 
-export const BUNKER_REGEX: RegExp = /^bunker:\/\/([0-9a-fA-F]{64})\??([?/\w:.=&%-]*)$/;
+export const BUNKER_REGEX = /^bunker:\/\/([0-9a-fA-F]{64})\??([?/\w:.=&%-]*)$/;
 
 export type BunkerPointer = {
   /** Remote signer / bunker public key (hex). */
   pubkey: string;
   relays: string[];
-  secret: string | null;
+  secret: string | undefined;
 };
 
 export type ClientMetadata = {
-  name?: string;
-  url?: string;
-  image?: string;
+  name?: string | undefined;
+  url?: string | undefined;
+  image?: string | undefined;
 };
 
 export type NostrConnectParams = {
   clientPubkey: string;
   relays: string[];
   secret: string;
-  perms?: string[];
+  perms?: string[] | undefined;
 } & ClientMetadata;
 
 export type Nip46Request = {
@@ -37,11 +37,12 @@ export type Nip46Request = {
 
 export type Nip46Response = {
   id: string;
-  result?: string;
-  error?: string;
+  result?: string | undefined;
+  error?: string | undefined;
 };
 
 export class Nip46Error extends NostrError {
+  override name = "Nip46Error";
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
   }
@@ -53,29 +54,32 @@ export function toBunkerURL(pointer: BunkerPointer): string {
   for (const relay of pointer.relays) {
     url.searchParams.append("relay", relay);
   }
-  if (pointer.secret) {
+  if (pointer.secret !== undefined && pointer.secret !== "") {
     url.searchParams.set("secret", pointer.secret);
   }
   return url.toString();
 }
 
 /**
- * Parse a `bunker://` URL into a pointer. Returns null when the input is not a bunker URL
+ * Parse a `bunker://` URL into a pointer. Returns undefined when the input is not a bunker URL
  * (including NIP-05 identifiers).
  */
-export function parseBunkerURL(input: string): BunkerPointer | null {
+export function parseBunkerURL(input: string): BunkerPointer | undefined {
   const match = BUNKER_REGEX.exec(input.trim());
-  if (!match?.[1]) {return null;}
+  const hex = match?.at(1);
+  if (match === null || hex === undefined) {
+    return undefined;
+  }
   try {
-    const pubkey = assertHex32(match[1], "bunker pubkey");
-    const qs = new URLSearchParams(match[2] ?? "");
+    const pubkey = assertHex32(hex, "bunker pubkey");
+    const qs = new URLSearchParams(match.at(2) ?? "");
     return {
       pubkey,
       relays: qs.getAll("relay"),
-      secret: qs.get("secret"),
+      secret: qs.get("secret") ?? undefined,
     };
   } catch {
-    return null;
+    return undefined;
   }
 }
 
@@ -96,12 +100,18 @@ export function createNostrConnectURI(params: NostrConnectParams): string {
     query.append("relay", relay);
   }
   query.set("secret", params.secret);
-  if (params.perms && params.perms.length > 0) {
+  if (params.perms !== undefined && params.perms.length > 0) {
     query.set("perms", params.perms.join(","));
   }
-  if (params.name) {query.set("name", params.name);}
-  if (params.url) {query.set("url", params.url);}
-  if (params.image) {query.set("image", params.image);}
+  if (params.name !== undefined && params.name !== "") {
+    query.set("name", params.name);
+  }
+  if (params.url !== undefined && params.url !== "") {
+    query.set("url", params.url);
+  }
+  if (params.image !== undefined && params.image !== "") {
+    query.set("image", params.image);
+  }
 
   return `nostrconnect://${params.clientPubkey.toLowerCase()}?${query.toString()}`;
 }
@@ -124,19 +134,35 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
     throw new Nip46Error("invalid client pubkey in nostrconnect URI");
   }
   const secret = url.searchParams.get("secret");
-  if (!secret) {throw new Nip46Error("missing secret in nostrconnect URI");}
+  if (secret === null || secret === "") {
+    throw new Nip46Error("missing secret in nostrconnect URI");
+  }
   const relays = url.searchParams.getAll("relay");
-  if (relays.length === 0) {throw new Nip46Error("missing relays in nostrconnect URI");}
-  const permsRaw = url.searchParams.get("perms");
-  return {
+  if (relays.length === 0) {
+    throw new Nip46Error("missing relays in nostrconnect URI");
+  }
+  const params: NostrConnectParams = {
     clientPubkey: clientPubkey.toLowerCase(),
     relays,
     secret,
-    perms: permsRaw ? permsRaw.split(",").filter(Boolean) : undefined,
-    name: url.searchParams.get("name") ?? undefined,
-    url: url.searchParams.get("url") ?? undefined,
-    image: url.searchParams.get("image") ?? undefined,
   };
+  const permsRaw = url.searchParams.get("perms");
+  if (permsRaw !== null && permsRaw !== "") {
+    params.perms = permsRaw.split(",").filter((p) => p !== "");
+  }
+  const name = url.searchParams.get("name");
+  if (name !== null) {
+    params.name = name;
+  }
+  const metadataUrl = url.searchParams.get("url");
+  if (metadataUrl !== null) {
+    params.url = metadataUrl;
+  }
+  const image = url.searchParams.get("image");
+  if (image !== null) {
+    params.image = image;
+  }
+  return params;
 }
 
 export function encodeNip46Request(req: Nip46Request): string {
@@ -152,19 +178,23 @@ export function decodeNip46Request(json: string): Nip46Request {
       cause: error instanceof Error ? error : undefined,
     });
   }
-  if (!isRecord(data) || typeof data.id !== "string" || typeof data.method !== "string") {
+  if (!isRecord(data) || typeof data["id"] !== "string" || typeof data["method"] !== "string") {
     throw new Nip46Error("invalid NIP-46 request shape");
   }
-  if (!Array.isArray(data.params) || !data.params.every((p) => typeof p === "string")) {
+  if (!Array.isArray(data["params"]) || !data["params"].every((p) => typeof p === "string")) {
     throw new Nip46Error("invalid NIP-46 request params");
   }
-  return { id: data.id, method: data.method, params: data.params };
+  return { id: data["id"], method: data["method"], params: data["params"] };
 }
 
 export function encodeNip46Response(res: Nip46Response): string {
   const body: Record<string, string> = { id: res.id };
-  if (res.result !== undefined) {body.result = res.result;}
-  if (res.error !== undefined) {body.error = res.error;}
+  if (res.result !== undefined) {
+    body["result"] = res.result;
+  }
+  if (res.error !== undefined) {
+    body["error"] = res.error;
+  }
   return JSON.stringify(body);
 }
 
@@ -177,20 +207,24 @@ export function decodeNip46Response(json: string): Nip46Response {
       cause: error instanceof Error ? error : undefined,
     });
   }
-  if (!isRecord(data) || typeof data.id !== "string") {
+  if (!isRecord(data) || typeof data["id"] !== "string") {
     throw new Nip46Error("invalid NIP-46 response shape");
   }
-  if (data.result !== undefined && typeof data.result !== "string") {
+  const { result, error } = data;
+  if (result !== undefined && typeof result !== "string") {
     throw new Nip46Error("invalid NIP-46 response result");
   }
-  if (data.error !== undefined && typeof data.error !== "string") {
+  if (error !== undefined && typeof error !== "string") {
     throw new Nip46Error("invalid NIP-46 response error");
   }
-  return {
-    id: data.id,
-    result: data.result,
-    error: data.error,
-  };
+  const response: Nip46Response = { id: data["id"] };
+  if (result !== undefined) {
+    response.result = result;
+  }
+  if (error !== undefined) {
+    response.error = error;
+  }
+  return response;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

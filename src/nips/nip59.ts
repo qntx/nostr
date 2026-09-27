@@ -26,14 +26,14 @@ export type Rumor = UnsignedEvent & {
  * present. This module must not import src/signer/.
  */
 export type Nip59Crypto = {
-  getPublicKey(): Promise<string>;
-  signEvent(unsigned: UnsignedEvent): Promise<Event>;
-  nip44Encrypt(peer: string, plaintext: string): Promise<string>;
-  nip44Decrypt(peer: string, payload: string): Promise<string>;
+  getPublicKey: () => Promise<string>;
+  signEvent: (unsigned: UnsignedEvent) => Promise<Event>;
+  nip44Encrypt: (peer: string, plaintext: string) => Promise<string>;
+  nip44Decrypt: (peer: string, payload: string) => Promise<string>;
 };
 
 export type Nip44Decryptor = {
-  nip44Decrypt(peer: string, payload: string): Promise<string>;
+  nip44Decrypt: (peer: string, payload: string) => Promise<string>;
 };
 
 export type GiftWrapTimestamps = {
@@ -46,24 +46,25 @@ export type TimestampRandomize = "wrap" | "seal+wrap";
 
 export type WrapOptions = {
   /** Unix seconds used as the randomization window end. Default: floor(Date.now()/1000). */
-  readonly now?: number;
+  readonly now?: number | undefined;
   /** Uniform integer in [0, maxExclusive). Default: CSPRNG via @noble/hashes randomBytes. */
-  readonly randomInt?: (maxExclusive: number) => number;
+  readonly randomInt?: ((maxExclusive: number) => number) | undefined;
   /** When set, used as-is. Overrides now/randomInt for this call. */
-  readonly timestamps?: GiftWrapTimestamps;
-  readonly relayHint?: string;
+  readonly timestamps?: GiftWrapTimestamps | undefined;
+  readonly relayHint?: string | undefined;
   /** Appended after the required wrap `p` tag. Never applied to the seal. */
-  readonly extraTags?: ReadonlyArray<Tag>;
+  readonly extraTags?: ReadonlyArray<Tag> | undefined;
   /**
    * Default `"seal+wrap"` (NIP-59). `"wrap"` = only wrap timestamp is randomized; seal uses
    * rumor.created_at.
    */
-  readonly randomize?: TimestampRandomize;
+  readonly randomize?: TimestampRandomize | undefined;
 };
 
 export type SealOptions = Pick<WrapOptions, "now" | "randomInt" | "timestamps" | "randomize">;
 
 export class Nip59Error extends NostrError {
+  override name = "Nip59Error";
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
   }
@@ -76,8 +77,8 @@ export function isGiftWrapKind(kind: number): boolean {
 }
 
 type Nip59CryptoInput = {
-  getPublicKey(): Promise<string>;
-  signEvent(unsigned: UnsignedEvent): Promise<Event>;
+  getPublicKey: () => Promise<string>;
+  signEvent: (unsigned: UnsignedEvent) => Promise<Event>;
   nip44Encrypt?: (peer: string, plaintext: string) => Promise<string>;
   nip44Decrypt?: (peer: string, payload: string) => Promise<string>;
 };
@@ -90,10 +91,10 @@ export function requireNip59Crypto(crypto: Nip59CryptoInput): Nip59Crypto {
     throw new Nip59Error("NIP-44 is required");
   }
   return {
-    getPublicKey:  async () => crypto.getPublicKey(),
-    signEvent:  async (unsigned) => crypto.signEvent(unsigned),
-    nip44Encrypt:  async (peer, plaintext) => encrypt.call(crypto, peer, plaintext),
-    nip44Decrypt:  async (peer, payload) => decrypt.call(crypto, peer, payload),
+    getPublicKey: async () => crypto.getPublicKey(),
+    signEvent: async (unsigned) => crypto.signEvent(unsigned),
+    nip44Encrypt: async (peer, plaintext) => encrypt.call(crypto, peer, plaintext),
+    nip44Decrypt: async (peer, payload) => decrypt.call(crypto, peer, payload),
   };
 }
 
@@ -105,7 +106,7 @@ export function requireNip44Decryptor(crypto: {
     throw new Nip59Error("NIP-44 is required");
   }
   return {
-    nip44Decrypt:  async (peer, payload) => decrypt.call(crypto, peer, payload),
+    nip44Decrypt: async (peer, payload) => decrypt.call(crypto, peer, payload),
   };
 }
 
@@ -142,8 +143,8 @@ function defaultRandomInt(maxExclusive: number): number {
 }
 
 export function randomPastTimestamp(opts?: {
-  now?: number;
-  randomInt?: (maxExclusive: number) => number;
+  now?: number | undefined;
+  randomInt?: ((maxExclusive: number) => number) | undefined;
 }): number {
   const now = opts?.now ?? Math.floor(Date.now() / 1000);
   const offset = (opts?.randomInt ?? defaultRandomInt)(TWO_DAYS_SECS);
@@ -154,9 +155,9 @@ export function createRumor(
   pubkey: string,
   template: {
     kind: number;
-    content?: string;
-    tags?: ReadonlyArray<Tag>;
-    created_at?: number;
+    content?: string | undefined;
+    tags?: ReadonlyArray<Tag> | undefined;
+    created_at?: number | undefined;
   },
 ): Rumor {
   const unsigned: UnsignedEvent = {
@@ -242,7 +243,7 @@ function parseRumor(value: unknown): Rumor {
   if (Object.hasOwn(value, "sig")) {
     throw new Nip59Error("rumor must be unsigned");
   }
-  const givenId = value.id;
+  const givenId = value["id"];
   if (!validateEvent(value)) {
     throw new Nip59Error("invalid rumor");
   }

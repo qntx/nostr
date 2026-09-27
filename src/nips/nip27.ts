@@ -5,8 +5,8 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/27.md
  */
 import type { Event } from "../core/event.ts";
-import { decode } from './nip19.ts';
-import type { AddressPointer, EventPointer, ProfilePointer } from './nip19.ts';
+import { decode } from "./nip19.ts";
+import type { AddressPointer, EventPointer, ProfilePointer } from "./nip19.ts";
 
 export type ContentBlock =
   | { type: "text"; text: string }
@@ -37,8 +37,16 @@ export function* parseContent(
     text = content;
   } else {
     for (const tag of content.tags) {
-      if (tag[0] === "emoji" && tag[1] && tag[2]) {
-        emojis.push({ type: "emoji", shortcode: tag[1], url: tag[2] });
+      const shortcode = tag.at(1);
+      const url = tag.at(2);
+      if (
+        tag[0] === "emoji" &&
+        shortcode !== undefined &&
+        shortcode !== "" &&
+        url !== undefined &&
+        url !== ""
+      ) {
+        emojis.push({ type: "emoji", shortcode, url });
       }
     }
     text = content.content;
@@ -51,14 +59,18 @@ export function* parseContent(
   mainloop: while (index < max) {
     const u = text.indexOf(":", index);
     const h = text.indexOf("#", index);
-    if (u === -1 && h === -1) {break;}
+    if (u === -1 && h === -1) {
+      break;
+    }
 
     if (u === -1 || (h !== -1 && h < u)) {
       // hashtag
-      if (h === 0 || (h > 0 && (noCharacter.exec((text[h - 1]!))))) {
+      if (h === 0 || (h > 0 && noCharacter.exec(text.at(h - 1) ?? "") !== null)) {
         const m = noCharacter.exec(text.slice(h + 1, h + MAX_HASHTAG_LENGTH));
         const end = m ? h + 1 + (m.index ?? 0) : max;
-        if (prevIndex !== h) {yield { type: "text", text: text.slice(prevIndex, h) };}
+        if (prevIndex !== h) {
+          yield { type: "text", text: text.slice(prevIndex, h) };
+        }
         yield { type: "hashtag", value: text.slice(h + 1, end) };
         index = end;
         prevIndex = index;
@@ -90,11 +102,10 @@ export function* parseContent(
           case "nsec":
             index = end + 1;
             continue mainloop;
-          default:
-            index = u + 1;
-            continue mainloop;
         }
-        if (prevIndex !== u - 5) {yield { type: "text", text: text.slice(prevIndex, u - 5) };}
+        if (prevIndex !== u - 5) {
+          yield { type: "text", text: text.slice(prevIndex, u - 5) };
+        }
         yield { type: "reference", pointer };
         index = end;
         prevIndex = index;
@@ -115,7 +126,9 @@ export function* parseContent(
       const prefixLen = text[u - 1] === "s" ? 5 : 4;
       try {
         const url = new URL(text.slice(u - prefixLen, end));
-        if (!url.hostname.includes(".")) {throw new Error("invalid url");}
+        if (!url.hostname.includes(".")) {
+          throw new Error("invalid url");
+        }
         if (prevIndex !== u - prefixLen) {
           yield { type: "text", text: text.slice(prevIndex, u - prefixLen) };
         }
@@ -145,7 +158,9 @@ export function* parseContent(
       const prefixLen = text[u - 1] === "s" ? 3 : 2;
       try {
         const url = new URL(text.slice(u - prefixLen, end));
-        if (!url.hostname.includes(".")) {throw new Error("invalid ws url");}
+        if (!url.hostname.includes(".")) {
+          throw new Error("invalid ws url");
+        }
         if (prevIndex !== u - prefixLen) {
           yield { type: "text", text: text.slice(prevIndex, u - prefixLen) };
         }
@@ -163,7 +178,9 @@ export function* parseContent(
     for (const emoji of emojis) {
       const endColon = u + emoji.shortcode.length + 1;
       if (text[endColon] === ":" && text.slice(u + 1, endColon) === emoji.shortcode) {
-        if (prevIndex !== u) {yield { type: "text", text: text.slice(prevIndex, u) };}
+        if (prevIndex !== u) {
+          yield { type: "text", text: text.slice(prevIndex, u) };
+        }
         yield emoji;
         index = endColon + 1;
         prevIndex = index;

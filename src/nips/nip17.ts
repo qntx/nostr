@@ -11,10 +11,11 @@ import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
 import { assertHex32, normalizeURL } from "../core/util.ts";
-import { createGiftWrap, createRumor, createSeal } from './nip59.ts';
-import type { Nip59Crypto, Rumor, WrapOptions } from './nip59.ts';
+import { createGiftWrap, createRumor, createSeal } from "./nip59.ts";
+import type { Nip59Crypto, Rumor, WrapOptions } from "./nip59.ts";
 
 export class Nip17Error extends NostrError {
+  override name = "Nip17Error";
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
   }
@@ -22,18 +23,18 @@ export class Nip17Error extends NostrError {
 
 export type Recipient = {
   readonly pubkey: string;
-  readonly relayHint?: string;
+  readonly relayHint?: string | undefined;
 };
 
 export type ReplyTo = {
   readonly id: string;
-  readonly relayHint?: string;
+  readonly relayHint?: string | undefined;
 };
 
 export type ChatMessageOptions = {
-  readonly created_at?: number;
-  readonly subject?: string;
-  readonly replyTo?: ReplyTo;
+  readonly created_at?: number | undefined;
+  readonly subject?: string | undefined;
+  readonly replyTo?: ReplyTo | undefined;
 };
 
 /** Parse kind:10050 DM relay list (`["relay", url]` tags). */
@@ -46,14 +47,19 @@ export function parseDmRelayList(event: Pick<Event, "kind" | "tags">): string[] 
   const out: string[] = [];
   const seen = new Set<string>();
   for (const tag of event.tags) {
-    if (tag[0] !== "relay" || !tag[1]) {continue;}
+    const value = tag.at(1);
+    if (tag[0] !== "relay" || value === undefined || value === "") {
+      continue;
+    }
     let url: string;
     try {
-      url = normalizeURL(tag[1]);
+      url = normalizeURL(value);
     } catch {
       continue;
     }
-    if (seen.has(url)) {continue;}
+    if (seen.has(url)) {
+      continue;
+    }
     seen.add(url);
     out.push(url);
   }
@@ -71,7 +77,9 @@ export function dmRelayListToTags(relays: ReadonlyArray<string>): Tag[] {
     } catch {
       continue;
     }
-    if (seen.has(url)) {continue;}
+    if (seen.has(url)) {
+      continue;
+    }
     seen.add(url);
     tags.push(["relay", url]);
   }
@@ -87,12 +95,17 @@ export function dmRelayListEventBuilder(relays: ReadonlyArray<string>): EventBui
   return new EventBuilder(Kind.DirectMessageRelaysList, "").tags(tags);
 }
 
+function isRecipient(value: unknown): value is Recipient {
+  return typeof value === "object" && value !== null && "pubkey" in value;
+}
+
 function asRecipientList(
   input: string | Recipient | ReadonlyArray<string | Recipient>,
 ): ReadonlyArray<string | Recipient> {
-  if (typeof input === "string") {return [input];}
-  if (Array.isArray(input)) {return input as readonly (string | Recipient)[];}
-  return [input as Recipient];
+  if (typeof input === "string" || isRecipient(input)) {
+    return [input];
+  }
+  return input;
 }
 
 /** Accept a hex pubkey, a Recipient, or a readonly array of either. Dedup by pubkey. */
@@ -104,7 +117,9 @@ export function normalizeRecipients(
   for (const item of asRecipientList(input)) {
     const rec: Recipient = typeof item === "string" ? { pubkey: item } : item;
     const pubkey = assertHex32(rec.pubkey, "public key");
-    if (seen.has(pubkey)) {continue;}
+    if (seen.has(pubkey)) {
+      continue;
+    }
     seen.add(pubkey);
     out.push({ pubkey, relayHint: rec.relayHint });
   }
@@ -147,7 +162,9 @@ function wrapTargets(sender: string, recipients: ReadonlyArray<Recipient>): Reci
   const seen = new Set<string>([senderPk]);
   for (const recipient of recipients) {
     const pk = recipient.pubkey.toLowerCase();
-    if (seen.has(pk)) {continue;}
+    if (seen.has(pk)) {
+      continue;
+    }
     seen.add(pk);
     out.push({ pubkey: pk, relayHint: recipient.relayHint });
   }
@@ -174,6 +191,7 @@ export async function wrapDirectMessage(
       }
     : undefined;
   for (const target of targets) {
+    // oxlint-disable-next-line no-await-in-loop -- signer calls stay ordered, one recipient at a time
     const seal = await createSeal(crypto, target.pubkey, rumor, timeOpts);
     const wrap = createGiftWrap(seal, target.pubkey, {
       ...timeOpts,

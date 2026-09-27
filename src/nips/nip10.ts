@@ -28,63 +28,91 @@ export type ThreadReferences = {
 type ReplyParent = Pick<Event, "id" | "pubkey" | "tags" | "kind">;
 type QuoteInput = string | EventPointer | AddressPointer;
 
-function eventPointerFromETag(tag: ReadonlyArray<string>): EventPointer | undefined {
-  if (tag[0] !== "e" || !tag[1] || !isHex32(tag[1].toLowerCase())) {return undefined;}
+function eTagAuthor(tag: ReadonlyArray<string>): string | undefined {
   // NIP-10 5-tuple pubkey is index 4; NIP-01 4-tuple pubkey is index 3.
-  const author =
-    tag[4] && isHex32(tag[4].toLowerCase())
-      ? tag[4].toLowerCase()
-      : (tag[3] && isHex32(tag[3].toLowerCase())
-        ? tag[3].toLowerCase()
-        : undefined);
-  return {
-    id: tag[1].toLowerCase(),
-    relays: tag[2] ? [tag[2]] : [],
-    author,
+  for (const author of [tag[4], tag[3]]) {
+    if (author !== undefined && isHex32(author.toLowerCase())) {
+      return author.toLowerCase();
+    }
+  }
+  return undefined;
+}
+
+function eventPointerFromETag(tag: ReadonlyArray<string>): EventPointer | undefined {
+  const id = tag.at(1);
+  if (tag[0] !== "e" || id === undefined || !isHex32(id.toLowerCase())) {
+    return undefined;
+  }
+  const pointer: EventPointer = {
+    id: id.toLowerCase(),
+    relays: tag[2] !== undefined && tag[2] !== "" ? [tag[2]] : [],
   };
+  const author = eTagAuthor(tag);
+  if (author !== undefined) {
+    pointer.author = author;
+  }
+  return pointer;
 }
 
 function quoteFromQTag(tag: ReadonlyArray<string>): EventPointer | AddressPointer | undefined {
-  if (tag[0] !== "q" || !tag[1]) {return undefined;}
-  if (isHex32(tag[1].toLowerCase())) {
-    const pointer: EventPointer = {
-      id: tag[1].toLowerCase(),
-      relays: tag[2] ? [tag[2]] : [],
-    };
-    if (tag[3] && isHex32(tag[3].toLowerCase())) {pointer.author = tag[3].toLowerCase();}
+  const value = tag.at(1);
+  if (tag[0] !== "q" || value === undefined || value === "") {
+    return undefined;
+  }
+  const relays = tag[2] !== undefined && tag[2] !== "" ? [tag[2]] : [];
+  if (isHex32(value.toLowerCase())) {
+    const pointer: EventPointer = { id: value.toLowerCase(), relays };
+    const author = tag.at(3);
+    if (author !== undefined && isHex32(author.toLowerCase())) {
+      pointer.author = author.toLowerCase();
+    }
     return pointer;
   }
-  const addr = parseEventAddress(tag[1]);
-  if (!addr) {return undefined;}
+  const addr = parseEventAddress(value);
+  if (!addr) {
+    return undefined;
+  }
   // Address q tags do not use the event-id pubkey slot (index 3).
   return {
     identifier: addr.identifier,
     pubkey: addr.pubkey,
     kind: addr.kind,
-    relays: tag[2] ? [tag[2]] : [],
+    relays,
   };
 }
 
-function quoteToTag(quote: QuoteInput): { tag: Tag; author?: string; relay?: string } | undefined {
+type BuiltQuote = { tag: Tag; author?: string | undefined; relay?: string | undefined };
+
+function quoteToTag(quote: QuoteInput): BuiltQuote | undefined {
   if (typeof quote === "string") {
-    if (isHex32(quote.toLowerCase())) {return { tag: ["q", quote.toLowerCase()] };}
+    if (isHex32(quote.toLowerCase())) {
+      return { tag: ["q", quote.toLowerCase()] };
+    }
     const addr = parseEventAddress(quote);
-    if (!addr) {return undefined;}
+    if (!addr) {
+      return undefined;
+    }
     return { tag: ["q", formatEventAddress(addr.kind, addr.pubkey, addr.identifier)] };
   }
   if ("id" in quote) {
     const id = quote.id.toLowerCase();
     const relay = quote.relays?.[0];
     const author =
-      quote.author && isHex32(quote.author.toLowerCase()) ? quote.author.toLowerCase() : undefined;
-    const tag: Tag =
-      author === undefined ? relay ? ["q", id, relay] : ["q", id] : ["q", id, relay ?? "", author];
-    return { tag, author, relay: relay || undefined };
+      quote.author !== undefined && isHex32(quote.author.toLowerCase())
+        ? quote.author.toLowerCase()
+        : undefined;
+    let tag: Tag;
+    if (author === undefined) {
+      tag = relay !== undefined && relay !== "" ? ["q", id, relay] : ["q", id];
+    } else {
+      tag = ["q", id, relay ?? "", author];
+    }
+    return { tag, author, relay };
   }
   const coord = formatEventAddress(quote.kind, quote.pubkey, quote.identifier);
   const relay = quote.relays?.[0];
-  const tag: Tag = relay ? ["q", coord, relay] : ["q", coord];
-  return { tag, author: quote.pubkey, relay: relay || undefined };
+  const tag: Tag = relay !== undefined && relay !== "" ? ["q", coord, relay] : ["q", coord];
+  return { tag, author: quote.pubkey, relay };
 }
 
 function assertKind1Parent(parent: ReplyParent): void {
@@ -108,11 +136,18 @@ export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
   let maybeRoot: EventPointer | undefined;
 
   for (let i = event.tags.length - 1; i >= 0; i--) {
-    const tag = event.tags[i]!;
+    const tag = event.tags[i];
+    if (tag === undefined) {
+      continue;
+    }
 
-    if (tag[0] === "e" && tag[1] && isHex32(tag[1].toLowerCase())) {
-      const pointer = eventPointerFromETag(tag)!;
-      const marker = tag[3];
+    const eValue = tag.at(1);
+    if (tag[0] === "e" && eValue !== undefined && isHex32(eValue.toLowerCase())) {
+      const pointer = eventPointerFromETag(tag);
+      if (pointer === undefined) {
+        continue;
+      }
+      const marker = tag.at(3);
 
       if (marker === "root") {
         result.root = pointer;
@@ -123,38 +158,40 @@ export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
         continue;
       }
       // Preferred markers are root/reply only. A hex32 at index 3 is NIP-01 pubkey, not a marker.
-      if (marker && !isHex32(marker.toLowerCase())) {
+      if (marker !== undefined && marker !== "" && !isHex32(marker.toLowerCase())) {
         result.mentions.push(pointer);
         continue;
       }
 
       // Legacy positional: last unmarked is parent, second-to-last is root.
-      if (maybeParent) {maybeRoot = pointer;}
-      else {maybeParent = pointer;}
+      if (maybeParent) {
+        maybeRoot = pointer;
+      } else {
+        maybeParent = pointer;
+      }
       result.mentions.push(pointer);
       continue;
     }
 
     if (tag[0] === "q") {
       const quote = quoteFromQTag(tag);
-      if (quote) {result.quotes.push(quote);}
+      if (quote) {
+        result.quotes.push(quote);
+      }
       continue;
     }
 
-    if (tag[0] === "p" && tag[1] && isHex32(tag[1].toLowerCase())) {
+    const pValue = tag.at(1);
+    if (tag[0] === "p" && pValue !== undefined && isHex32(pValue.toLowerCase())) {
       result.profiles.push({
-        pubkey: tag[1].toLowerCase(),
-        relays: tag[2] ? [tag[2]] : [],
+        pubkey: pValue.toLowerCase(),
+        relays: tag[2] !== undefined && tag[2] !== "" ? [tag[2]] : [],
       });
     }
   }
 
-  if (!result.root) {
-    result.root = maybeRoot ?? maybeParent ?? result.reply;
-  }
-  if (!result.reply) {
-    result.reply = maybeParent ?? result.root;
-  }
+  result.root ??= maybeRoot ?? maybeParent ?? result.reply;
+  result.reply ??= maybeParent ?? result.root;
 
   // Drop root/reply from mentions (by id).
   const drop = new Set(
@@ -164,12 +201,23 @@ export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
 
   // Inherit relay hints from matching p-tags.
   for (const ref of [result.reply, result.root, ...result.mentions]) {
-    if (!ref?.author) {continue;}
-    const author = result.profiles.find((p) => p.pubkey === ref.author);
-    if (!author?.relays?.length) {continue;}
+    if (ref === undefined) {
+      continue;
+    }
+    const refAuthor = ref.author;
+    if (refAuthor === undefined || refAuthor === "") {
+      continue;
+    }
+    const profile = result.profiles.find((p) => p.pubkey === refAuthor);
+    const profileRelays = profile?.relays;
+    if (profileRelays === undefined || profileRelays.length === 0) {
+      continue;
+    }
     const relays = [...(ref.relays ?? [])];
-    for (const url of author.relays) {
-      if (!relays.includes(url)) {relays.push(url);}
+    for (const url of profileRelays) {
+      if (!relays.includes(url)) {
+        relays.push(url);
+      }
     }
     ref.relays = relays;
   }
@@ -182,9 +230,9 @@ export type ReplyTagsOptions = {
   /** Parent event being replied to. */
   parent: ReplyParent;
   /** Optional relay hint for the parent e-tag. */
-  relayHint?: string;
+  relayHint?: string | undefined;
   /** Quoted events (`q` tags): hex ids, `kind:pubkey:d` coords, or pointers. */
-  quotes?: QuoteInput[];
+  quotes?: QuoteInput[] | undefined;
 };
 
 /**
@@ -209,19 +257,29 @@ export function buildReplyTags(opts: ReplyTagsOptions): Tag[] {
   const pSeen = new Set<string>();
   const addP = (pk: string, relay?: string) => {
     const key = pk.toLowerCase();
-    if (pSeen.has(key)) {return;}
+    if (pSeen.has(key)) {
+      return;
+    }
     pSeen.add(key);
-    tags.push(Tag.p(pk, relay || undefined));
+    tags.push(Tag.p(pk, relay ?? undefined));
   };
-  if (root.author) {addP(root.author, root.relays?.[0]);}
+  if (root.author !== undefined && root.author !== "") {
+    addP(root.author, root.relays?.[0]);
+  }
   addP(opts.parent.pubkey, opts.relayHint);
-  for (const p of thread.profiles) {addP(p.pubkey, p.relays?.[0]);}
+  for (const p of thread.profiles) {
+    addP(p.pubkey, p.relays?.[0]);
+  }
 
   const qTags: Tag[] = [];
   for (const quote of opts.quotes ?? []) {
     const built = quoteToTag(quote);
-    if (!built) {continue;}
-    if (built.author) {addP(built.author, built.relay);}
+    if (built === undefined) {
+      continue;
+    }
+    if (built.author !== undefined && built.author !== "") {
+      addP(built.author, built.relay);
+    }
     qTags.push(built.tag);
   }
   tags.push(...qTags);
