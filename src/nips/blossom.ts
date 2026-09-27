@@ -85,10 +85,7 @@ export async function verifyBlob(
   return (await sha256Blob(data)) === expected;
 }
 
-/**
- * `Nostr ` + base64url(utf8 JSON), padding stripped. NIP-98 uses standard base64; mixing them is a
- * 401.
- */
+/** `Nostr ` + base64url(utf8 JSON), padding stripped. NIP-98 uses standard base64; mixing them is a 401. */
 export function encodeAuthorizationHeader(event: Event): string {
   return `Nostr ${base64urlnopad.encode(utf8Encoder.encode(JSON.stringify(event)))}`;
 }
