@@ -32,11 +32,18 @@ export type NostrWasm = {
 let interned: Promise<NostrWasm> | undefined;
 
 function isNode(): boolean {
+  if (!("process" in globalThis)) {
+    return false;
+  }
+  const proc: unknown = globalThis.process;
   return (
-    process !== undefined &&
-    typeof process.versions === "object" &&
-    process.versions !== null &&
-    typeof process.versions.node === "string"
+    typeof proc === "object" &&
+    proc !== null &&
+    "versions" in proc &&
+    typeof proc.versions === "object" &&
+    proc.versions !== null &&
+    "node" in proc.versions &&
+    typeof proc.versions.node === "string"
   );
 }
 
