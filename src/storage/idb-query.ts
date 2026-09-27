@@ -1,10 +1,20 @@
+// oxlint-disable unicorn/prefer-add-event-listener -- the *Like driver interfaces model only the `on*` handler surface
 import type { Event } from "../core/event.ts";
 import { compareEventsDesc, sortEvents } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { StorageError } from "./error.ts";
 import { reqOf } from "./idb-helpers.ts";
-import { EVENTS, TAG_REFS } from './idb-types.ts';
-import type { IDBCursorDirectionLike, IDBCursorLike, IDBIndexLike, IDBKeyRangeLike, IDBObjectStoreLike, IDBRequestLike, IDBTransactionLike, TagRef } from './idb-types.ts';
+import { EVENTS, TAG_REFS } from "./idb-types.ts";
+import type {
+  IDBCursorDirectionLike,
+  IDBCursorLike,
+  IDBIndexLike,
+  IDBKeyRangeLike,
+  IDBObjectStoreLike,
+  IDBRequestLike,
+  IDBTransactionLike,
+  TagRef,
+} from "./idb-types.ts";
 
 export function prefixRange(
   prefix: ReadonlyArray<string | number>,
@@ -22,8 +32,14 @@ function createdAtRange(since?: number, until?: number): IDBKeyRangeLike {
 }
 
 function idbKeyRange(): {
-  bound(lower: unknown, upper: unknown, lowerOpen?: boolean, upperOpen?: boolean): IDBKeyRangeLike;
+  bound: (
+    lower: unknown,
+    upper: unknown,
+    lowerOpen?: boolean,
+    upperOpen?: boolean,
+  ) => IDBKeyRangeLike;
 } {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- globalThis lookup of the platform IDBKeyRange
   return (globalThis as unknown as { IDBKeyRange: ReturnType<typeof idbKeyRange> }).IDBKeyRange;
 }
 
@@ -31,30 +47,35 @@ export function epTagPrefixes(filter: Filter): Array<{ name: "e" | "p"; value: s
   const out: Array<{ name: "e" | "p"; value: string }> = [];
   for (const name of ["e", "p"] as const) {
     const values = filter[`#${name}`];
-    if (!values) {continue;}
-    for (const value of values) {out.push({ name, value: value.toLowerCase() });}
+    if (values === undefined) {
+      continue;
+    }
+    for (const value of values) {
+      out.push({ name, value: value.toLowerCase() });
+    }
   }
   return out;
 }
 
 type MergeOpener = {
-  open(): IDBRequestLike;
-  read(
+  open: () => IDBRequestLike;
+  read: (
     cursor: IDBCursorLike,
     ok: (event: Event | undefined) => void,
     err: (error: Error) => void,
-  ): void;
+  ) => void;
 };
 
 function eventCursor(
   source: {
-    openCursor(range?: IDBKeyRangeLike, direction?: IDBCursorDirectionLike): IDBRequestLike;
+    openCursor: (range?: IDBKeyRangeLike, direction?: IDBCursorDirectionLike) => IDBRequestLike;
   },
   range: IDBKeyRangeLike,
 ): MergeOpener {
   return {
     open: () => source.openCursor(range, "prev"),
     read: (cursor, ok) => {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- index cursor values are stored Event rows
       ok(cursor.value as Event);
     },
   };
@@ -68,9 +89,11 @@ function tagCursor(
   return {
     open: () => index.openCursor(range, "prev"),
     read: (cursor, ok, err) => {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- tag_refs cursor values are TagRef rows written by writeTagRefs
       const row = cursor.value as TagRef;
       const req = events.get(row.id);
       req.onerror = () => err(req.error ?? new StorageError("IndexedDB get failed"));
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- get resolves with a stored Event row or undefined
       req.onsuccess = () => ok(req.result as Event | undefined);
     },
   };
@@ -85,20 +108,23 @@ export async function scanIds(
   const ids = filter.ids ?? [];
   const events = tx.objectStore(EVENTS);
   const reqs = ids.map((id) => events.get(id.toLowerCase()));
-  return Promise.all(reqs.map( async (req) => reqOf<Event | undefined>(req))).then((rows) => {
-    const matched: Event[] = [];
-    const seen = new Set<string>();
-    for (const event of rows) {
-      if (!event || seen.has(event.id) || !accept(event)) {continue;}
-      seen.add(event.id);
-      matched.push(event);
+  const rows = await Promise.all(reqs.map(async (req) => reqOf<Event | undefined>(req)));
+  const matched: Event[] = [];
+  const seen = new Set<string>();
+  for (const event of rows) {
+    if (event === undefined || seen.has(event.id) || !accept(event)) {
+      continue;
     }
-    sortEvents(matched);
-    const out = filter.limit === undefined ? matched : matched.slice(0, filter.limit);
-    for (const event of out) {
-      if (take(event)) {break;}
+    seen.add(event.id);
+    matched.push(event);
+  }
+  sortEvents(matched);
+  const out = filter.limit === undefined ? matched : matched.slice(0, filter.limit);
+  for (const event of out) {
+    if (take(event)) {
+      break;
     }
-  });
+  }
 }
 
 /** IDB auto-commits when onsuccess returns with no outstanding requests. */
@@ -122,19 +148,25 @@ export async function kWayMerge(
     let drainBuf: Event[] = [];
 
     const finish = () => {
-      if (phase === "done") {return;}
+      if (phase === "done") {
+        return;
+      }
       phase = "done";
       resolve();
     };
     const fail = (error: Error) => {
-      if (phase === "done") {return;}
+      if (phase === "done") {
+        return;
+      }
       phase = "done";
       reject(error);
     };
 
     const stepCursor = (i: number) => {
-      const {cursor} = slots[i]!;
-      if (!cursor) {return;}
+      const { cursor } = slots.at(i) ?? { cursor: undefined };
+      if (cursor === undefined) {
+        return;
+      }
       inflight++;
       cursor.continue();
     };
@@ -142,7 +174,9 @@ export async function kWayMerge(
     const emitDrain = () => {
       sortEvents(drainBuf);
       for (const event of drainBuf) {
-        if (seen.has(event.id) || !accept(event)) {continue;}
+        if (seen.has(event.id) || !accept(event)) {
+          continue;
+        }
         seen.add(event.id);
         if (take(event)) {
           finish();
@@ -155,55 +189,70 @@ export async function kWayMerge(
     };
 
     const pump = () => {
-      if (phase === "done" || inflight > 0) {return;}
+      if (phase === "done" || inflight > 0) {
+        return;
+      }
       if (phase === "drain") {
         emitDrain();
         return;
       }
       let best: Event | undefined;
-      for (let i = 0; i < slots.length; i++) {
-        const event = slots[i]!.head;
-        if (!event) {continue;}
-        if (!best || compareEventsDesc(event, best) < 0) {best = event;}
+      for (const slot of slots) {
+        const event = slot.head;
+        if (event === undefined) {
+          continue;
+        }
+        if (best === undefined || compareEventsDesc(event, best) < 0) {
+          best = event;
+        }
       }
-      if (!best) {
+      if (best === undefined) {
         finish();
         return;
       }
       phase = "drain";
       drainT = best.created_at;
       drainBuf = [];
-      for (let i = 0; i < slots.length; i++) {
-        const event = slots[i]!.head;
-        if (!event || event.created_at !== drainT) {continue;}
+      for (const [i, slot] of slots.entries()) {
+        const event = slot.head;
+        if (event === undefined || event.created_at !== drainT) {
+          continue;
+        }
         drainBuf.push(event);
-        slots[i]!.head = undefined;
+        slot.head = undefined;
         stepCursor(i);
       }
-      if (inflight === 0) {pump();}
+      if (inflight === 0) {
+        pump();
+      }
     };
 
     const onEvent = (i: number, event: Event | undefined) => {
-      if (phase === "done") {return;}
-      const slot = slots[i]!;
-      const {cursor} = slot;
-      if (!event) {
-        if (cursor) {
+      if (phase === "done") {
+        return;
+      }
+      const slot = slots.at(i);
+      if (slot === undefined) {
+        return;
+      }
+      const { cursor } = slot;
+      if (event === undefined) {
+        if (cursor === undefined) {
+          pump();
+        } else {
           inflight++;
           cursor.continue();
-        } else {
-          pump();
         }
         return;
       }
       if (phase === "drain") {
         if (event.created_at === drainT) {
           drainBuf.push(event);
-          if (cursor) {
+          if (cursor === undefined) {
+            pump();
+          } else {
             inflight++;
             cursor.continue();
-          } else {
-            pump();
           }
           return;
         }
@@ -215,16 +264,22 @@ export async function kWayMerge(
       pump();
     };
 
-    for (let i = 0; i < openers.length; i++) {
-      const req = openers[i]!.open();
+    const openSlot = (i: number, opener: MergeOpener): void => {
+      const req = opener.open();
       req.onerror = () => fail(req.error ?? new StorageError("IndexedDB cursor failed"));
       inflight++;
       req.onsuccess = () => {
         inflight--;
-        if (phase === "done") {return;}
-        const cursor = req.result as IDBCursorLike | undefined;
-        const slot = slots[i]!;
-        if (!cursor) {
+        if (phase === "done") {
+          return;
+        }
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- openCursor resolves with a cursor or null
+        const cursor = (req.result ?? undefined) as IDBCursorLike | undefined;
+        const slot = slots.at(i);
+        if (slot === undefined) {
+          return;
+        }
+        if (cursor === undefined) {
           slot.cursor = undefined;
           slot.head = undefined;
           pump();
@@ -232,7 +287,7 @@ export async function kWayMerge(
         }
         slot.cursor = cursor;
         inflight++;
-        openers[i]!.read(
+        opener.read(
           cursor,
           (event) => {
             inflight--;
@@ -244,6 +299,9 @@ export async function kWayMerge(
           },
         );
       };
+    };
+    for (const [i, opener] of openers.entries()) {
+      openSlot(i, opener);
     }
   });
 }
@@ -261,9 +319,11 @@ export async function scanFilter(
   accept: (event: Event) => boolean,
   take: (event: Event) => boolean,
 ): Promise<void> {
-  if (filter.limit === 0) {return Promise.resolve();}
+  if (filter.limit === 0) {
+    return;
+  }
   if (filter.since !== undefined && filter.until !== undefined && filter.since > filter.until) {
-    return Promise.resolve();
+    return;
   }
 
   if (filter.ids) {

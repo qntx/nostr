@@ -2,8 +2,8 @@ import type { Event } from "../core/event.ts";
 import { isReplaceableWinner, validateSignedEvent } from "../core/event.ts";
 import { isEphemeralKind, Kind } from "../core/kind.ts";
 import { eventAddress } from "../core/tag.ts";
-import { coordinateRemovals, planDeletion } from './deletion.ts';
-import type { DeletionPlan, DeletionState } from './deletion.ts';
+import { coordinateRemovals, planDeletion } from "./deletion.ts";
+import type { DeletionPlan, DeletionState } from "./deletion.ts";
 import type { PutResult } from "./types.ts";
 
 export function outboxBoundKey(pubkey: string, kind: number): string {
@@ -51,24 +51,24 @@ export function decidePut(raw: Event, lookup: PutLookup): PutDecision {
     const coordIds = coordinateRemovals(plan.coordinates, lookup.getReplaceable);
     return { action: "delete", result: "deleted", event, plan, coordIds };
   }
-  if (lookup.deletion.covers(event)) {return { action: "tombstone", result: "duplicate", event };}
-  if (isEphemeralKind(event.kind)) {return { action: "skip", result: "ephemeral", event };}
+  if (lookup.deletion.covers(event)) {
+    return { action: "tombstone", result: "duplicate", event };
+  }
+  if (isEphemeralKind(event.kind)) {
+    return { action: "skip", result: "ephemeral", event };
+  }
   const address = eventAddress(event);
-  if (address) {
+  if (address !== undefined) {
     const prev = lookup.getReplaceable(address);
     // A stored incumbent rejects stale versions; an eviction watermark does
     // the same, except a re-put of the watermarked id re-inserts it.
     if (prev && prev.id !== event.id && !isReplaceableWinner(event, prev)) {
       return { action: "skip", result: "rejected", event };
     }
-    const supersedes = prev !== undefined && prev.evicted !== true;
-    return {
-      action: "insert",
-      result: supersedes ? "replaced" : "accepted",
-      event,
-      address,
-      replaceId: supersedes ? prev.id : undefined,
-    };
+    if (prev !== undefined && prev.evicted !== true) {
+      return { action: "insert", result: "replaced", event, address, replaceId: prev.id };
+    }
+    return { action: "insert", result: "accepted", event, address };
   }
   return { action: "insert", result: "accepted", event };
 }
@@ -76,31 +76,35 @@ export function decidePut(raw: Event, lookup: PutLookup): PutDecision {
 export function applyPutMemory(
   s: {
     deletion: DeletionState;
-    indexInsert(event: Event): void;
-    indexRemove(id: string): boolean;
+    indexInsert: (event: Event) => void;
+    indexRemove: (id: string) => boolean;
   },
   d: PutDecision,
 ): PutResult {
-  switch (d.action) {
-    case "skip":
-      return d.result;
-    case "tombstone":
-      s.deletion.ids.add(d.event.id);
-      s.deletion.pending.delete(d.event.id);
-      return "duplicate";
-    case "delete":
-      s.deletion.pending.delete(d.event.id);
-      s.deletion.absorb(d.plan);
-      for (const id of d.plan.removeIds) {s.indexRemove(id);}
-      for (const id of d.coordIds) {
-        s.deletion.ids.add(id);
-        s.indexRemove(id);
-      }
-      s.indexInsert(d.event);
-      return "deleted";
-    case "insert":
-      if (d.replaceId) {s.indexRemove(d.replaceId);}
-      s.indexInsert(d.event);
-      return d.result;
+  if (d.action === "skip") {
+    return d.result;
   }
+  if (d.action === "tombstone") {
+    s.deletion.ids.add(d.event.id);
+    s.deletion.pending.delete(d.event.id);
+    return "duplicate";
+  }
+  if (d.action === "delete") {
+    s.deletion.pending.delete(d.event.id);
+    s.deletion.absorb(d.plan);
+    for (const id of d.plan.removeIds) {
+      s.indexRemove(id);
+    }
+    for (const id of d.coordIds) {
+      s.deletion.ids.add(id);
+      s.indexRemove(id);
+    }
+    s.indexInsert(d.event);
+    return "deleted";
+  }
+  if (d.replaceId !== undefined) {
+    s.indexRemove(d.replaceId);
+  }
+  s.indexInsert(d.event);
+  return d.result;
 }

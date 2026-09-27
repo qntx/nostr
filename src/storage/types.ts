@@ -25,24 +25,24 @@ export type OutboxBound = { oldest: number; newest: number };
  * apply replaceable / addressable / deletion semantics on put.
  */
 export type EventStore = {
-  put(event: Event): Promise<PutResult>;
+  put: (event: Event) => Promise<PutResult>;
   /**
    * Persist in input order. IndexedDB: one transaction, abort rolls the batch back. Memory:
    * sequential; put does not throw, so a rejected item does not undo earlier accepts.
    */
-  putMany(events: readonly Event[]): Promise<PutResult[]>;
-  get(id: string): Promise<Event | undefined>;
-  query(filters: Filter[]): Promise<Event[]>;
+  putMany: (events: ReadonlyArray<Event>) => Promise<PutResult[]>;
+  get: (id: string) => Promise<Event | undefined>;
+  query: (filters: Filter[]) => Promise<Event[]>;
   /** Unique events matching `filters` (same cardinality as {@link query}). */
-  count(filters: Filter[]): Promise<number>;
+  count: (filters: Filter[]) => Promise<number>;
   /**
    * Matching `{ id, created_at }` for one filter, sorted created_at asc then id. Does not allocate
    * an `Event[]`.
    */
-  negentropyItems(filter: Filter): Promise<NegentropyItem[]>;
-  getOutboxBound(pubkey: string, kind: number): Promise<OutboxBound | undefined>;
-  setOutboxBound(pubkey: string, kind: number, bound: OutboxBound): Promise<void>;
+  negentropyItems: (filter: Filter) => Promise<NegentropyItem[]>;
+  getOutboxBound: (pubkey: string, kind: number) => Promise<OutboxBound | undefined>;
+  setOutboxBound: (pubkey: string, kind: number, bound: OutboxBound) => Promise<void>;
   /** Remove by id (does not publish NIP-09). */
-  remove(ids: string[]): Promise<number>;
-  clear(): Promise<void>;
-}
+  remove: (ids: string[]) => Promise<number>;
+  clear: () => Promise<void>;
+};
