@@ -285,6 +285,21 @@ describe("http", () => {
     ).rejects.toThrow(/sha256 mismatch/);
   });
 
+  test("non-OK with an empty x-reason falls back to the status message", async () => {
+    const file = new Blob(["abc"]);
+    const auth = await createUploadAuth(async (t) => {
+      await Promise.resolve();
+      return signAuth(t);
+    }, file);
+    const fetchImpl: BlossomFetch = async () => {
+      await Promise.resolve();
+      return new Response("err", { status: 500, headers: { "x-reason": "   " } });
+    };
+    await expect(
+      upload("https://cdn.example.com", file, auth, { fetch: fetchImpl }),
+    ).rejects.toThrow("blossom PUT https://cdn.example.com/upload failed (500)");
+  });
+
   test("listBlobs rejects non-integer size", async () => {
     const keys = Keys.fromSecretKey(SK);
     const fetchImpl: BlossomFetch = async () => {

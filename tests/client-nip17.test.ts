@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
+import { giftWrapRelays } from "../src/client/dm.ts";
 import { normalizeURL } from "../src/core/util.ts";
 import {
   Client,
   EventBuilder,
+  Gossip,
   Kind,
   Keys,
   KeysSigner,
@@ -976,5 +978,33 @@ describe("issue #125", () => {
     expect([...bob.index.seenOn(wrap2.id)].toSorted()).toStrictEqual(wantUrls);
     sub.close();
     await bob.shutdown();
+  });
+});
+
+describe("giftWrapRelays", () => {
+  test("ignores empty p-tag values", () => {
+    const gossip = new Gossip();
+    const bob = Keys.fromSecretKey(BOB_SK);
+    gossip.ingest(dmRelayListEventBuilder([BOB_DM]).createdAt(3).signWithKeys(bob));
+    const wrapped = finalizeEvent(
+      {
+        kind: Kind.GiftWrap,
+        tags: [
+          ["p", ""],
+          ["p", bob.publicKey],
+        ],
+        content: "",
+        created_at: 1,
+      },
+      ALICE_SK,
+    );
+    expect(giftWrapRelays(gossip, wrapped)).toStrictEqual([normalizeURL(BOB_DM)]);
+
+    const noRecipient = finalizeEvent(
+      { kind: Kind.GiftWrap, tags: [["p", ""]], content: "", created_at: 1 },
+      ALICE_SK,
+    );
+    expect(() => giftWrapRelays(gossip, noRecipient)).toThrow(Nip17Error);
+    expect(() => giftWrapRelays(gossip, noRecipient)).toThrow(/no p-tag recipient/);
   });
 });

@@ -444,9 +444,13 @@ function blossomHttpError(method: string, url: string, res: ManualResponse): Blo
   } catch {
     reason = undefined;
   }
-  return new BlossomError(reason?.trim() ?? `blossom ${method} ${url} failed (${res.status})`, {
-    status: res.status,
-  });
+  const detail = reason?.trim();
+  return new BlossomError(
+    detail === undefined || detail === ""
+      ? `blossom ${method} ${url} failed (${res.status})`
+      : detail,
+    { status: res.status },
+  );
 }
 
 async function blossomFetch(

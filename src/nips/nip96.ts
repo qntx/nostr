@@ -59,7 +59,7 @@ async function throwHttpError(
     // body is optional on error
   }
   throw new Nip96Error(
-    detail === undefined
+    detail === undefined || detail === ""
       ? `${prefix} HTTP ${res.status}`
       : `${prefix} HTTP ${res.status}: ${detail}`,
   );

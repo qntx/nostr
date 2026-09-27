@@ -72,7 +72,7 @@ export function createListLoaders(replaceable: (kind: number) => ReplaceableLoad
         event,
         fresh,
         items: fromTags(event, (tag) => {
-          if (tag[1] === undefined) {
+          if (tag[1] === undefined || tag[1] === "") {
             return undefined;
           }
           switch (tag[0]) {

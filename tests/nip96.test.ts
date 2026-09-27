@@ -175,6 +175,16 @@ describe("nip96 server info", () => {
       /^NIP-96 server info HTTP 404: not found$/,
     );
   });
+
+  test("non-OK info with an empty message has no trailing separator", async () => {
+    const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
+      return jsonResponse(404, { status: "error", message: "" });
+    };
+    await expect(fetchNip96Info(SERVICE, { fetch: fetchImpl })).rejects.toThrow(
+      /^NIP-96 server info HTTP 404$/,
+    );
+  });
 });
 
 describe("nip96 upload parse", () => {
