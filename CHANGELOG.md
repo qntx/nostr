@@ -5,9 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Version is `0.1.0`. `0.0.1` was the local `npm publish`. Tag `v0.1.0` runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --provenance`. `pack:local` stays JS-only.
+A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --provenance`. `pack:local` stays JS-only.
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-09-27
 
 ### Breaking changes
 
@@ -89,4 +91,5 @@ Version is `0.1.0`. `0.0.1` was the local `npm publish`. Tag `v0.1.0` runs `publ
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/commits/HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/qntx/nostr.js/compare/v0.1.0...v0.2.0
