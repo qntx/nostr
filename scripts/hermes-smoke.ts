@@ -45,7 +45,7 @@ async function main(): Promise<number> {
   }
 
   const result = await Bun.build({
-    entrypoints: [resolve(root, "tests/hermes/smoke.ts")],
+    entrypoints: [resolve(root, "tests/hermes/entry.ts")],
     target: "browser",
     format: "iife",
     plugins: [

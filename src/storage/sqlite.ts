@@ -585,7 +585,7 @@ export class SqliteEventStore implements EventStore {
   async negentropyItems(filter: Filter): Promise<NegentropyItem[]> {
     try {
       const items = await this.#filterRows(filter, "id, created_at");
-      return items.toSorted(itemCompare);
+      return [...items].sort(itemCompare);
     } catch (error) {
       throw toStorageError(error);
     }
@@ -643,7 +643,7 @@ export class SqliteEventStore implements EventStore {
         return this.#driver.all<Row>(`SELECT ${select} FROM events${where}${tail}`, params);
       }),
     );
-    const sorted = perPlan.flat().toSorted(compareEventsDesc);
+    const sorted = perPlan.flat().sort(compareEventsDesc);
     const seen = new Set<string>();
     const merged: Row[] = [];
     for (const row of sorted) {

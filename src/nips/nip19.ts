@@ -104,7 +104,7 @@ function assertNip19Kind(kind: number): void {
 
 function encodeTLV(tlv: TLV): Uint8Array {
   const entries: Uint8Array[] = [];
-  for (const [t, vs] of Object.entries(tlv).toReversed()) {
+  for (const [t, vs] of Object.entries(tlv).reverse()) {
     for (const v of vs) {
       if (v.length > 255) {
         throw new Nip19Error("TLV value exceeds 255 bytes");

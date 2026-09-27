@@ -229,7 +229,7 @@ export class ReactiveEventStore {
   /** Bulk load (initial hydration): no seenOn, one batched notification. */
   hydrate(events: ReadonlyArray<Event>): void {
     // Insert oldest-first so recency ends with the newest entries hottest.
-    const sorted = [...events].toSorted(itemCompare);
+    const sorted = [...events].sort(itemCompare);
     for (const event of sorted) {
       this.#index.put(event);
     }
@@ -272,7 +272,7 @@ export class ReactiveEventStore {
     const events = this.#index.query(filters);
     // Results come back newest-first; touch oldest→newest so the newest
     // entries end up hottest in the recency order.
-    for (const event of events.toReversed()) {
+    for (const event of [...events].reverse()) {
       this.#touch(event.id);
     }
     return events;

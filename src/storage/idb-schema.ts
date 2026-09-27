@@ -82,7 +82,7 @@ export function migrateV1Events(tx: IDBTransactionLike, events: ReadonlyArray<un
 
   const byId = new Map(valid.map((e) => [e.id, e]));
   const deletion = new DeletionState();
-  const dels = valid.filter((e) => e.kind === Kind.EventDeletion).toSorted(itemCompare);
+  const dels = valid.filter((e) => e.kind === Kind.EventDeletion).sort(itemCompare);
   for (const del of dels) {
     const plan = planDeletion(del, (id) => byId.get(id));
     deletion.absorb(plan);

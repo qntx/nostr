@@ -160,6 +160,15 @@ const config: UserConfig = defineConfig({
           "eslint/no-console": "off",
         },
       },
+      {
+        files: ["src/**"],
+        rules: {
+          // Hermes V1 (what React Native ships) has no ES2023 immutable array
+          // methods, so the library must sort/reverse copies in place.
+          "unicorn/no-array-sort": "off",
+          "unicorn/no-array-reverse": "off",
+        },
+      },
     ],
   }),
   fmt: {

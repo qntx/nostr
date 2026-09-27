@@ -171,7 +171,7 @@ export async function fetchPrivateMessages(
     }
   }
 
-  return [...byRumor.values()].toSorted((a, b) => itemCompare(a.rumor, b.rumor));
+  return [...byRumor.values()].sort((a, b) => itemCompare(a.rumor, b.rumor));
 }
 
 export async function subscribePrivateMessages(

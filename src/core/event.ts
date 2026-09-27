@@ -144,13 +144,12 @@ export function compareEventsDesc(
  * returns the array.
  */
 export function sortEvents(events: Event[]): Event[] {
-  // oxlint-disable-next-line unicorn/no-array-sort -- in-place mutation is this function's contract
   return events.sort(compareEventsDesc);
 }
 
 /** Non-mutating sort; returns a new array. */
 export function sortedEvents(events: ReadonlyArray<Event>): Event[] {
-  return [...events].toSorted(compareEventsDesc);
+  return [...events].sort(compareEventsDesc);
 }
 
 /**

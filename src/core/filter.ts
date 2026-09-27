@@ -164,7 +164,7 @@ const HEX_LIST_KEYS = new Set(["ids", "authors", "#e", "#p"]);
 export function canonicalizeFilter(filter: Filter): Filter {
   const raw = filter as Record<string, unknown>;
   const out: Record<string, unknown> = {};
-  for (const key of Object.keys(raw).toSorted()) {
+  for (const key of Object.keys(raw).sort()) {
     const value = raw[key];
     // omit undefined so a missing key is not `[]` / null
     if (value === undefined) {
@@ -172,11 +172,11 @@ export function canonicalizeFilter(filter: Filter): Filter {
     }
     if (Array.isArray(value)) {
       if (HEX_LIST_KEYS.has(key)) {
-        out[key] = value.map((v) => String(v).toLowerCase()).toSorted();
+        out[key] = value.map((v) => String(v).toLowerCase()).sort();
       } else if (key === "kinds") {
-        out[key] = value.map(Number).toSorted((a, b) => a - b);
+        out[key] = value.map(Number).sort((a, b) => a - b);
       } else {
-        out[key] = value.map(String).toSorted();
+        out[key] = value.map(String).sort();
       }
     } else {
       out[key] = value;

@@ -37,10 +37,6 @@ import { createRumor, unwrap, wrap } from "../../src/nips/nip59.ts";
  * inside a promise callback does not set the exit code), so runners must assert the marker appears
  * in stdout.
  */
-import { hermesGlobalsInstalled } from "./globals.ts";
-
-declare function print(msg: string): void;
-declare function quit(code: number): void;
 
 function assert(cond: boolean, name: string): asserts cond {
   if (!cond) {
@@ -79,9 +75,7 @@ const NIP44_VECTOR = {
     "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABee0G5VSK0/9YypIObAtDKfYEAjD35uVkHyB0F4DwrcNaCXlCWZKaArsGrY6M9wnuTMxWfp1RTN9Xga8no+kF5Vsb",
 };
 
-async function main(): Promise<void> {
-  assert(hermesGlobalsInstalled, "globals module evaluated");
-
+export async function main(): Promise<void> {
   // Keys + signing.
   const generated = Keys.generate();
   assert(generated.publicKey.length === 64, "Keys.generate pubkey");
@@ -194,14 +188,4 @@ async function main(): Promise<void> {
   const inner = await unwrap(new KeysSigner(SK2), gift);
   eq(inner.content, "secret hello", "nip59 unwrap content");
   eq(inner.pubkey, keys.publicKey, "nip59 unwrap pubkey");
-}
-
-try {
-  await main();
-  print("HERMES_SMOKE_OK");
-} catch (error) {
-  print(
-    `HERMES_SMOKE_FAIL: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
-  );
-  quit(1);
 }
