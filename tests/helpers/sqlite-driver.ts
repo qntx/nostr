@@ -1,7 +1,5 @@
 import type { SqlDriver, SqlValue } from "../../src/storage/sqlite.ts";
 
-declare const Bun: unknown;
-
 /**
  * Minimal synchronous database shape shared by `bun:sqlite`'s `Database` and `node:sqlite`'s
  * `DatabaseSync`.
@@ -34,7 +32,7 @@ export class SqliteTestDriver implements SqlDriver {
   }
 
   static async open(): Promise<SqliteTestDriver> {
-    if (Bun !== undefined) {
+    if ("Bun" in globalThis) {
       const specifier = "bun:sqlite";
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- bun:sqlite has no importable types; this is the RawDb contract
       const mod = (await import(specifier)) as {
