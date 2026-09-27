@@ -1,5 +1,5 @@
-import type { Event } from "../core/event.ts";
 import type { ProfileMetadata } from "../core/builder.ts";
+import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import { npubEncode } from "../nips/nip19.ts";
 import type { LoadStyle, ReplaceableLoader } from "./replaceable.ts";
@@ -12,7 +12,7 @@ export type NostrUser = {
   image?: string;
   metadata: ProfileMetadata;
   lastUpdated: number;
-  event: Event | null;
+  event: Event | undefined;
   fresh: boolean;
 };
 
@@ -31,35 +31,52 @@ export function bareNostrUser(pubkey: string): NostrUser {
     shortName: npub.startsWith("npub1") ? `${npub.slice(0, 8)}…${npub.slice(-4)}` : pk.slice(0, 8),
     metadata: {},
     lastUpdated: 0,
-    event: null,
+    event: undefined,
     fresh: false,
   };
 }
 
 function parseMetadata(content: string): ProfileMetadata {
   try {
-    const obj = JSON.parse(content) as ProfileMetadata;
-    return typeof obj === "object" && obj !== null ? obj : {};
+    const obj: unknown = JSON.parse(content);
+    if (typeof obj !== "object" || obj === null) {
+      return {};
+    }
+    return obj;
   } catch {
     return {};
   }
 }
 
-export function createProfileLoader(replaceable: (kind: number) => ReplaceableLoader) {
+export type ProfileLoader = {
+  load: (
+    pubkey: string,
+    opts?: { hints?: string[] | undefined; style?: LoadStyle | undefined },
+  ) => Promise<NostrUser>;
+};
+
+export function createProfileLoader(
+  replaceable: (kind: number) => ReplaceableLoader,
+): ProfileLoader {
   const loader = replaceable(Kind.Metadata);
 
   return {
-    async load(pubkey: string, opts?: { hints?: string[]; style?: LoadStyle }): Promise<NostrUser> {
+    async load(
+      pubkey: string,
+      opts?: { hints?: string[] | undefined; style?: LoadStyle | undefined },
+    ): Promise<NostrUser> {
       const base = bareNostrUser(pubkey);
       const { event, fresh } = await loader(pubkey, opts);
-      if (!event) return { ...base, fresh };
+      if (!event) {
+        return { ...base, fresh };
+      }
 
       const metadata = parseMetadata(event.content);
-      const display = metadata.display_name || metadata.name;
+      const display = metadata.display_name ?? metadata.name;
       return {
         ...base,
-        shortName: display || base.shortName,
-        image: metadata.picture,
+        shortName: display ?? base.shortName,
+        ...(metadata.picture === undefined ? {} : { image: metadata.picture }),
         metadata,
         lastUpdated: event.created_at,
         event,
@@ -68,5 +85,3 @@ export function createProfileLoader(replaceable: (kind: number) => ReplaceableLo
     },
   };
 }
-
-export type ProfileLoader = ReturnType<typeof createProfileLoader>;

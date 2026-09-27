@@ -1,6 +1,6 @@
 /**
- * Shared nips HTTP primitive. Not a pack entry (core has zero network).
- * Callers never pass `redirect`; sendManual always sets `"manual"`.
+ * Shared nips HTTP primitive. Not a pack entry (core has zero network). Callers never pass
+ * `redirect`; sendManual always sets `"manual"`.
  */
 
 export type ManualFetch = (
@@ -8,22 +8,30 @@ export type ManualFetch = (
   init?: {
     method?: string;
     headers?: Record<string, string>;
+    // oxlint-disable-next-line no-restricted-types -- mirrors RequestInit.body, which is nullable
     body?: Blob | FormData | string | null;
-    signal?: AbortSignal;
+    signal?: AbortSignal | undefined;
   },
 ) => Promise<{
   ok: boolean;
   status: number;
-  headers: { get(name: string): string | null };
-  json(): Promise<unknown>;
-  arrayBuffer(): Promise<ArrayBuffer>;
+  // oxlint-disable-next-line no-restricted-types -- mirrors Headers.get, which returns null
+  headers: { get: (name: string) => string | null };
+  json: () => Promise<unknown>;
+  arrayBuffer: () => Promise<ArrayBuffer>;
 }>;
 
 type ManualInit = NonNullable<Parameters<ManualFetch>[1]>;
 
 export function requireGlobalFetch(missing: () => Error): ManualFetch {
-  if (typeof globalThis.fetch !== "function") throw missing();
-  return globalThis.fetch.bind(globalThis) as ManualFetch;
+  if (typeof globalThis.fetch !== "function") {
+    throw missing();
+  }
+  const fetchImpl = globalThis.fetch.bind(globalThis);
+  // RequestInit.signal is AbortSignal | null and rejects explicit undefined under
+  // exactOptionalPropertyTypes; normalize it for the real fetch.
+  return async (url, init) =>
+    fetchImpl(url, init === undefined ? init : { ...init, signal: init.signal ?? null });
 }
 
 /** Always sets redirect:manual. Shared by fetchManual and headStatus. */
@@ -32,7 +40,7 @@ export async function sendManual(
   url: string,
   init: ManualInit,
 ): Promise<Awaited<ReturnType<ManualFetch>>> {
-  return await fetchImpl(url, { ...init, redirect: "manual" } as Parameters<ManualFetch>[1]);
+  return fetchImpl(url, { ...init, redirect: "manual" } as Parameters<ManualFetch>[1]);
 }
 
 export async function fetchManual(
@@ -43,8 +51,10 @@ export async function fetchManual(
 ): Promise<Awaited<ReturnType<ManualFetch>>> {
   try {
     return await sendManual(fetchImpl, url, init);
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw err;
-    throw wrapNetwork(err);
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
+    throw wrapNetwork(error);
   }
 }

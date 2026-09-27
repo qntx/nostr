@@ -1,8 +1,10 @@
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import type { Gossip } from "../gossip/gossip.ts";
-import { fanIn, fetchRouted, type FanInOptions, type RoutedJob } from "../relay/fan-in.ts";
+import { fanIn, fetchRouted } from "../relay/fan-in.ts";
+import type { FanInOptions, RoutedJob } from "../relay/fan-in.ts";
 import type { Pool } from "../relay/pool.ts";
+import { ClientError } from "./types.ts";
 
 /** Remainder is one job on defaults; throw before any REQ when defaults are empty. */
 export function jobsForFilters(
@@ -15,21 +17,28 @@ export function jobsForFilters(
   const defaults = needsDefaults ? defaultRelays() : undefined;
   const jobs: RoutedJob[] = [];
   for (const r of routed) {
-    for (const [url, sub] of r.perRelay) jobs.push({ urls: [url], filters: [sub] });
-    if (r.remainder) jobs.push({ urls: defaults!, filters: [r.remainder] });
+    for (const [url, sub] of r.perRelay) {
+      jobs.push({ urls: [url], filters: [sub] });
+    }
+    if (r.remainder !== undefined) {
+      if (defaults === undefined) {
+        throw new ClientError("unrouted remainder without default relays");
+      }
+      jobs.push({ urls: defaults, filters: [r.remainder] });
+    }
   }
   return jobs;
 }
 
-export function fetchGossip(
+export async function fetchGossip(
   pool: Pool,
   gossip: Gossip,
   filters: Filter[],
   defaultRelays: () => string[],
   opts?: {
-    timeoutMs?: number;
-    signal?: AbortSignal;
-    onevent?: (event: Event, relayUrl: string) => void;
+    timeoutMs?: number | undefined;
+    signal?: AbortSignal | undefined;
+    onevent?: ((event: Event, relayUrl: string) => void) | undefined;
   },
 ): Promise<Event[]> {
   return fetchRouted(pool, jobsForFilters(gossip, filters, defaultRelays), {
@@ -49,7 +58,11 @@ export function subscribeGossip(
   const jobs = jobsForFilters(gossip, filters, defaultRelays);
   if (jobs.length === 0) {
     queueMicrotask(() => opts.oneose?.());
-    return { close: () => {} };
+    return {
+      close: () => {
+        /* empty */
+      },
+    };
   }
   return fanIn(pool, jobs, opts);
 }

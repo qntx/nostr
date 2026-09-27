@@ -1,11 +1,12 @@
-import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex as bytesToHexNoble, hexToBytes } from "@noble/hashes/utils.js";
-import { KeysSigner } from "../src/index.ts";
+import { afterEach, describe, expect, test, vi } from "vite-plus/test";
+
 import { bytesToHex, utf8Encoder } from "../src/core/util.ts";
+import { KeysSigner } from "../src/index.ts";
 import * as nip44 from "../src/nips/nip44.ts";
 import {
   DEFAULT_MAX_PAYLOAD_CHARS,
@@ -16,7 +17,7 @@ import {
   getMessageKeys,
 } from "../src/nips/nip44.ts";
 
-const dir = dirname(fileURLToPath(import.meta.url));
+const dir = import.meta.dirname;
 const vectors = JSON.parse(readFileSync(join(dir, "fixtures/nip44.vectors.json"), "utf8")) as {
   v2: {
     valid: {
@@ -140,13 +141,13 @@ describe("nip44", () => {
 
   test("invalid.get_conversation_key vectors throw", () => {
     for (const row of vectors.v2.invalid.get_conversation_key) {
-      expect(() => getConversationKey(hexToBytes(row.sec1), row.pub2)).toThrow();
+      expect(() => getConversationKey(hexToBytes(row.sec1), row.pub2)).toThrow(Error);
     }
   });
 
   test("invalid.decrypt vectors throw", () => {
     for (const row of vectors.v2.invalid.decrypt) {
-      expect(() => nip44Decrypt(row.payload, hexToBytes(row.conversation_key))).toThrow();
+      expect(() => nip44Decrypt(row.payload, hexToBytes(row.conversation_key))).toThrow(Error);
     }
   });
 
@@ -157,7 +158,7 @@ describe("nip44", () => {
     // current spec only sub-minimum lengths are invalid; >=65536 is valid.
     // Decrypting these oversized payloads needs a raised maxPayloadChars.
     expect(lengths[0]).toBe(0);
-    expect(() => nip44Encrypt("", ck)).toThrow();
+    expect(() => nip44Encrypt("", ck)).toThrow(Error);
     for (const len of lengths.slice(1)) {
       const plaintext = "a".repeat(len);
       const payload = nip44Encrypt(plaintext, ck);
@@ -179,7 +180,7 @@ describe("nip44", () => {
     const payload = nip44Encrypt(oneMiB, ck);
     // The cap is the base64 length of the payload for exactly 1 MiB of
     // plaintext, so a conforming 1 MiB payload decrypts with defaults.
-    expect(payload.length).toBe(DEFAULT_MAX_PAYLOAD_CHARS);
+    expect(payload).toHaveLength(DEFAULT_MAX_PAYLOAD_CHARS);
     expect(nip44Decrypt(payload, ck)).toBe(oneMiB);
 
     const over = nip44Encrypt(`${oneMiB}a`, ck);
@@ -193,10 +194,10 @@ describe("nip44", () => {
     const b = new KeysSigner("0000000000000000000000000000000000000000000000000000000000000002");
     const pkB = await b.getPublicKey();
     const pkA = await a.getPublicKey();
-    expect(typeof a.nip44Encrypt).toBe("function");
-    expect(typeof b.nip44Decrypt).toBe("function");
+    expect(a.nip44Encrypt).toBeTypeOf("function");
+    expect(b.nip44Decrypt).toBeTypeOf("function");
     const cipher = await a.nip44Encrypt(pkB, "hello nip44");
-    expect(await b.nip44Decrypt(pkA, cipher)).toBe("hello nip44");
+    await expect(b.nip44Decrypt(pkA, cipher)).resolves.toBe("hello nip44");
   });
 
   describe("KeysSigner NIP-44 conversation-key cache", () => {
@@ -215,19 +216,19 @@ describe("nip44", () => {
       const spy = vi.spyOn(nip44, "getConversationKey");
       const first = await a.nip44Encrypt(peerA, "one");
       const second = await a.nip44Encrypt(peerA, "two");
-      expect(spy.mock.calls.length).toBe(1);
-      expect(spy.mock.calls[0]).toEqual([a.keys.secretKey.bytes, peerA]);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]).toStrictEqual([a.keys.secretKey.bytes, peerA]);
       expect(first).not.toBe(second);
-      expect(await a.nip44Decrypt(peerA, first)).toBe("one");
-      expect(await a.nip44Decrypt(peerA, second)).toBe("two");
+      await expect(a.nip44Decrypt(peerA, first)).resolves.toBe("one");
+      await expect(a.nip44Decrypt(peerA, second)).resolves.toBe("two");
 
       const third = await a.nip44Encrypt(peerB, "three");
-      expect(spy.mock.calls.length).toBe(2);
-      expect(spy.mock.calls[1]).toEqual([a.keys.secretKey.bytes, peerB]);
-      expect(await a.nip44Decrypt(peerB, third)).toBe("three");
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy.mock.calls[1]).toStrictEqual([a.keys.secretKey.bytes, peerB]);
+      await expect(a.nip44Decrypt(peerB, third)).resolves.toBe("three");
 
-      expect(await a.nip44Decrypt(peerA, first)).toBe("one");
-      expect(spy.mock.calls.length).toBe(2);
+      await expect(a.nip44Decrypt(peerA, first)).resolves.toBe("one");
+      expect(spy).toHaveBeenCalledTimes(2);
     });
 
     test("low-level nip44.encrypt ciphertext decrypts via KeysSigner cache hit", async () => {
@@ -244,14 +245,14 @@ describe("nip44", () => {
         nip44.getConversationKey(signer.keys.secretKey.bytes, peer),
       );
       const spy = vi.spyOn(nip44, "getConversationKey");
-      expect(typeof signer.nip44Encrypt).toBe("function");
-      expect(typeof signer.nip44Decrypt).toBe("function");
+      expect(signer.nip44Encrypt).toBeTypeOf("function");
+      expect(signer.nip44Decrypt).toBeTypeOf("function");
       const warm = await signer.nip44Encrypt(peer, "warm");
-      expect(spy.mock.calls.length).toBe(1);
-      expect(spy.mock.calls[0]).toEqual([signer.keys.secretKey.bytes, peer]);
-      expect(await signer.nip44Decrypt(peer, warm)).toBe("warm");
-      expect(await signer.nip44Decrypt(peer, payload)).toBe(plaintext);
-      expect(spy.mock.calls.length).toBe(1);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]).toStrictEqual([signer.keys.secretKey.bytes, peer]);
+      await expect(signer.nip44Decrypt(peer, warm)).resolves.toBe("warm");
+      await expect(signer.nip44Decrypt(peer, payload)).resolves.toBe(plaintext);
+      expect(spy).toHaveBeenCalledTimes(1);
     });
 
     test("mixed-case peer hits the same cache entry", async () => {
@@ -260,9 +261,9 @@ describe("nip44", () => {
       const peer = await b.getPublicKey();
       const spy = vi.spyOn(nip44, "getConversationKey");
       const cipher = await a.nip44Encrypt(peer.toUpperCase(), "cased");
-      expect(await a.nip44Decrypt(peer, cipher)).toBe("cased");
-      expect(spy.mock.calls.length).toBe(1);
-      expect(spy.mock.calls[0]).toEqual([a.keys.secretKey.bytes, peer]);
+      await expect(a.nip44Decrypt(peer, cipher)).resolves.toBe("cased");
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]).toStrictEqual([a.keys.secretKey.bytes, peer]);
     });
 
     test("failed derivation is not cached", async () => {
@@ -270,9 +271,9 @@ describe("nip44", () => {
       const spy = vi.spyOn(nip44, "getConversationKey");
       await expect(a.nip44Encrypt("gg".repeat(32), "hi")).rejects.toThrow(/invalid public key/);
       await expect(a.nip44Encrypt("not-a-pubkey", "hi")).rejects.toThrow(/invalid public key/);
-      expect(spy.mock.calls.length).toBe(2);
+      expect(spy).toHaveBeenCalledTimes(2);
       await expect(a.nip44Encrypt("gg".repeat(32), "again")).rejects.toThrow(/invalid public key/);
-      expect(spy.mock.calls.length).toBe(3);
+      expect(spy).toHaveBeenCalledTimes(3);
     });
 
     test("decrypt errors reuse the cached key and still throw", async () => {
@@ -283,16 +284,16 @@ describe("nip44", () => {
       const peerB = await c.getPublicKey();
       const spy = vi.spyOn(nip44, "getConversationKey");
       const cipher = await a.nip44Encrypt(peerA, "ok");
-      expect(spy.mock.calls.length).toBe(1);
+      expect(spy).toHaveBeenCalledTimes(1);
 
       await expect(a.nip44Decrypt(peerA, "short")).rejects.toThrow(/invalid payload length/);
-      expect(spy.mock.calls.length).toBe(1);
+      expect(spy).toHaveBeenCalledTimes(1);
 
       await expect(a.nip44Encrypt(peerA, "")).rejects.toThrow(/invalid plaintext size/);
-      expect(spy.mock.calls.length).toBe(1);
+      expect(spy).toHaveBeenCalledTimes(1);
 
       await expect(a.nip44Decrypt(peerB, cipher)).rejects.toThrow(/invalid MAC/);
-      expect(spy.mock.calls.length).toBe(2);
+      expect(spy).toHaveBeenCalledTimes(2);
     });
 
     test("each KeysSigner instance keeps its own conversation-key cache", async () => {
@@ -303,9 +304,9 @@ describe("nip44", () => {
       const spy = vi.spyOn(nip44, "getConversationKey");
       const fromA = await a.nip44Encrypt(peer, "from a");
       const fromB = await b.nip44Encrypt(peer, "from b");
-      expect(spy.mock.calls.length).toBe(2);
-      expect(await c.nip44Decrypt(await a.getPublicKey(), fromA)).toBe("from a");
-      expect(await c.nip44Decrypt(await b.getPublicKey(), fromB)).toBe("from b");
+      expect(spy).toHaveBeenCalledTimes(2);
+      await expect(c.nip44Decrypt(await a.getPublicKey(), fromA)).resolves.toBe("from a");
+      await expect(c.nip44Decrypt(await b.getPublicKey(), fromB)).resolves.toBe("from b");
     });
 
     test("encryptToPubkey is independent of KeysSigner conversation-key cache", async () => {
@@ -319,7 +320,7 @@ describe("nip44", () => {
       expect(first).not.toBe(signed);
       expect(nip44.decryptFromPubkey(first, a.keys.secretKey.bytes, peer)).toBe("gift wrap");
       expect(nip44.decryptFromPubkey(second, a.keys.secretKey.bytes, peer)).toBe("gift wrap 2");
-      expect(await a.nip44Decrypt(peer, signed)).toBe("cached");
+      await expect(a.nip44Decrypt(peer, signed)).resolves.toBe("cached");
     });
   });
 

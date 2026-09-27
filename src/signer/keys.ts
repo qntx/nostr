@@ -1,5 +1,6 @@
 import type { Event, UnsignedEvent } from "../core/event.ts";
-import { Keys, SecretKey, signEvent } from "../core/key.ts";
+import type { SecretKey } from "../core/key.ts";
+import { Keys, signEvent } from "../core/key.ts";
 import * as nip04 from "../nips/nip04.ts";
 import * as nip44 from "../nips/nip44.ts";
 import type { NostrSigner } from "./types.ts";
@@ -17,18 +18,22 @@ export class KeysSigner implements NostrSigner {
     return this.#keys;
   }
 
+  // oxlint-disable-next-line typescript/require-await -- NostrSigner is async; KeysSigner signs synchronously
   async getPublicKey(): Promise<string> {
     return this.#keys.publicKey;
   }
 
+  // oxlint-disable-next-line typescript/require-await -- NostrSigner is async; KeysSigner signs synchronously
   async signEvent(unsigned: UnsignedEvent): Promise<Event> {
     return signEvent(unsigned, this.#keys);
   }
 
+  // oxlint-disable-next-line typescript/require-await -- NostrSigner is async; KeysSigner signs synchronously
   async nip04Encrypt(peer: string, plaintext: string): Promise<string> {
     return nip04.encrypt(this.#keys.secretKey.bytes, peer, plaintext);
   }
 
+  // oxlint-disable-next-line typescript/require-await -- NostrSigner is async; KeysSigner signs synchronously
   async nip04Decrypt(peer: string, ciphertext: string): Promise<string> {
     return nip04.decrypt(this.#keys.secretKey.bytes, peer, ciphertext);
   }
@@ -43,10 +48,12 @@ export class KeysSigner implements NostrSigner {
     return key;
   }
 
+  // oxlint-disable-next-line typescript/require-await -- NostrSigner is async; KeysSigner signs synchronously
   async nip44Encrypt(peer: string, plaintext: string): Promise<string> {
     return nip44.encrypt(plaintext, this.#conversationKey(peer));
   }
 
+  // oxlint-disable-next-line typescript/require-await -- NostrSigner is async; KeysSigner signs synchronously
   async nip44Decrypt(peer: string, payload: string): Promise<string> {
     return nip44.decrypt(payload, this.#conversationKey(peer));
   }

@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+
+import type { Event, EventTemplate } from "../src/core/event.ts";
+import type { Tag } from "../src/core/tag.ts";
 import {
   Client,
   EventBuilder,
@@ -9,31 +12,41 @@ import {
   Relay,
   finalizeEvent,
 } from "../src/index.ts";
-import type { Event, EventTemplate } from "../src/core/event.ts";
-import type { WebSocketConstructor } from "../src/relay/websocket.ts";
 import { Nip46Signer } from "../src/signer/nip46.ts";
 import {
   createFakeNip46Signer,
   createFakeRelayNetwork,
   serveFakeRelay,
-  type FakeRelayNetwork,
 } from "../src/testing/index.ts";
+import type { FakeRelayNetwork } from "../src/testing/index.ts";
 import { FakeRelayCore } from "../src/testing/relay-core.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
-function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 3000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (await check()) return;
+    // oxlint-disable-next-line no-await-in-loop -- polling must await each probe
+    if (await check()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
     await sleep(10);
   }
   throw new Error("timed out");
 }
+
+const containsAll = (list: ReadonlyArray<string>, items: ReadonlyArray<string>): boolean =>
+  items.every((item) => list.includes(item));
+
+const rewriteChallenge = (tag: Tag): Tag => (tag[0] === "challenge" ? ["challenge", "wrong"] : tag);
+
+const hasEose = (received: ReadonlyArray<ReadonlyArray<unknown>>, id: string): boolean =>
+  received.some((m) => m[0] === "EOSE" && m[1] === id);
 
 function note(content: string, createdAt = 1): Event {
   return EventBuilder.textNote(content).createdAt(createdAt).signWithKeys(Keys.fromSecretKey(SK));
@@ -96,8 +109,8 @@ describe("FakeRelay NIP-01 + faults", () => {
       onevent: () => order.push("EVENT"),
       oneose: () => order.push("EOSE"),
     });
-    await waitFor(() => order.includes("EOSE") && order.includes("EVENT"));
-    expect(order).toEqual(["EOSE", "EVENT"]);
+    await waitFor(() => containsAll(order, ["EOSE", "EVENT"]));
+    expect(order).toStrictEqual(["EOSE", "EVENT"]);
     sub.close();
     relay.close();
   });
@@ -112,7 +125,7 @@ describe("FakeRelay NIP-01 + faults", () => {
     await sleep(10);
     net.relay("wss://closed.example").closeSubscriptions("lab: maintenance");
     await waitFor(() => reasons.length === 2);
-    expect(reasons).toEqual(["a:lab: maintenance", "b:lab: maintenance"]);
+    expect(reasons).toStrictEqual(["a:lab: maintenance", "b:lab: maintenance"]);
     a.close();
     b.close();
     relay.close();
@@ -139,7 +152,7 @@ describe("FakeRelay NIP-01 + faults", () => {
       websocketImplementation: net.websocketImplementation,
     });
     const found = await relay.fetch([{ kinds: [1], search: "hello" }], { timeoutMs: 2000 });
-    expect(found.map((e) => e.content).sort()).toEqual(["Hello Nostr", "heLLO world"]);
+    expect(found.map((e) => e.content).toSorted()).toStrictEqual(["Hello Nostr", "heLLO world"]);
     relay.close();
   });
 
@@ -158,10 +171,12 @@ describe("FakeRelay NIP-01 + faults", () => {
 
     net.relay("wss://bounce.example").disconnect();
     await waitFor(() => reconnects === 1);
+    expect(reconnects).toBe(1);
 
     const after = note("after reconnect", 7);
     net.relay("wss://bounce.example").inject(after);
     await waitFor(() => got.some((e) => e.id === after.id));
+    expect(got.map((e) => e.id)).toContain(after.id);
 
     relay.close();
   });
@@ -169,7 +184,7 @@ describe("FakeRelay NIP-01 + faults", () => {
 
 describe("FakeRelay NIP-42 auth", () => {
   const keys = Keys.fromSecretKey(SK);
-  const authSigner = (template: EventTemplate): Promise<Event> =>
+  const authSigner = async (template: EventTemplate): Promise<Event> =>
     Promise.resolve(finalizeEvent(template, keys.secretKey));
 
   let net: FakeRelayNetwork;
@@ -254,12 +269,12 @@ describe("FakeRelay NIP-42 auth", () => {
     });
     const relay = await Relay.connect("wss://auth-bad.example", {
       websocketImplementation: net.websocketImplementation,
-      authSigner: (template) =>
+      authSigner: async (template) =>
         Promise.resolve(
           finalizeEvent(
             {
               ...template,
-              tags: template.tags.map((t) => (t[0] === "challenge" ? ["challenge", "wrong"] : t)),
+              tags: template.tags.map(rewriteChallenge),
             },
             keys.secretKey,
           ),
@@ -280,7 +295,7 @@ describe("serveFakeRelay over real ws", () => {
       const client = Client.builder()
         .signer(new KeysSigner(keys))
         .relays([served.url])
-        .websocketImplementation(globalThis.WebSocket as unknown as WebSocketConstructor)
+        .websocketImplementation(globalThis.WebSocket)
         .trustedInsecureUrls([served.url])
         .enableReconnect(false)
         .build();
@@ -384,7 +399,7 @@ describe("issue #125", () => {
     const hit = await searchRelay.fetch([{ kinds: [1], search: "hello", limit: 1 }], {
       timeoutMs: 2000,
     });
-    expect(hit.map((e) => e.content)).toEqual(["hello there"]);
+    expect(hit.map((e) => e.content)).toStrictEqual(["hello there"]);
     const counted = await searchRelay.count([{ kinds: [1], search: "hello" }], {
       timeoutMs: 2000,
     });
@@ -416,13 +431,14 @@ describe("issue #125", () => {
     const metaOld = EventBuilder.metadata({ name: "old" }).createdAt(10).signWithKeys(keys);
     core.inject(metaOld);
     await sleep(50);
-    expect(gotMeta.map((e) => e.id)).toEqual([metaNew.id]);
+    expect(gotMeta.map((e) => e.id)).toStrictEqual([metaNew.id]);
 
     // (b) re-publishing the same event ACKs `duplicate:` and is not re-delivered
     const gotNotes: Event[] = [];
     const subNotes = subRelay.subscribe([{ kinds: [1] }], { onevent: (e) => gotNotes.push(e) });
     const dup = EventBuilder.textNote("dup").createdAt(30).signWithKeys(keys);
-    expect((await pub.publish(dup)).ok).toBe(true);
+    const firstDup = await pub.publish(dup);
+    expect(firstDup.ok).toBe(true);
     const ok2 = await pub.publish(dup);
     expect(ok2.ok).toBe(true);
     expect(ok2.message).toMatch(/^duplicate:/);
@@ -432,10 +448,12 @@ describe("issue #125", () => {
 
     // (c) re-publishing a deleted event ACKs `duplicate:` and is not delivered
     const victim = EventBuilder.textNote("victim").createdAt(31).signWithKeys(keys);
-    expect((await pub.publish(victim)).ok).toBe(true);
+    const victimPublish = await pub.publish(victim);
+    expect(victimPublish.ok).toBe(true);
     await waitFor(() => gotNotes.some((e) => e.id === victim.id));
     const del = EventBuilder.deletion([victim.id]).createdAt(32).signWithKeys(keys);
-    expect((await pub.publish(del)).ok).toBe(true);
+    const delPublish = await pub.publish(del);
+    expect(delPublish.ok).toBe(true);
     const okRepublish = await pub.publish(victim);
     expect(okRepublish.ok).toBe(true);
     expect(okRepublish.message).toMatch(/^duplicate:/);
@@ -468,8 +486,6 @@ describe("issue #125", () => {
       });
       return { core, session, received };
     };
-    const hasEose = (received: unknown[][], id: string) =>
-      received.some((m) => m[0] === "EOSE" && m[1] === id);
     const waitForEose = async (received: unknown[][], id: string): Promise<void> => {
       try {
         await waitFor(() => hasEose(received, id), 100);

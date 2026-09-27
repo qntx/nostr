@@ -1,11 +1,14 @@
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { describe, expect, test } from "vite-plus/test";
+
 import { CryptoError } from "../src/core/error.ts";
-import { getEventHash, type Event } from "../src/core/event.ts";
-import { Kind } from "../src/core/kind.ts";
+import { getEventHash } from "../src/core/event.ts";
+import type { Event } from "../src/core/event.ts";
 import { getPublicKey, verifyEvent } from "../src/core/key.ts";
+import { Kind } from "../src/core/kind.ts";
 import { bytesToHex, hexToBytes } from "../src/core/util.ts";
-import { loadNostrWasm, type NostrWasm } from "../src/wasm/load.ts";
+import { loadNostrWasm } from "../src/wasm/load.ts";
+import type { NostrWasm } from "../src/wasm/load.ts";
 import { readBuiltWasm } from "./read-wasm.ts";
 
 const SK_HEX = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";

@@ -8,7 +8,7 @@ import type { LoadStyle, ReplaceableLoader } from "./replaceable.ts";
 
 /** Result of a list loader: the source event, its decoded items, and freshness. */
 export type ListResult<T> = {
-  event: Event | null;
+  event: Event | undefined;
   items: T[];
   fresh: boolean;
 };
@@ -20,49 +20,61 @@ export type MutedEntity =
   | { label: "hashtag"; value: string }
   | { label: "word"; value: string };
 
-function fromTags<T>(event: Event | null, map: (tag: readonly string[]) => T | undefined): T[] {
-  if (!event) return [];
+function fromTags<T>(
+  event: Event | undefined,
+  map: (tag: ReadonlyArray<string>) => T | undefined,
+): T[] {
+  if (event === undefined) {
+    return [];
+  }
   const out: T[] = [];
   for (const tag of event.tags) {
     const item = map(tag);
-    if (item !== undefined) out.push(item);
+    if (item !== undefined) {
+      out.push(item);
+    }
   }
   return out;
 }
 
-export function createListLoaders(replaceable: (kind: number) => ReplaceableLoader) {
+type ListLoaderOpts = { hints?: string[] | undefined; style?: LoadStyle | undefined };
+
+export type ListLoaders = {
+  follows: (pubkey: string, opts?: ListLoaderOpts) => Promise<ListResult<string>>;
+  muteList: (pubkey: string, opts?: ListLoaderOpts) => Promise<ListResult<MutedEntity>>;
+  relayList: (pubkey: string, opts?: ListLoaderOpts) => Promise<ListResult<RelayListItem>>;
+  dmRelayList: (pubkey: string, opts?: ListLoaderOpts) => Promise<ListResult<string>>;
+};
+
+export function createListLoaders(replaceable: (kind: number) => ReplaceableLoader): ListLoaders {
   const followsLoader = replaceable(Kind.Contacts);
   const muteLoader = replaceable(Kind.MuteList);
   const relayListLoader = replaceable(Kind.RelayList);
   const dmRelayListLoader = replaceable(Kind.DirectMessageRelaysList);
 
   return {
-    async follows(
-      pubkey: string,
-      opts?: { hints?: string[]; style?: LoadStyle },
-    ): Promise<ListResult<string>> {
+    async follows(pubkey: string, opts?: ListLoaderOpts): Promise<ListResult<string>> {
       const { event, fresh } = await followsLoader(pubkey, opts);
       return {
         event,
         fresh,
         items: fromTags(event, (tag) =>
-          tag[0] === "p" && tag[1] && isHex32(tag[1].toLowerCase())
+          tag[0] === "p" && tag[1] !== undefined && isHex32(tag[1].toLowerCase())
             ? tag[1].toLowerCase()
             : undefined,
         ),
       };
     },
 
-    async muteList(
-      pubkey: string,
-      opts?: { hints?: string[]; style?: LoadStyle },
-    ): Promise<ListResult<MutedEntity>> {
+    async muteList(pubkey: string, opts?: ListLoaderOpts): Promise<ListResult<MutedEntity>> {
       const { event, fresh } = await muteLoader(pubkey, opts);
       return {
         event,
         fresh,
         items: fromTags(event, (tag) => {
-          if (!tag[1]) return undefined;
+          if (tag[1] === undefined) {
+            return undefined;
+          }
           switch (tag[0]) {
             case "p":
               return isHex32(tag[1].toLowerCase())
@@ -83,10 +95,7 @@ export function createListLoaders(replaceable: (kind: number) => ReplaceableLoad
       };
     },
 
-    async relayList(
-      pubkey: string,
-      opts?: { hints?: string[]; style?: LoadStyle },
-    ): Promise<ListResult<RelayListItem>> {
+    async relayList(pubkey: string, opts?: ListLoaderOpts): Promise<ListResult<RelayListItem>> {
       const { event, fresh } = await relayListLoader(pubkey, opts);
       let items: RelayListItem[] = [];
       if (event) {
@@ -107,10 +116,7 @@ export function createListLoaders(replaceable: (kind: number) => ReplaceableLoad
       return { event, fresh, items };
     },
 
-    async dmRelayList(
-      pubkey: string,
-      opts?: { hints?: string[]; style?: LoadStyle },
-    ): Promise<ListResult<string>> {
+    async dmRelayList(pubkey: string, opts?: ListLoaderOpts): Promise<ListResult<string>> {
       const { event, fresh } = await dmRelayListLoader(pubkey, opts);
       let items: string[] = [];
       if (event) {
@@ -124,5 +130,3 @@ export function createListLoaders(replaceable: (kind: number) => ReplaceableLoad
     },
   };
 }
-
-export type ListLoaders = ReturnType<typeof createListLoaders>;

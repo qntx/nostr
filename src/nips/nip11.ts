@@ -1,9 +1,11 @@
 /**
  * NIP-11: Relay Information Document
+ *
  * @see https://github.com/nostr-protocol/nips/blob/master/11.md
  */
 import { NostrError } from "../core/error.ts";
-import { fetchManual, requireGlobalFetch, type ManualFetch } from "./http.ts";
+import { fetchManual, requireGlobalFetch } from "./http.ts";
+import type { ManualFetch } from "./http.ts";
 
 const ACCEPT = "application/nostr+json";
 
@@ -68,22 +70,26 @@ export type RelayInformation = {
   terms_of_service?: string;
 };
 
-export class Nip11Error extends NostrError {}
+export class Nip11Error extends NostrError {
+  override name = "Nip11Error";
+}
 
 /** Convert a relay websocket URL to the HTTP URL that serves the NIP-11 document. */
 export function relayInfoHttpUrl(wsUrl: string): string {
   let url: URL;
   try {
     url = new URL(wsUrl);
-  } catch (cause) {
+  } catch (error) {
     throw new Nip11Error(`invalid relay URL: ${wsUrl}`, {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
 
-  if (url.protocol === "wss:") url.protocol = "https:";
-  else if (url.protocol === "ws:") url.protocol = "http:";
-  else if (url.protocol !== "https:" && url.protocol !== "http:") {
+  if (url.protocol === "wss:") {
+    url.protocol = "https:";
+  } else if (url.protocol === "ws:") {
+    url.protocol = "http:";
+  } else if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Nip11Error(`unsupported relay URL scheme: ${url.protocol}`);
   }
 
@@ -94,34 +100,46 @@ function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function parseRelayInformation(json: unknown): RelayInformation {
-  if (json === null || typeof json !== "object" || Array.isArray(json)) {
+  if (!isRecord(json)) {
     throw new Nip11Error("relay information document must be a JSON object");
   }
-  const raw = json as Record<string, unknown>;
+  const raw = json;
   const info: RelayInformation = {};
 
   for (const key of STRING_FIELDS) {
     const value = raw[key];
-    if (typeof value === "string") info[key] = value;
+    if (typeof value === "string") {
+      info[key] = value;
+    }
   }
 
-  if (Array.isArray(raw.supported_nips)) {
-    info.supported_nips = raw.supported_nips.filter(isNonNegativeInteger);
+  if (Array.isArray(raw["supported_nips"])) {
+    info.supported_nips = raw["supported_nips"].filter(isNonNegativeInteger);
   }
 
-  if (raw.limitation && typeof raw.limitation === "object" && !Array.isArray(raw.limitation)) {
-    const rawLim = raw.limitation as Record<string, unknown>;
+  const rawLim = raw["limitation"];
+  if (isRecord(rawLim)) {
     const limitation: NonNullable<RelayInformation["limitation"]> = {};
     for (const key of LIMITATION_NUMBERS) {
       const value = rawLim[key];
-      if (isNonNegativeInteger(value)) limitation[key] = value;
+      if (isNonNegativeInteger(value)) {
+        limitation[key] = value;
+      }
     }
     for (const key of LIMITATION_BOOLEANS) {
       const value = rawLim[key];
-      if (typeof value === "boolean") limitation[key] = value;
+      if (typeof value === "boolean") {
+        limitation[key] = value;
+      }
     }
-    if (Object.keys(limitation).length > 0) info.limitation = limitation;
+    if (Object.keys(limitation).length > 0) {
+      info.limitation = limitation;
+    }
   }
 
   return info;
@@ -153,9 +171,9 @@ export async function fetchRelayInformation(
   let json: unknown;
   try {
     json = await res.json();
-  } catch (cause) {
+  } catch (error) {
     throw new Nip11Error("relay information document is not valid JSON", {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
 

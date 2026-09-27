@@ -24,7 +24,7 @@ export function planDeletion(
   deletion: Pick<Event, "pubkey" | "created_at" | "tags">,
   getById: (id: string) => Pick<Event, "id" | "pubkey" | "kind"> | undefined,
 ): DeletionPlan {
-  const pubkey = deletion.pubkey;
+  const { pubkey } = deletion;
   const removeIds: string[] = [];
   const pendingIds: Array<{ id: string; pubkey: string }> = [];
   const coordinates: Array<{ key: string; until: number }> = [];
@@ -32,26 +32,36 @@ export function planDeletion(
   const seenCoords = new Set<string>();
 
   for (const tag of deletion.tags) {
-    if (tag[0] === "e" && tag[1] && isHex32(tag[1].toLowerCase())) {
+    if (tag[0] === "e" && tag[1] !== undefined && isHex32(tag[1].toLowerCase())) {
       const id = tag[1].toLowerCase();
-      if (seenIds.has(id)) continue;
+      if (seenIds.has(id)) {
+        continue;
+      }
       seenIds.add(id);
       const existing = getById(id);
       if (!existing) {
         pendingIds.push({ id, pubkey });
         continue;
       }
-      if (existing.kind === Kind.EventDeletion) continue;
-      if (existing.pubkey !== pubkey) continue;
+      if (existing.kind === Kind.EventDeletion) {
+        continue;
+      }
+      if (existing.pubkey !== pubkey) {
+        continue;
+      }
       removeIds.push(id);
       continue;
     }
 
-    if (tag[0] === "a" && tag[1]) {
+    if (tag[0] === "a" && tag[1] !== undefined) {
       const coord = parseEventAddress(tag[1]);
-      if (!coord || coord.pubkey !== pubkey) continue;
+      if (!coord || coord.pubkey !== pubkey) {
+        continue;
+      }
       const key = `${coord.kind}:${coord.pubkey}:${coord.identifier}`;
-      if (seenCoords.has(key)) continue;
+      if (seenCoords.has(key)) {
+        continue;
+      }
       seenCoords.add(key);
       coordinates.push({ key, until: deletion.created_at });
     }
@@ -62,9 +72,9 @@ export function planDeletion(
 
 /** In-memory NIP-09 tombstones shared by MemoryEventStore and IndexedDbEventStore. */
 export class DeletionState {
-  readonly ids: Set<string> = new Set();
-  readonly pending: Map<string, string> = new Map();
-  readonly coordinates: Map<string, number> = new Map();
+  readonly ids: Set<string> = new Set<string>();
+  readonly pending: Map<string, string> = new Map<string, string>();
+  readonly coordinates: Map<string, number> = new Map<string, number>();
 
   clear(): void {
     this.ids.clear();
@@ -73,12 +83,20 @@ export class DeletionState {
   }
 
   covers(event: Pick<Event, "id" | "pubkey" | "kind" | "created_at" | "tags">): boolean {
-    if (this.ids.has(event.id)) return true;
-    if (event.kind === Kind.EventDeletion) return false;
+    if (this.ids.has(event.id)) {
+      return true;
+    }
+    if (event.kind === Kind.EventDeletion) {
+      return false;
+    }
     const pendingPk = this.pending.get(event.id);
-    if (pendingPk && event.pubkey === pendingPk) return true;
+    if (pendingPk !== undefined && event.pubkey === pendingPk) {
+      return true;
+    }
     const addr = eventAddress(event);
-    if (!addr) return false;
+    if (addr === undefined) {
+      return false;
+    }
     const until = this.coordinates.get(addr);
     return until !== undefined && event.created_at <= until;
   }
@@ -89,7 +107,9 @@ export class DeletionState {
       this.pending.delete(id);
     }
     for (const p of plan.pendingIds) {
-      if (!this.ids.has(p.id)) this.pending.set(p.id, p.pubkey);
+      if (!this.ids.has(p.id)) {
+        this.pending.set(p.id, p.pubkey);
+      }
     }
     for (const c of plan.coordinates) {
       const prev = this.coordinates.get(c.key) ?? Number.NEGATIVE_INFINITY;
@@ -102,13 +122,15 @@ export class DeletionState {
 }
 
 export function coordinateRemovals(
-  coordinates: readonly { key: string; until: number }[],
+  coordinates: ReadonlyArray<{ key: string; until: number }>,
   getCurrent: (key: string) => Pick<Event, "id" | "created_at"> | undefined,
 ): string[] {
   const ids: string[] = [];
   for (const c of coordinates) {
     const current = getCurrent(c.key);
-    if (current && current.created_at <= c.until) ids.push(current.id);
+    if (current && current.created_at <= c.until) {
+      ids.push(current.id);
+    }
   }
   return ids;
 }

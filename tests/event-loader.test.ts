@@ -1,12 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
-import {
-  EventBuilder,
-  Keys,
-  Pool,
-  ReactiveEventStore,
-  naddrEncode,
-  type Filter,
-} from "../src/index.ts";
+
+import { EventBuilder, Keys, Pool, ReactiveEventStore, naddrEncode } from "../src/index.ts";
+import type { Event, Filter } from "../src/index.ts";
 import { LoaderContext } from "../src/loaders/context.ts";
 import { createEventLoader } from "../src/loaders/event.ts";
 
@@ -16,23 +11,48 @@ const ID2 = "22".repeat(32);
 const RELAY = "wss://idx.example";
 const FETCH_TIMEOUT_MS = 1500;
 
-function captureError(p: Promise<unknown>): Promise<unknown> {
+async function captureError(p: Promise<unknown>): Promise<unknown> {
   return p.then(
     () => {
       throw new Error("expected reject");
     },
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
 }
 
-function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+const elemAt = <T>(items: ReadonlyArray<T>, index: number): T => {
+  const item = items[index];
+  if (item === undefined) {
+    throw new Error(`no element at index ${index}`);
+  }
+  return item;
+};
+
+const deliverOnCall = (
+  call: number,
+  n: number,
+  event: Event,
+  opts: { onevent?: ((event: Event, relayUrl: string) => void) | undefined } | undefined,
+): void => {
+  if (call === n) {
+    opts?.onevent?.(event, RELAY);
+  }
+};
+
+const lowerId = (x: Event, y: Event): Event => (x.id < y.id ? x : y);
+const higherId = (x: Event, y: Event): Event => (x.id < y.id ? y : x);
 
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) return;
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -40,7 +60,9 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
 
 function idsOf(filters: Filter[]): string[] {
   const ids = filters[0]?.ids;
-  if (!ids) throw new Error("expected filter.ids");
+  if (!ids) {
+    throw new Error("expected filter.ids");
+  }
   return [...ids];
 }
 
@@ -82,17 +104,12 @@ describe("createEventLoader overlapping fetches", () => {
     await waitUntil(() => inflight === 2);
     expect(maxInflight).toBe(2);
     expect(calls).toHaveLength(2);
-    expect(
-      calls
-        .map((c) => c.ids)
-        .flat()
-        .sort(),
-    ).toEqual([ID1, ID2].sort());
+    expect(calls.flatMap((c) => c.ids).toSorted()).toStrictEqual([ID1, ID2].toSorted());
     expect(calls[0]!.timeoutMs).toBe(FETCH_TIMEOUT_MS);
     expect(calls[1]!.timeoutMs).toBe(FETCH_TIMEOUT_MS);
 
     release();
-    expect(await Promise.all([p1, p2])).toEqual([undefined, undefined]);
+    await expect(Promise.all([p1, p2])).resolves.toStrictEqual([undefined, undefined]);
     expect(inflight).toBe(0);
   });
 
@@ -122,10 +139,10 @@ describe("createEventLoader overlapping fetches", () => {
     const p2 = loader.load({ id: ID1, relays: ["wss://hint.example"] });
     await waitUntil(() => inflight === 1);
     expect(maxInflight).toBe(1);
-    expect(calls).toEqual([[ID1]]);
+    expect(calls).toStrictEqual([[ID1]]);
 
     release();
-    expect(await Promise.all([p1, p2])).toEqual([undefined, undefined]);
+    await expect(Promise.all([p1, p2])).resolves.toStrictEqual([undefined, undefined]);
     expect(inflight).toBe(0);
   });
 
@@ -134,18 +151,19 @@ describe("createEventLoader overlapping fetches", () => {
     const seen: string[][] = [];
     let fetchCalls = 0;
     pool.fetch = async (relays) => {
+      await Promise.resolve();
       fetchCalls += 1;
       seen.push([...relays]);
       return [];
     };
     const loader = createEventLoader(makeCtx(pool));
     const hint = "wss://hint.example";
-    expect(await loader.load({ id: ID1, relays: [hint] })).toBeUndefined();
+    await expect(loader.load({ id: ID1, relays: [hint] })).resolves.toBeUndefined();
     expect(fetchCalls).toBe(1);
-    expect(seen).toEqual([[hint, RELAY]]);
-    expect(await loader.load(ID1)).toBeUndefined();
+    expect(seen).toStrictEqual([[hint, RELAY]]);
+    await expect(loader.load(ID1)).resolves.toBeUndefined();
     expect(fetchCalls).toBe(2);
-    expect(seen).toEqual([[hint, RELAY], [RELAY]]);
+    expect(seen).toStrictEqual([[hint, RELAY], [RELAY]]);
   });
 
   test("a miss does not block a later fetch from resolving", async () => {
@@ -154,17 +172,19 @@ describe("createEventLoader overlapping fetches", () => {
     const pool = new Pool();
     let fetchCalls = 0;
     pool.fetch = async (_relays, _filters, opts) => {
+      await Promise.resolve();
       fetchCalls += 1;
-      if (fetchCalls > 1) opts?.onevent?.(event, RELAY);
+      deliverOnCall(fetchCalls, 2, event, opts);
       return [];
     };
     const loader = createEventLoader(makeCtx(pool));
-    expect(await loader.load(event.id)).toBeUndefined();
+    await expect(loader.load(event.id)).resolves.toBeUndefined();
     expect(fetchCalls).toBe(1);
-    expect((await loader.load(event.id))?.id).toBe(event.id);
+    const late = await loader.load(event.id);
+    expect(late?.id).toBe(event.id);
     expect(fetchCalls).toBe(2);
     // Now the index holds it — no further fetch needed.
-    expect(await loader.load(event.id)).toEqual(event);
+    await expect(loader.load(event.id)).resolves.toStrictEqual(event);
     expect(fetchCalls).toBe(2);
   });
 
@@ -187,23 +207,24 @@ describe("createEventLoader overlapping fetches", () => {
     };
     const loader = createEventLoader(makeCtx(pool));
 
-    expect(await loader.load(ID1)).toBeUndefined();
+    await expect(loader.load(ID1)).resolves.toBeUndefined();
     expect(inflight).toBe(0);
-    expect(await loader.load(ID2)).toBeUndefined();
+    await expect(loader.load(ID2)).resolves.toBeUndefined();
     expect(inflight).toBe(0);
     expect(maxInflight).toBe(1);
-    expect(calls).toEqual([[ID1], [ID2]]);
+    expect(calls).toStrictEqual([[ID1], [ID2]]);
   });
 
   test("no relays and no hints skips pool.fetch", async () => {
     const pool = new Pool();
     let fetchCalls = 0;
     pool.fetch = async () => {
+      await Promise.resolve();
       fetchCalls += 1;
       return [];
     };
     const loader = createEventLoader(makeCtx(pool, []));
-    expect(await loader.load(ID1)).toBeUndefined();
+    await expect(loader.load(ID1)).resolves.toBeUndefined();
     expect(fetchCalls).toBe(0);
   });
 
@@ -211,13 +232,14 @@ describe("createEventLoader overlapping fetches", () => {
     const pool = new Pool();
     const seen: string[][] = [];
     pool.fetch = async (relays) => {
+      await Promise.resolve();
       seen.push([...relays]);
       return [];
     };
     const loader = createEventLoader(makeCtx(pool, []));
     const hint = "wss://hint.example";
-    expect(await loader.load({ id: ID1, relays: [hint] })).toBeUndefined();
-    expect(seen).toEqual([[hint]]);
+    await expect(loader.load({ id: ID1, relays: [hint] })).resolves.toBeUndefined();
+    expect(seen).toStrictEqual([[hint]]);
   });
 
   test("index winner selection: newer version of an addressable ref wins", async () => {
@@ -228,6 +250,7 @@ describe("createEventLoader overlapping fetches", () => {
     const pool = new Pool();
     let fetchCalls = 0;
     pool.fetch = async (_relays, _filters, opts) => {
+      await Promise.resolve();
       fetchCalls += 1;
       opts?.onevent?.(older, RELAY);
       opts?.onevent?.(newer, RELAY);
@@ -243,11 +266,12 @@ describe("createEventLoader overlapping fetches", () => {
     const pool = new Pool();
     let fetchCalls = 0;
     pool.fetch = async () => {
+      await Promise.resolve();
       fetchCalls += 1;
       return [];
     };
     const loader = createEventLoader(makeCtx(pool));
-    expect(await loader.load(ID1)).toBeUndefined();
+    await expect(loader.load(ID1)).resolves.toBeUndefined();
     expect(fetchCalls).toBe(1);
   });
 
@@ -256,6 +280,7 @@ describe("createEventLoader overlapping fetches", () => {
     const pool = new Pool();
     let fetchCalls = 0;
     pool.fetch = async () => {
+      await Promise.resolve();
       fetchCalls += 1;
       throw boom;
     };
@@ -273,27 +298,26 @@ describe("createEventLoader overlapping fetches", () => {
     const pool = new Pool();
     const seen: Filter[] = [];
     pool.fetch = async (_relays, filters) => {
-      const f = filters[0];
-      if (!f) throw new Error("expected a filter");
-      seen.push(f);
+      await Promise.resolve();
+      seen.push(elemAt(filters, 0));
       return [];
     };
     const loader = createEventLoader(makeCtx(pool));
     const pubkey = keys.publicKey;
-    expect(await loader.load({ kind: 30023, pubkey, identifier: "" })).toBeUndefined();
+    await expect(loader.load({ kind: 30023, pubkey, identifier: "" })).resolves.toBeUndefined();
     expect(seen).toHaveLength(1);
     expect(Object.hasOwn(seen[0]!, "#d")).toBe(true);
-    expect(seen[0]!["#d"]).toEqual([""]);
-    expect(seen[0]!.authors).toEqual([pubkey.toLowerCase()]);
-    expect(seen[0]!.kinds).toEqual([30023]);
+    expect(seen[0]!["#d"]).toStrictEqual([""]);
+    expect(seen[0]!.authors).toStrictEqual([pubkey.toLowerCase()]);
+    expect(seen[0]!.kinds).toStrictEqual([30023]);
 
     const naddr = naddrEncode({ kind: 30023, pubkey, identifier: "" });
-    expect(await loader.load(naddr)).toBeUndefined();
+    await expect(loader.load(naddr)).resolves.toBeUndefined();
     expect(seen).toHaveLength(2);
     expect(Object.hasOwn(seen[1]!, "#d")).toBe(true);
-    expect(seen[1]!["#d"]).toEqual([""]);
-    expect(seen[1]!.authors).toEqual([pubkey.toLowerCase()]);
-    expect(seen[1]!.kinds).toEqual([30023]);
+    expect(seen[1]!["#d"]).toStrictEqual([""]);
+    expect(seen[1]!.authors).toStrictEqual([pubkey.toLowerCase()]);
+    expect(seen[1]!.kinds).toStrictEqual([30023]);
   });
 
   test("kind 0 AddressPointer omits #d", async () => {
@@ -301,33 +325,32 @@ describe("createEventLoader overlapping fetches", () => {
     const pool = new Pool();
     const seen: Filter[] = [];
     pool.fetch = async (_relays, filters) => {
-      const f = filters[0];
-      if (!f) throw new Error("expected a filter");
-      seen.push(f);
+      await Promise.resolve();
+      seen.push(elemAt(filters, 0));
       return [];
     };
     const loader = createEventLoader(makeCtx(pool));
     const pubkey = keys.publicKey;
-    expect(await loader.load({ kind: 0, pubkey, identifier: "" })).toBeUndefined();
+    await expect(loader.load({ kind: 0, pubkey, identifier: "" })).resolves.toBeUndefined();
     expect(seen).toHaveLength(1);
     expect(Object.hasOwn(seen[0]!, "#d")).toBe(false);
     expect(seen[0]!["#d"]).toBeUndefined();
-    expect(seen[0]!.authors).toEqual([pubkey.toLowerCase()]);
-    expect(seen[0]!.kinds).toEqual([0]);
+    expect(seen[0]!.authors).toStrictEqual([pubkey.toLowerCase()]);
+    expect(seen[0]!.kinds).toStrictEqual([0]);
 
-    expect(await loader.load({ kind: 0, pubkey, identifier: "profile" })).toBeUndefined();
+    await expect(loader.load({ kind: 0, pubkey, identifier: "profile" })).resolves.toBeUndefined();
     expect(seen).toHaveLength(2);
     expect(Object.hasOwn(seen[1]!, "#d")).toBe(false);
     expect(seen[1]!["#d"]).toBeUndefined();
-    expect(seen[1]!.kinds).toEqual([0]);
+    expect(seen[1]!.kinds).toStrictEqual([0]);
 
     const naddr = naddrEncode({ kind: 0, pubkey, identifier: "" });
-    expect(await loader.load(naddr)).toBeUndefined();
+    await expect(loader.load(naddr)).resolves.toBeUndefined();
     expect(seen).toHaveLength(3);
     expect(Object.hasOwn(seen[2]!, "#d")).toBe(false);
     expect(seen[2]!["#d"]).toBeUndefined();
-    expect(seen[2]!.authors).toEqual([pubkey.toLowerCase()]);
-    expect(seen[2]!.kinds).toEqual([0]);
+    expect(seen[2]!.authors).toStrictEqual([pubkey.toLowerCase()]);
+    expect(seen[2]!.kinds).toStrictEqual([0]);
   });
 
   test("two addressable versions same created_at, lower id wins", async () => {
@@ -335,12 +358,13 @@ describe("createEventLoader overlapping fetches", () => {
     const a = new EventBuilder(30023, "a").tag(["d", "x"]).createdAt(50).signWithKeys(keys);
     const b = new EventBuilder(30023, "b").tag(["d", "x"]).createdAt(50).signWithKeys(keys);
     expect(a.id).not.toBe(b.id);
-    const winner = a.id < b.id ? a : b;
-    const loser = a.id < b.id ? b : a;
+    const winner = lowerId(a, b);
+    const loser = higherId(a, b);
 
     const pool = new Pool();
     let fetchCalls = 0;
     pool.fetch = async (_relays, _filters, opts) => {
+      await Promise.resolve();
       fetchCalls += 1;
       opts?.onevent?.(loser, RELAY);
       opts?.onevent?.(winner, RELAY);

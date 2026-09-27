@@ -1,11 +1,12 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   Nip96Error,
   fetchNip96Info,
   parseNip96UploadResponse,
   uploadNip96,
-  type Nip96Fetch,
 } from "../src/nips/nip96.ts";
+import type { Nip96Fetch, Nip96UploadResult } from "../src/nips/nip96.ts";
 
 const SERVICE = "https://files.example";
 const INFO_URL = "https://files.example/.well-known/nostr/nip96.json";
@@ -26,13 +27,42 @@ const SUCCESS_BODY = {
   },
 };
 
+async function captureError(p: Promise<unknown>): Promise<unknown> {
+  try {
+    await p;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected rejection");
+}
+
+const uploadSuccess = (
+  r: Nip96UploadResult,
+): { status: "success"; url: string; tags: string[][] } => {
+  if (r.status !== "success") {
+    throw new Error("expected success");
+  }
+  return r;
+};
+
+const delegatedInfo = (callCount: number): unknown =>
+  callCount === 1
+    ? { api_url: "", delegated_to_url: "https://other.example" }
+    : { api_url: "https://other.example/upload" };
+
 function jsonResponse(status: number, body: unknown): Awaited<ReturnType<Nip96Fetch>> {
   return {
     ok: status >= 200 && status < 300,
     status,
     headers: { get: () => null },
-    json: async () => body,
-    arrayBuffer: async () => new ArrayBuffer(0),
+    json: async () => {
+      await Promise.resolve();
+      return body;
+    },
+    arrayBuffer: async () => {
+      await Promise.resolve();
+      return new ArrayBuffer(0);
+    },
   };
 }
 
@@ -43,16 +73,19 @@ function abortError(): Error {
 }
 
 function redirectOf(init: unknown): string | undefined {
-  if (!init || typeof init !== "object" || !("redirect" in init)) return undefined;
+  if (!init || typeof init !== "object" || !("redirect" in init)) {
+    return undefined;
+  }
   const value = (init as { redirect?: unknown }).redirect;
   return typeof value === "string" ? value : undefined;
 }
 
 describe("nip96 server info", () => {
   test("fetches well-known JSON and ignores extra fields", async () => {
-    const calls: { url: string; init?: Parameters<Nip96Fetch>[1] }[] = [];
+    const calls: Array<{ url: string; init?: Parameters<Nip96Fetch>[1] }> = [];
     const fetchImpl: Nip96Fetch = async (url, init) => {
       calls.push({ url, init });
+      await Promise.resolve();
       return jsonResponse(200, {
         api_url: API_URL,
         download_url: "https://cdn.example",
@@ -63,7 +96,7 @@ describe("nip96 server info", () => {
     };
 
     const info = await fetchNip96Info(`${SERVICE}/`, { fetch: fetchImpl });
-    expect(info).toEqual({
+    expect(info).toStrictEqual({
       api_url: API_URL,
       download_url: "https://cdn.example",
       content_types: ["image/jpeg", "video/webm"],
@@ -77,65 +110,67 @@ describe("nip96 server info", () => {
   test("network TypeError wraps Nip96Error", async () => {
     const net = new TypeError("fetch failed");
     const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
       throw net;
     };
-    try {
-      await fetchNip96Info(SERVICE, { fetch: fetchImpl });
-      throw new Error("expected reject");
-    } catch (err) {
-      expect(err).toBeInstanceOf(Nip96Error);
-      expect((err as Nip96Error).cause).toBe(net);
-      expect(err).not.toBe(net);
-    }
+    const error = await captureError(fetchNip96Info(SERVICE, { fetch: fetchImpl }));
+    expect(error).toBeInstanceOf(Nip96Error);
+    expect((error as Nip96Error).cause).toBe(net);
+    expect(error).not.toBe(net);
   });
 
   test("AbortError is not wrapped into Nip96Error", async () => {
     const aborted = abortError();
     const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
       throw aborted;
     };
     await expect(fetchNip96Info(SERVICE, { fetch: fetchImpl })).rejects.toBe(aborted);
   });
 
   test("missing api_url throws", async () => {
-    const fetchImpl: Nip96Fetch = async () =>
-      jsonResponse(200, { download_url: "https://cdn.example" });
+    const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
+      return jsonResponse(200, { download_url: "https://cdn.example" });
+    };
     await expect(fetchNip96Info(SERVICE, { fetch: fetchImpl })).rejects.toThrow(Nip96Error);
     await expect(fetchNip96Info(SERVICE, { fetch: fetchImpl })).rejects.toThrow(/missing api_url/);
   });
 
   test("non-OK including redirects throws", async () => {
-    const fetchImpl: Nip96Fetch = async () => jsonResponse(302, { api_url: API_URL });
+    const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
+      return jsonResponse(302, { api_url: API_URL });
+    };
     await expect(fetchNip96Info(SERVICE, { fetch: fetchImpl })).rejects.toThrow(Nip96Error);
   });
 
   test("follows delegated_to_url exactly one hop", async () => {
     const calls: string[] = [];
     const fetchImpl: Nip96Fetch = async (url) => {
-      calls.push(String(url));
-      if (calls.length === 1) {
-        return jsonResponse(200, {
-          api_url: "",
-          delegated_to_url: "https://other.example",
-        });
-      }
-      return jsonResponse(200, { api_url: "https://other.example/upload" });
+      calls.push(url);
+      await Promise.resolve();
+      return jsonResponse(200, delegatedInfo(calls.length));
     };
     const info = await fetchNip96Info(SERVICE, { fetch: fetchImpl });
-    expect(calls).toEqual([INFO_URL, "https://other.example/.well-known/nostr/nip96.json"]);
-    expect(info).toEqual({ api_url: "https://other.example/upload" });
+    expect(calls).toStrictEqual([INFO_URL, "https://other.example/.well-known/nostr/nip96.json"]);
+    expect(info).toStrictEqual({ api_url: "https://other.example/upload" });
   });
 
   test("a second delegation throws", async () => {
-    const fetchImpl: Nip96Fetch = async () =>
-      jsonResponse(200, { api_url: "", delegated_to_url: "https://other.example" });
+    const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
+      return jsonResponse(200, { api_url: "", delegated_to_url: "https://other.example" });
+    };
     await expect(fetchNip96Info(SERVICE, { fetch: fetchImpl })).rejects.toThrow(Nip96Error);
     await expect(fetchNip96Info(SERVICE, { fetch: fetchImpl })).rejects.toThrow(/one hop/);
   });
 
   test("non-OK info includes JSON message", async () => {
-    const fetchImpl: Nip96Fetch = async () =>
-      jsonResponse(404, { status: "error", message: "not found" });
+    const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
+      return jsonResponse(404, { status: "error", message: "not found" });
+    };
     await expect(fetchNip96Info(SERVICE, { fetch: fetchImpl })).rejects.toThrow(
       /^NIP-96 server info HTTP 404: not found$/,
     );
@@ -144,7 +179,7 @@ describe("nip96 server info", () => {
 
 describe("nip96 upload parse", () => {
   test("parseNip96UploadResponse reads url tag and tags", () => {
-    expect(parseNip96UploadResponse(SUCCESS_BODY)).toEqual({
+    expect(parseNip96UploadResponse(SUCCESS_BODY)).toStrictEqual({
       status: "success",
       url: FILE_URL,
       tags: [
@@ -161,7 +196,7 @@ describe("nip96 upload parse", () => {
         { status: "processing", processing_url: "https://files.example/status/1" },
         202,
       ),
-    ).toEqual({
+    ).toStrictEqual({
       status: "processing",
       processingUrl: "https://files.example/status/1",
       tags: [],
@@ -172,7 +207,7 @@ describe("nip96 upload parse", () => {
         status: "processing",
         processing_url: "https://files.example/status/1",
       }),
-    ).toEqual({
+    ).toStrictEqual({
       status: "processing",
       processingUrl: "https://files.example/status/1",
       tags: [],
@@ -199,9 +234,10 @@ describe("nip96 upload parse", () => {
   });
 
   test("uploadNip96 posts multipart file with authorization and extra fields", async () => {
-    const calls: { url: string; init?: Parameters<Nip96Fetch>[1] }[] = [];
+    const calls: Array<{ url: string; init?: Parameters<Nip96Fetch>[1] }> = [];
     const fetchImpl: Nip96Fetch = async (url, init) => {
       calls.push({ url, init });
+      await Promise.resolve();
       return jsonResponse(201, SUCCESS_BODY);
     };
     const file = new Blob(["hello"], { type: "text/plain" });
@@ -210,15 +246,14 @@ describe("nip96 upload parse", () => {
       extraFields: { caption: "hi", no_transform: "true" },
     });
 
-    expect(result.status).toBe("success");
-    if (result.status !== "success") throw new Error("expected success");
-    expect(result.url).toBe(FILE_URL);
-    expect(result.tags[0]).toEqual(["url", FILE_URL]);
+    const success = uploadSuccess(result);
+    expect(success.url).toBe(FILE_URL);
+    expect(result.tags[0]).toStrictEqual(["url", FILE_URL]);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe(API_URL);
     expect(calls[0]?.init?.method).toBe("POST");
     expect(redirectOf(calls[0]?.init)).toBe("manual");
-    expect(calls[0]?.init?.headers).toEqual({ Authorization: "Nostr tok" });
+    expect(calls[0]?.init?.headers).toStrictEqual({ Authorization: "Nostr tok" });
     expect(calls[0]?.init?.body).toBeInstanceOf(FormData);
     const body = calls[0]?.init?.body as FormData;
     expect(body.get("caption")).toBe("hi");
@@ -227,16 +262,20 @@ describe("nip96 upload parse", () => {
   });
 
   test("uploadNip96 without url tag throws", async () => {
-    const fetchImpl: Nip96Fetch = async () =>
-      jsonResponse(200, { status: "success", nip94_event: { tags: [] } });
+    const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
+      return jsonResponse(200, { status: "success", nip94_event: { tags: [] } });
+    };
     await expect(
       uploadNip96(API_URL, new Blob(["x"]), "Nostr tok", { fetch: fetchImpl }),
     ).rejects.toThrow(/upload response without url/);
   });
 
   test("non-OK upload includes JSON message and does not require url", async () => {
-    const fetchImpl: Nip96Fetch = async () =>
-      jsonResponse(403, { status: "error", message: "User is not allowed to upload" });
+    const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
+      return jsonResponse(403, { status: "error", message: "User is not allowed to upload" });
+    };
     await expect(
       uploadNip96(API_URL, new Blob(["x"]), "Nostr tok", { fetch: fetchImpl }),
     ).rejects.toThrow(/^NIP-96 upload HTTP 403: User is not allowed to upload$/);
@@ -245,21 +284,21 @@ describe("nip96 upload parse", () => {
   test("upload network TypeError wraps Nip96Error", async () => {
     const net = new TypeError("fetch failed");
     const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
       throw net;
     };
-    try {
-      await uploadNip96(API_URL, new Blob(["x"]), "Nostr tok", { fetch: fetchImpl });
-      throw new Error("expected reject");
-    } catch (err) {
-      expect(err).toBeInstanceOf(Nip96Error);
-      expect((err as Nip96Error).cause).toBe(net);
-      expect(err).not.toBe(net);
-    }
+    const error = await captureError(
+      uploadNip96(API_URL, new Blob(["x"]), "Nostr tok", { fetch: fetchImpl }),
+    );
+    expect(error).toBeInstanceOf(Nip96Error);
+    expect((error as Nip96Error).cause).toBe(net);
+    expect(error).not.toBe(net);
   });
 
   test("upload AbortError is not wrapped into Nip96Error", async () => {
     const aborted = abortError();
     const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
       throw aborted;
     };
     await expect(
@@ -268,7 +307,10 @@ describe("nip96 upload parse", () => {
   });
 
   test("non-OK upload without message falls back to status", async () => {
-    const fetchImpl: Nip96Fetch = async () => jsonResponse(413, { status: "error" });
+    const fetchImpl: Nip96Fetch = async () => {
+      await Promise.resolve();
+      return jsonResponse(413, { status: "error" });
+    };
     await expect(
       uploadNip96(API_URL, new Blob(["x"]), "Nostr tok", { fetch: fetchImpl }),
     ).rejects.toThrow(/^NIP-96 upload HTTP 413$/);

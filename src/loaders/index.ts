@@ -3,9 +3,13 @@ import type { Pool } from "../relay/pool.ts";
 import type { ReactiveEventStore } from "../store/reactive.ts";
 import { LoaderContext } from "./context.ts";
 import { createEventLoader } from "./event.ts";
+import type { EventLoader } from "./event.ts";
 import { createListLoaders } from "./lists.ts";
+import type { ListLoaders } from "./lists.ts";
 import { createProfileLoader } from "./profile.ts";
-import { createReplaceableLoader, type ReplaceableLoader } from "./replaceable.ts";
+import type { ProfileLoader } from "./profile.ts";
+import { createReplaceableLoader } from "./replaceable.ts";
+import type { ReplaceableLoader } from "./replaceable.ts";
 
 export {
   type LoadStyle,
@@ -24,10 +28,6 @@ export {
   type OutboxFeedOptions,
 } from "./outbox.ts";
 
-import type { ListLoaders } from "./lists.ts";
-import type { ProfileLoader } from "./profile.ts";
-import type { EventLoader } from "./event.ts";
-
 /** The loader surface returned by {@link createLoaders}. */
 export type Loaders = {
   follows: ListLoaders["follows"];
@@ -38,20 +38,19 @@ export type Loaders = {
   event: EventLoader["load"];
   /** Generic replaceable loader for any kind; memoized per kind. */
   replaceable: (kind: number) => ReplaceableLoader;
-  addRelay(url: string): void;
-  removeRelay(url: string): void;
+  addRelay: (url: string) => void;
+  removeRelay: (url: string) => void;
 };
 
 /** Options for {@link createLoaders}. */
 export type CreateLoadersOptions = {
   pool: Pool;
-  relays: readonly string[];
+  relays: ReadonlyArray<string>;
   /** The reactive index loaders read from and feed fetched events into. */
   index: ReactiveEventStore;
   /**
-   * Inbound-event sink for fetched events; defaults to `index.add`. Client
-   * wires its single ingest path so loader fetches get gossip meta and
-   * persistence like every other inbound event.
+   * Inbound-event sink for fetched events; defaults to `index.add`. Client wires its single ingest
+   * path so loader fetches get gossip meta and persistence like every other inbound event.
    */
   ingest?: (event: Event, relayUrl: string) => void;
   staleAfterSec?: number;
@@ -74,11 +73,12 @@ export function createLoaders(opts: CreateLoadersOptions): Loaders {
   const profile = createProfileLoader(replaceable);
   const event = createEventLoader(context);
   return {
-    follows: (pubkey, o) => lists.follows(pubkey, o),
-    muteList: (pubkey, o) => lists.muteList(pubkey, o),
-    relayList: (pubkey, o) => lists.relayList(pubkey, o),
-    dmRelayList: (pubkey, o) => lists.dmRelayList(pubkey, o),
-    profile: (pubkey, o) => profile.load(pubkey, o),
+    follows: async (pubkey, o) => lists.follows(pubkey, o),
+    muteList: async (pubkey, o) => lists.muteList(pubkey, o),
+    relayList: async (pubkey, o) => lists.relayList(pubkey, o),
+    dmRelayList: async (pubkey, o) => lists.dmRelayList(pubkey, o),
+    profile: async (pubkey, o) => profile.load(pubkey, o),
+    // oxlint-disable-next-line typescript/promise-function-async -- must pass through load's synchronous throw on malformed refs
     event: (ref) => event.load(ref),
     replaceable,
     addRelay: (url) => context.addRelay(url),

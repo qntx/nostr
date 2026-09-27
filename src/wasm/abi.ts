@@ -1,4 +1,4 @@
-/** wasm-bindgen 0.2.122 bundler-produced exports used by interned TS glue. */
+/** Wasm-bindgen 0.2.122 bundler-produced exports used by interned TS glue. */
 export type CryptoWasmExports = {
   memory: WebAssembly.Memory;
   verify: (
@@ -84,32 +84,37 @@ function requireMemory(value: WebAssembly.ExportValue | undefined): WebAssembly.
   return value;
 }
 
-function requireFn<T extends (...args: never[]) => unknown>(
+// oxlint-disable-next-line no-unnecessary-type-parameters -- T binds the declared ABI signature at each call site
+function requireFn<T extends (...args: number[]) => unknown>(
   value: WebAssembly.ExportValue | undefined,
   name: string,
 ): T {
   if (typeof value !== "function") {
     throw new TypeError(`wasm missing ${name} export`);
   }
+  // oxlint-disable-next-line no-unsafe-type-assertion -- wasm exports are opaque; each name is bound to the signature the ABI contract requires
   return value as T;
 }
 
 function asExports(raw: WebAssembly.Exports): CryptoWasmExports {
-  return {
-    memory: requireMemory(raw.memory),
-    verify: requireFn(raw.verify, "verify"),
-    verify_serialized: requireFn(raw.verify_serialized, "verify_serialized"),
-    sign: requireFn(raw.sign, "sign"),
-    public_key: requireFn(raw.public_key, "public_key"),
-    __wbindgen_export: requireFn(raw.__wbindgen_export, "__wbindgen_export"),
-    __wbindgen_export2: requireFn(raw.__wbindgen_export2, "__wbindgen_export2"),
+  const exports: CryptoWasmExports = {
+    memory: requireMemory(raw["memory"]),
+    verify: requireFn(raw["verify"], "verify"),
+    verify_serialized: requireFn(raw["verify_serialized"], "verify_serialized"),
+    sign: requireFn(raw["sign"], "sign"),
+    public_key: requireFn(raw["public_key"], "public_key"),
+    __wbindgen_export: requireFn(raw["__wbindgen_export"], "__wbindgen_export"),
+    __wbindgen_export2: requireFn(raw["__wbindgen_export2"], "__wbindgen_export2"),
     __wbindgen_add_to_stack_pointer: requireFn(
-      raw.__wbindgen_add_to_stack_pointer,
+      raw["__wbindgen_add_to_stack_pointer"],
       "__wbindgen_add_to_stack_pointer",
     ),
-    __wbindgen_start:
-      typeof raw.__wbindgen_start === "function" ? (raw.__wbindgen_start as () => void) : undefined,
   };
+  const start = raw["__wbindgen_start"];
+  if (typeof start === "function") {
+    exports.__wbindgen_start = requireFn<() => void>(start, "__wbindgen_start");
+  }
+  return exports;
 }
 
 function passBytes(exports: CryptoWasmExports, bytes: Uint8Array): { ptr: number; len: number } {
@@ -119,25 +124,16 @@ function passBytes(exports: CryptoWasmExports, bytes: Uint8Array): { ptr: number
   return { ptr, len };
 }
 
-function callWithBytes(
-  exports: CryptoWasmExports,
-  arrays: readonly Uint8Array[],
-  invoke: (args: number[]) => number,
-): boolean {
-  const passed = arrays.map((bytes) => passBytes(exports, bytes));
-  const args = passed.flatMap(({ ptr, len }) => [ptr, len]);
-  return invoke(args) !== 0;
-}
-
 export function wasmVerify(
   exports: CryptoWasmExports,
   id: Uint8Array,
   pubkey: Uint8Array,
   sig: Uint8Array,
 ): boolean {
-  return callWithBytes(exports, [id, pubkey, sig], (args) =>
-    exports.verify(args[0]!, args[1]!, args[2]!, args[3]!, args[4]!, args[5]!),
-  );
+  const idP = passBytes(exports, id);
+  const pkP = passBytes(exports, pubkey);
+  const sigP = passBytes(exports, sig);
+  return exports.verify(idP.ptr, idP.len, pkP.ptr, pkP.len, sigP.ptr, sigP.len) !== 0;
 }
 
 export function wasmVerifySerialized(
@@ -147,17 +143,21 @@ export function wasmVerifySerialized(
   pubkey: Uint8Array,
   sig: Uint8Array,
 ): boolean {
-  return callWithBytes(exports, [serialized, id, pubkey, sig], (args) =>
+  const serP = passBytes(exports, serialized);
+  const idP = passBytes(exports, id);
+  const pkP = passBytes(exports, pubkey);
+  const sigP = passBytes(exports, sig);
+  return (
     exports.verify_serialized(
-      args[0]!,
-      args[1]!,
-      args[2]!,
-      args[3]!,
-      args[4]!,
-      args[5]!,
-      args[6]!,
-      args[7]!,
-    ),
+      serP.ptr,
+      serP.len,
+      idP.ptr,
+      idP.len,
+      pkP.ptr,
+      pkP.len,
+      sigP.ptr,
+      sigP.len,
+    ) !== 0
   );
 }
 
@@ -172,17 +172,14 @@ function takeBytes(exports: CryptoWasmExports, ptr: number, len: number): Uint8A
 
 function callReturningBytes(
   exports: CryptoWasmExports,
-  arrays: readonly Uint8Array[],
-  invoke: (retptr: number, args: number[]) => void,
+  invoke: (retptr: number) => void,
 ): Uint8Array {
-  const passed = arrays.map((bytes) => passBytes(exports, bytes));
-  const args = passed.flatMap(({ ptr, len }) => [ptr, len]);
   const retptr = exports.__wbindgen_add_to_stack_pointer(-16);
   try {
-    invoke(retptr, args);
+    invoke(retptr);
     const view = new DataView(exports.memory.buffer);
-    const ptr = view.getInt32(retptr, true) >>> 0;
-    const len = view.getInt32(retptr + 4, true) >>> 0;
+    const ptr = view.getUint32(retptr, true);
+    const len = view.getUint32(retptr + 4, true);
     return takeBytes(exports, ptr, len);
   } finally {
     exports.__wbindgen_add_to_stack_pointer(16);
@@ -195,14 +192,18 @@ export function wasmSign(
   seckey: Uint8Array,
   aux: Uint8Array,
 ): Uint8Array {
-  return callReturningBytes(exports, [id, seckey, aux], (retptr, args) => {
-    exports.sign(retptr, args[0]!, args[1]!, args[2]!, args[3]!, args[4]!, args[5]!);
+  const idP = passBytes(exports, id);
+  const skP = passBytes(exports, seckey);
+  const auxP = passBytes(exports, aux);
+  return callReturningBytes(exports, (retptr) => {
+    exports.sign(retptr, idP.ptr, idP.len, skP.ptr, skP.len, auxP.ptr, auxP.len);
   });
 }
 
 export function wasmPublicKey(exports: CryptoWasmExports, seckey: Uint8Array): Uint8Array {
-  return callReturningBytes(exports, [seckey], (retptr, args) => {
-    exports.public_key(retptr, args[0]!, args[1]!);
+  const skP = passBytes(exports, seckey);
+  return callReturningBytes(exports, (retptr) => {
+    exports.public_key(retptr, skP.ptr, skP.len);
   });
 }
 

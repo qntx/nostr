@@ -1,11 +1,11 @@
-import type { Event } from "../core/event.ts";
-import { NostrError } from "../core/error.ts";
-import type { Filter } from "../core/filter.ts";
-import { sortedEvents } from "../core/event.ts";
-import { Kind } from "../core/kind.ts";
-import { normalizeURL } from "../core/util.ts";
 import { throwIfAborted } from "../core/abort.ts";
+import { NostrError } from "../core/error.ts";
+import type { Event } from "../core/event.ts";
+import { sortedEvents } from "../core/event.ts";
+import type { Filter } from "../core/filter.ts";
+import { Kind } from "../core/kind.ts";
 import { invokeSafely } from "../core/report.ts";
+import { normalizeURL } from "../core/util.ts";
 import type { Gossip } from "../gossip/gossip.ts";
 import type { Pool } from "../relay/pool.ts";
 import { toStorageError } from "../storage/error.ts";
@@ -14,7 +14,9 @@ import type { EventStore, OutboxBound } from "../storage/types.ts";
 export type { OutboxBound } from "../storage/types.ts";
 
 /** Outbox feed lifecycle error (e.g. use after close). */
-export class OutboxError extends NostrError {}
+export class OutboxError extends NostrError {
+  override name = "OutboxError";
+}
 
 /** Options for {@link createOutboxFeed}. */
 export type OutboxFeedOptions = {
@@ -22,32 +24,29 @@ export type OutboxFeedOptions = {
   gossip: Gossip;
   storage: EventStore;
   /** Fallback relays when an author has no known outbox routes. */
-  discoveryRelays: readonly string[];
-  authors: readonly string[];
+  discoveryRelays: ReadonlyArray<string>;
+  authors: ReadonlyArray<string>;
   /** Event kinds to fetch. Default `[Kind.TextNote]`. */
-  kinds?: readonly number[];
+  kinds?: ReadonlyArray<number> | undefined;
   /** Max write-relays to use per author. Default 3. */
-  maxRelaysPerAuthor?: number;
-  fetchTimeoutMs?: number;
+  maxRelaysPerAuthor?: number | undefined;
+  fetchTimeoutMs?: number | undefined;
   /** Called for live events after observe, and for sync events returned by applySync. */
-  onEvent?: (event: Event) => void;
+  onEvent?: ((event: Event) => void) | undefined;
   /** Live ingest (e.g. `client.observe`) with the source relay URL. StartLive never putManys. */
-  observe?: (event: Event, relayUrl: string) => void;
+  observe?: ((event: Event, relayUrl: string) => void) | undefined;
   /**
-   * Every receipt from every relay — live (including duplicates the feed's
-   * own dedupe skips) and sync fetch batches — for seenOn bookkeeping.
+   * Every receipt from every relay — live (including duplicates the feed's own dedupe skips) and
+   * sync fetch batches — for seenOn bookkeeping.
    */
-  seen?: (event: Event, relayUrl: string) => void;
+  seen?: ((event: Event, relayUrl: string) => void) | undefined;
   /**
-   * Sync path only. Awaited. Return events that should advance bounds.
-   * Throw → sync throws, bounds unchanged.
+   * Sync path only. Awaited. Return events that should advance bounds. Throw → sync throws, bounds
+   * unchanged.
    */
-  applySync?: (events: readonly Event[]) => Promise<readonly Event[]>;
-  /**
-   * Load kind:10002 for authors before sync when routes are missing.
-   * Requires a relay-list loader.
-   */
-  hydrate?: (pubkeys: readonly string[]) => Promise<void>;
+  applySync?: ((events: ReadonlyArray<Event>) => Promise<ReadonlyArray<Event>>) | undefined;
+  /** Load kind:10002 for authors before sync when routes are missing. Requires a relay-list loader. */
+  hydrate?: ((pubkeys: ReadonlyArray<string>) => Promise<void>) | undefined;
 };
 
 function boundKey(pubkey: string, kind: number): string {
@@ -55,12 +54,14 @@ function boundKey(pubkey: string, kind: number): string {
 }
 
 /** Same skip/dedup as Gossip.setRoutes so prefer can match Client.relays. */
-function canonicalRelayUrls(urls: readonly string[]): string[] {
+function canonicalRelayUrls(urls: ReadonlyArray<string>): string[] {
   const out: string[] = [];
   for (const raw of urls) {
     try {
       const url = normalizeURL(raw);
-      if (!out.includes(url)) out.push(url);
+      if (!out.includes(url)) {
+        out.push(url);
+      }
     } catch {
       // not a relay URL
     }
@@ -69,17 +70,16 @@ function canonicalRelayUrls(urls: readonly string[]): string[] {
 }
 
 /**
- * Group authors by outbox relay (discovery fallback).
- * `prefer` reorders existing candidates only; it never appends a URL
- * that is not already in the author's outbox or discovery list.
- * Returns Map<relayUrl, authors[]>.
+ * Group authors by outbox relay (discovery fallback). `prefer` reorders existing candidates only;
+ * it never appends a URL that is not already in the author's outbox or discovery list. Returns
+ * Map<relayUrl, authors[]>.
  */
 export function groupAuthorsByOutboxRelay(
-  authors: readonly string[],
+  authors: ReadonlyArray<string>,
   gossip: Gossip,
-  discoveryRelays: readonly string[],
+  discoveryRelays: ReadonlyArray<string>,
   maxRelaysPerAuthor = 3,
-  prefer: readonly string[] = [],
+  prefer: ReadonlyArray<string> = [],
 ): Map<string, string[]> {
   const leftover = new Set(
     (gossip.route({ authors: authors.map((a) => a.toLowerCase()) }).remainder?.authors ?? []).map(
@@ -96,12 +96,17 @@ export function groupAuthorsByOutboxRelay(
     const preferred: string[] = [];
     const rest: string[] = [];
     for (const url of urls) {
-      if (preferSet.has(url)) preferred.push(url);
-      else rest.push(url);
+      if (preferSet.has(url)) {
+        preferred.push(url);
+      } else {
+        rest.push(url);
+      }
     }
-    for (const url of preferred.concat(rest).slice(0, maxRelaysPerAuthor)) {
+    for (const url of [...preferred, ...rest].slice(0, maxRelaysPerAuthor)) {
       const list = map.get(url) ?? [];
-      if (!list.includes(pk)) list.push(pk);
+      if (!list.includes(pk)) {
+        list.push(pk);
+      }
       map.set(url, list);
     }
   }
@@ -109,8 +114,8 @@ export function groupAuthorsByOutboxRelay(
 }
 
 /**
- * Outbox-model feed: history sync + live subscription for a set of authors,
- * routed via NIP-65 write relays (with discovery fallback).
+ * Outbox-model feed: history sync + live subscription for a set of authors, routed via NIP-65 write
+ * relays (with discovery fallback).
  */
 export class OutboxFeed {
   readonly #pool: Pool;
@@ -123,8 +128,10 @@ export class OutboxFeed {
   readonly #onEvent: ((event: Event) => void) | undefined;
   readonly #observe: ((event: Event, relayUrl: string) => void) | undefined;
   readonly #seen: ((event: Event, relayUrl: string) => void) | undefined;
-  readonly #applySync: ((events: readonly Event[]) => Promise<readonly Event[]>) | undefined;
-  readonly #hydrate: ((pubkeys: readonly string[]) => Promise<void>) | undefined;
+  readonly #applySync:
+    | ((events: ReadonlyArray<Event>) => Promise<ReadonlyArray<Event>>)
+    | undefined;
+  readonly #hydrate: ((pubkeys: ReadonlyArray<string>) => Promise<void>) | undefined;
   readonly #bounds = new Map<string, OutboxBound>();
   #authors: string[];
   #liveCloser: { close: (reason?: string) => void } | undefined;
@@ -146,16 +153,16 @@ export class OutboxFeed {
     this.#hydrate = opts.hydrate;
   }
 
-  get authors(): readonly string[] {
+  get authors(): ReadonlyArray<string> {
     return this.#authors;
   }
 
-  get kinds(): readonly number[] {
+  get kinds(): ReadonlyArray<number> {
     return this.#kinds;
   }
 
   /** Replace the author set (does not auto-restart live). */
-  setAuthors(authors: readonly string[]): void {
+  setAuthors(authors: ReadonlyArray<string>): void {
     this.#authors = [...new Set(authors.map((a) => a.toLowerCase()))];
   }
 
@@ -163,30 +170,32 @@ export class OutboxFeed {
     return this.#bounds.get(boundKey(pubkey, kind));
   }
 
-  /**
-   * Load NIP-65 relay lists for authors that have no outbox routes yet.
-   */
+  /** Load NIP-65 relay lists for authors that have no outbox routes yet. */
   async hydrate(): Promise<void> {
     this.#assertOpen();
-    if (!this.#hydrate) return;
+    if (!this.#hydrate) {
+      return;
+    }
     const missing = this.#authors.filter((pk) => this.#gossip.outboxRelays(pk).length === 0);
-    if (missing.length === 0) return;
+    if (missing.length === 0) {
+      return;
+    }
     await this.#hydrate(missing);
   }
 
-  /**
-   * One-shot history pull. Persistence is `applySync`; bounds move only for events it returns.
-   */
+  /** One-shot history pull. Persistence is `applySync`; bounds move only for events it returns. */
   async sync(opts?: {
-    limit?: number;
-    since?: number;
-    until?: number;
-    signal?: AbortSignal;
+    limit?: number | undefined;
+    since?: number | undefined;
+    until?: number | undefined;
+    signal?: AbortSignal | undefined;
     /** Skip hydrate() even if provided. */
-    skipHydrate?: boolean;
+    skipHydrate?: boolean | undefined;
   }): Promise<Event[]> {
     this.#assertOpen();
-    if (!opts?.skipHydrate) await this.hydrate();
+    if (opts?.skipHydrate !== true) {
+      await this.hydrate();
+    }
     await this.#hydrateBoundsFromStore();
 
     const byRelay = groupAuthorsByOutboxRelay(
@@ -197,7 +206,9 @@ export class OutboxFeed {
       this.#pool.connectedUrls(),
     );
 
-    if (byRelay.size === 0) return [];
+    if (byRelay.size === 0) {
+      return [];
+    }
 
     const byId = new Map<string, Event>();
     await Promise.all(
@@ -211,23 +222,29 @@ export class OutboxFeed {
             signal: opts?.signal,
             onevent: (event, relayUrl) => invokeSafely(() => this.#seen?.(event, relayUrl)),
           });
-          for (const event of batch) byId.set(event.id, event);
-        } catch (err) {
+          for (const event of batch) {
+            byId.set(event.id, event);
+          }
+        } catch (error) {
           // An abort rejects the whole sync; per-relay failures are skipped.
-          if (opts?.signal?.aborted) throw err;
+          if (opts?.signal?.aborted === true) {
+            throw error;
+          }
         }
       }),
     );
 
     const unique = [...byId.values()];
-    if (unique.length === 0) return [];
+    if (unique.length === 0) {
+      return [];
+    }
 
-    let applied: readonly Event[] = [];
+    let applied: ReadonlyArray<Event> = [];
     if (this.#applySync) {
       try {
         applied = await this.#applySync(unique);
-      } catch (err) {
-        throw toStorageError(err);
+      } catch (error) {
+        throw toStorageError(error);
       }
     }
     const dirty = new Set<string>();
@@ -241,10 +258,12 @@ export class OutboxFeed {
   }
 
   /**
-   * Start a live subscription across outbox relays for the current authors.
-   * Closes any previous live subscription.
+   * Start a live subscription across outbox relays for the current authors. Closes any previous
+   * live subscription.
    */
-  startLive(opts?: { signal?: AbortSignal; since?: number }): { close: (reason?: string) => void } {
+  startLive(opts?: { signal?: AbortSignal | undefined; since?: number | undefined }): {
+    close: (reason?: string) => void;
+  } {
     this.#assertOpen();
     this.#liveCloser?.close("restart");
 
@@ -271,7 +290,9 @@ export class OutboxFeed {
           signal: opts?.signal,
           onevent: (event, relayUrl) => {
             invokeSafely(() => this.#seen?.(event, relayUrl));
-            if (seen.has(event.id)) return;
+            if (seen.has(event.id)) {
+              return;
+            }
             seen.add(event.id);
             this.#noteEvent(event, relayUrl);
           },
@@ -281,8 +302,12 @@ export class OutboxFeed {
 
     const closer = {
       close: (reason?: string) => {
-        for (const c of closers) c.close(reason);
-        if (this.#liveCloser === closer) this.#liveCloser = undefined;
+        for (const c of closers) {
+          c.close(reason);
+        }
+        if (this.#liveCloser === closer) {
+          this.#liveCloser = undefined;
+        }
       },
     };
     this.#liveCloser = closer;
@@ -291,8 +316,8 @@ export class OutboxFeed {
 
   /** Convenience: hydrate + sync + startLive. */
   async start(opts?: {
-    limit?: number;
-    signal?: AbortSignal;
+    limit?: number | undefined;
+    signal?: AbortSignal | undefined;
   }): Promise<{ close: (reason?: string) => void; events: Event[] }> {
     const events = await this.sync({ limit: opts?.limit, signal: opts?.signal });
     const live = this.startLive({ signal: opts?.signal });
@@ -306,7 +331,9 @@ export class OutboxFeed {
   }
 
   #assertOpen(): void {
-    if (this.#closed) throw new OutboxError("OutboxFeed is closed");
+    if (this.#closed) {
+      throw new OutboxError("OutboxFeed is closed");
+    }
   }
 
   async #hydrateBoundsFromStore(): Promise<void> {
@@ -314,9 +341,13 @@ export class OutboxFeed {
       this.#authors.flatMap((pk) =>
         this.#kinds.map(async (kind) => {
           const key = boundKey(pk, kind);
-          if (this.#bounds.has(key)) return;
+          if (this.#bounds.has(key)) {
+            return;
+          }
           const bound = await this.#storage.getOutboxBound(pk, kind);
-          if (!bound) return;
+          if (!bound) {
+            return;
+          }
           await this.#storage.setOutboxBound(pk, kind, bound);
           this.#bounds.set(key, { oldest: bound.oldest, newest: bound.newest });
         }),
@@ -326,12 +357,12 @@ export class OutboxFeed {
 
   #syncFilters(
     authors: string[],
-    opts?: { limit?: number; since?: number; until?: number },
+    opts?: { limit?: number | undefined; since?: number | undefined; until?: number | undefined },
   ): Filter[] {
     const base: Filter = {
       kinds: this.#kinds,
       limit: opts?.limit ?? 50,
-      ...(opts?.until !== undefined ? { until: opts.until } : {}),
+      ...(opts?.until === undefined ? {} : { until: opts.until }),
     };
 
     if (opts?.since !== undefined) {
@@ -351,7 +382,7 @@ export class OutboxFeed {
           complete = false;
           break;
         }
-        if (newest === undefined || b.newest < newest) newest = b.newest;
+        newest = Math.min(newest ?? b.newest, b.newest);
       }
       if (complete && newest !== undefined) {
         bounded.push(pk);
@@ -379,22 +410,28 @@ export class OutboxFeed {
     this.#updateBounds(event);
     const bound = this.#bounds.get(boundKey(event.pubkey, event.kind));
     if (bound) {
-      void this.#storage
-        .setOutboxBound(event.pubkey, event.kind, {
-          oldest: bound.oldest,
-          newest: bound.newest,
-        })
-        .catch(() => {});
+      void (async () => {
+        try {
+          await this.#storage.setOutboxBound(event.pubkey, event.kind, {
+            oldest: bound.oldest,
+            newest: bound.newest,
+          });
+        } catch {
+          // Bound persistence is best-effort.
+        }
+      })();
     }
     invokeSafely(() => this.#observe?.(event, relayUrl));
     invokeSafely(() => this.#onEvent?.(event));
   }
 
   async #persistBounds(keys: Iterable<string>): Promise<void> {
-    const writes: Promise<void>[] = [];
+    const writes: Array<Promise<void>> = [];
     for (const key of keys) {
       const bound = this.#bounds.get(key);
-      if (!bound) continue;
+      if (!bound) {
+        continue;
+      }
       const sep = key.lastIndexOf(":");
       writes.push(
         this.#storage.setOutboxBound(key.slice(0, sep), Number(key.slice(sep + 1)), {
@@ -403,11 +440,13 @@ export class OutboxFeed {
         }),
       );
     }
-    if (writes.length === 0) return;
+    if (writes.length === 0) {
+      return;
+    }
     try {
       await Promise.all(writes);
-    } catch (err) {
-      throw toStorageError(err);
+    } catch (error) {
+      throw toStorageError(error);
     }
   }
 
@@ -418,8 +457,12 @@ export class OutboxFeed {
       this.#bounds.set(key, { oldest: event.created_at, newest: event.created_at });
       return;
     }
-    if (event.created_at < prev.oldest) prev.oldest = event.created_at;
-    if (event.created_at > prev.newest) prev.newest = event.created_at;
+    if (event.created_at < prev.oldest) {
+      prev.oldest = event.created_at;
+    }
+    if (event.created_at > prev.newest) {
+      prev.newest = event.created_at;
+    }
   }
 }
 

@@ -1,3 +1,4 @@
+// oxlint-disable unicorn/prefer-add-event-listener -- the *Like driver interfaces model only the `on*` handler surface
 import type { Event } from "../core/event.ts";
 import { isReplaceableWinner, itemCompare, validateSignedEvent } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
@@ -5,27 +6,25 @@ import { eventAddress } from "../core/tag.ts";
 import { DeletionState, planDeletion } from "./deletion.ts";
 import { StorageError } from "./error.ts";
 import { deleteStoredEvent, writeTagRefs } from "./idb-helpers.ts";
-import {
-  ADDRESSES,
-  EVENTS,
-  OUTBOX_BOUNDS,
-  TAG_REFS,
-  TOMBSTONES,
-  type AddressRow,
-  type IDBDatabaseLike,
-  type IDBFactoryLike,
-  type IDBTransactionLike,
-  type Tombstone,
+import { ADDRESSES, EVENTS, OUTBOX_BOUNDS, TAG_REFS, TOMBSTONES } from "./idb-types.ts";
+import type {
+  AddressRow,
+  IDBDatabaseLike,
+  IDBFactoryLike,
+  IDBTransactionLike,
+  Tombstone,
 } from "./idb-types.ts";
+
 export const IDB_VERSION = 4;
 
-export function openDb(dbName: string): Promise<IDBDatabaseLike> {
+export async function openDb(dbName: string): Promise<IDBDatabaseLike> {
   return new Promise((resolve, reject) => {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- reads the platform global, which has no ambient types here
     const factory = (globalThis as unknown as { indexedDB: IDBFactoryLike }).indexedDB;
     const req = factory.open(dbName, IDB_VERSION);
     req.onupgradeneeded = (ev) => {
       const db = req.result;
-      const oldVersion = ev.oldVersion;
+      const { oldVersion } = ev;
       const tx = ev.target.transaction;
       if (oldVersion < 1) {
         db.createObjectStore(EVENTS, { keyPath: "id" });
@@ -46,7 +45,8 @@ export function openDb(dbName: string): Promise<IDBDatabaseLike> {
         if (oldVersion >= 1) {
           const all = events.getAll();
           all.onsuccess = () => {
-            migrateV1Events(tx, (all.result as Event[]) ?? []);
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- getAll resolves with the stored legacy event rows
+            migrateV1Events(tx, (all.result as unknown[]) ?? []);
             compactSupersededReplaceables(tx);
           };
         }
@@ -62,7 +62,7 @@ export function openDb(dbName: string): Promise<IDBDatabaseLike> {
   });
 }
 
-export function migrateV1Events(tx: IDBTransactionLike, events: Event[]): void {
+export function migrateV1Events(tx: IDBTransactionLike, events: ReadonlyArray<unknown>): void {
   const eventsStore = tx.objectStore(EVENTS);
   const tagRefs = tx.objectStore(TAG_REFS);
   const addresses = tx.objectStore(ADDRESSES);
@@ -75,8 +75,9 @@ export function migrateV1Events(tx: IDBTransactionLike, events: Event[]): void {
       valid.push(e);
       continue;
     }
-    const row = e as { id?: unknown };
-    if (typeof row.id === "string") eventsStore.delete(row.id);
+    if (typeof e === "object" && e !== null && "id" in e && typeof e.id === "string") {
+      eventsStore.delete(e.id);
+    }
   }
 
   const byId = new Map(valid.map((e) => [e.id, e]));
@@ -87,7 +88,9 @@ export function migrateV1Events(tx: IDBTransactionLike, events: Event[]): void {
     deletion.absorb(plan);
     for (const c of plan.coordinates) {
       for (const ev of valid) {
-        if (ev.kind === Kind.EventDeletion) continue;
+        if (ev.kind === Kind.EventDeletion) {
+          continue;
+        }
         if (eventAddress(ev) === c.key && ev.created_at <= c.until) {
           deletion.ids.add(ev.id);
         }
@@ -113,9 +116,11 @@ export function migrateV1Events(tx: IDBTransactionLike, events: Event[]): void {
     }
     writeTagRefs(tagRefs, event);
     const addr = eventAddress(event);
-    if (addr) {
+    if (addr !== undefined) {
       const prev = winners.get(addr);
-      if (!prev || isReplaceableWinner(event, prev)) winners.set(addr, event);
+      if (!prev || isReplaceableWinner(event, prev)) {
+        winners.set(addr, event);
+      }
     }
   }
   for (const [address, event] of winners) {
@@ -131,13 +136,17 @@ export function compactSupersededReplaceables(tx: IDBTransactionLike): void {
   let events: Event[] | undefined;
   let addressRows: AddressRow[] | undefined;
   const run = () => {
-    if (events === undefined || addressRows === undefined) return;
+    if (events === undefined || addressRows === undefined) {
+      return;
+    }
     const byAddr = new Map<string, AddressRow>();
-    for (const row of addressRows) byAddr.set(row.address, row);
+    for (const row of addressRows) {
+      byAddr.set(row.address, row);
+    }
     const kept: Event[] = [];
     for (const event of events) {
       const addr = eventAddress(event);
-      if (addr) {
+      if (addr !== undefined) {
         const row = byAddr.get(addr);
         if (!row || row.id !== event.id) {
           deleteStoredEvent(tx, event, row);
@@ -149,15 +158,19 @@ export function compactSupersededReplaceables(tx: IDBTransactionLike): void {
     addressesStore.clear();
     for (const event of kept) {
       const addr = eventAddress(event);
-      if (!addr) continue;
+      if (addr === undefined) {
+        continue;
+      }
       addressesStore.put({ address: addr, id: event.id, created_at: event.created_at });
     }
   };
   evReq.onsuccess = () => {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- getAll resolves with the stored Event rows
     events = (evReq.result as Event[]) ?? [];
     run();
   };
   addrReq.onsuccess = () => {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- getAll resolves with the stored AddressRow rows
     addressRows = (addrReq.result as AddressRow[]) ?? [];
     run();
   };

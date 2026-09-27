@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, test } from "vite-plus/test";
+
 import { IndexedDbEventStore, MemoryEventStore } from "../src/index.ts";
 import { eventStoreConformanceCases } from "../src/testing/index.ts";
-import { installIdbMock, type IdbMock } from "./helpers/idb-mock.ts";
+import { installIdbMock } from "./helpers/idb-mock.ts";
+import type { IdbMock } from "./helpers/idb-mock.ts";
 
 describe("MemoryEventStore conformance", () => {
-  for (const c of eventStoreConformanceCases) {
-    test(c.name, () => c.run(new MemoryEventStore()));
-  }
+  // oxlint-disable-next-line expect-expect -- assertions live inside each case's run()
+  test.each(eventStoreConformanceCases)("$name", async (c) => {
+    await c.run(new MemoryEventStore());
+  });
 });
 
 describe("IndexedDbEventStore conformance", () => {
@@ -21,15 +24,14 @@ describe("IndexedDbEventStore conformance", () => {
     mock.uninstall();
   });
 
-  for (const c of eventStoreConformanceCases) {
-    test(c.name, async () => {
-      const store = new IndexedDbEventStore({ dbName: `conformance-${dbSeq++}` });
-      await store.open();
-      try {
-        await c.run(store);
-      } finally {
-        store.close();
-      }
-    });
-  }
+  // oxlint-disable-next-line expect-expect -- assertions live inside each case's run()
+  test.each(eventStoreConformanceCases)("$name", async (c) => {
+    const store = new IndexedDbEventStore({ dbName: `conformance-${dbSeq++}` });
+    await store.open();
+    try {
+      await c.run(store);
+    } finally {
+      store.close();
+    }
+  });
 });

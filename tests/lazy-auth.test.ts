@@ -1,30 +1,30 @@
 import { describe, expect, test } from "vite-plus/test";
-import {
-  Client,
-  EventBuilder,
-  Keys,
-  KeysSigner,
-  Pool,
-  finalizeEvent,
-  type NostrSigner,
-} from "../src/index.ts";
+
+import { Client, EventBuilder, Keys, KeysSigner, Pool, finalizeEvent } from "../src/index.ts";
+import type { NostrSigner, UnsignedEvent } from "../src/index.ts";
 import { createFakeRelayNetwork } from "../src/testing/index.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const GATED = "wss://gated.example";
 
-function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) return;
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
 }
+
+const challengeOf = (template: UnsignedEvent): string =>
+  template.tags.find((t) => t[0] === "challenge")?.[1] ?? "";
 
 function authFrames(net: ReturnType<typeof createFakeRelayNetwork>, url: string): unknown[] {
   return net
@@ -38,7 +38,9 @@ function gatedClient(net: ReturnType<typeof createFakeRelayNetwork>, signer?: No
     .relays([GATED])
     .websocketImplementation(net.websocketImplementation)
     .enableReconnect(false);
-  if (signer) builder.signer(signer);
+  if (signer) {
+    builder.signer(signer);
+  }
   return builder.build();
 }
 
@@ -96,7 +98,8 @@ describe("lazy NIP-42 AUTH", () => {
       const client = gatedClient(net, new KeysSigner(keys));
       await client.connect();
       const note = EventBuilder.textNote("authed").createdAt(7).signWithKeys(keys);
-      expect((await client.publish(note))[0]?.result?.ok).toBe(true);
+      const published = await client.publish(note);
+      expect(published[0]?.result?.ok).toBe(true);
       expect(authFrames(net, GATED)).toHaveLength(1);
 
       client.setSigner(undefined);
@@ -131,7 +134,8 @@ describe("lazy NIP-42 AUTH", () => {
       await manual.connect();
       await sleep(20);
       const note = EventBuilder.textNote("no auth").createdAt(9).signWithKeys(keys);
-      expect((await manual.publish(note))[0]?.result?.ok).toBe(false);
+      const manualResult = await manual.publish(note);
+      expect(manualResult[0]?.result?.ok).toBe(false);
       expect(authFrames(net, GATED)).toHaveLength(0);
       await manual.shutdown();
     } finally {
@@ -152,6 +156,7 @@ describe("lazy NIP-42 AUTH", () => {
         enableReconnect: false,
         automaticallyAuth: () => async (template) => {
           signCalls += 1;
+          await Promise.resolve();
           return EventBuilder.textNote("")
             .kind(template.kind)
             .tags([
@@ -187,20 +192,22 @@ describe("lazy NIP-42 AUTH", () => {
       const keys = Keys.fromSecretKey(SK);
       // A signer whose AUTH tags the wrong relay URL: the relay answers OK false.
       const wrongRelaySigner: NostrSigner = {
-        getPublicKey: () => Promise.resolve(keys.publicKey),
-        signEvent: (unsigned) => {
-          const challenge = unsigned.tags.find((t) => t[0] === "challenge")?.[1] ?? "";
-          return Promise.resolve(
-            finalizeEvent(
-              {
-                ...unsigned,
-                tags: [
-                  ["relay", "wss://elsewhere.example"],
-                  ["challenge", challenge],
-                ],
-              },
-              keys.secretKey,
-            ),
+        getPublicKey: async () => {
+          await Promise.resolve();
+          return keys.publicKey;
+        },
+        signEvent: async (unsigned) => {
+          const challenge = challengeOf(unsigned);
+          await Promise.resolve();
+          return finalizeEvent(
+            {
+              ...unsigned,
+              tags: [
+                ["relay", "wss://elsewhere.example"],
+                ["challenge", challenge],
+              ],
+            },
+            keys.secretKey,
           );
         },
       };
@@ -215,7 +222,8 @@ describe("lazy NIP-42 AUTH", () => {
 
       client.setSigner(new KeysSigner(keys));
       await waitUntil(() => authFrames(net, GATED).length === 2);
-      expect((await client.publish(note))[0]?.result?.ok).toBe(true);
+      const secondPublished = await client.publish(note);
+      expect(secondPublished[0]?.result?.ok).toBe(true);
 
       await client.shutdown();
     } finally {
@@ -231,7 +239,8 @@ describe("lazy NIP-42 AUTH", () => {
       const client = gatedClient(net, new KeysSigner(keys));
       await client.connect();
       const note = EventBuilder.textNote("one").createdAt(10).signWithKeys(keys);
-      expect((await client.publish(note))[0]?.result?.ok).toBe(true);
+      const published = await client.publish(note);
+      expect(published[0]?.result?.ok).toBe(true);
       expect(authFrames(net, GATED)).toHaveLength(1);
 
       relay.configure({ auth: { challenge: "c2", writes: true } });
@@ -239,7 +248,8 @@ describe("lazy NIP-42 AUTH", () => {
       await client.pool.ensureRelay(GATED);
       await sleep(20);
       const second = EventBuilder.textNote("two").createdAt(11).signWithKeys(keys);
-      expect((await client.publish(second))[0]?.result?.ok).toBe(true);
+      const secondResult = await client.publish(second);
+      expect(secondResult[0]?.result?.ok).toBe(true);
       expect(authFrames(net, GATED)).toHaveLength(2);
 
       await client.shutdown();

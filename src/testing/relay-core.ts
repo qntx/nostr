@@ -1,9 +1,10 @@
 import type { Event } from "../core/event.ts";
 import { compareEventsDesc, validateSignedEvent } from "../core/event.ts";
-import { matchFilter, type Filter } from "../core/filter.ts";
+import { matchFilter } from "../core/filter.ts";
+import type { Filter } from "../core/filter.ts";
+import { verifyEvent } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import { bytesToHex, normalizeURL } from "../core/util.ts";
-import { verifyEvent } from "../core/key.ts";
 import { Negentropy, PROTOCOL_VERSION, storageFromEvents } from "../nips/nip77.ts";
 import { MemoryEventStore } from "../storage/memory.ts";
 import type { PutResult } from "../storage/types.ts";
@@ -15,7 +16,7 @@ export type FakeRelayOptions = {
     /** Sent as `["AUTH", challenge]` right after the socket opens. */
     challenge: string;
     /** REQ whose filters can match these kinds is CLOSED `auth-required:` until AUTH succeeds. */
-    readKinds?: readonly number[];
+    readKinds?: ReadonlyArray<number>;
     /** EVENT → `["OK", id, false, "auth-required: ..."]` until AUTH succeeds. */
     writes?: boolean;
   };
@@ -25,22 +26,22 @@ export type FakeRelayOptions = {
   eoseBeforeEvents?: boolean;
 };
 
-export interface FakeRelay {
+export type FakeRelay = {
   readonly url: string;
-  seed(events: readonly Event[]): void;
-  events(): readonly Event[];
-  inject(event: Event): void;
-  disconnect(): void;
-  closeSubscriptions(reason: string): void;
-  configure(opts: Partial<FakeRelayOptions>): void;
+  seed: (events: ReadonlyArray<Event>) => void;
+  events: () => ReadonlyArray<Event>;
+  inject: (event: Event) => void;
+  disconnect: () => void;
+  closeSubscriptions: (reason: string) => void;
+  configure: (opts: Partial<FakeRelayOptions>) => void;
   /** Every parsed client→relay message received, in arrival order. */
-  clientMessages(): readonly unknown[];
-}
+  clientMessages: () => ReadonlyArray<unknown>;
+};
 
 /** One relay→client transport (an in-process socket or a `ws` connection). */
 export type RelayTransport = {
-  send(data: string): void;
-  close(): void;
+  send: (data: string) => void;
+  close: () => void;
 };
 
 export type FakeRelaySession = {
@@ -51,12 +52,23 @@ export type FakeRelaySession = {
   queue: Promise<void>;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Wire filters are trusted as NIP-01 filters once they are records. */
+function isFilter(value: unknown): value is Filter {
+  return isRecord(value);
+}
+
 function searchMatch(filter: Filter, event: Event): boolean {
-  if (filter.search === undefined) return true;
+  if (filter.search === undefined) {
+    return true;
+  }
   return event.content.toLowerCase().includes(filter.search.toLowerCase());
 }
 
-function subMatches(filters: readonly Filter[], event: Event): boolean {
+function subMatches(filters: ReadonlyArray<Filter>, event: Event): boolean {
   return filters.some((f) => matchFilter(f, event) && searchMatch(f, event));
 }
 
@@ -67,22 +79,21 @@ function isLivePut(result: PutResult): boolean {
   );
 }
 
-function mayReadKinds(filters: readonly Filter[], readKinds: readonly number[]): boolean {
+function mayReadKinds(filters: ReadonlyArray<Filter>, readKinds: ReadonlyArray<number>): boolean {
   return filters.some((f) => f.kinds === undefined || f.kinds.some((k) => readKinds.includes(k)));
 }
 
 /**
- * Transport-agnostic fake relay: one NIP-01/42/45/50/77 session state machine
- * per connection, storage via {@link MemoryEventStore}. No timers except
- * `latencyMs`; no global state.
+ * Transport-agnostic fake relay: one NIP-01/42/45/50/77 session state machine per connection,
+ * storage via {@link MemoryEventStore}. No timers except `latencyMs`; no global state.
  */
 export class FakeRelayCore implements FakeRelay {
   readonly url: string;
   #opts: FakeRelayOptions;
-  #store = new MemoryEventStore();
-  #sessions = new Set<FakeRelaySession>();
+  readonly #store = new MemoryEventStore();
+  readonly #sessions = new Set<FakeRelaySession>();
   #mirror = new Map<string, Event>();
-  #inbox: unknown[] = [];
+  readonly #inbox: unknown[] = [];
   #pending: Promise<void> = Promise.resolve();
 
   constructor(url: string, opts: FakeRelayOptions = {}) {
@@ -94,30 +105,42 @@ export class FakeRelayCore implements FakeRelay {
     this.#opts = { ...this.#opts, ...opts };
   }
 
-  seed(events: readonly Event[]): void {
-    for (const event of events) this.#mirror.set(event.id, event);
-    this.#pending = this.#pending.then(async () => {
-      for (const event of events) await this.#store.put(event);
+  seed(events: ReadonlyArray<Event>): void {
+    for (const event of events) {
+      this.#mirror.set(event.id, event);
+    }
+    this.#pending = (async (): Promise<void> => {
+      await this.#pending;
+      for (const event of events) {
+        // Sequential puts keep per-event store ordering for replaceables.
+        // oxlint-disable-next-line eslint/no-await-in-loop
+        await this.#store.put(event);
+      }
       await this.#refreshMirror();
-    });
+    })();
   }
 
-  events(): readonly Event[] {
+  events(): ReadonlyArray<Event> {
     return [...this.#mirror.values()];
   }
 
   inject(event: Event): void {
-    this.#pending = this.#pending.then(async () => {
+    this.#pending = (async (): Promise<void> => {
+      await this.#pending;
       const result = await this.#store.put(event);
       await this.#refreshMirror();
-      if (isLivePut(result)) this.#deliver(event);
-    });
+      if (isLivePut(result)) {
+        this.#deliver(event);
+      }
+    })();
   }
 
   disconnect(): void {
     const sessions: FakeRelaySession[] = [...this.#sessions];
     this.#sessions.clear();
-    for (const session of sessions) session.transport.close();
+    for (const session of sessions) {
+      session.transport.close();
+    }
   }
 
   closeSubscriptions(reason: string): void {
@@ -130,7 +153,7 @@ export class FakeRelayCore implements FakeRelay {
     }
   }
 
-  clientMessages(): readonly unknown[] {
+  clientMessages(): ReadonlyArray<unknown> {
     return this.#inbox;
   }
 
@@ -144,7 +167,9 @@ export class FakeRelayCore implements FakeRelay {
       queue: Promise.resolve(),
     };
     this.#sessions.add(session);
-    if (this.#opts.auth) this.#send(session, ["AUTH", this.#opts.auth.challenge]);
+    if (this.#opts.auth) {
+      this.#send(session, ["AUTH", this.#opts.auth.challenge]);
+    }
     return session;
   }
 
@@ -155,16 +180,19 @@ export class FakeRelayCore implements FakeRelay {
   /** Feed a raw client→relay frame. Messages of one session are handled in order. */
   handleMessage(session: FakeRelaySession, raw: string): void {
     // A handler throw must not poison the session queue: NOTICE and continue.
-    session.queue = session.queue
-      .then(() => this.#handle(session, raw))
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
+    session.queue = (async (): Promise<void> => {
+      try {
+        await session.queue;
+        await this.#handle(session, raw);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         try {
           this.#send(session, ["NOTICE", `error: ${message}`]);
         } catch {
           // transport gone
         }
-      });
+      }
+    })();
   }
 
   async #refreshMirror(): Promise<void> {
@@ -174,8 +202,9 @@ export class FakeRelayCore implements FakeRelay {
 
   #send(session: FakeRelaySession, message: unknown[]): void {
     const payload = JSON.stringify(message);
-    if (this.#opts.latencyMs) {
-      setTimeout(() => session.transport.send(payload), this.#opts.latencyMs);
+    const { latencyMs } = this.#opts;
+    if (latencyMs !== undefined && latencyMs > 0) {
+      setTimeout(() => session.transport.send(payload), latencyMs);
       return;
     }
     session.transport.send(payload);
@@ -184,25 +213,32 @@ export class FakeRelayCore implements FakeRelay {
   #deliver(event: Event): void {
     for (const session of this.#sessions) {
       for (const [id, filters] of session.subs) {
-        if (subMatches(filters, event)) this.#send(session, ["EVENT", id, event]);
+        if (subMatches(filters, event)) {
+          this.#send(session, ["EVENT", id, event]);
+        }
       }
     }
   }
 
   async #matched(filters: Filter[]): Promise<Event[]> {
+    // Per-filter NIP-01 limit: query unbounded, apply search, keep that
+    // filter's newest — never a cross-filter minimum.
+    const keptPerFilter = await Promise.all(
+      filters.map(async (filter): Promise<Event[]> => {
+        const unbounded = { ...filter };
+        delete unbounded.limit;
+        const queried = await this.#store.query([unbounded]);
+        const rows = queried.filter((event) => searchMatch(filter, event));
+        rows.sort(compareEventsDesc);
+        return filter.limit === undefined ? rows : rows.slice(0, filter.limit);
+      }),
+    );
     const seen = new Map<string, Event>();
-    for (const filter of filters) {
-      // Per-filter NIP-01 limit: query unbounded, apply search, keep that
-      // filter's newest — never a cross-filter minimum.
-      const unbounded = { ...filter };
-      delete unbounded.limit;
-      const rows = (await this.#store.query([unbounded])).filter((event) =>
-        searchMatch(filter, event),
-      );
-      rows.sort(compareEventsDesc);
-      const kept = filter.limit === undefined ? rows : rows.slice(0, filter.limit);
+    for (const kept of keptPerFilter) {
       for (const event of kept) {
-        if (!seen.has(event.id)) seen.set(event.id, event);
+        if (!seen.has(event.id)) {
+          seen.set(event.id, event);
+        }
       }
     }
     const matched = [...seen.values()];
@@ -219,24 +255,32 @@ export class FakeRelayCore implements FakeRelay {
       this.#send(session, ["NOTICE", "error: invalid message"]);
       return;
     }
-    if (!Array.isArray(msg) || typeof msg[0] !== "string") {
+    if (!Array.isArray(msg)) {
+      this.#send(session, ["NOTICE", "error: invalid message"]);
+      return;
+    }
+    const items: unknown[] = msg;
+    const [type] = items;
+    if (typeof type !== "string") {
       this.#send(session, ["NOTICE", "error: invalid message"]);
       return;
     }
     this.#inbox.push(msg);
 
-    switch (msg[0]) {
+    switch (type) {
       case "EVENT": {
-        const event = msg[1] as Event | undefined;
-        if (!event || typeof event.id !== "string") {
+        const [, rawEvent] = items;
+        if (!isRecord(rawEvent) || typeof rawEvent["id"] !== "string") {
           this.#send(session, ["NOTICE", "invalid: malformed event"]);
           return;
         }
-        if (this.#opts.rateLimited) {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- wire record trusted as Event; verifyEvent below is the authoritative check
+        const event = rawEvent as Event;
+        if (this.#opts.rateLimited === true) {
           this.#send(session, ["OK", event.id, false, "rate-limited: slow down"]);
           return;
         }
-        if (this.#opts.auth?.writes && !session.authed) {
+        if (this.#opts.auth?.writes === true && !session.authed) {
           this.#send(session, ["OK", event.id, false, "auth-required: login first"]);
           return;
         }
@@ -268,9 +312,9 @@ export class FakeRelayCore implements FakeRelay {
         return;
       }
       case "REQ": {
-        const id = msg[1];
-        const filters = msg.slice(2) as Filter[];
-        if (typeof id !== "string" || filters.length === 0) {
+        const [, id] = items;
+        const filters = items.slice(2);
+        if (typeof id !== "string" || filters.length === 0 || !filters.every(isFilter)) {
           this.#send(session, ["NOTICE", "error: invalid REQ"]);
           return;
         }
@@ -281,69 +325,88 @@ export class FakeRelayCore implements FakeRelay {
         }
         session.subs.set(id, filters);
         const matched = await this.#matched(filters);
-        if (this.#opts.eoseBeforeEvents) this.#send(session, ["EOSE", id]);
-        for (const event of matched) this.#send(session, ["EVENT", id, event]);
-        if (!this.#opts.eoseBeforeEvents) this.#send(session, ["EOSE", id]);
+        if (this.#opts.eoseBeforeEvents === true) {
+          this.#send(session, ["EOSE", id]);
+        }
+        for (const event of matched) {
+          this.#send(session, ["EVENT", id, event]);
+        }
+        if (this.#opts.eoseBeforeEvents !== true) {
+          this.#send(session, ["EOSE", id]);
+        }
         return;
       }
       case "CLOSE": {
-        if (typeof msg[1] === "string") session.subs.delete(msg[1]);
+        const [, id] = items;
+        if (typeof id === "string") {
+          session.subs.delete(id);
+        }
         return;
       }
       case "COUNT": {
-        const id = msg[1];
-        const filters = msg.slice(2) as Filter[];
+        const [, id] = items;
+        const filters = items.slice(2);
+        if (typeof id !== "string" || !filters.every(isFilter)) {
+          this.#send(session, ["NOTICE", "error: invalid COUNT"]);
+          return;
+        }
         const matched = await this.#matched(filters);
         this.#send(session, ["COUNT", id, { count: matched.length }]);
         return;
       }
       case "AUTH": {
-        const auth = this.#opts.auth;
-        if (!validateSignedEvent(msg[1])) {
+        const { auth } = this.#opts;
+        const [, rawAuth] = items;
+        if (!validateSignedEvent(rawAuth)) {
           this.#send(session, ["OK", "0".repeat(64), false, "error: invalid auth event"]);
           return;
         }
-        const event = msg[1];
-        const challengeTag = event.tags.find((t) => t[0] === "challenge")?.[1];
-        const relayTag = event.tags.find((t) => t[0] === "relay")?.[1];
+        const challengeTag = rawAuth.tags.find((t) => t[0] === "challenge")?.[1];
+        const relayTag = rawAuth.tags.find((t) => t[0] === "relay")?.[1];
         let relayOk = false;
-        try {
-          relayOk = relayTag !== undefined && normalizeURL(relayTag) === this.url;
-        } catch {
-          relayOk = false;
+        if (relayTag !== undefined) {
+          try {
+            relayOk = normalizeURL(relayTag) === this.url;
+          } catch {
+            // unparseable relay tag
+          }
         }
         if (
-          auth &&
-          event.kind === Kind.ClientAuth &&
-          verifyEvent(event) &&
+          auth !== undefined &&
+          rawAuth.kind === Kind.ClientAuth &&
+          verifyEvent(rawAuth) &&
           challengeTag === auth.challenge &&
           relayOk
         ) {
           session.authed = true;
-          this.#send(session, ["OK", event.id, true, ""]);
+          this.#send(session, ["OK", rawAuth.id, true, ""]);
           return;
         }
-        this.#send(session, ["OK", event.id, false, "error: invalid auth event"]);
+        this.#send(session, ["OK", rawAuth.id, false, "error: invalid auth event"]);
         return;
       }
       case "NEG-OPEN": {
-        if (msg.length === 5) {
-          this.#send(session, ["NEG-ERR", msg[1], "error: obsolete 5-element NEG-OPEN"]);
+        if (items.length === 5) {
+          this.#send(session, ["NEG-ERR", items[1], "error: obsolete 5-element NEG-OPEN"]);
           return;
         }
-        if (msg.length !== 4 || typeof msg[1] !== "string" || typeof msg[3] !== "string") {
-          const badId = typeof msg[1] === "string" ? msg[1] : "";
+        const [, id, rawFilter, negMessage] = items;
+        if (
+          items.length !== 4 ||
+          typeof id !== "string" ||
+          !isFilter(rawFilter) ||
+          typeof negMessage !== "string"
+        ) {
+          const badId = typeof id === "string" ? id : "";
           this.#send(session, ["NEG-ERR", badId, "error: invalid NEG-OPEN"]);
           return;
         }
-        const id = msg[1];
         // The NIP-77 filter is a plain NIP-01 filter — `limit` applies.
-        const filter = msg[2] as Filter;
-        const matched = await this.#matched([filter]);
+        const matched = await this.#matched([rawFilter]);
         const neg = new Negentropy(storageFromEvents(matched));
         let opened: string | undefined;
         try {
-          opened = neg.reconcile(msg[3] as string).nextMessage ?? undefined;
+          opened = neg.reconcile(negMessage).nextMessage ?? undefined;
         } catch {
           this.#send(session, ["NEG-ERR", id, "error: invalid negentropy message"]);
           return;
@@ -357,34 +420,39 @@ export class FakeRelayCore implements FakeRelay {
         return;
       }
       case "NEG-MSG": {
-        if (msg.length !== 3 || typeof msg[1] !== "string" || typeof msg[2] !== "string") return;
-        const handle = session.negs.get(msg[1]);
-        if (!handle) {
-          this.#send(session, ["NEG-ERR", msg[1], "closed: unknown subscription"]);
+        const [, id, negMessage] = items;
+        if (items.length !== 3 || typeof id !== "string" || typeof negMessage !== "string") {
+          return;
+        }
+        const handle = session.negs.get(id);
+        if (handle === undefined) {
+          this.#send(session, ["NEG-ERR", id, "closed: unknown subscription"]);
           return;
         }
         let next: string | undefined;
         try {
-          next = handle.reconcile(msg[2]).nextMessage ?? undefined;
+          next = handle.reconcile(negMessage).nextMessage ?? undefined;
         } catch {
-          session.negs.delete(msg[1]);
-          this.#send(session, ["NEG-ERR", msg[1], "error: invalid negentropy message"]);
+          session.negs.delete(id);
+          this.#send(session, ["NEG-ERR", id, "error: invalid negentropy message"]);
           return;
         }
         this.#send(session, [
           "NEG-MSG",
-          msg[1],
+          id,
           next ?? bytesToHex(new Uint8Array([PROTOCOL_VERSION])),
         ]);
         return;
       }
       case "NEG-CLOSE": {
-        if (typeof msg[1] === "string") session.negs.delete(msg[1]);
+        const [, id] = items;
+        if (typeof id === "string") {
+          session.negs.delete(id);
+        }
         return;
       }
       default:
-        this.#send(session, ["NOTICE", `error: unsupported ${String(msg[0])}`]);
-        return;
+        this.#send(session, ["NOTICE", `error: unsupported ${type}`]);
     }
   }
 }

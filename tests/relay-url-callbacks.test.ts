@@ -1,25 +1,51 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import { Client, EventBuilder, Keys, Pool, relayListEventBuilder } from "../src/index.ts";
-import { fetchRouted } from "../src/relay/fan-in.ts";
+
 import type { Event } from "../src/core/event.ts";
 import { normalizeURL } from "../src/core/util.ts";
-import { createFakeRelayNetwork, type FakeRelayNetwork } from "../src/testing/index.ts";
+import { Client, EventBuilder, Keys, Pool, relayListEventBuilder } from "../src/index.ts";
+import { fetchRouted } from "../src/relay/fan-in.ts";
+import { createFakeRelayNetwork } from "../src/testing/index.ts";
+import type { FakeRelayNetwork } from "../src/testing/index.ts";
 import { stubReportError } from "./helpers/report-error.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
-function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) return;
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
 }
+
+async function waitUntilAsync(pred: () => Promise<boolean>, timeoutMs = 500): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    // oxlint-disable-next-line no-await-in-loop -- polling must await each probe
+    if (await pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    await sleep(5);
+  }
+  throw new Error("timeout waiting for condition");
+}
+
+const throwOnId =
+  (target: string) =>
+  (event: Event): void => {
+    if (event.id === target) {
+      throw new Error("boom");
+    }
+  };
 
 const A = normalizeURL("wss://a.example");
 const B = normalizeURL("wss://b.example");
@@ -62,7 +88,7 @@ describe("relay URL callbacks", () => {
     expect(events).toHaveLength(1);
     expect(events[0]![0].id).toBe(note.id);
     expect(events[0]![1]).toBe(received[0]![1]);
-    expect(new Set(received.map(([, url]) => url))).toEqual(new Set([A, B]));
+    expect(new Set(received.map(([, url]) => url))).toStrictEqual(new Set([A, B]));
 
     closer.close();
     await client.shutdown();
@@ -92,7 +118,7 @@ describe("relay URL callbacks", () => {
     expect(events).toHaveLength(1);
     expect(events[0]!.id).toBe(note.id);
     expect(seen).toHaveLength(2);
-    expect(new Set(seen.map(([, url]) => url))).toEqual(new Set([A, B]));
+    expect(new Set(seen.map(([, url]) => url))).toStrictEqual(new Set([A, B]));
 
     pool.close();
   });
@@ -132,7 +158,7 @@ describe("relay URL callbacks", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]![0].id).toBe(note.id);
-    expect(new Set(received)).toEqual(
+    expect(new Set(received)).toStrictEqual(
       new Set([normalizeURL("wss://out-a.example"), normalizeURL("wss://out-b.example")]),
     );
     expect(received).toContain(events[0]![1]);
@@ -158,9 +184,7 @@ describe("issue #125", () => {
     const older = EventBuilder.textNote("older").createdAt(1).signWithKeys(keys);
     const newer = EventBuilder.textNote("newer").createdAt(2).signWithKeys(keys);
     net.relay("wss://a.example").seed([older, newer]);
-    const throwOnOlder = (event: Event): void => {
-      if (event.id === older.id) throw new Error("boom");
-    };
+    const throwOnOlder = throwOnId(older.id);
 
     const pool = new Pool({
       websocketImplementation: net.websocketImplementation,
@@ -173,12 +197,12 @@ describe("issue #125", () => {
         [{ urls: ["wss://a.example"], filters: [{ kinds: [1] }] }],
         { onevent: (event) => throwOnOlder(event) },
       );
-      expect(routed.map((e) => e.id).sort()).toEqual([older.id, newer.id].sort());
+      expect(routed.map((e) => e.id).toSorted()).toStrictEqual([older.id, newer.id].toSorted());
 
       const pooled = await pool.fetch(["wss://a.example"], [{ kinds: [1] }], {
         onevent: (event) => throwOnOlder(event),
       });
-      expect(pooled.map((e) => e.id).sort()).toEqual([older.id, newer.id].sort());
+      expect(pooled.map((e) => e.id).toSorted()).toStrictEqual([older.id, newer.id].toSorted());
       pool.close();
 
       const client = Client.builder()
@@ -190,14 +214,14 @@ describe("issue #125", () => {
         { kinds: [1] },
         { onevent: (event) => throwOnOlder(event), timeoutMs: 2000 },
       );
-      expect(fetched.map((e) => e.id).sort()).toEqual([older.id, newer.id].sort());
+      expect(fetched.map((e) => e.id).toSorted()).toStrictEqual([older.id, newer.id].toSorted());
       // persistence is a microtask-coalesced flush; poll until it lands
       let stored: Event[] = [];
-      for (let i = 0; i < 200 && stored.length < 2; i += 1) {
+      await waitUntilAsync(async () => {
         stored = await client.storage.query([{ kinds: [1] }]);
-        if (stored.length < 2) await sleep(5);
-      }
-      expect(stored.map((e) => e.id).sort()).toEqual([older.id, newer.id].sort());
+        return stored.length >= 2;
+      });
+      expect(stored.map((e) => e.id).toSorted()).toStrictEqual([older.id, newer.id].toSorted());
       await client.shutdown();
     } finally {
       restore();

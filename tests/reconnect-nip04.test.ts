@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+
 import { EventBuilder, Keys, KeysSigner, Relay, useWebSocketImplementation } from "../src/index.ts";
 import { decrypt as nip04Decrypt, encrypt as nip04Encrypt } from "../src/nips/nip04.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
@@ -6,14 +7,35 @@ import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const SK2 = "0000000000000000000000000000000000000000000000000000000000000001";
 
-function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+const elemAt = <T>(items: ReadonlyArray<T>, index: number): T => {
+  const item = items[index];
+  if (item === undefined) {
+    throw new Error(`no element at index ${index}`);
+  }
+  return item;
+};
+
+const all =
+  (...preds: ReadonlyArray<() => boolean>) =>
+  (): boolean =>
+    preds.every((pred) => pred());
+
+const isOtherSocketWithSub =
+  (excluded: ReadonlyArray<MockWebSocket>, subId: string) =>
+  (ws: MockWebSocket): boolean =>
+    !excluded.includes(ws) && reqFilters(ws).some((m) => m[1] === subId);
 
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) return;
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -23,9 +45,9 @@ function sentMessages(ws: MockWebSocket): unknown[][] {
   return ws.sent.map((s) => JSON.parse(s) as unknown[]);
 }
 
-function reqFilters(ws: MockWebSocket): Array<[string, string, ...Record<string, unknown>[]]> {
+function reqFilters(ws: MockWebSocket): Array<[string, string, ...Array<Record<string, unknown>>]> {
   return sentMessages(ws).filter((m) => m[0] === "REQ") as Array<
-    [string, string, ...Record<string, unknown>[]]
+    [string, string, ...Array<Record<string, unknown>>]
   >;
 }
 
@@ -66,7 +88,7 @@ describe("Relay reconnect", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("after reconnect").createdAt(1).signWithKeys(keys);
 
-    const events: (typeof note)[] = [];
+    const events: Array<typeof note> = [];
     let reconnected = false;
     relay.onreconnect = () => {
       reconnected = true;
@@ -88,12 +110,12 @@ describe("Relay reconnect", () => {
     expect(relay.connected).toBe(false);
 
     // wait for reconnect backoff + new socket
-    await new Promise((r) => setTimeout(r, 40));
+    await new Promise((resolve) => setTimeout(resolve, 40));
     expect(reconnected).toBe(true);
     expect(relay.connected).toBe(true);
     expect(MockWebSocket.instances.length).toBeGreaterThanOrEqual(2);
 
-    const second = MockWebSocket.instances[MockWebSocket.instances.length - 1]!;
+    const second = MockWebSocket.instances.at(-1)!;
     const reReq = second.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [
       string,
       string,
@@ -130,7 +152,7 @@ describe("Relay reconnect", () => {
         closed = reason;
       },
     });
-    await expect(connecting).rejects.toThrow();
+    await expect(connecting).rejects.toThrow(Error);
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(MockWebSocket.instances[0]!.readyState).toBe(MockWebSocket.CLOSED);
     expect(sub.closed).toBe(false);
@@ -139,10 +161,11 @@ describe("Relay reconnect", () => {
 
     MockWebSocket.failConnect = false;
     await waitUntil(
-      () =>
-        relay.connected &&
-        MockWebSocket.instances.length >= 2 &&
-        sentMessages(MockWebSocket.last()).some((m) => m[0] === "REQ"),
+      all(
+        () => relay.connected,
+        () => MockWebSocket.instances.length >= 2,
+        () => sentMessages(MockWebSocket.last()).some((m) => m[0] === "REQ"),
+      ),
     );
     expect(sub.closed).toBe(false);
     expect(closed).toBeUndefined();
@@ -150,13 +173,12 @@ describe("Relay reconnect", () => {
 
     const second = MockWebSocket.last();
     expect(second).not.toBe(MockWebSocket.instances[0]);
-    const reReq = reqFilters(second)[0];
-    if (!reReq) throw new Error("expected REQ on socket 2");
+    const reReq = elemAt(reqFilters(second), 0);
     expect(reReq[0]).toBe("REQ");
     expect(reReq[1]).toBe(sub.id);
 
     second.receive(JSON.stringify(["EVENT", sub.id, note]));
-    expect(events).toEqual([note.id]);
+    expect(events).toStrictEqual([note.id]);
     second.receive(JSON.stringify(["EOSE", sub.id]));
     expect(eose).toBe(1);
     relay.close();
@@ -184,16 +206,16 @@ describe("Relay reconnect", () => {
 
     MockWebSocket.autoConnect = true;
     await waitUntil(
-      () =>
-        relay.connected &&
-        MockWebSocket.instances.length >= 2 &&
-        sentMessages(MockWebSocket.last()).some((m) => m[0] === "REQ"),
+      all(
+        () => relay.connected,
+        () => MockWebSocket.instances.length >= 2,
+        () => sentMessages(MockWebSocket.last()).some((m) => m[0] === "REQ"),
+      ),
     );
     expect(eose).toBe(0);
     const second = MockWebSocket.last();
     expect(second).not.toBe(MockWebSocket.instances[0]);
-    const reReq = reqFilters(second)[0];
-    if (!reReq) throw new Error("expected REQ on socket 2");
+    const reReq = elemAt(reqFilters(second), 0);
     expect(reReq[1]).toBe(sub.id);
     second.receive(JSON.stringify(["EOSE", sub.id]));
     expect(eose).toBe(1);
@@ -213,7 +235,7 @@ describe("Relay reconnect", () => {
     ac.abort();
     // The caller's signal rejects only its own wait; the shared attempt is
     // unaffected — the subscription stays open and the socket completes.
-    await expect(connecting).rejects.toThrow();
+    await expect(connecting).rejects.toThrow(Error);
     expect(sub.closed).toBe(false);
     expect(MockWebSocket.instances).toHaveLength(1);
     MockWebSocket.last().open();
@@ -229,7 +251,7 @@ describe("Relay reconnect", () => {
       reconnectBackoffMs: [10],
       websocketImplementation: MockWebSocketCtor,
     });
-    await expect(relay.fetch([{ kinds: [1] }], { timeoutMs: 50 })).rejects.toThrow();
+    await expect(relay.fetch([{ kinds: [1] }], { timeoutMs: 50 })).rejects.toThrow(Error);
     expect(MockWebSocket.instances).toHaveLength(1);
     await sleep(40);
     expect(MockWebSocket.instances).toHaveLength(1);
@@ -247,8 +269,8 @@ describe("Relay reconnect", () => {
     relay.subscribe([{ kinds: [1] }], {});
     const before = MockWebSocket.instances.length;
     relay.close();
-    await new Promise((r) => setTimeout(r, 30));
-    expect(MockWebSocket.instances.length).toBe(before);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(MockWebSocket.instances).toHaveLength(before);
   });
 
   test("reconnect REQ since is lastCreatedAt inclusive, not +1", async () => {
@@ -269,19 +291,24 @@ describe("Relay reconnect", () => {
     const first = MockWebSocket.last();
     first.receive(JSON.stringify(["EVENT", sub.id, note]));
     expect(sub.lastCreatedAt).toBe(50);
-    expect(sub.filters).toEqual([{ kinds: [1] }]);
+    expect(sub.filters).toStrictEqual([{ kinds: [1] }]);
     expect(sub.replayFilters()[0]!.since).toBe(50);
 
     first.close();
-    await waitUntil(() => relay.connected && MockWebSocket.instances.length >= 2);
+    await waitUntil(
+      all(
+        () => relay.connected,
+        () => MockWebSocket.instances.length >= 2,
+      ),
+    );
     const second = MockWebSocket.last();
-    const reReq = reqFilters(second)[0]!;
+    const reReq = elemAt(reqFilters(second), 0);
     expect(reReq[1]).toBe(sub.id);
-    expect(reReq[2]!.since).toBe(50);
-    expect(reReq[2]!.since).not.toBe(51);
+    expect(reReq[2]!["since"]).toBe(50);
+    expect(reReq[2]!["since"]).not.toBe(51);
 
     second.receive(JSON.stringify(["EVENT", sub.id, later]));
-    expect(events).toEqual([note.id, later.id]);
+    expect(events).toStrictEqual([note.id, later.id]);
     relay.close();
   });
 
@@ -307,23 +334,28 @@ describe("Relay reconnect", () => {
     const first = MockWebSocket.last();
     first.receive(JSON.stringify(["EVENT", sub.id, a]));
     first.receive(JSON.stringify(["EVENT", sub.id, b]));
-    expect(events).toEqual([a.id, b.id]);
+    expect(events).toStrictEqual([a.id, b.id]);
     expect(sub.lastCreatedAt).toBe(t);
     expect(sub.idsAtWatermark.has(a.id)).toBe(true);
     expect(sub.idsAtWatermark.has(b.id)).toBe(true);
 
     first.close();
-    await waitUntil(() => relay.connected && MockWebSocket.instances.length >= 2);
+    await waitUntil(
+      all(
+        () => relay.connected,
+        () => MockWebSocket.instances.length >= 2,
+      ),
+    );
     const second = MockWebSocket.last();
-    expect(reqFilters(second)[0]![2]!.since).toBe(t);
+    expect(reqFilters(second)[0]![2]!["since"]).toBe(t);
 
     second.receive(JSON.stringify(["EVENT", sub.id, a]));
     second.receive(JSON.stringify(["EVENT", sub.id, b]));
-    expect(events).toEqual([a.id, b.id]);
-    expect(received).toEqual([a.id, b.id, a.id, b.id]);
+    expect(events).toStrictEqual([a.id, b.id]);
+    expect(received).toStrictEqual([a.id, b.id, a.id, b.id]);
 
     second.receive(JSON.stringify(["EVENT", sub.id, c]));
-    expect(events).toEqual([a.id, b.id, c.id]);
+    expect(events).toStrictEqual([a.id, b.id, c.id]);
     expect(sub.idsAtWatermark.has(c.id)).toBe(true);
     relay.close();
   });
@@ -341,11 +373,16 @@ describe("Relay reconnect", () => {
     expect(sub1.id).not.toBe(sub2.id);
     expect(MockWebSocket.instances).toHaveLength(0);
 
-    await waitUntil(() => MockWebSocket.instances.length >= 1, 200);
-    await waitUntil(() => relay.connected && reqFilters(MockWebSocket.last()).length >= 2);
+    await waitUntil(() => MockWebSocket.instances.length > 0, 200);
+    await waitUntil(
+      all(
+        () => relay.connected,
+        () => reqFilters(MockWebSocket.last()).length >= 2,
+      ),
+    );
     const reqs = reqFilters(MockWebSocket.last());
-    expect(reqs.map((m) => m[1])).toEqual(expect.arrayContaining([sub1.id, sub2.id]));
-    expect(reqs.map((m) => m[2]!.kinds)).toEqual(expect.arrayContaining([[1], [2]]));
+    expect(reqs.map((m) => m[1])).toStrictEqual(expect.arrayContaining([sub1.id, sub2.id]));
+    expect(reqs.map((m) => m[2]!["kinds"])).toStrictEqual(expect.arrayContaining([[1], [2]]));
     expect(MockWebSocket.instances).toHaveLength(1);
     relay.close();
   });
@@ -363,10 +400,15 @@ describe("Relay reconnect", () => {
     expect(live.id).not.toBe(once.id);
     expect(MockWebSocket.instances).toHaveLength(0);
 
-    await waitUntil(() => MockWebSocket.instances.length >= 1, 200);
-    await waitUntil(() => relay.connected && reqFilters(MockWebSocket.last()).length >= 2);
+    await waitUntil(() => MockWebSocket.instances.length > 0, 200);
+    await waitUntil(
+      all(
+        () => relay.connected,
+        () => reqFilters(MockWebSocket.last()).length >= 2,
+      ),
+    );
     const reqs = reqFilters(MockWebSocket.last());
-    expect(reqs.map((m) => m[1])).toEqual(expect.arrayContaining([live.id, once.id]));
+    expect(reqs.map((m) => m[1])).toStrictEqual(expect.arrayContaining([live.id, once.id]));
     expect(MockWebSocket.instances).toHaveLength(1);
     relay.close();
   });
@@ -377,13 +419,15 @@ describe("Relay reconnect", () => {
       enableReconnect: true,
       reconnectBackoffMs: [5],
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
+      authSigner: async (template) => {
+        await Promise.resolve();
+        return EventBuilder.textNote("")
           .kind(template.kind)
           .tags(template.tags)
           .content(template.content)
           .createdAt(template.created_at)
-          .signWithKeys(keys),
+          .signWithKeys(keys);
+      },
     });
     await relay.connect();
     const note = EventBuilder.textNote("wm").createdAt(42).signWithKeys(keys);
@@ -392,9 +436,14 @@ describe("Relay reconnect", () => {
     expect(sub.lastCreatedAt).toBe(42);
 
     MockWebSocket.last().close();
-    await waitUntil(() => relay.connected && MockWebSocket.instances.length >= 2);
+    await waitUntil(
+      all(
+        () => relay.connected,
+        () => MockWebSocket.instances.length >= 2,
+      ),
+    );
     const second = MockWebSocket.last();
-    expect(reqFilters(second)[0]![2]!.since).toBe(42);
+    expect(reqFilters(second)[0]![2]!["since"]).toBe(42);
 
     second.receive(JSON.stringify(["AUTH", "new-challenge"]));
     second.receive(JSON.stringify(["CLOSED", sub.id, "auth-required: login"]));
@@ -405,8 +454,8 @@ describe("Relay reconnect", () => {
 
     const postAuth = reqFilters(second).at(-1)!;
     expect(postAuth[1]).toBe(sub.id);
-    expect(postAuth[2]!.since).toBe(42);
-    expect(postAuth[2]!.since).not.toBe(43);
+    expect(postAuth[2]!["since"]).toBe(42);
+    expect(postAuth[2]!["since"]).not.toBe(43);
     relay.close();
   });
 
@@ -428,23 +477,28 @@ describe("Relay reconnect", () => {
     FailReqSocket.failNextReq = true;
     first.close();
     await waitUntil(() => MockWebSocket.instances.length >= 2);
-    const second = MockWebSocket.instances[1]!;
-    await waitUntil(() => !relay.connected && second.readyState === MockWebSocket.CLOSED);
+    const second = elemAt(MockWebSocket.instances, 1);
+    await waitUntil(
+      all(
+        () => !relay.connected,
+        () => second.readyState === MockWebSocket.CLOSED,
+      ),
+    );
     expect(reconnects).toBe(0);
     expect(sub.closed).toBe(false);
     expect(reqFilters(second).some((m) => m[1] === sub.id)).toBe(false);
 
     await waitUntil(
-      () =>
-        relay.connected &&
-        MockWebSocket.instances.some(
-          (ws) => ws !== first && ws !== second && reqFilters(ws).some((m) => m[1] === sub.id),
-        ),
+      all(
+        () => relay.connected,
+        () => MockWebSocket.instances.some(isOtherSocketWithSub([first, second], sub.id)),
+      ),
       1000,
     );
-    const later = MockWebSocket.instances.find(
-      (ws) => ws !== first && ws !== second && reqFilters(ws).some((m) => m[1] === sub.id),
-    )!;
+    const later = elemAt(
+      MockWebSocket.instances.filter(isOtherSocketWithSub([first, second], sub.id)),
+      0,
+    );
     expect(reconnects).toBe(1);
     expect(sub.closed).toBe(false);
     expect(reqFilters(later).some((m) => m[1] === sub.id)).toBe(true);
@@ -467,7 +521,7 @@ describe("nip04", () => {
     const b = new KeysSigner(SK2);
     const pkB = await b.getPublicKey();
     const pkA = await a.getPublicKey();
-    const cipher = await a.nip04Encrypt!(pkB, "via signer");
-    expect(await b.nip04Decrypt!(pkA, cipher)).toBe("via signer");
+    const cipher = await a.nip04Encrypt(pkB, "via signer");
+    await expect(b.nip04Decrypt(pkA, cipher)).resolves.toBe("via signer");
   });
 });

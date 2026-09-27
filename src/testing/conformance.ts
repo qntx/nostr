@@ -1,10 +1,12 @@
-import { EventBuilder, Keys, type Event } from "../core/index.ts";
-import type { Filter } from "../core/filter.ts";
+import { EventBuilder, Keys } from "../core/index.ts";
+import type { Event } from "../core/index.ts";
 import type { EventStore } from "../storage/types.ts";
+
+export { type Filter } from "../core/filter.ts";
 
 export type EventStoreConformanceCase = {
   name: string;
-  run(store: EventStore): Promise<void>;
+  run: (store: EventStore) => Promise<void>;
 };
 
 const ALICE_SK = "0000000000000000000000000000000000000000000000000000000000000101";
@@ -48,14 +50,14 @@ function eq<T>(got: T, want: T, what: string): void {
   }
 }
 
-function ids(events: readonly Event[]): string[] {
+function ids(events: ReadonlyArray<Event>): string[] {
   return events.map((e) => e.id);
 }
 
 /**
- * Framework-agnostic {@link EventStore} conformance cases. Each `run` throws on
- * failure; register them with the test framework of your choice:
- * `for (const c of eventStoreConformanceCases) test(c.name, () => c.run(store()))`.
+ * Framework-agnostic {@link EventStore} conformance cases. Each `run` throws on failure; register
+ * them with the test framework of your choice: `for (const c of eventStoreConformanceCases)
+ * test(c.name, () => c.run(store()))`.
  */
 export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase> = [
   {
@@ -226,8 +228,9 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
         [b.id, a.id, c.id],
         "created_at asc ordering",
       );
+      const limited = await store.negentropyItems({ kinds: [1], limit: 2 });
       eq(
-        (await store.negentropyItems({ kinds: [1], limit: 2 })).map((i) => i.id),
+        limited.map((i) => i.id),
         [a.id, c.id],
         "limit keeps newest two, presented ascending",
       );
@@ -279,5 +282,3 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
     },
   },
 ];
-
-export type { Filter };

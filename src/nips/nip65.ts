@@ -1,8 +1,8 @@
-import type { Event } from "../core/event.ts";
+import { EventBuilder } from "../core/builder.ts";
 import { EventValidationError } from "../core/error.ts";
+import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
-import { EventBuilder } from "../core/builder.ts";
 import { normalizeURL } from "../core/util.ts";
 
 /** NIP-65 `r` tag marker: read-only, write-only, or unmarked (both). */
@@ -17,9 +17,15 @@ export type RelayListItem = {
 
 /** The NIP-65 marker an item's read/write flags map to. */
 export function markerOf(item: RelayListItem): RelayMarker {
-  if (item.read && item.write) return "readwrite";
-  if (item.read) return "read";
-  if (item.write) return "write";
+  if (item.read && item.write) {
+    return "readwrite";
+  }
+  if (item.read) {
+    return "read";
+  }
+  if (item.write) {
+    return "write";
+  }
   return "readwrite";
 }
 
@@ -32,17 +38,22 @@ export function parseRelayList(event: Event): RelayListItem[] {
   const seen = new Set<string>();
 
   for (const tag of event.tags) {
-    if (tag[0] !== "r" || !tag[1]) continue;
+    const value = tag.at(1);
+    if (tag[0] !== "r" || value === undefined || value === "") {
+      continue;
+    }
     let url: string;
     try {
-      url = normalizeURL(tag[1]);
+      url = normalizeURL(value);
     } catch {
       continue;
     }
-    if (seen.has(url)) continue;
+    if (seen.has(url)) {
+      continue;
+    }
     seen.add(url);
 
-    const marker = tag[2];
+    const marker = tag.at(2);
     if (marker === "read") {
       out.push({ url, read: true, write: false });
     } else if (marker === "write") {
@@ -57,9 +68,15 @@ export function parseRelayList(event: Event): RelayListItem[] {
 /** Encode relay list items as NIP-65 `r` tags. */
 export function relayListToTags(items: RelayListItem[]): Tag[] {
   return items.map((item) => {
-    if (item.read && item.write) return ["r", item.url];
-    if (item.read) return ["r", item.url, "read"];
-    if (item.write) return ["r", item.url, "write"];
+    if (item.read && item.write) {
+      return ["r", item.url];
+    }
+    if (item.read) {
+      return ["r", item.url, "read"];
+    }
+    if (item.write) {
+      return ["r", item.url, "write"];
+    }
     throw new EventValidationError("relay list item must be read, write, or both");
   });
 }

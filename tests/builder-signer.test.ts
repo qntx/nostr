@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   EventBuilder,
   EventValidationError,
@@ -25,7 +26,7 @@ describe("EventBuilder", () => {
 
     expect(event.kind).toBe(Kind.TextNote);
     expect(event.content).toBe("hello");
-    expect(event.tags).toEqual([["t", "nostr"]]);
+    expect(event.tags).toStrictEqual([["t", "nostr"]]);
     expect(event.created_at).toBe(1_700_000_000);
     expect(event.pubkey).toBe(keys.publicKey);
     expect(verifyEvent(event)).toBe(true);
@@ -39,14 +40,14 @@ describe("EventBuilder", () => {
 
     const del = EventBuilder.deletion([meta.id], "spam").signWithKeys(keys);
     expect(del.kind).toBe(Kind.EventDeletion);
-    expect(del.tags[0]).toEqual(["e", meta.id]);
+    expect(del.tags[0]).toStrictEqual(["e", meta.id]);
   });
 
   test("contacts lowercases p pubkeys", () => {
     const pk = "ab".repeat(32);
     const draft = EventBuilder.contacts([pk.toUpperCase()]);
     expect(draft.currentKind).toBe(Kind.Contacts);
-    expect(draft.currentTags).toEqual([["p", pk]]);
+    expect(draft.currentTags).toStrictEqual([["p", pk]]);
   });
 
   test("repost NIP-70 empty content and required normalized relay URL", () => {
@@ -55,11 +56,9 @@ describe("EventBuilder", () => {
     const protectedTarget = EventBuilder.textNote("p").tag(["-"]).createdAt(1).signWithKeys(keys);
     expect(EventBuilder.repost(protectedTarget, RELAY_HINT).currentContent).toBe("");
     expect(JSON.parse(EventBuilder.repost(target, RELAY_HINT).currentContent).id).toBe(target.id);
-    expect(EventBuilder.repost(target, RELAY_HINT).currentTags.find((t) => t[0] === "e")).toEqual([
-      "e",
-      target.id,
-      RELAY,
-    ]);
+    expect(
+      EventBuilder.repost(target, RELAY_HINT).currentTags.find((t) => t[0] === "e"),
+    ).toStrictEqual(["e", target.id, RELAY]);
     expect(EventBuilder.repost(target, RELAY_HINT).currentTags).toContainEqual([
       "p",
       target.pubkey,
@@ -92,12 +91,12 @@ describe("EventBuilder", () => {
       EventBuilder.repost(target, { relayHint: "relay.example" }).currentTags.find(
         (t) => t[0] === "e",
       ),
-    ).toEqual(["e", target.id, normalizeURL("relay.example")]);
+    ).toStrictEqual(["e", target.id, normalizeURL("relay.example")]);
     expect(
       EventBuilder.repost(target, { relayHint: "https://r.example/path/" }).currentTags.find(
         (t) => t[0] === "e",
       ),
-    ).toEqual(["e", target.id, normalizeURL("https://r.example/path/")]);
+    ).toStrictEqual(["e", target.id, normalizeURL("https://r.example/path/")]);
   });
 
   test("repost rejects non-kind-1", () => {
@@ -123,7 +122,7 @@ describe("EventBuilder", () => {
     const draft = EventBuilder.genericRepost(target, RELAY_HINT);
 
     expect(draft.currentKind).toBe(Kind.GenericRepost);
-    expect(draft.currentTags.find((t) => t[0] === "e")).toEqual(["e", target.id, RELAY]);
+    expect(draft.currentTags.find((t) => t[0] === "e")).toStrictEqual(["e", target.id, RELAY]);
     expect(draft.currentTags).toContainEqual(["p", target.pubkey]);
     expect(draft.currentTags).toContainEqual(["k", "20"]);
     expect(draft.currentTags.some((t) => t[0] === "a")).toBe(false);
@@ -157,7 +156,7 @@ describe("EventBuilder", () => {
     expect(draft.currentContent).toBe("");
     expect(draft.currentTags).toContainEqual(["a", `0:${target.pubkey}:`]);
     expect(draft.currentTags).toContainEqual(["k", "0"]);
-    expect(draft.currentTags.find((t) => t[0] === "e")).toEqual(["e", target.id, RELAY]);
+    expect(draft.currentTags.find((t) => t[0] === "e")).toStrictEqual(["e", target.id, RELAY]);
   });
 
   test("genericRepost addressable without d throws", () => {
@@ -173,7 +172,7 @@ describe("EventBuilder", () => {
     const draft = EventBuilder.genericRepost(target, RELAY_HINT);
     expect(draft.currentContent).toBe("");
     expect(draft.currentTags).toContainEqual(["a", `34235:${target.pubkey}:ep1`]);
-    expect(draft.currentTags.find((t) => t[0] === "e")).toEqual(["e", target.id, RELAY]);
+    expect(draft.currentTags.find((t) => t[0] === "e")).toStrictEqual(["e", target.id, RELAY]);
   });
 
   test("genericRepost lowercases e/p hex and a-tag pubkey", () => {
@@ -181,7 +180,7 @@ describe("EventBuilder", () => {
     const signed = EventBuilder.metadata({ name: "alice" }).createdAt(1).signWithKeys(keys);
     const target = { ...signed, id: signed.id.toUpperCase(), pubkey: signed.pubkey.toUpperCase() };
     const draft = EventBuilder.genericRepost(target, RELAY_HINT);
-    expect(draft.currentTags.find((t) => t[0] === "e")).toEqual(["e", signed.id, RELAY]);
+    expect(draft.currentTags.find((t) => t[0] === "e")).toStrictEqual(["e", signed.id, RELAY]);
     expect(draft.currentTags).toContainEqual(["p", signed.pubkey]);
     expect(draft.currentTags).toContainEqual(["a", `0:${signed.pubkey}:`]);
   });
@@ -200,7 +199,7 @@ describe("EventBuilder", () => {
     const react = EventBuilder.reaction(target).signWithKeys(keys);
     expect(react.kind).toBe(Kind.Reaction);
     expect(react.content).toBe("+");
-    expect(react.tags).toEqual([
+    expect(react.tags).toStrictEqual([
       ["e", target.id, "", target.pubkey],
       ["p", target.pubkey],
       ["k", "1"],
@@ -212,7 +211,7 @@ describe("EventBuilder", () => {
     const signed = EventBuilder.textNote("n").createdAt(1).signWithKeys(keys);
     const target = { ...signed, id: signed.id.toUpperCase(), pubkey: signed.pubkey.toUpperCase() };
     const draft = EventBuilder.reaction(target);
-    expect(draft.currentTags).toEqual([
+    expect(draft.currentTags).toStrictEqual([
       ["e", signed.id, "", signed.pubkey],
       ["p", signed.pubkey],
       ["k", "1"],
@@ -226,7 +225,7 @@ describe("EventBuilder", () => {
     const signed = new EventBuilder(34235, "v").tag(["d", "ep1"]).createdAt(1).signWithKeys(keys);
     const target = { ...signed, id: signed.id.toUpperCase(), pubkey: signed.pubkey.toUpperCase() };
     const draft = EventBuilder.reaction(target);
-    expect(draft.currentTags).toEqual([
+    expect(draft.currentTags).toStrictEqual([
       ["e", signed.id, "", signed.pubkey],
       ["p", signed.pubkey],
       ["k", "34235"],
@@ -242,7 +241,7 @@ describe("EventBuilder", () => {
     const hint = normalizeURL(raw);
     const draft = EventBuilder.reaction(target, "-", { relayHint: raw });
     expect(draft.currentContent).toBe("-");
-    expect(draft.currentTags).toEqual([
+    expect(draft.currentTags).toStrictEqual([
       ["e", target.id, hint, target.pubkey],
       ["p", target.pubkey, hint],
       ["k", "1"],
@@ -255,7 +254,7 @@ describe("EventBuilder", () => {
     const draft = EventBuilder.reaction(target);
     expect(draft.currentTags.some((t) => t[0] === "a")).toBe(false);
     expect(draft.currentTags).toContainEqual(["k", "0"]);
-    expect(draft.currentTags.find((t) => t[0] === "e")).toEqual([
+    expect(draft.currentTags.find((t) => t[0] === "e")).toStrictEqual([
       "e",
       target.id,
       "",
@@ -267,14 +266,14 @@ describe("EventBuilder", () => {
     const keys = Keys.fromSecretKey(SK);
     const target = new EventBuilder(34235, "v").tag(["d", "ep1"]).createdAt(1).signWithKeys(keys);
     const withHint = EventBuilder.reaction(target, "+", RELAY_HINT);
-    expect(withHint.currentTags).toEqual([
+    expect(withHint.currentTags).toStrictEqual([
       ["e", target.id, RELAY, target.pubkey],
       ["p", target.pubkey, RELAY],
       ["k", "34235"],
       ["a", `34235:${target.pubkey}:ep1`, RELAY],
     ]);
     const noHint = EventBuilder.reaction(target);
-    expect(noHint.currentTags).toEqual([
+    expect(noHint.currentTags).toStrictEqual([
       ["e", target.id, "", target.pubkey],
       ["p", target.pubkey],
       ["k", "34235"],
@@ -293,7 +292,7 @@ describe("EventBuilder", () => {
     const keys = Keys.fromSecretKey(SK);
     const target = new EventBuilder(34235, "v").tag(["d", ""]).createdAt(1).signWithKeys(keys);
     const draft = EventBuilder.reaction(target);
-    expect(draft.currentTags).toEqual([
+    expect(draft.currentTags).toStrictEqual([
       ["e", target.id, "", target.pubkey],
       ["p", target.pubkey],
       ["k", "34235"],
@@ -318,14 +317,14 @@ describe("EventBuilder", () => {
   test("deletion lowercases e ids", () => {
     const id = "ab".repeat(32);
     const del = EventBuilder.deletion([id.toUpperCase()]);
-    expect(del.currentTags).toEqual([["e", id]]);
+    expect(del.currentTags).toStrictEqual([["e", id]]);
   });
 
   test("deletion k tags with e", () => {
     const del = EventBuilder.deletion([{ id: "id", kind: 1 }], "x");
     expect(del.currentKind).toBe(Kind.EventDeletion);
     expect(del.currentContent).toBe("x");
-    expect(del.currentTags).toEqual([
+    expect(del.currentTags).toStrictEqual([
       ["e", "id"],
       ["k", "1"],
     ]);
@@ -340,7 +339,7 @@ describe("EventBuilder", () => {
       ],
       "x",
     );
-    expect(del.currentTags).toEqual([
+    expect(del.currentTags).toStrictEqual([
       ["e", "a"],
       ["e", "b"],
       ["e", "c"],
@@ -352,14 +351,14 @@ describe("EventBuilder", () => {
   test("deletion address target derives k tag", () => {
     const del = EventBuilder.deletion([{ address: "0:pk:" }], "gone");
     expect(del.currentContent).toBe("gone");
-    expect(del.currentTags).toEqual([["a", "0:pk:"]]);
+    expect(del.currentTags).toStrictEqual([["a", "0:pk:"]]);
     expect(del.currentTags.some((t) => t[0] === "e")).toBe(false);
   });
 
   test("deletion address with valid coordinate derives k tag", () => {
     const pk = "ab".repeat(32);
     const del = EventBuilder.deletion([{ address: `30023:${pk}:d1` }], "gone");
-    expect(del.currentTags).toEqual([
+    expect(del.currentTags).toStrictEqual([
       ["a", `30023:${pk}:d1`],
       ["k", "30023"],
     ]);
@@ -373,7 +372,7 @@ describe("EventBuilder", () => {
       { url: "wss://c.example", read: false, write: true },
     ]).signWithKeys(keys);
     expect(event.kind).toBe(Kind.RelayList);
-    expect(event.tags).toEqual([
+    expect(event.tags).toStrictEqual([
       ["r", "wss://a.example"],
       ["r", "wss://b.example", "read"],
       ["r", "wss://c.example", "write"],

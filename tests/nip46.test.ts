@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+
 import { EventBuilder, Nip46Signer, Pool, getPublicKey, verifyEvent } from "../src/index.ts";
 import {
   createNostrConnectURI,
@@ -6,11 +7,8 @@ import {
   parseNostrConnectURI,
   toBunkerURL,
 } from "../src/nips/nip46.ts";
-import {
-  createFakeNip46Signer,
-  createFakeRelayNetwork,
-  type FakeRelayNetwork,
-} from "../src/testing/index.ts";
+import { createFakeNip46Signer, createFakeRelayNetwork } from "../src/testing/index.ts";
+import type { FakeRelayNetwork } from "../src/testing/index.ts";
 import { stubReportError } from "./helpers/report-error.ts";
 
 const BUNKER_SK = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -37,8 +35,12 @@ afterEach(() => {
 async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 2000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (await check()) return;
-    await new Promise((r) => setTimeout(r, 5));
+    // oxlint-disable-next-line no-await-in-loop -- polling helper must check between sleeps
+    if (await check()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling helper must check between sleeps
+    await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("timed out");
 }
@@ -52,7 +54,7 @@ describe("nip46 protocol", () => {
     };
     const url = toBunkerURL(pointer);
     expect(url.startsWith("bunker://")).toBe(true);
-    expect(parseBunkerURL(url)).toEqual({
+    expect(parseBunkerURL(url)).toStrictEqual({
       pubkey: pointer.pubkey,
       relays: pointer.relays,
       secret: "s3cret",
@@ -72,20 +74,20 @@ describe("nip46 protocol", () => {
     const parsed = parseNostrConnectURI(uri);
     expect(parsed.clientPubkey).toBe(clientPubkey);
     expect(parsed.secret).toBe("hello");
-    expect(parsed.relays).toEqual(["wss://relay.example"]);
+    expect(parsed.relays).toStrictEqual(["wss://relay.example"]);
     expect(parsed.name).toBe("test");
-    expect(parsed.perms).toEqual(["sign_event"]);
+    expect(parsed.perms).toStrictEqual(["sign_event"]);
   });
 
   test("parseBunkerURL rejects NIP-05 identifiers and other non-bunker strings", () => {
-    expect(parseBunkerURL("alice@example.com")).toBeNull();
-    expect(parseBunkerURL("bunker@example.com")).toBeNull();
-    expect(parseBunkerURL("example.com")).toBeNull();
-    expect(parseBunkerURL("")).toBeNull();
-    expect(parseBunkerURL("not a bunker")).toBeNull();
-    expect(parseBunkerURL("bunker://")).toBeNull();
-    expect(parseBunkerURL(`bunker://${getPublicKey(BUNKER_SK).slice(0, 63)}`)).toBeNull();
-    expect(parseBunkerURL(getPublicKey(BUNKER_SK))).toBeNull();
+    expect(parseBunkerURL("alice@example.com")).toBeUndefined();
+    expect(parseBunkerURL("bunker@example.com")).toBeUndefined();
+    expect(parseBunkerURL("example.com")).toBeUndefined();
+    expect(parseBunkerURL("")).toBeUndefined();
+    expect(parseBunkerURL("not a bunker")).toBeUndefined();
+    expect(parseBunkerURL("bunker://")).toBeUndefined();
+    expect(parseBunkerURL(`bunker://${getPublicKey(BUNKER_SK).slice(0, 63)}`)).toBeUndefined();
+    expect(parseBunkerURL(getPublicKey(BUNKER_SK))).toBeUndefined();
     expect(
       parseBunkerURL(
         createNostrConnectURI({
@@ -94,7 +96,7 @@ describe("nip46 protocol", () => {
           secret: "hello",
         }),
       ),
-    ).toBeNull();
+    ).toBeUndefined();
   });
 });
 
@@ -125,8 +127,12 @@ describe("Nip46Signer", () => {
         timeoutMs: 3000,
       });
 
-      expect(requests.map((r) => r.method)).toEqual(["connect", "switch_relays", "get_public_key"]);
-      expect(await signer.getPublicKey()).toBe(getPublicKey(USER_SK));
+      expect(requests.map((r) => r.method)).toStrictEqual([
+        "connect",
+        "switch_relays",
+        "get_public_key",
+      ]);
+      await expect(signer.getPublicKey()).resolves.toBe(getPublicKey(USER_SK));
 
       const unsigned = EventBuilder.textNote("remote sign")
         .createdAt(100)
@@ -146,7 +152,7 @@ describe("Nip46Signer", () => {
     const url = toBunkerURL({
       pubkey: getPublicKey(BUNKER_SK),
       relays: ["wss://bunker.example"],
-      secret: null,
+      secret: undefined,
     });
     await expect(Nip46Signer.connect(url, { clientSecretKey: CLIENT_SK })).rejects.toThrow(
       /pool or createPool/,
@@ -180,8 +186,8 @@ describe("Nip46Signer", () => {
         timeoutMs: 3000,
         onAuthUrl: (u) => authUrls.push(u),
       });
-      expect(authUrls).toEqual(["https://auth.example/approve"]);
-      expect(await signer.getPublicKey()).toBe(getPublicKey(USER_SK));
+      expect(authUrls).toStrictEqual(["https://auth.example/approve"]);
+      await expect(signer.getPublicKey()).resolves.toBe(getPublicKey(USER_SK));
       await signer.close();
     } finally {
       remote.close();
@@ -242,7 +248,7 @@ describe("Nip46Signer", () => {
     );
 
     await waitFor(() => net.relay("wss://bunker.example").clientMessages().length > 0);
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((resolve) => setTimeout(resolve, 20));
     const frames = net.relay("wss://bunker.example").clientMessages();
     expect(frames.some((m) => (m as unknown[])[0] === "REQ")).toBe(true);
     expect(frames.some((m) => (m as unknown[])[0] === "EVENT")).toBe(false);
@@ -256,7 +262,7 @@ describe("Nip46Signer", () => {
         {
           pubkey: getPublicKey(BUNKER_SK),
           relays: ["wss://bunker.example"],
-          secret: null,
+          secret: undefined,
         },
         { createPool: testPool } as never,
       ),
@@ -280,7 +286,7 @@ describe("Nip46Signer", () => {
         { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret },
         { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
       );
-      expect(await signer.getPublicKey()).toBe(getPublicKey(USER_SK));
+      await expect(signer.getPublicKey()).resolves.toBe(getPublicKey(USER_SK));
       await signer.close();
     } finally {
       remote.close();
@@ -347,7 +353,7 @@ describe("Nip46Signer", () => {
     try {
       await expect(
         Nip46Signer.connect(
-          { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: null },
+          { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: undefined },
           { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
         ),
       ).rejects.toThrow(/connect result is not ack or secret: tok/);
@@ -374,7 +380,10 @@ describe("Nip46Signer", () => {
                 subClosed = true;
               },
             }),
-            publish: async () => [{ result: { ok: true, message: "" } }],
+            publish: async () => {
+              await Promise.resolve();
+              return [{ result: { ok: true, message: "" } }];
+            },
             close: () => {
               poolClosed = true;
             },
@@ -422,7 +431,7 @@ describe("Nip46Signer", () => {
       const signer = await handshake;
       expect(signer.bunker.pubkey).toBe(getPublicKey(BUNKER_SK));
       expect(signer.clientPublicKey).toBe(clientPk);
-      expect(await signer.getPublicKey()).toBe(getPublicKey(USER_SK));
+      await expect(signer.getPublicKey()).resolves.toBe(getPublicKey(USER_SK));
       await signer.close();
     } finally {
       remote.close();
@@ -453,7 +462,7 @@ describe("Nip46Signer", () => {
         },
       );
       const connect = requests.find((r) => r.method === "connect");
-      expect(connect?.params).toEqual([
+      expect(connect?.params).toStrictEqual([
         bunkerPk,
         "tok",
         "sign_event:1,nip44_encrypt",
@@ -482,7 +491,7 @@ describe("Nip46Signer", () => {
         toBunkerURL({ pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: "tok" }),
         { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
       );
-      expect(signer.bunker.relays).toEqual(["wss://new.example"]);
+      expect(signer.bunker.relays).toStrictEqual(["wss://new.example"]);
       await signer.logout();
     } finally {
       remote.close();
@@ -510,7 +519,7 @@ describe("issue #130", () => {
         {
           pubkey: getPublicKey(BUNKER_SK),
           relays: ["wss://bunker.example"],
-          secret: null,
+          secret: undefined,
         },
         {
           clientSecretKey: CLIENT_SK,
@@ -523,7 +532,7 @@ describe("issue #130", () => {
       const started = Date.now();
       await expect(signer.ping()).resolves.toBeUndefined();
       expect(Date.now() - started).toBeGreaterThanOrEqual(140);
-      expect(authUrls).toEqual(["https://auth.example/approve"]);
+      expect(authUrls).toStrictEqual(["https://auth.example/approve"]);
       await signer.close();
     } finally {
       remote.close();
@@ -535,16 +544,19 @@ describe("issue #130", () => {
       {
         pubkey: getPublicKey(BUNKER_SK),
         relays: ["wss://bunker.example"],
-        secret: null,
+        secret: undefined,
       },
       {
         clientSecretKey: CLIENT_SK,
         createPool: () => ({
           subscribe: () => ({ close: () => {} }),
-          publish: async () => [
-            { error: "blocked: spam" },
-            { result: { ok: false, message: "restricted: no" } },
-          ],
+          publish: async () => {
+            await Promise.resolve();
+            return [
+              { error: "blocked: spam" },
+              { result: { ok: false, message: "restricted: no" } },
+            ];
+          },
           close: () => {},
         }),
         timeoutMs: 500,
@@ -575,7 +587,7 @@ describe("issue #130", () => {
         {
           pubkey: getPublicKey(BUNKER_SK),
           relays: ["wss://bunker.example"],
-          secret: null,
+          secret: undefined,
         },
         {
           clientSecretKey: CLIENT_SK,
@@ -587,7 +599,7 @@ describe("issue #130", () => {
         },
       );
       await expect(signer.ping()).resolves.toBeUndefined();
-      expect(reported).toEqual([boom]);
+      expect(reported).toStrictEqual([boom]);
       await signer.close();
     } finally {
       restore();

@@ -5,19 +5,28 @@ import type { NostrSigner } from "../signer/types.ts";
 import type { StorageError } from "../storage/error.ts";
 import type { EventStore } from "../storage/types.ts";
 import type { ReactiveEventStore } from "../store/reactive.ts";
-import { Client } from "./client.ts";
+import type { Client } from "./client.ts";
 import type { ClientOptions } from "./types.ts";
 
-/** Fluent constructor for {@link Client}. */
+/**
+ * Fluent constructor for {@link Client}. The constructor is supplied by {@link Client.builder} so
+ * this module never imports the `Client` value, keeping the client/builder dependency
+ * one-directional.
+ */
 export class ClientBuilder {
   #opts: ClientOptions = {};
+  readonly #newClient: (opts: ClientOptions) => Client;
+
+  constructor(newClient: (opts: ClientOptions) => Client) {
+    this.#newClient = newClient;
+  }
 
   signer(signer: NostrSigner): this {
     this.#opts = { ...this.#opts, signer };
     return this;
   }
 
-  relays(urls: readonly string[]): this {
+  relays(urls: ReadonlyArray<string>): this {
     this.#opts = { ...this.#opts, relays: [...urls] };
     return this;
   }
@@ -59,7 +68,7 @@ export class ClientBuilder {
   }
 
   /** `ws://` URLs allowed despite `allowInsecure` being off. */
-  trustedInsecureUrls(urls: readonly string[]): this {
+  trustedInsecureUrls(urls: ReadonlyArray<string>): this {
     this.#opts = { ...this.#opts, trustedInsecureUrls: urls };
     return this;
   }
@@ -77,7 +86,7 @@ export class ClientBuilder {
   }
 
   /** Relays never closed by idle cleanup or `maxRelays` eviction. */
-  pinnedUrls(urls: readonly string[]): this {
+  pinnedUrls(urls: ReadonlyArray<string>): this {
     this.#opts = { ...this.#opts, pinnedUrls: urls };
     return this;
   }
@@ -103,8 +112,8 @@ export class ClientBuilder {
   }
 
   /**
-   * Local event store. Defaults to {@link MemoryEventStore}.
-   * Browser apps that want persistence must pass {@link IndexedDbEventStore} and `await open()`.
+   * Local event store. Defaults to {@link MemoryEventStore}. Browser apps that want persistence must
+   * pass {@link IndexedDbEventStore} and `await open()`.
    */
   storage(store: EventStore): this {
     this.#opts = { ...this.#opts, storage: store };
@@ -112,8 +121,8 @@ export class ClientBuilder {
   }
 
   /**
-   * Synchronous reactive index mirroring ingested events.
-   * Defaults to a new {@link ReactiveEventStore}.
+   * Synchronous reactive index mirroring ingested events. Defaults to a new
+   * {@link ReactiveEventStore}.
    */
   index(index: ReactiveEventStore): this {
     this.#opts = { ...this.#opts, index };
@@ -137,6 +146,6 @@ export class ClientBuilder {
   }
 
   build(): Client {
-    return new Client(this.#opts);
+    return this.#newClient(this.#opts);
   }
 }

@@ -1,13 +1,3 @@
-/**
- * Hermes smoke test (N12): bundled to a single classic script and run on the
- * Hermes CLI that RN 0.86 ships (hermes-v250829098.0.17). Hard asserts only;
- * prints `HERMES_SMOKE_OK` after every check — including async ones — settled.
- *
- * The OK line is the pass contract: Hermes exits 0 even for unhandled async
- * errors (and `quit()` inside a promise callback does not set the exit code),
- * so runners must assert the marker appears in stdout.
- */
-import { hermesGlobalsInstalled } from "./globals.ts";
 import {
   EventBuilder,
   Keys,
@@ -27,8 +17,8 @@ import {
   nsecEncode,
   serializeEvent,
   verifyEvent,
-  type Event,
 } from "../../src/index.ts";
+import type { Event } from "../../src/index.ts";
 import {
   decrypt as nip44Decrypt,
   decryptFromPubkey,
@@ -38,12 +28,20 @@ import {
 } from "../../src/nips/nip44.ts";
 import * as nip49 from "../../src/nips/nip49.ts";
 import { createRumor, unwrap, wrap } from "../../src/nips/nip59.ts";
+/**
+ * Hermes smoke test (N12): bundled to a single classic script and run on the Hermes CLI that RN
+ * 0.86 ships (hermes-v250829098.0.17). Hard asserts only; prints `HERMES_SMOKE_OK` after every
+ * check — including async ones — settled.
+ *
+ * The OK line is the pass contract: Hermes exits 0 even for unhandled async errors (and `quit()`
+ * inside a promise callback does not set the exit code), so runners must assert the marker appears
+ * in stdout.
+ */
 
-declare function print(msg: string): void;
-declare function quit(code: number): void;
-
-function assert(cond: boolean, name: string): void {
-  if (!cond) throw new Error(`smoke: ${name}`);
+function assert(cond: boolean, name: string): asserts cond {
+  if (!cond) {
+    throw new Error(`smoke: ${name}`);
+  }
 }
 function eq<T>(got: T, want: T, name: string): void {
   if (JSON.stringify(got) !== JSON.stringify(want)) {
@@ -77,9 +75,7 @@ const NIP44_VECTOR = {
     "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABee0G5VSK0/9YypIObAtDKfYEAjD35uVkHyB0F4DwrcNaCXlCWZKaArsGrY6M9wnuTMxWfp1RTN9Xga8no+kF5Vsb",
 };
 
-async function main(): Promise<void> {
-  assert(hermesGlobalsInstalled, "globals module evaluated");
-
+export async function main(): Promise<void> {
   // Keys + signing.
   const generated = Keys.generate();
   assert(generated.publicKey.length === 64, "Keys.generate pubkey");
@@ -126,7 +122,7 @@ async function main(): Promise<void> {
   const nsec = nsecEncode(keys.secretKey.bytes);
   const decodedNsec = nip19Decode(nsec);
   assert(decodedNsec.type === "nsec", "nsec type");
-  eq(bytesToHex(decodedNsec.data as Uint8Array), SK, "nsec round trip");
+  eq(bytesToHex(decodedNsec.data), SK, "nsec round trip");
   const npub = npubEncode(keys.publicKey);
   eq(nip19Decode(npub), { type: "npub", data: keys.publicKey }, "npub round trip");
   const note = noteEncode(signed.id);
@@ -173,7 +169,8 @@ async function main(): Promise<void> {
   const mem = new MemoryEventStore();
   eq(await mem.put(built), "accepted", "mem.put");
   eq(await mem.put(built), "duplicate", "mem.put duplicate");
-  eq((await mem.query([{ ids: [built.id] }]))[0]?.id, built.id, "mem.query");
+  const memRows = await mem.query([{ ids: [built.id] }]);
+  eq(memRows.at(0)?.id, built.id, "mem.query");
   eq(await mem.count([{ kinds: [1] }]), 1, "mem.count");
 
   // NIP-59 gift wrap round trip via KeysSigner (async, NIP-44 under the hood).
@@ -192,13 +189,3 @@ async function main(): Promise<void> {
   eq(inner.content, "secret hello", "nip59 unwrap content");
   eq(inner.pubkey, keys.publicKey, "nip59 unwrap pubkey");
 }
-
-main().then(
-  () => {
-    print("HERMES_SMOKE_OK");
-  },
-  (err: unknown) => {
-    print(`HERMES_SMOKE_FAIL: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
-    quit(1);
-  },
-);

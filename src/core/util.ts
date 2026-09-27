@@ -2,6 +2,7 @@ import {
   bytesToHex as nobleBytesToHex,
   hexToBytes as nobleHexToBytes,
 } from "@noble/hashes/utils.js";
+
 import { HexError, UrlError } from "./error.ts";
 import { SECRET_KEY_BYTES } from "./limits.ts";
 
@@ -20,9 +21,9 @@ export function bytesToHex(bytes: Uint8Array): string {
 export function hexToBytes(hex: string): Uint8Array {
   try {
     return nobleHexToBytes(hex);
-  } catch (cause) {
+  } catch (error) {
     throw new HexError(`invalid hex string of length ${hex.length}`, {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
 }
@@ -57,23 +58,27 @@ export function assertSecretKeyBytes(bytes: Uint8Array): void {
 }
 
 /**
- * Normalize a relay URL to a stable form: `http:`/`https:` are rewritten to
- * `ws:`/`wss:` (a bare host gets `wss://`), any other scheme throws UrlError.
- * The result has a lowercased host, the default port removed, duplicate path
- * slashes collapsed, a sorted query, and no fragment. `URL` serialization keeps
- * a trailing `/` on the root path (`wss://a.example/`).
+ * Normalize a relay URL to a stable form: `http:`/`https:` are rewritten to `ws:`/`wss:` (a bare
+ * host gets `wss://`), any other scheme throws UrlError. The result has a lowercased host, the
+ * default port removed, duplicate path slashes collapsed, a sorted query, and no fragment. `URL`
+ * serialization keeps a trailing `/` on the root path (`wss://a.example/`).
  */
 export function normalizeURL(url: string): string {
   try {
     let input = url;
-    if (!input.includes("://")) input = `wss://${input}`;
+    if (!input.includes("://")) {
+      input = `wss://${input}`;
+    }
     const p = new URL(input);
-    if (p.protocol === "http:") p.protocol = "ws:";
-    else if (p.protocol === "https:") p.protocol = "wss:";
+    if (p.protocol === "http:") {
+      p.protocol = "ws:";
+    } else if (p.protocol === "https:") {
+      p.protocol = "wss:";
+    }
     if (p.protocol !== "ws:" && p.protocol !== "wss:") {
       throw new UrlError(`unsupported relay URL scheme: ${p.protocol}`);
     }
-    p.pathname = p.pathname.replace(/\/+/g, "/");
+    p.pathname = p.pathname.replaceAll(/\/+/g, "/");
     if (p.pathname.endsWith("/") && p.pathname.length > 1) {
       p.pathname = p.pathname.slice(0, -1);
     }
@@ -83,10 +88,12 @@ export function normalizeURL(url: string): string {
     p.searchParams.sort();
     p.hash = "";
     return p.toString();
-  } catch (cause) {
-    if (cause instanceof UrlError) throw cause;
+  } catch (error) {
+    if (error instanceof UrlError) {
+      throw error;
+    }
     throw new UrlError(`invalid URL: ${url}`, {
-      cause: cause instanceof Error ? cause : undefined,
+      cause: error instanceof Error ? error : undefined,
     });
   }
 }

@@ -1,42 +1,41 @@
+import { abortReason, throwIfAborted } from "../core/abort.ts";
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { invokeSafely } from "../core/report.ts";
-import { abortReason, throwIfAborted } from "../core/abort.ts";
 import { normalizeURL } from "../core/util.ts";
 import { RelayClosedError } from "./error.ts";
 import type { Pool } from "./pool.ts";
 import type { Relay } from "./relay.ts";
 
 export type RoutedJob = {
-  urls: readonly string[];
-  filters: readonly Filter[];
-  id?: string;
+  urls: ReadonlyArray<string>;
+  filters: ReadonlyArray<Filter>;
+  id?: string | undefined;
 };
 
 export type FanInOptions = {
   /** First receipt only (deduped across jobs). `relayUrl` is the normalized relay URL. */
-  onevent?: (event: Event, relayUrl: string) => void;
-  oneose?: () => void;
-  onclose?: (reason: string) => void;
-  signal?: AbortSignal;
+  onevent?: ((event: Event, relayUrl: string) => void) | undefined;
+  oneose?: (() => void) | undefined;
+  onclose?: ((reason: string) => void) | undefined;
+  signal?: AbortSignal | undefined;
   /** Armed at fan-in only. Never forwarded to relay.subscribe. */
-  eoseTimeoutMs?: number;
-  alreadyHaveEvent?: (id: string) => boolean;
+  eoseTimeoutMs?: number | undefined;
+  alreadyHaveEvent?: ((id: string) => boolean) | undefined;
   /** Every receipt from every relay, including skipped duplicates. */
-  receivedEvent?: (id: string, relayUrl: string) => void;
-  closeOnEose?: boolean;
+  receivedEvent?: ((id: string, relayUrl: string) => void) | undefined;
+  closeOnEose?: boolean | undefined;
   /** Optional. ensureRelay uses Pool.#opts.connectTimeoutMs when omitted. */
-  connectTimeoutMs?: number;
+  connectTimeoutMs?: number | undefined;
 };
 
 /**
- * Aggregate EOSE/close across routed jobs. One `seen` set.
- * `pending` counts URL list entries (duplicates included).
- * `pendingEose` counts unique `jobIndex:url` keys.
+ * Aggregate EOSE/close across routed jobs. One `seen` set. `pending` counts URL list entries
+ * (duplicates included). `pendingEose` counts unique `jobIndex:url` keys.
  */
 export function fanIn(
   pool: Pool,
-  jobs: readonly RoutedJob[],
+  jobs: ReadonlyArray<RoutedJob>,
   opts: FanInOptions = {},
 ): { close: (reason?: string) => void } {
   const seen = new Set<string>();
@@ -50,7 +49,9 @@ export function fanIn(
   let pending = 0;
 
   const fireEose = () => {
-    if (closed || eoseFired) return;
+    if (closed || eoseFired) {
+      return;
+    }
     eoseFired = true;
     if (eoseTimer !== undefined) {
       clearTimeout(eoseTimer);
@@ -61,10 +62,14 @@ export function fanIn(
 
   const markEose = (jobIndex: number, url: string) => {
     const key = `${jobIndex}:${url}`;
-    if (eoseDone.has(key)) return;
+    if (eoseDone.has(key)) {
+      return;
+    }
     eoseDone.add(key);
     pendingEose -= 1;
-    if (pendingEose === 0) fireEose();
+    if (pendingEose === 0) {
+      fireEose();
+    }
   };
 
   const settleClose = () => {
@@ -76,13 +81,17 @@ export function fanIn(
   };
 
   const closeAll = (reason?: string) => {
-    if (closed) return;
+    if (closed) {
+      return;
+    }
     settleClose();
-    for (const c of closers) c.close(reason);
+    for (const c of closers) {
+      c.close(reason);
+    }
     invokeSafely(() => opts.onclose?.(reason ?? "closed by client"));
   };
 
-  if (opts.signal?.aborted) {
+  if (opts.signal?.aborted === true) {
     closed = true;
     invokeSafely(() => opts.onclose?.("aborted"));
     return { close: closeAll };
@@ -90,8 +99,19 @@ export function fanIn(
 
   opts.signal?.addEventListener("abort", () => closeAll("aborted"), { once: true });
 
+  const failUrl = (jobIndex: number, key: string): void => {
+    markEose(jobIndex, key);
+    pending -= 1;
+    if (pending <= 0 && closers.length === 0 && !closed) {
+      settleClose();
+      invokeSafely(() => opts.onclose?.("all relays failed"));
+    }
+  };
+
   const attach = (relay: Relay, job: RoutedJob, jobIndex: number): void => {
-    if (closed) return;
+    if (closed) {
+      return;
+    }
     const received = opts.receivedEvent;
     const sub = relay.subscribe([...job.filters], {
       id: jobs.length === 1 ? job.id : undefined,
@@ -122,8 +142,7 @@ export function fanIn(
     closers.push(sub);
   };
 
-  for (let jobIndex = 0; jobIndex < jobs.length; jobIndex++) {
-    const job = jobs[jobIndex]!;
+  for (const [jobIndex, job] of jobs.entries()) {
     // Equivalent spellings of one relay URL attach exactly once per job.
     const jobUrls = new Set<string>();
     for (const url of job.urls) {
@@ -133,7 +152,9 @@ export function fanIn(
       } catch {
         key = url; // invalid URL: ensureRelay fails it like a dead relay
       }
-      if (jobUrls.has(key)) continue;
+      if (jobUrls.has(key)) {
+        continue;
+      }
       jobUrls.add(key);
       pending += 1;
       const eoseKey = `${jobIndex}:${key}`;
@@ -142,39 +163,37 @@ export function fanIn(
         pendingEose += 1;
       }
 
-      const failUrl = (): void => {
-        markEose(jobIndex, key);
-        pending -= 1;
-        if (pending <= 0 && closers.length === 0 && !closed) {
-          settleClose();
-          invokeSafely(() => opts.onclose?.("all relays failed"));
-        }
-      };
-
       const tryAttach = (relay: Relay): void => {
         try {
           attach(relay, job, jobIndex);
-        } catch (err) {
-          if (err instanceof RelayClosedError) {
-            failUrl();
+        } catch (error) {
+          if (error instanceof RelayClosedError) {
+            failUrl(jobIndex, key);
             return;
           }
-          throw err;
+          throw error;
         }
       };
 
-      void pool.ensureRelay(key, { signal: opts.signal, timeoutMs: opts.connectTimeoutMs }).then(
-        (relay) => tryAttach(relay),
-        () => {
+      void (async (): Promise<void> => {
+        let relay: Relay;
+        try {
+          relay = await pool.ensureRelay(key, {
+            signal: opts.signal,
+            timeoutMs: opts.connectTimeoutMs,
+          });
+        } catch {
           // ensureRelay rejected only — not tryAttach throws (those must not look like connect failure).
-          const relay = pool.getRelay(key);
-          if (relay) {
-            tryAttach(relay);
+          const existing = pool.getRelay(key);
+          if (existing !== undefined) {
+            tryAttach(existing);
             return;
           }
-          failUrl();
-        },
-      );
+          failUrl(jobIndex, key);
+          return;
+        }
+        tryAttach(relay);
+      })();
     }
   }
 
@@ -187,7 +206,9 @@ export function fanIn(
 
   if (pending === 0) {
     queueMicrotask(() => {
-      if (closed) return;
+      if (closed) {
+        return;
+      }
       settleClose();
       invokeSafely(() => opts.onclose?.("no relays"));
     });
@@ -198,13 +219,13 @@ export function fanIn(
 
 export async function fetchRouted(
   pool: Pool,
-  jobs: readonly RoutedJob[],
+  jobs: ReadonlyArray<RoutedJob>,
   opts: {
-    timeoutMs?: number;
-    signal?: AbortSignal;
-    connectTimeoutMs?: number;
+    timeoutMs?: number | undefined;
+    signal?: AbortSignal | undefined;
+    connectTimeoutMs?: number | undefined;
     /** Every event of every relay batch, including cross-relay duplicates. */
-    onevent?: (event: Event, relayUrl: string) => void;
+    onevent?: ((event: Event, relayUrl: string) => void) | undefined;
   } = {},
 ): Promise<Event[]> {
   throwIfAborted(opts.signal);
@@ -219,7 +240,9 @@ export async function fetchRouted(
         } catch {
           key = raw; // invalid URL: ensureRelay fails it like a dead relay
         }
-        if (!urls.includes(key)) urls.push(key);
+        if (!urls.includes(key)) {
+          urls.push(key);
+        }
       }
       return urls.map(async (url) => {
         let batch: Event[];
@@ -236,13 +259,17 @@ export async function fetchRouted(
           });
         } catch {
           // An abort rejects the whole call; per-relay failures are skipped.
-          if (opts.signal?.aborted) throw abortReason(opts.signal);
+          if (opts.signal?.aborted === true) {
+            throw abortReason(opts.signal);
+          }
           return;
         }
         // The whole batch lands before callbacks so a throwing onevent cannot
         // drop events; listener errors are reported, never propagated.
         for (const event of batch) {
-          if (!byId.has(event.id)) byId.set(event.id, event);
+          if (!byId.has(event.id)) {
+            byId.set(event.id, event);
+          }
         }
         for (const event of batch) {
           invokeSafely(() => opts.onevent?.(event, relayUrl));

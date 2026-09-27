@@ -1,17 +1,15 @@
-/**
- * NIP-04 legacy encrypted direct messages.
- * Prefer NIP-44 for new applications.
- */
+/** NIP-04 legacy encrypted direct messages. Prefer NIP-44 for new applications. */
 import { cbc } from "@noble/ciphers/aes.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 import { base64 } from "@scure/base";
+
 import { CryptoError } from "../core/error.ts";
 import { assertHex32, hexToBytes, utf8Decoder, utf8Encoder } from "../core/util.ts";
 
 function normalizeSharedSecret(privkey: Uint8Array, pubkey: string): Uint8Array {
   assertHex32(pubkey, "public key");
-  const key = secp256k1.getSharedSecret(privkey, hexToBytes("02" + pubkey.toLowerCase()));
+  const key = secp256k1.getSharedSecret(privkey, hexToBytes(`02${pubkey.toLowerCase()}`));
   return key.slice(1, 33);
 }
 
@@ -35,7 +33,13 @@ export function encrypt(secretKey: string | Uint8Array, pubkey: string, text: st
 export function decrypt(secretKey: string | Uint8Array, pubkey: string, data: string): string {
   const privkey = resolveSecret(secretKey);
   const parts = data.split("?iv=");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+  if (
+    parts.length !== 2 ||
+    parts[0] === undefined ||
+    parts[0] === "" ||
+    parts[1] === undefined ||
+    parts[1] === ""
+  ) {
     throw new CryptoError("invalid NIP-04 payload: missing iv");
   }
   const normalizedKey = normalizeSharedSecret(privkey, pubkey);

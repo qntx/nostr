@@ -1,11 +1,12 @@
 /**
- * Optional live-relay smoke tests.
- * Enable with: NOSTR_LIVE_RELAY=wss://… bun test tests/live-relay.test.ts
+ * Optional live-relay smoke tests. Enable with: NOSTR_LIVE_RELAY=wss://… bun test
+ * tests/live-relay.test.ts
  *
- * Skipped by default so CI stays deterministic without network.
- * Uses describe.skip (not describe.runIf) for bun:test + vite-plus compatibility.
+ * Skipped by default so CI stays deterministic without network. Uses describe.skip (not
+ * describe.runIf) for bun:test + vite-plus compatibility.
  */
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   EventBuilder,
   Keys,
@@ -14,14 +15,16 @@ import {
   useWebSocketImplementation,
 } from "../src/index.ts";
 
-const LIVE = process.env.NOSTR_LIVE_RELAY?.trim();
+const LIVE = process.env["NOSTR_LIVE_RELAY"]?.trim();
 const describeLive = LIVE ? describe : describe.skip;
 
 async function ensureNodeWebSocket(): Promise<void> {
-  if (typeof globalThis.WebSocket !== "undefined") return;
+  if (globalThis.WebSocket !== undefined) {
+    return;
+  }
   try {
     // Optional peer; avoid static resolve of `ws` types in typecheck.
-    const mod = (await import(/* @vite-ignore */ "ws" as string)) as {
+    const mod = (await import(/* @vite-ignore */ "ws")) as {
       default: Parameters<typeof useWebSocketImplementation>[0];
     };
     useWebSocketImplementation(mod.default);
@@ -48,7 +51,7 @@ describeLive("live relay", () => {
 
     const found = await client.fetchEvents(
       { kinds: [1], authors: [keys.publicKey], limit: 5 },
-      { timeoutMs: 8_000 },
+      { timeoutMs: 8000 },
     );
     expect(found.some((e) => e.content === stamp)).toBe(true);
 

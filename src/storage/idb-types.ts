@@ -1,3 +1,4 @@
+// oxlint-disable typescript/no-restricted-types -- the *Like types mirror IndexedDB, whose request/transaction fields and event handlers are null-valued
 export const EVENTS = "events";
 export const TAG_REFS = "tag_refs";
 export const ADDRESSES = "addresses";
@@ -18,12 +19,12 @@ export type IDBCursorLike = {
   value?: unknown;
   key: unknown;
   primaryKey: unknown;
-  continue(): void;
+  continue: () => void;
 };
 
 export type IDBIndexLike = {
-  openCursor(range?: IDBKeyRangeLike, direction?: IDBCursorDirectionLike): IDBRequestLike;
-  openKeyCursor(range?: IDBKeyRangeLike, direction?: IDBCursorDirectionLike): IDBRequestLike;
+  openCursor: (range?: IDBKeyRangeLike, direction?: IDBCursorDirectionLike) => IDBRequestLike;
+  openKeyCursor: (range?: IDBKeyRangeLike, direction?: IDBCursorDirectionLike) => IDBRequestLike;
 };
 
 export type IDBRequestLike = {
@@ -34,30 +35,33 @@ export type IDBRequestLike = {
 };
 
 export type IDBObjectStoreLike = {
-  put(value: unknown): unknown;
-  get(key: string): IDBRequestLike;
-  delete(key: string): unknown;
-  clear(): unknown;
-  getAll(): IDBRequestLike;
-  createIndex(name: string, keyPath: string | string[]): IDBIndexLike;
-  index(name: string): IDBIndexLike;
-  openCursor(range?: IDBKeyRangeLike, direction?: IDBCursorDirectionLike): IDBRequestLike;
+  put: (value: unknown) => unknown;
+  get: (key: string) => IDBRequestLike;
+  delete: (key: string) => unknown;
+  clear: () => unknown;
+  getAll: () => IDBRequestLike;
+  createIndex: (name: string, keyPath: string | string[]) => IDBIndexLike;
+  index: (name: string) => IDBIndexLike;
+  openCursor: (range?: IDBKeyRangeLike, direction?: IDBCursorDirectionLike) => IDBRequestLike;
 };
 
 export type IDBTransactionLike = {
-  objectStore(name: string): IDBObjectStoreLike;
+  objectStore: (name: string) => IDBObjectStoreLike;
   oncomplete: ((ev: unknown) => void) | null;
   onerror: ((ev: unknown) => void) | null;
   onabort: ((ev: unknown) => void) | null;
   error: Error | null;
-  abort(): void;
+  abort: () => void;
 };
 
 export type IDBDatabaseLike = {
-  objectStoreNames: { contains(name: string): boolean };
-  createObjectStore(name: string, options?: { keyPath?: string }): IDBObjectStoreLike;
-  transaction(storeNames: string | string[], mode?: "readonly" | "readwrite"): IDBTransactionLike;
-  close(): void;
+  objectStoreNames: { contains: (name: string) => boolean };
+  createObjectStore: (name: string, options?: { keyPath?: string }) => IDBObjectStoreLike;
+  transaction: (
+    storeNames: string | string[],
+    mode?: "readonly" | "readwrite",
+  ) => IDBTransactionLike;
+  close: () => void;
 };
 
 export type IDBVersionChangeEventLike = {
@@ -67,7 +71,7 @@ export type IDBVersionChangeEventLike = {
 };
 
 export type IDBFactoryLike = {
-  open(name: string, version?: number): IDBOpenRequestLike;
+  open: (name: string, version?: number) => IDBOpenRequestLike;
 };
 
 export type IDBOpenRequestLike = IDBRequestLike & {

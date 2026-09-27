@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+
+import type { Filter } from "../src/core/filter.ts";
+import { normalizeURL } from "../src/core/util.ts";
 import {
   Client,
   EventBuilder,
@@ -12,7 +15,6 @@ import {
   useWebSocketImplementation,
 } from "../src/index.ts";
 import { dmRelayListEventBuilder, parseDmRelayList } from "../src/nips/nip17.ts";
-import { normalizeURL } from "../src/core/util.ts";
 import { createFakeRelayNetwork } from "../src/testing/index.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
@@ -28,7 +30,7 @@ afterEach(() => {
   MockWebSocket.reset();
 });
 
-function respondReplaceables(
+async function respondReplaceables(
   events: Array<{ kind: number; event: ReturnType<typeof EventBuilder.prototype.signWithKeys> }>,
 ) {
   // after microtasks, answer each REQ with matching events
@@ -37,12 +39,18 @@ function respondReplaceables(
       for (const ws of MockWebSocket.instances) {
         for (const raw of ws.sent) {
           const msg = JSON.parse(raw) as unknown[];
-          if (msg[0] !== "REQ") continue;
+          if (msg[0] !== "REQ") {
+            continue;
+          }
           const subId = msg[1] as string;
           const filter = msg[2] as { kinds?: number[]; authors?: string[] };
           for (const { kind, event } of events) {
-            if (filter.kinds && !filter.kinds.includes(kind)) continue;
-            if (filter.authors && !filter.authors.includes(event.pubkey)) continue;
+            if (filter.kinds && !filter.kinds.includes(kind)) {
+              continue;
+            }
+            if (filter.authors && !filter.authors.includes(event.pubkey)) {
+              continue;
+            }
             ws.receive(JSON.stringify(["EVENT", subId, event]));
           }
           ws.receive(JSON.stringify(["EOSE", subId]));
@@ -56,11 +64,36 @@ function respondReplaceables(
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) return;
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("timeout waiting for condition");
 }
+
+async function waitUntilAsync(pred: () => Promise<boolean>, timeoutMs = 500): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    // oxlint-disable-next-line no-await-in-loop -- polling must await each probe
+    if (await pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("timeout waiting for condition");
+}
+
+function requireRemainder(routed: { remainder?: Filter | undefined }): Filter {
+  if (routed.remainder === undefined) {
+    throw new Error("expected remainder");
+  }
+  return routed.remainder;
+}
+
+const isReq = (m: unknown): boolean => Array.isArray(m) && m[0] === "REQ";
 
 describe("Gossip", () => {
   test("ingest NIP-65 and route by authors", () => {
@@ -77,7 +110,7 @@ describe("Gossip", () => {
     expect(gossip.ingest(list)).toBe(true);
     expect(gossip.outboxRelays(keys.publicKey).length).toBeGreaterThan(0);
     expect(gossip.inboxRelays(keys.publicKey).length).toBeGreaterThan(0);
-    expect(gossip.dmRelays(keys.publicKey)).toEqual([]);
+    expect(gossip.dmRelays(keys.publicKey)).toStrictEqual([]);
 
     const routed = gossip.route({
       kinds: [1],
@@ -86,13 +119,13 @@ describe("Gossip", () => {
     expect(routed.remainder).toBeUndefined();
     expect(routed.perRelay.size).toBeGreaterThan(0);
     for (const filter of routed.perRelay.values()) {
-      expect(filter.authors).toEqual([keys.publicKey]);
-      expect(filter.kinds).toEqual([1]);
+      expect(filter.authors).toStrictEqual([keys.publicKey]);
+      expect(filter.kinds).toStrictEqual([1]);
     }
 
     const generic = gossip.route({ kinds: [1] });
     expect(generic.perRelay.size).toBe(0);
-    expect(generic.remainder).toEqual({ kinds: [1] });
+    expect(generic.remainder).toStrictEqual({ kinds: [1] });
   });
 
   test("route leftover authors become remainder", () => {
@@ -109,14 +142,14 @@ describe("Gossip", () => {
       kinds: [1],
       authors: [a.publicKey, b.publicKey],
     });
-    if (!routed.remainder) throw new Error("expected remainder");
-    expect(routed.remainder.authors).toEqual([b.publicKey]);
-    expect(routed.remainder.kinds).toEqual([1]);
+    const remainder = requireRemainder(routed);
+    expect(remainder.authors).toStrictEqual([b.publicKey]);
+    expect(remainder.kinds).toStrictEqual([1]);
     expect(routed.perRelay.size).toBe(1);
     const [url, filter] = [...routed.perRelay.entries()][0]!;
-    expect(url.includes("out-a.example")).toBe(true);
-    expect(filter.authors).toEqual([a.publicKey]);
-    expect(filter.kinds).toEqual([1]);
+    expect(url).toContain("out-a.example");
+    expect(filter.authors).toStrictEqual([a.publicKey]);
+    expect(filter.kinds).toStrictEqual([1]);
   });
 
   test("route leftover #p values become remainder", () => {
@@ -133,13 +166,13 @@ describe("Gossip", () => {
       kinds: [1],
       "#p": [a.publicKey, b.publicKey],
     });
-    if (!routed.remainder) throw new Error("expected remainder");
-    expect(routed.remainder["#p"]).toEqual([b.publicKey]);
-    expect(routed.remainder.kinds).toEqual([1]);
+    const remainder = requireRemainder(routed);
+    expect(remainder["#p"]).toStrictEqual([b.publicKey]);
+    expect(remainder.kinds).toStrictEqual([1]);
     expect(routed.perRelay.size).toBe(1);
     const [url, filter] = [...routed.perRelay.entries()][0]!;
-    expect(url.includes("in-a.example")).toBe(true);
-    expect(filter["#p"]).toEqual([a.publicKey]);
+    expect(url).toContain("in-a.example");
+    expect(filter["#p"]).toStrictEqual([a.publicKey]);
   });
 
   test("route authors+#p leftover keeps the original filter as remainder", () => {
@@ -161,8 +194,8 @@ describe("Gossip", () => {
     expect(routed.remainder).toBe(filter);
     expect(routed.perRelay.size).toBe(1);
     const sub = [...routed.perRelay.values()][0]!;
-    expect(sub.authors).toEqual(filter.authors);
-    expect(sub["#p"]).toEqual(filter["#p"]);
+    expect(sub.authors).toStrictEqual(filter.authors);
+    expect(sub["#p"]).toStrictEqual(filter["#p"]);
   });
 
   test("ingest kind 10050 DM relays without clobbering NIP-65", () => {
@@ -173,7 +206,7 @@ describe("Gossip", () => {
     const dm = dmRelayListEventBuilder(["wss://dm-a.example", "wss://dm-b.example"])
       .createdAt(20)
       .signWithKeys(keys);
-    expect(parseDmRelayList(dm).map((u) => u.replace(/\/$/, ""))).toEqual([
+    expect(parseDmRelayList(dm).map((u) => u.replace(/\/$/, ""))).toStrictEqual([
       "wss://dm-a.example",
       "wss://dm-b.example",
     ]);
@@ -183,7 +216,7 @@ describe("Gossip", () => {
     expect(gossip.ingest(dm)).toBe(true);
 
     expect(gossip.outboxRelays(keys.publicKey).some((u) => u.includes("out.example"))).toBe(true);
-    expect(gossip.dmRelays(keys.publicKey).map((u) => u.replace(/\/$/, ""))).toEqual([
+    expect(gossip.dmRelays(keys.publicKey).map((u) => u.replace(/\/$/, ""))).toStrictEqual([
       "wss://dm-a.example",
       "wss://dm-b.example",
     ]);
@@ -198,7 +231,7 @@ describe("Gossip", () => {
     expect(gossip.getRoutes(keys.publicKey)?.dmUpdatedAt).toBe(20);
     const orphan = gossip.route({ authors: [Keys.fromSecretKey(SK2).publicKey] });
     expect(orphan.perRelay.size).toBe(0);
-    expect(orphan.remainder?.authors).toEqual([Keys.fromSecretKey(SK2).publicKey]);
+    expect(orphan.remainder?.authors).toStrictEqual([Keys.fromSecretKey(SK2).publicKey]);
   });
 
   test("routes are LRU-bounded by maxPubkeys; lookups and writes refresh recency", () => {
@@ -213,7 +246,7 @@ describe("Gossip", () => {
     gossip.setRoutes(b, items, 1);
     gossip.setRoutes(c, items, 1);
     // a lookup moves "a" to the newest end
-    expect(gossip.outboxRelays(a)).toEqual(["wss://r.example/"]);
+    expect(gossip.outboxRelays(a)).toStrictEqual(["wss://r.example/"]);
     // inserting "d" drops the oldest ("b")
     gossip.setRoutes(d, items, 1);
     expect(gossip.size).toBe(3);
@@ -224,7 +257,7 @@ describe("Gossip", () => {
     gossip.setRoutes(e, items, 1);
     expect(gossip.size).toBe(3);
     expect(gossip.getRoutes(d)).toBeUndefined();
-    expect(gossip.getRoutes(c)?.dm).toEqual(["wss://dm.example/"]);
+    expect(gossip.getRoutes(c)?.dm).toStrictEqual(["wss://dm.example/"]);
     expect(gossip.getRoutes(a)).toBeDefined();
     expect(gossip.getRoutes(e)).toBeDefined();
   });
@@ -268,7 +301,7 @@ describe("Loaders", () => {
     // cache hit (no extra network required for second call with default style)
     const fl2 = await loaders.follows(keys.publicKey);
     expect(fl2.fresh).toBe(false);
-    expect(fl2.items).toEqual(fl.items);
+    expect(fl2.items).toStrictEqual(fl.items);
 
     pool.close();
   });
@@ -391,7 +424,7 @@ describe("loaders on the reactive index (issue #136)", () => {
       const res = await client.loaders.profile(keys.publicKey);
       expect(res.event?.id).toBe(meta.id);
       expect(res.fresh).toBe(true);
-      expect(client.index.seenOn(meta.id)).toEqual([normalizeURL("wss://idx.example")]);
+      expect(client.index.seenOn(meta.id)).toStrictEqual([normalizeURL("wss://idx.example")]);
       await client.shutdown();
     } finally {
       net.close();
@@ -404,20 +437,16 @@ describe("loaders on the reactive index (issue #136)", () => {
       const pool = new Pool({ websocketImplementation: net.websocketImplementation });
       const index = new ReactiveEventStore();
       const keys = Keys.fromSecretKey(SK);
-      const reqs = () =>
-        net
-          .relay("wss://idx.example")
-          .clientMessages()
-          .filter((m) => Array.isArray(m) && m[0] === "REQ").length;
+      const reqs = () => net.relay("wss://idx.example").clientMessages().filter(isReq).length;
 
       const loaders = createLoaders({ pool, relays: ["wss://idx.example"], index });
       const miss = await loaders.profile(keys.publicKey);
-      expect(miss.event).toBeNull();
+      expect(miss.event).toBeUndefined();
       expect(miss.fresh).toBe(true);
       expect(reqs()).toBe(1);
       // a recent miss counts as fresh: no refetch
       const again = await loaders.profile(keys.publicKey);
-      expect(again.event).toBeNull();
+      expect(again.event).toBeUndefined();
       expect(again.fresh).toBe(false);
       expect(reqs()).toBe(1);
       // force always fetches
@@ -483,11 +512,7 @@ describe("loaders on the reactive index (issue #136)", () => {
       const keys = Keys.fromSecretKey(SK);
       const meta = EventBuilder.metadata({ name: "alice" }).createdAt(5).signWithKeys(keys);
       net.relay("wss://idx.example").seed([meta]);
-      const reqs = () =>
-        net
-          .relay("wss://idx.example")
-          .clientMessages()
-          .filter((m) => Array.isArray(m) && m[0] === "REQ").length;
+      const reqs = () => net.relay("wss://idx.example").clientMessages().filter(isReq).length;
 
       const loaders = createLoaders({ pool, relays: ["wss://idx.example"], index });
       const first = await loaders.profile(keys.publicKey);
@@ -533,16 +558,17 @@ describe("loaders on the reactive index (issue #136)", () => {
       // a fetched 10002 feeds gossip without a manual observe()
       const relayList = await client.loaders.relayList(keys.publicKey);
       expect(relayList.event?.id).toBe(list.id);
-      expect(client.gossip.outboxRelays(keys.publicKey)).toEqual(["wss://out.example/"]);
+      expect(client.gossip.outboxRelays(keys.publicKey)).toStrictEqual(["wss://out.example/"]);
 
       // a fetched profile lands in persistent storage after the flush
       const user = await client.loaders.profile(keys.publicKey);
       expect(user.event?.id).toBe(meta.id);
-      const stored = async () => (await client.storage.query([{ ids: [meta.id] }])).length === 1;
-      for (let i = 0; i < 100 && !(await stored()); i++) {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-      }
-      expect(await stored()).toBe(true);
+      const stored = async (): Promise<boolean> => {
+        const rows = await client.storage.query([{ ids: [meta.id] }]);
+        return rows.length === 1;
+      };
+      await waitUntilAsync(stored);
+      await expect(stored()).resolves.toBe(true);
       await client.shutdown();
     } finally {
       net.close();

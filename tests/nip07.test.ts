@@ -1,15 +1,20 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   EventBuilder,
   Keys,
   Nip07Signer,
   getWindowNostr,
   isNip07Available,
-  type WindowNostr,
   verifyEvent,
 } from "../src/index.ts";
+import type { WindowNostr } from "../src/index.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
+
+const tick = async (): Promise<void> => {
+  await Promise.resolve();
+};
 
 describe("Nip07Signer", () => {
   test("isNip07Available is false without provider", () => {
@@ -21,9 +26,11 @@ describe("Nip07Signer", () => {
     const keys = Keys.fromSecretKey(SK);
     const provider: WindowNostr = {
       async getPublicKey() {
+        await tick();
         return keys.publicKey;
       },
       async signEvent(template) {
+        await tick();
         return EventBuilder.textNote(template.content)
           .kind(template.kind)
           .tags(template.tags.map((t) => [...t]))
@@ -32,22 +39,24 @@ describe("Nip07Signer", () => {
       },
       nip04: {
         async encrypt() {
+          await tick();
           return "enc";
         },
         async decrypt() {
+          await tick();
           return "plain";
         },
       },
     };
 
     const signer = new Nip07Signer(provider);
-    expect(await signer.getPublicKey()).toBe(keys.publicKey);
+    await expect(signer.getPublicKey()).resolves.toBe(keys.publicKey);
 
     const event = await EventBuilder.textNote("via nip07").createdAt(42).sign(signer);
     expect(event.pubkey).toBe(keys.publicKey);
     expect(verifyEvent(event)).toBe(true);
-    expect(await signer.nip04Encrypt!(keys.publicKey, "x")).toBe("enc");
-    expect(await signer.nip04Decrypt!(keys.publicKey, "y")).toBe("plain");
+    await expect(signer.nip04Encrypt(keys.publicKey, "x")).resolves.toBe("enc");
+    await expect(signer.nip04Decrypt(keys.publicKey, "y")).resolves.toBe("plain");
   });
 
   test("throws when provider missing", async () => {
@@ -59,9 +68,11 @@ describe("Nip07Signer", () => {
     const keys = Keys.fromSecretKey(SK);
     const provider: WindowNostr = {
       async getPublicKey() {
+        await tick();
         return keys.publicKey;
       },
       async signEvent() {
+        await tick();
         return EventBuilder.textNote("other").createdAt(1).signWithKeys(keys);
       },
     };
@@ -75,9 +86,11 @@ describe("Nip07Signer", () => {
     const keys = Keys.fromSecretKey(SK);
     const provider: WindowNostr = {
       async getPublicKey() {
+        await tick();
         return keys.publicKey;
       },
       async signEvent(template) {
+        await tick();
         return EventBuilder.textNote(template.content)
           .kind(template.kind)
           .tags([])
@@ -86,6 +99,6 @@ describe("Nip07Signer", () => {
       },
     };
     const signer = new Nip07Signer(provider);
-    await expect(signer.nip44Encrypt!(keys.publicKey, "x")).rejects.toThrow(/nip44/);
+    await expect(signer.nip44Encrypt(keys.publicKey, "x")).rejects.toThrow(/nip44/);
   });
 });

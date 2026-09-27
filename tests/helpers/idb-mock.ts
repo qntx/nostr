@@ -1,24 +1,27 @@
 /**
- * Minimal in-memory IndexedDB factory for unit tests (no browser).
- * Installs on `globalThis.indexedDB` / `IDBKeyRange` and returns an uninstall handle.
+ * Minimal in-memory IndexedDB factory for unit tests (no browser). Installs on
+ * `globalThis.indexedDB` / `IDBKeyRange` and returns an uninstall handle.
  */
 
+// oxlint-disable-next-line typescript/no-restricted-types -- mirrors IndexedDB, where request.error and handlers are null
+type Nullable<T> = T | null;
+
 export type IdbMock = {
-  uninstall(): void;
-  eventsGetAllCount(): number;
-  cursorVisitCount(): number;
-  readwriteTransactions(): string[][];
-  resetStats(): void;
+  uninstall: () => void;
+  eventsGetAllCount: () => number;
+  cursorVisitCount: () => number;
+  readwriteTransactions: () => string[][];
+  resetStats: () => void;
   /** Fail the next Nth `get` after this call (1-based). Restores tx snapshot on abort. */
-  failGetOnCall(n: number, error?: Error | null): void;
+  failGetOnCall: (n: number, error?: Nullable<Error>) => void;
   /** Fail the next `indexedDB.open` with this `req.error` (null exercises the fallback). */
-  failOpen(error: Error | null): void;
+  failOpen: (error: Nullable<Error>) => void;
   /** Fail the next `openCursor` with this `req.error` (null exercises the fallback). */
-  failCursor(error: Error | null): void;
+  failCursor: (error: Nullable<Error>) => void;
   /** Fail the next transaction complete with onabort/onerror (null exercises the fallback). */
-  failNextTxComplete(kind: "abort" | "error", error: Error | null): void;
+  failNextTxComplete: (kind: "abort" | "error", error: Nullable<Error>) => void;
   /** Park the Nth `get` (1-based, after this call) until `release()`. */
-  gateGetOnCall(n: number): { release(): void };
+  gateGetOnCall: (n: number) => { release: () => void };
 };
 
 type Row = Record<string, unknown>;
@@ -40,10 +43,10 @@ export function installIdbMock(): IdbMock {
     readwrite: [] as string[][],
     getCalls: 0,
     failGetOn: undefined as number | undefined,
-    failGetError: undefined as Error | null | undefined,
-    failOpenError: undefined as Error | null | undefined,
-    failCursorError: undefined as Error | null | undefined,
-    failTx: undefined as { kind: "abort" | "error"; error: Error | null } | undefined,
+    failGetError: undefined as Nullable<Error> | undefined,
+    failOpenError: undefined as Nullable<Error> | undefined,
+    failCursorError: undefined as Nullable<Error> | undefined,
+    failTx: undefined as { kind: "abort" | "error"; error: Nullable<Error> } | undefined,
     gateOn: undefined as number | undefined,
     getGate: undefined as Promise<void> | undefined,
   };
@@ -66,18 +69,19 @@ export function installIdbMock(): IdbMock {
       lowerOpen = false,
       upperOpen = false,
     ): MockKeyRange {
-      if (cmp(lower, upper) > 0)
+      if (cmp(lower, upper) > 0) {
         throw new Error("DataError: lower bound is greater than upper bound");
+      }
       return new MockKeyRange(lower, upper, lowerOpen, upperOpen);
     }
   }
 
   class MockRequest<T = unknown> {
     result!: T;
-    error: Error | null = null;
-    onsuccess: ((ev: unknown) => void) | null = null;
-    onerror: ((ev: unknown) => void) | null = null;
-    onupgradeneeded: ((ev: unknown) => void) | null = null;
+    error: Nullable<Error> = null;
+    onsuccess: Nullable<(ev: unknown) => void> = null;
+    onerror: Nullable<(ev: unknown) => void> = null;
+    onupgradeneeded: Nullable<(ev: unknown) => void> = null;
     complete(value: T) {
       this.result = value;
       queueMicrotask(() => this.onsuccess?.({}));
@@ -85,18 +89,18 @@ export function installIdbMock(): IdbMock {
   }
 
   class MockTx {
-    oncomplete: ((ev: unknown) => void) | null = null;
-    onerror: ((ev: unknown) => void) | null = null;
-    onabort: ((ev: unknown) => void) | null = null;
-    error: Error | null = null;
+    oncomplete: Nullable<(ev: unknown) => void> = null;
+    onerror: Nullable<(ev: unknown) => void> = null;
+    onabort: Nullable<(ev: unknown) => void> = null;
+    error: Nullable<Error> = null;
     #pending = 0;
     #held = false;
     #completed = false;
     #scheduled = false;
     #aborted = false;
-    #backup = new Map<string, Map<string, Row>>();
-    private db: MockDb;
-    private names: string[] | "all";
+    readonly #backup = new Map<string, Map<string, Row>>();
+    private readonly db: MockDb;
+    private readonly names: string[] | "all";
 
     constructor(db: MockDb, names: string[] | "all") {
       this.db = db;
@@ -104,9 +108,13 @@ export function installIdbMock(): IdbMock {
       const list = names === "all" ? db.storeNames() : names;
       for (const name of list) {
         const data = db.getStore(name);
-        if (!data) continue;
+        if (!data) {
+          continue;
+        }
         const copy = new Map<string, Row>();
-        for (const [k, v] of data.rows) copy.set(k, structuredClone(v));
+        for (const [k, v] of data.rows) {
+          copy.set(k, structuredClone(v));
+        }
         this.#backup.set(name, copy);
       }
       this.#queue();
@@ -130,14 +138,22 @@ export function installIdbMock(): IdbMock {
     }
 
     abort() {
-      if (this.#aborted) return;
-      if (this.#completed) throw new Error("InvalidStateError: transaction already finished");
+      if (this.#aborted) {
+        return;
+      }
+      if (this.#completed) {
+        throw new Error("InvalidStateError: transaction already finished");
+      }
       this.#aborted = true;
       for (const [name, rows] of this.#backup) {
         const data = this.db.getStore(name);
-        if (!data) continue;
+        if (!data) {
+          continue;
+        }
         data.rows.clear();
-        for (const [k, v] of rows) data.rows.set(k, structuredClone(v));
+        for (const [k, v] of rows) {
+          data.rows.set(k, structuredClone(v));
+        }
       }
       this.error = new Error("transaction aborted");
       this.#completed = true;
@@ -154,21 +170,29 @@ export function installIdbMock(): IdbMock {
     }
 
     #queue() {
-      if (this.#scheduled) return;
+      if (this.#scheduled) {
+        return;
+      }
       this.#scheduled = true;
       // Real IDB commits at a task boundary; a microtask tick would complete
       // the tx before microtask-chained follow-up requests are issued.
       setTimeout(() => {
         this.#scheduled = false;
-        if (this.#completed || this.#held || this.#pending > 0) return;
+        if (this.#completed || this.#held || this.#pending > 0) {
+          return;
+        }
         if (stats.failTx) {
           const fail = stats.failTx;
           stats.failTx = undefined;
           for (const [name, rows] of this.#backup) {
             const data = this.db.getStore(name);
-            if (!data) continue;
+            if (!data) {
+              continue;
+            }
             data.rows.clear();
-            for (const [k, v] of rows) data.rows.set(k, structuredClone(v));
+            for (const [k, v] of rows) {
+              data.rows.set(k, structuredClone(v));
+            }
           }
           this.error = fail.error;
           this.#completed = true;
@@ -190,15 +214,17 @@ export function installIdbMock(): IdbMock {
         throw new Error(`store ${name} not in transaction`);
       }
       const data = this.db.getStore(name);
-      if (!data) throw new Error(`store ${name} not found`);
+      if (!data) {
+        throw new Error(`store ${name} not found`);
+      }
       return new MockStore(data, this, name);
     }
   }
 
   class MockIndex {
-    private data: StoreData;
-    private keyPath: string | string[];
-    private tx: MockTx;
+    private readonly data: StoreData;
+    private readonly keyPath: string | string[];
+    private readonly tx: MockTx;
 
     constructor(data: StoreData, keyPath: string | string[], tx: MockTx) {
       this.data = data;
@@ -223,9 +249,9 @@ export function installIdbMock(): IdbMock {
   }
 
   class MockStore {
-    private data: StoreData;
-    private tx: MockTx;
-    private name: string;
+    private readonly data: StoreData;
+    private readonly tx: MockTx;
+    private readonly name: string;
 
     constructor(data: StoreData, tx: MockTx, name: string) {
       this.data = data;
@@ -240,14 +266,19 @@ export function installIdbMock(): IdbMock {
 
     index(name: string) {
       const keyPath = this.data.indexes.get(name);
-      if (keyPath === undefined) throw new Error(`index ${name} not found`);
+      if (keyPath === undefined) {
+        throw new Error(`index ${name} not found`);
+      }
       return new MockIndex(this.data, keyPath, this.tx);
     }
 
     put(value: unknown) {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- test rows are caller-shaped
       const row = structuredClone(value) as Row;
       const key = row[this.data.keyPath];
-      if (typeof key !== "string") throw new Error("IndexedDB put missing keyPath value");
+      if (typeof key !== "string") {
+        throw new TypeError("IndexedDB put missing keyPath value");
+      }
       this.data.rows.set(key, row);
     }
 
@@ -256,7 +287,7 @@ export function installIdbMock(): IdbMock {
       this.tx.begin();
       stats.getCalls += 1;
       const fail = stats.failGetOn !== undefined && stats.getCalls === stats.failGetOn;
-      const gated = stats.gateOn === stats.getCalls && stats.getGate !== undefined;
+      const gate = stats.gateOn === stats.getCalls ? stats.getGate : undefined;
       const finish = () => {
         if (this.tx.aborted || this.tx.completed) {
           this.tx.end();
@@ -264,9 +295,9 @@ export function installIdbMock(): IdbMock {
         }
         if (fail) {
           req.error =
-            stats.failGetError !== undefined
-              ? stats.failGetError
-              : new Error("IndexedDB request failed");
+            stats.failGetError === undefined
+              ? new Error("IndexedDB request failed")
+              : stats.failGetError;
           req.onerror?.({});
           this.tx.abort();
           this.tx.end();
@@ -277,10 +308,11 @@ export function installIdbMock(): IdbMock {
         req.onsuccess?.({});
         this.tx.end();
       };
-      if (gated) {
-        void stats.getGate!.then(() => queueMicrotask(finish));
-      } else {
+      if (gate === undefined) {
         queueMicrotask(finish);
+      } else {
+        // oxlint-disable-next-line promise/prefer-await-to-then -- fires a release callback inside a synchronous scheduler
+        void gate.then(() => queueMicrotask(finish));
       }
       return req;
     }
@@ -294,7 +326,9 @@ export function installIdbMock(): IdbMock {
     }
 
     getAll() {
-      if (this.name === "events") stats.eventsGetAll += 1;
+      if (this.name === "events") {
+        stats.eventsGetAll += 1;
+      }
       const req = new MockRequest<Row[]>();
       this.tx.begin();
       queueMicrotask(() => {
@@ -322,7 +356,7 @@ export function installIdbMock(): IdbMock {
       contains: (name: string) => this.rec.stores.has(name),
     };
 
-    private rec: PersistedDb;
+    private readonly rec: PersistedDb;
 
     constructor(rec: PersistedDb) {
       this.rec = rec;
@@ -337,7 +371,9 @@ export function installIdbMock(): IdbMock {
     }
 
     createObjectStore(name: string, options?: { keyPath?: string }) {
-      if (this.rec.stores.has(name)) throw new Error(`store ${name} already exists`);
+      if (this.rec.stores.has(name)) {
+        throw new Error(`store ${name} already exists`);
+      }
       const data: StoreData = {
         keyPath: options?.keyPath ?? "id",
         rows: new Map(),
@@ -349,11 +385,15 @@ export function installIdbMock(): IdbMock {
 
     transaction(storeNames: string | string[], mode: "readonly" | "readwrite" = "readonly") {
       const names = Array.isArray(storeNames) ? storeNames : [storeNames];
-      if (mode === "readwrite") stats.readwrite.push([...names]);
+      if (mode === "readwrite") {
+        stats.readwrite.push([...names]);
+      }
       return new MockTx(this, names);
     }
 
-    close() {}
+    close() {
+      /* empty */
+    }
   }
 
   const indexedDB = {
@@ -405,12 +445,16 @@ export function installIdbMock(): IdbMock {
     },
   };
 
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- installs the mock over the host global
   (globalThis as { indexedDB?: unknown }).indexedDB = indexedDB;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- installs the mock over the host global
   (globalThis as { IDBKeyRange?: unknown }).IDBKeyRange = MockKeyRange;
 
   return {
     uninstall() {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- uninstalls the mock from the host global
       delete (globalThis as { indexedDB?: unknown }).indexedDB;
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- uninstalls the mock from the host global
       delete (globalThis as { IDBKeyRange?: unknown }).IDBKeyRange;
       dbs.clear();
     },
@@ -430,18 +474,18 @@ export function installIdbMock(): IdbMock {
       stats.gateOn = undefined;
       stats.getGate = undefined;
     },
-    failGetOnCall(n: number, error?: Error | null) {
+    failGetOnCall(n: number, error?: Nullable<Error>) {
       stats.getCalls = 0;
       stats.failGetOn = n;
-      stats.failGetError = error !== undefined ? error : new Error("IndexedDB request failed");
+      stats.failGetError = error === undefined ? new Error("IndexedDB request failed") : error;
     },
-    failOpen(error: Error | null) {
+    failOpen(error: Nullable<Error>) {
       stats.failOpenError = error;
     },
-    failCursor(error: Error | null) {
+    failCursor(error: Nullable<Error>) {
       stats.failCursorError = error;
     },
-    failNextTxComplete(kind: "abort" | "error", error: Error | null) {
+    failNextTxComplete(kind: "abort" | "error", error: Nullable<Error>) {
       stats.failTx = { kind, error };
     },
     gateGetOnCall(n: number) {
@@ -462,10 +506,16 @@ export function installIdbMock(): IdbMock {
   };
 }
 
-export function seedIdbV1(dbName: string, events: Array<Record<string, unknown>>): Promise<void> {
-  const factory = (
-    globalThis as unknown as { indexedDB: { open(name: string, version?: number): MockOpenReq } }
-  ).indexedDB;
+export async function seedIdbV1(
+  dbName: string,
+  events: Array<Record<string, unknown>>,
+): Promise<void> {
+  const host =
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the installed mock IS this shape
+    globalThis as unknown as {
+      indexedDB: { open: (name: string, version?: number) => MockOpenReq };
+    };
+  const factory = host.indexedDB;
   return new Promise((resolve, reject) => {
     const req = factory.open(dbName, 1);
     req.onupgradeneeded = () => {
@@ -474,22 +524,26 @@ export function seedIdbV1(dbName: string, events: Array<Record<string, unknown>>
         db.createObjectStore("events", { keyPath: "id" });
       }
     };
+    // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the mock request mirrors IDB on* handlers
     req.onerror = () => reject(req.error ?? new Error("seed v1 open failed"));
     req.onsuccess = () => {
       const db = req.result;
       const tx = db.transaction("events", "readwrite");
       const store = tx.objectStore("events");
-      for (const event of events) store.put(event);
+      for (const event of events) {
+        store.put(event);
+      }
       tx.oncomplete = () => {
         db.close();
         resolve();
       };
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the mock request mirrors IDB on* handlers
       tx.onerror = () => reject(tx.error ?? new Error("seed v1 put failed"));
     };
   });
 }
 
-export function seedIdbV2(
+export async function seedIdbV2(
   dbName: string,
   data: {
     events: Array<Record<string, unknown>>;
@@ -497,9 +551,12 @@ export function seedIdbV2(
     tagRefs: Array<Record<string, unknown>>;
   },
 ): Promise<void> {
-  const factory = (
-    globalThis as unknown as { indexedDB: { open(name: string, version?: number): MockOpenReq } }
-  ).indexedDB;
+  const host =
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the installed mock IS this shape
+    globalThis as unknown as {
+      indexedDB: { open: (name: string, version?: number) => MockOpenReq };
+    };
+  const factory = host.indexedDB;
   return new Promise((resolve, reject) => {
     const req = factory.open(dbName, 2);
     req.onupgradeneeded = () => {
@@ -517,29 +574,40 @@ export function seedIdbV2(
       db.createObjectStore("addresses", { keyPath: "address" });
       db.createObjectStore("tombstones", { keyPath: "key" });
     };
+    // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the mock request mirrors IDB on* handlers
     req.onerror = () => reject(req.error ?? new Error("seed v2 open failed"));
     req.onsuccess = () => {
       const db = req.result;
       const tx = db.transaction(["events", "addresses", "tag_refs"], "readwrite");
       const eventsStore = tx.objectStore("events");
-      for (const event of data.events) eventsStore.put(event);
+      for (const event of data.events) {
+        eventsStore.put(event);
+      }
       const addressesStore = tx.objectStore("addresses");
-      for (const row of data.addresses) addressesStore.put(row);
+      for (const row of data.addresses) {
+        addressesStore.put(row);
+      }
       const tagStore = tx.objectStore("tag_refs");
-      for (const row of data.tagRefs) tagStore.put(row);
+      for (const row of data.tagRefs) {
+        tagStore.put(row);
+      }
       tx.oncomplete = () => {
         db.close();
         resolve();
       };
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the mock request mirrors IDB on* handlers
       tx.onerror = () => reject(tx.error ?? new Error("seed v2 put failed"));
     };
   });
 }
 
-export function seedIdbV3(dbName: string): Promise<void> {
-  const factory = (
-    globalThis as unknown as { indexedDB: { open(name: string, version?: number): MockOpenReq } }
-  ).indexedDB;
+export async function seedIdbV3(dbName: string): Promise<void> {
+  const host =
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the installed mock IS this shape
+    globalThis as unknown as {
+      indexedDB: { open: (name: string, version?: number) => MockOpenReq };
+    };
+  const factory = host.indexedDB;
   return new Promise((resolve, reject) => {
     const req = factory.open(dbName, 3);
     req.onupgradeneeded = () => {
@@ -557,6 +625,7 @@ export function seedIdbV3(dbName: string): Promise<void> {
       db.createObjectStore("addresses", { keyPath: "address" });
       db.createObjectStore("tombstones", { keyPath: "key" });
     };
+    // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the mock request mirrors IDB on* handlers
     req.onerror = () => reject(req.error ?? new Error("seed v3 open failed"));
     req.onsuccess = () => {
       req.result.close();
@@ -567,30 +636,32 @@ export function seedIdbV3(dbName: string): Promise<void> {
 
 type MockOpenReq = {
   result: {
-    objectStoreNames: { contains(name: string): boolean };
-    createObjectStore(
+    objectStoreNames: { contains: (name: string) => boolean };
+    createObjectStore: (
       name: string,
       options?: { keyPath?: string },
-    ): { createIndex(name: string, keyPath: string | string[]): unknown };
-    transaction(
+    ) => { createIndex: (name: string, keyPath: string | string[]) => unknown };
+    transaction: (
       storeNames: string | string[],
       mode?: "readonly" | "readwrite",
-    ): {
-      objectStore(name: string): { put(value: unknown): unknown };
-      oncomplete: ((ev: unknown) => void) | null;
-      onerror: ((ev: unknown) => void) | null;
-      error: Error | null;
+    ) => {
+      objectStore: (name: string) => { put: (value: unknown) => unknown };
+      oncomplete: ((ev: unknown) => void) | undefined;
+      onerror: ((ev: unknown) => void) | undefined;
+      error: Error | undefined;
     };
-    close(): void;
+    close: () => void;
   };
-  error: Error | null;
-  onupgradeneeded: ((ev: unknown) => void) | null;
-  onsuccess: ((ev: unknown) => void) | null;
-  onerror: ((ev: unknown) => void) | null;
+  error: Error;
+  onupgradeneeded: (ev: unknown) => void;
+  onsuccess: (ev: unknown) => void;
+  onerror: (ev: unknown) => void;
 };
 
 function getKeyPath(row: Row, keyPath: string | string[]): unknown {
-  if (typeof keyPath === "string") return row[keyPath];
+  if (typeof keyPath === "string") {
+    return row[keyPath];
+  }
   return keyPath.map((k) => row[k]);
 }
 
@@ -600,8 +671,12 @@ function keyRangeIncludes(
 ): boolean {
   const lo = cmp(key, range.lower);
   const hi = cmp(key, range.upper);
-  if (range.lowerOpen ? lo <= 0 : lo < 0) return false;
-  if (range.upperOpen ? hi >= 0 : hi > 0) return false;
+  if (range.lowerOpen ? lo <= 0 : lo < 0) {
+    return false;
+  }
+  if (range.upperOpen ? hi >= 0 : hi > 0) {
+    return false;
+  }
   return true;
 }
 
@@ -610,16 +685,16 @@ function openCursor(
   keyOf: (row: Row) => unknown,
   range: { lower: unknown; upper: unknown; lowerOpen: boolean; upperOpen: boolean } | undefined,
   direction: "next" | "prev",
-  tx: { begin(): void; end(): void; readonly completed: boolean },
-  stats: { cursorVisits: number; failCursorError?: Error | null },
+  tx: { begin: () => void; end: () => void; readonly completed: boolean },
+  stats: { cursorVisits: number; failCursorError: Nullable<Error> | undefined },
 ) {
   const req = {
     result: undefined as
-      | { key: unknown; primaryKey: unknown; value: Row; continue(): void }
+      | { key: unknown; primaryKey: unknown; value: Row; continue: () => void }
       | undefined,
-    error: null as Error | null,
-    onsuccess: null as ((ev: unknown) => void) | null,
-    onerror: null as ((ev: unknown) => void) | null,
+    error: null as Nullable<Error>,
+    onsuccess: null as Nullable<(ev: unknown) => void>,
+    onerror: null as Nullable<(ev: unknown) => void>,
   };
   if (stats.failCursorError !== undefined) {
     req.error = stats.failCursorError;
@@ -634,16 +709,24 @@ function openCursor(
   const entries: Array<{ key: unknown; primaryKey: unknown; value: Row }> = [];
   for (const row of data.rows.values()) {
     const key = keyOf(row);
-    if (key === undefined) continue;
-    if (range && !keyRangeIncludes(range, key)) continue;
+    if (key === undefined) {
+      continue;
+    }
+    if (range && !keyRangeIncludes(range, key)) {
+      continue;
+    }
     entries.push({ key, primaryKey: row[data.keyPath], value: row });
   }
   entries.sort((a, b) => {
     const c = cmp(a.key, b.key);
-    if (c !== 0) return c;
+    if (c !== 0) {
+      return c;
+    }
     return cmp(a.primaryKey, b.primaryKey);
   });
-  if (direction === "prev") entries.reverse();
+  if (direction === "prev") {
+    entries.reverse();
+  }
 
   let pos = 0;
   const emit = () => {
@@ -654,7 +737,10 @@ function openCursor(
       return;
     }
     stats.cursorVisits += 1;
-    const entry = entries[pos]!;
+    const entry = entries[pos];
+    if (entry === undefined) {
+      return;
+    }
     req.result = {
       key: entry.key,
       primaryKey: entry.primaryKey,
@@ -677,17 +763,27 @@ function openCursor(
 }
 
 function cmp(a: unknown, b: unknown): number {
-  if (a === b) return 0;
+  if (a === b) {
+    return 0;
+  }
   const ra = typeRank(a);
   const rb = typeRank(b);
-  if (ra !== rb) return ra - rb;
-  if (typeof a === "number" && typeof b === "number") return a < b ? -1 : a > b ? 1 : 0;
-  if (typeof a === "string" && typeof b === "string") return a < b ? -1 : a > b ? 1 : 0;
+  if (ra !== rb) {
+    return ra - rb;
+  }
+  if (typeof a === "number" && typeof b === "number") {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+  if (typeof a === "string" && typeof b === "string") {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
   if (Array.isArray(a) && Array.isArray(b)) {
     const n = Math.min(a.length, b.length);
     for (let i = 0; i < n; i++) {
       const c = cmp(a[i], b[i]);
-      if (c !== 0) return c;
+      if (c !== 0) {
+        return c;
+      }
     }
     return a.length - b.length;
   }
@@ -695,8 +791,14 @@ function cmp(a: unknown, b: unknown): number {
 }
 
 function typeRank(value: unknown): number {
-  if (typeof value === "number") return 1;
-  if (typeof value === "string") return 2;
-  if (Array.isArray(value)) return 3;
+  if (typeof value === "number") {
+    return 1;
+  }
+  if (typeof value === "string") {
+    return 2;
+  }
+  if (Array.isArray(value)) {
+    return 3;
+  }
   return 0;
 }

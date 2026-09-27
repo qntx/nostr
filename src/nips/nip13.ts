@@ -1,16 +1,18 @@
 /**
- * NIP-13: Proof of Work.
- * Does not import signer, relay, or client. Does not sign.
+ * NIP-13: Proof of Work. Does not import signer, relay, or client. Does not sign.
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/13.md
  */
 import { sha256 } from "@noble/hashes/sha2.js";
-import { NostrError } from "../core/error.ts";
-import { serializeEvent, type UnsignedEvent } from "../core/event.ts";
-import { bytesToHex, isHex32, utf8Encoder } from "../core/util.ts";
+
 import { abortReason } from "../core/abort.ts";
+import { NostrError } from "../core/error.ts";
+import { serializeEvent } from "../core/event.ts";
+import type { UnsignedEvent } from "../core/event.ts";
+import { bytesToHex, isHex32, utf8Encoder } from "../core/util.ts";
 
 export class Nip13Error extends NostrError {
+  override name = "Nip13Error";
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
   }
@@ -30,7 +32,7 @@ export function getPow(idOrHash: string | Uint8Array): number {
     }
     let count = 0;
     for (let i = 0; i < idOrHash.length; i += 8) {
-      const chunk = Number.parseInt(idOrHash.substring(i, i + 8), 16);
+      const chunk = Number.parseInt(idOrHash.slice(i, i + 8), 16);
       if (chunk === 0) {
         count += 32;
       } else {
@@ -42,8 +44,7 @@ export function getPow(idOrHash: string | Uint8Array): number {
   }
 
   let count = 0;
-  for (let i = 0; i < idOrHash.length; i++) {
-    const byte = idOrHash[i]!;
+  for (const byte of idOrHash) {
     if (byte === 0) {
       count += 8;
     } else {
@@ -55,8 +56,8 @@ export function getPow(idOrHash: string | Uint8Array): number {
 }
 
 /**
- * Returns a new unsigned event with nonce tag and computed id.
- * Does not mutate input. Yields every `yieldEvery` hashes.
+ * Returns a new unsigned event with nonce tag and computed id. Does not mutate input. Yields every
+ * `yieldEvery` hashes.
  */
 export async function minePow(
   unsigned: UnsignedEvent,
@@ -79,7 +80,7 @@ export async function minePow(
   let iterations = 0;
 
   while (true) {
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       throw abortReason(signal);
     }
 
@@ -98,8 +99,9 @@ export async function minePow(
     iterations++;
     if (iterations >= yieldEvery) {
       iterations = 0;
+      // oxlint-disable-next-line no-await-in-loop -- the yield is part of each mining round
       await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0);
+        setTimeout(resolve);
       });
     }
   }

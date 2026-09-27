@@ -1,29 +1,39 @@
 /**
- * Test-only globals installed before the library modules evaluate, for the raw
- * Hermes CLI (`hermes`, no RN host). Each shim mirrors what an Expo / React
- * Native runtime provides in production — the library documents these as
- * runtime requirements and ships no fallbacks.
+ * Test-only globals installed before the library modules evaluate, for the raw Hermes CLI
+ * (`hermes`, no RN host). Each shim mirrors what an Expo / React Native runtime provides in
+ * production — the library documents these as runtime requirements and ships no fallbacks.
  */
 
-import { Buffer as BufferPolyfill } from "buffer";
+import { Buffer as BufferPolyfill } from "node:buffer";
+
 import { URL as WhatwgURL, URLSearchParams as WhatwgURLSearchParams } from "whatwg-url";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const g = globalThis as any;
+const has = (name: string): boolean => Reflect.get(globalThis, name) !== undefined;
+const install = (name: string, value: unknown): void => {
+  if (!has(name)) {
+    Reflect.set(globalThis, name, value);
+  }
+};
+const read = (name: string): unknown => Reflect.get(globalThis, name);
 
 /**
- * Referenced by smoke.ts so bundlers keep this module (and its ordering):
- * package.json whitelists only `*.wasm` in `sideEffects`, so bun/esbuild would
- * tree-shake a pure side-effect module and skip installation entirely.
+ * Referenced by smoke.ts so bundlers keep this module (and its ordering): package.json whitelists
+ * only `*.wasm` in `sideEffects`, so bun/esbuild would tree-shake a pure side-effect module and
+ * skip installation entirely.
  */
-export const hermesGlobalsInstalled: boolean = true;
+export const hermesGlobalsInstalled = true;
 
 // crypto.getRandomValues — production: react-native-quick-crypto / expo-crypto
 // polyfill. xorshift PRNG: test-grade only, not cryptographic.
-if (typeof g.crypto === "undefined") g.crypto = {};
-if (typeof g.crypto.getRandomValues !== "function") {
+install("crypto", {});
+const cryptoHost = read("crypto");
+if (
+  typeof cryptoHost === "object" &&
+  cryptoHost !== null &&
+  typeof Reflect.get(cryptoHost, "getRandomValues") !== "function"
+) {
   let s0 = 0x9e3779b9 ^ Date.now();
-  g.crypto.getRandomValues = <T extends { length: number; [k: number]: number }>(arr: T): T => {
+  const getRandomValues = <T extends { length: number; [k: number]: number }>(arr: T): T => {
     for (let i = 0; i < arr.length; i++) {
       s0 ^= s0 << 13;
       s0 ^= s0 >>> 17;
@@ -32,17 +42,21 @@ if (typeof g.crypto.getRandomValues !== "function") {
     }
     return arr;
   };
+  Reflect.set(cryptoHost, "getRandomValues", getRandomValues);
 }
 
 // TextDecoder — production: Expo ships a UTF-8 TextDecoder on native (Hermes
 // itself ships TextEncoder only). Minimal UTF-8 decoder: invalid, truncated,
 // overlong, surrogate, and out-of-range sequences each decode to U+FFFD,
 // consuming the longest well-formed prefix of the ill-formed subpart.
-if (typeof g.TextDecoder === "undefined") {
-  g.TextDecoder = class {
-    readonly encoding = "utf-8";
+if (!has("TextDecoder")) {
+  class HermesTextDecoder {
+    readonly encoding = "utf8";
+    // oxlint-disable-next-line no-restricted-types -- decode(null) is part of the WebIDL signature
     decode(input?: ArrayBuffer | ArrayBufferView | null): string {
-      if (!input) return "";
+      if (input === undefined || input === null) {
+        return "";
+      }
       const bytes =
         input instanceof ArrayBuffer
           ? new Uint8Array(input)
@@ -50,9 +64,12 @@ if (typeof g.TextDecoder === "undefined") {
       let out = "";
       let i = 0;
       while (i < bytes.length) {
-        const b0 = bytes[i]!;
+        const b0 = bytes[i];
+        if (b0 === undefined) {
+          break;
+        }
         if (b0 < 0x80) {
-          out += String.fromCharCode(b0);
+          out += String.fromCodePoint(b0);
           i += 1;
           continue;
         }
@@ -61,22 +78,25 @@ if (typeof g.TextDecoder === "undefined") {
         let len: number;
         let lo = 0x80;
         let hi = 0xbf;
-        if (b0 >= 0xc2 && b0 <= 0xdf) len = 2;
-        else if (b0 === 0xe0) {
+        if (b0 >= 0xc2 && b0 <= 0xdf) {
+          len = 2;
+        } else if (b0 === 0xe0) {
           len = 3;
           lo = 0xa0;
         } else if (b0 === 0xed) {
           len = 3;
           hi = 0x9f;
-        } else if (b0 >= 0xe1 && b0 <= 0xef) len = 3;
-        else if (b0 === 0xf0) {
+        } else if (b0 >= 0xe1 && b0 <= 0xef) {
+          len = 3;
+        } else if (b0 === 0xf0) {
           len = 4;
           lo = 0x90;
         } else if (b0 === 0xf4) {
           len = 4;
           hi = 0x8f;
-        } else if (b0 >= 0xf1 && b0 <= 0xf3) len = 4;
-        else {
+        } else if (b0 >= 0xf1 && b0 <= 0xf3) {
+          len = 4;
+        } else {
           // C0/C1, F5..FF, or a stray continuation byte.
           out += "\uFFFD";
           i += 1;
@@ -110,35 +130,35 @@ if (typeof g.TextDecoder === "undefined") {
             cp = ((b0 & 0x07) << 18) | ((b1 & 0x3f) << 12) | ((b2 & 0x3f) << 6) | (b3 & 0x3f);
           }
         }
-        if (cp > 0xffff) {
-          cp -= 0x10000;
-          out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
-        } else {
-          out += String.fromCharCode(cp);
-        }
+        out += String.fromCodePoint(cp);
         i += len;
       }
       return out;
     }
-  };
+  }
+  Reflect.set(globalThis, "TextDecoder", HermesTextDecoder);
 }
 
 // queueMicrotask — production: React Native. Mapped onto the promise job
 // queue: identical microtask semantics.
-if (typeof g.queueMicrotask !== "function") {
-  g.queueMicrotask = (fn: () => void): void => {
-    void Promise.resolve().then(fn);
-  };
+const runOnMicrotask = (fn: () => void): void => {
+  void (async (): Promise<void> => {
+    await Promise.resolve();
+    fn();
+  })();
+};
+if (typeof read("queueMicrotask") !== "function") {
+  Reflect.set(globalThis, "queueMicrotask", runOnMicrotask);
 }
 
 // URL / URLSearchParams — production: Expo ships spec-compliant globals built
 // on its whatwg-url fork; this shim uses the upstream `whatwg-url` package.
 // Pinned to 7.x: whatwg-url >= 8 ships webidl2js-built sources that parse
 // `async function*`, which Hermes V1 rejects at parse time.
-if (typeof g.URL === "undefined") g.URL = WhatwgURL;
-if (typeof g.URLSearchParams === "undefined") g.URLSearchParams = WhatwgURLSearchParams;
+install("URL", WhatwgURL);
+install("URLSearchParams", WhatwgURLSearchParams);
 
 // Buffer — not a documented runtime requirement; only whatwg-url's host
 // parser touches it (`Buffer.from`/`alloc`/`toString`). Installed solely to
 // satisfy the test shim above, via the browser `buffer` package.
-if (typeof g.Buffer === "undefined") g.Buffer = BufferPolyfill;
+install("Buffer", BufferPolyfill);

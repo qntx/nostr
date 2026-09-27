@@ -6,6 +6,7 @@ import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { concatBytes, randomBytes } from "@noble/hashes/utils.js";
 import { base64 } from "@scure/base";
+
 import { CryptoError } from "../core/error.ts";
 import {
   assertHex32,
@@ -20,24 +21,25 @@ const maxPlaintextSize = 0xffffffff;
 const extendedPrefixThreshold = 0x10000;
 
 /**
- * Default decode-side payload cap: the base64 length of a payload carrying
- * exactly 1 MiB (0x100000 bytes) of plaintext — version(1) + nonce(32) +
- * extended prefix(6) + calcPaddedLen(1 MiB) + mac(32) bytes. NIP-44 asks
- * implementations to enforce their own maximum payload size; relays cap
- * events far below this. Raise it via `opts.maxPayloadChars` in `decrypt`/
- * `decryptFromPubkey` for large local payloads.
+ * Default decode-side payload cap: the base64 length of a payload carrying exactly 1 MiB (0x100000
+ * bytes) of plaintext — version(1) + nonce(32) + extended prefix(6) + calcPaddedLen(1 MiB) +
+ * mac(32) bytes. NIP-44 asks implementations to enforce their own maximum payload size; relays cap
+ * events far below this. Raise it via `opts.maxPayloadChars` in `decrypt`/ `decryptFromPubkey` for
+ * large local payloads.
  */
 export const DEFAULT_MAX_PAYLOAD_CHARS: number = Math.ceil((71 + calcPaddedLen(0x100000)) / 3) * 4;
 
 function assert32(bytes: Uint8Array, label: string): void {
-  if (bytes.length !== 32) throw new CryptoError(`${label} must be 32 bytes`);
+  if (bytes.length !== 32) {
+    throw new CryptoError(`${label} must be 32 bytes`);
+  }
 }
 
 export function getConversationKey(privkeyA: Uint8Array, pubkeyB: string): Uint8Array {
   assertSecretKeyBytes(privkeyA);
   assertHex32(pubkeyB, "public key");
   const sharedX = secp256k1
-    .getSharedSecret(privkeyA, hexToBytes("02" + pubkeyB.toLowerCase()))
+    .getSharedSecret(privkeyA, hexToBytes(`02${pubkeyB.toLowerCase()}`))
     .subarray(1, 33);
   return hkdf_extract(sha256, sharedX, utf8Encoder.encode("nip44-v2"));
 }
@@ -58,8 +60,12 @@ export function getMessageKeys(
 }
 
 export function calcPaddedLen(len: number): number {
-  if (!Number.isSafeInteger(len) || len < 1) throw new CryptoError("expected positive integer");
-  if (len <= 32) return 32;
+  if (!Number.isSafeInteger(len) || len < 1) {
+    throw new CryptoError("expected positive integer");
+  }
+  if (len <= 32) {
+    return 32;
+  }
   const nextPower = 2 ** (Math.floor(Math.log2(len - 1)) + 1);
   const chunk = nextPower <= 256 ? 32 : nextPower / 8;
   return chunk * (Math.floor((len - 1) / chunk) + 1);
@@ -104,7 +110,9 @@ function unpad(padded: Uint8Array): string {
   let prefixLen: number;
   if (firstTwo === 0) {
     unpaddedLen = dv.getUint32(2);
-    if (unpaddedLen < extendedPrefixThreshold) throw new CryptoError("invalid padding");
+    if (unpaddedLen < extendedPrefixThreshold) {
+      throw new CryptoError("invalid padding");
+    }
     prefixLen = 6;
   } else {
     unpaddedLen = firstTwo;
@@ -123,7 +131,9 @@ function unpad(padded: Uint8Array): string {
 }
 
 function hmacAad(key: Uint8Array, message: Uint8Array, aad: Uint8Array): Uint8Array {
-  if (aad.length !== 32) throw new CryptoError("AAD associated data must be 32 bytes");
+  if (aad.length !== 32) {
+    throw new CryptoError("AAD associated data must be 32 bytes");
+  }
   return hmac(sha256, key, concatBytes(aad, message));
 }
 
@@ -135,21 +145,33 @@ function decodePayload(
   ciphertext: Uint8Array;
   mac: Uint8Array;
 } {
-  if (typeof payload !== "string") throw new CryptoError("payload must be a valid string");
-  if (payload[0] === "#") throw new CryptoError("unknown encryption version");
+  if (typeof payload !== "string") {
+    throw new CryptoError("payload must be a valid string");
+  }
+  if (payload.startsWith("#")) {
+    throw new CryptoError("unknown encryption version");
+  }
   if (payload.length < 132 || payload.length > maxPayloadChars) {
-    throw new CryptoError("invalid payload length: " + payload.length);
+    throw new CryptoError(`invalid payload length: ${payload.length}`);
   }
   let data: Uint8Array;
   try {
     data = base64.decode(payload);
   } catch (error) {
     throw new CryptoError(
-      "invalid base64: " + (error instanceof Error ? error.message : "decode failed"),
+      `invalid base64: ${error instanceof Error ? error.message : "decode failed"}`,
     );
   }
-  if (data.length < 99) throw new CryptoError("invalid data length: " + data.length);
-  if (data[0] !== 2) throw new CryptoError("unknown encryption version " + data[0]);
+  if (data.length < 99) {
+    throw new CryptoError(`invalid data length: ${data.length}`);
+  }
+  const version = data.at(0);
+  if (version === undefined) {
+    throw new CryptoError("invalid data length");
+  }
+  if (version !== 2) {
+    throw new CryptoError(`unknown encryption version ${version}`);
+  }
   return {
     nonce: data.subarray(1, 33),
     ciphertext: data.subarray(33, -32),
@@ -180,7 +202,9 @@ export function decrypt(
   );
   const { chacha_key, chacha_nonce, hmac_key } = getMessageKeys(conversationKey, nonce);
   const calculatedMac = hmacAad(hmac_key, ciphertext, nonce);
-  if (!equalBytes(calculatedMac, mac)) throw new CryptoError("invalid MAC");
+  if (!equalBytes(calculatedMac, mac)) {
+    throw new CryptoError("invalid MAC");
+  }
   const padded = chacha20(chacha_key, chacha_nonce, ciphertext);
   return unpad(padded);
 }
