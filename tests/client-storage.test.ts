@@ -1,10 +1,106 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
-import { Client, EventBuilder, Gossip, Kind, Keys, KeysSigner, MemoryEventStore, relayListEventBuilder, StorageError, useWebSocketImplementation } from '../src/index.ts';
-import type { EventStore, PutResult } from '../src/index.ts';
+import {
+  Client,
+  EventBuilder,
+  Gossip,
+  Kind,
+  Keys,
+  KeysSigner,
+  MemoryEventStore,
+  relayListEventBuilder,
+  StorageError,
+  useWebSocketImplementation,
+} from "../src/index.ts";
+import type { Event, EventStore } from "../src/index.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
+
+const gateOnce = (armed: { done: boolean }, gate: Promise<void>): Promise<void> | undefined => {
+  if (armed.done) {
+    return undefined;
+  }
+  armed.done = true;
+  return gate;
+};
+
+const answerRelayListReqs = (list: Event): void => {
+  for (const ws of MockWebSocket.instances) {
+    for (const raw of ws.sent) {
+      const msg = JSON.parse(raw) as unknown[];
+      if (msg[0] !== "REQ") {
+        continue;
+      }
+      const filter = msg[2] as { kinds?: number[] };
+      if (filter.kinds?.includes(Kind.RelayList)) {
+        ws.receive(JSON.stringify(["EVENT", msg[1], list]));
+      }
+      ws.receive(JSON.stringify(["EOSE", msg[1]]));
+    }
+  }
+};
+
+const delegatingStore = (
+  inner: MemoryEventStore,
+  overrides: Partial<EventStore> = {},
+): EventStore => ({
+  put: async (event) => inner.put(event),
+  putMany: async (events) => inner.putMany(events),
+  get: async (id) => inner.get(id),
+  query: async (filters) => inner.query(filters),
+  count: async (filters) => inner.count(filters),
+  negentropyItems: async (filter) => inner.negentropyItems(filter),
+  remove: async (ids) => inner.remove(ids),
+  clear: async () => inner.clear(),
+  getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+  setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+  ...overrides,
+});
+
+function stubStore(overrides: Partial<EventStore> = {}): EventStore {
+  return {
+    put: async () => {
+      await Promise.resolve();
+      return "accepted";
+    },
+    putMany: async (events) => {
+      await Promise.resolve();
+      return events.map(() => "accepted");
+    },
+    get: async () => {
+      await Promise.resolve();
+      return undefined;
+    },
+    query: async () => {
+      await Promise.resolve();
+      return [];
+    },
+    count: async () => {
+      await Promise.resolve();
+      return 0;
+    },
+    negentropyItems: async () => {
+      await Promise.resolve();
+      return [];
+    },
+    remove: async () => {
+      await Promise.resolve();
+      return 0;
+    },
+    clear: async () => {
+      await Promise.resolve();
+    },
+    getOutboxBound: async () => {
+      await Promise.resolve();
+      return undefined;
+    },
+    setOutboxBound: async () => {
+      await Promise.resolve();
+    },
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   MockWebSocket.reset();
@@ -28,7 +124,7 @@ describe("Client storage + observe", () => {
 
     await client.connect();
     const publishP = client.publish(EventBuilder.textNote("stored").createdAt(10));
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const ws = MockWebSocket.last();
     const eventMsg = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "EVENT") as [
       string,
@@ -38,7 +134,7 @@ describe("Client storage + observe", () => {
     await publishP;
 
     // allow fire-and-forget put
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((resolve) => setTimeout(resolve, 5));
     const local = await client.queryLocal({ kinds: [Kind.TextNote] });
     expect(local).toHaveLength(1);
     expect(local[0]!.content).toBe("stored");
@@ -64,7 +160,7 @@ describe("Client storage + observe", () => {
       { kinds: [1], authors: [keys.publicKey] },
       { timeoutMs: 2000 },
     );
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const ws = MockWebSocket.last();
     const req = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [string, string];
     ws.receive(JSON.stringify(["EVENT", req[1], note]));
@@ -72,7 +168,7 @@ describe("Client storage + observe", () => {
     const remote = await fetchP;
     expect(remote).toHaveLength(1);
 
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await expect(store.get(note.id)).resolves.toBeDefined();
 
     // Second fetch with localFirst should return stored event even without network reply
@@ -81,7 +177,7 @@ describe("Client storage + observe", () => {
       { kinds: [1], authors: [keys.publicKey] },
       { timeoutMs: 500, localFirst: true },
     );
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const ws2 = MockWebSocket.last();
     const reqs = ws2.sent.map((s) => JSON.parse(s)).filter((m) => m[0] === "REQ");
     const lastReq = reqs.at(-1) as [string, string];
@@ -98,21 +194,21 @@ describe("Client storage + observe", () => {
     const inner = new MemoryEventStore();
     let queryCalls = 0;
     const seen: StorageError[] = [];
-    const store: EventStore = {
-      put:  async (event) => inner.put(event),
-      putMany:  async (events) => inner.putMany(events),
-      get:  async (id) => inner.get(id),
-      query: async () => {
+    const store: EventStore = stubStore({
+      put: async (event) => inner.put(event),
+      putMany: async (events) => inner.putMany(events),
+      get: async (id) => inner.get(id),
+      query: () => {
         queryCalls += 1;
         throw new Error("query boom");
       },
-      count:  async (filters) => inner.count(filters),
-      negentropyItems:  async (filter) => inner.negentropyItems(filter),
-      remove:  async (ids) => inner.remove(ids),
-      clear:  async () => inner.clear(),
-      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
-    };
+      count: async (filters) => inner.count(filters),
+      negentropyItems: async (filter) => inner.negentropyItems(filter),
+      remove: async (ids) => inner.remove(ids),
+      clear: async () => inner.clear(),
+      getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+      setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+    });
     const client = Client.builder()
       .storage(store)
       .onstorageerror((err) => {
@@ -128,7 +224,7 @@ describe("Client storage + observe", () => {
       { kinds: [1], authors: [keys.publicKey] },
       { timeoutMs: 2000, localFirst: true },
     );
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const ws = MockWebSocket.last();
     const req = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [string, string];
     ws.receive(JSON.stringify(["EVENT", req[1], note]));
@@ -162,12 +258,12 @@ describe("Client storage + observe", () => {
       onevent: (e) => got.push(e.id),
     });
 
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const ws = MockWebSocket.last();
     const req = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [string, string];
     ws.receive(JSON.stringify(["EVENT", req[1], note]));
     expect(got).toStrictEqual([note.id]);
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await expect(store.get(note.id)).resolves.toBeDefined();
     sub.close();
     await client.shutdown();
@@ -189,19 +285,8 @@ describe("Client storage + observe", () => {
 
     // kick hydrate (will fetch); respond with list
     const hydrateP = client.hydrateGossip([keys.publicKey]);
-    await new Promise((r) => setTimeout(r, 15));
-    for (const ws of MockWebSocket.instances) {
-      for (const raw of ws.sent) {
-        const msg = JSON.parse(raw) as unknown[];
-        if (msg[0] !== "REQ") {continue;}
-        const subId = msg[1] as string;
-        const filter = msg[2] as { kinds?: number[] };
-        if (filter.kinds?.includes(Kind.RelayList)) {
-          ws.receive(JSON.stringify(["EVENT", subId, list]));
-        }
-        ws.receive(JSON.stringify(["EOSE", subId]));
-      }
-    }
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    answerRelayListReqs(list);
     await hydrateP;
 
     expect(gossip.outboxRelays(keys.publicKey).length).toBeGreaterThan(0);
@@ -222,7 +307,7 @@ describe("Client storage + observe", () => {
       .build();
 
     client.observe(note);
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await expect(store.get(note.id)).resolves.toBeUndefined();
     // gossip still runs for kind 10002 only — text notes are fine
     await client.shutdown();
@@ -235,26 +320,17 @@ describe("Client storage + observe", () => {
     const b = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
     const batches: string[][] = [];
     let putCalls = 0;
-    const store: EventStore = {
+    const store: EventStore = delegatingStore(inner, {
       put: async (event) => {
         putCalls += 1;
         return inner.put(event);
       },
       putMany: async (events) => {
         batches.push(events.map((e) => e.id));
-        const out: PutResult[] = [];
-        for (const event of events) {out.push(await inner.put(event));}
+        const out = await inner.putMany(events);
         return out;
       },
-      get:  async (id) => inner.get(id),
-      query:  async (filters) => inner.query(filters),
-      count:  async (filters) => inner.count(filters),
-      negentropyItems:  async (filter) => inner.negentropyItems(filter),
-      remove:  async (ids) => inner.remove(ids),
-      clear:  async () => inner.clear(),
-      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
-    };
+    });
     const client = Client.builder().storage(store).enableReconnect(false).build();
     client.observe(a);
     client.observe(b);
@@ -271,23 +347,13 @@ describe("Client storage + observe", () => {
     const a = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
     const b = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
     const batches: string[][] = [];
-    const store: EventStore = {
-      put:  async (event) => inner.put(event),
+    const store: EventStore = delegatingStore(inner, {
       putMany: async (events) => {
         batches.push(events.map((e) => e.id));
-        const out: PutResult[] = [];
-        for (const event of events) {out.push(await inner.put(event));}
+        const out = await inner.putMany(events);
         return out;
       },
-      get:  async (id) => inner.get(id),
-      query:  async (filters) => inner.query(filters),
-      count:  async (filters) => inner.count(filters),
-      negentropyItems:  async (filter) => inner.negentropyItems(filter),
-      remove:  async (ids) => inner.remove(ids),
-      clear:  async () => inner.clear(),
-      getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-      setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
-    };
+    });
     const client = Client.builder().storage(store).enableReconnect(false).build();
     client.observeAll([a, b, a]);
     await client.shutdown();
@@ -300,43 +366,22 @@ describe("Client storage + observe", () => {
     const b = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
     let inFlight = 0;
     let maxInFlight = 0;
-    let first = true;
     let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
     const batches: string[][] = [];
-    const store: EventStore = {
-      put: async () => "accepted",
+    const firstCall = { done: false };
+    const store: EventStore = stubStore({
       putMany: async (events) => {
         inFlight += 1;
         maxInFlight = Math.max(maxInFlight, inFlight);
         batches.push(events.map((e) => e.id));
-        if (first) {
-          first = false;
-          await new Promise<void>((resolve) => {
-            releaseFirst = resolve;
-          });
-        }
+        await gateOnce(firstCall, firstGate);
         inFlight -= 1;
         return events.map(() => "accepted");
       },
-      async get() {
-        return undefined;
-      },
-      async query() {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
-    };
+    });
     const client = Client.builder().storage(store).enableReconnect(false).build();
     client.observe(a);
     await Promise.resolve();
@@ -359,38 +404,20 @@ describe("Client storage + observe", () => {
       finish = resolve;
     });
     let putManyDone = false;
-    const store: EventStore = {
-      put: async () => "accepted",
+    const store: EventStore = stubStore({
       putMany: async (events) => {
         await gate;
         putManyDone = true;
         return events.map(() => "accepted");
       },
-      async get() {
-        return undefined;
-      },
-      async query() {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
-    };
+    });
     const client = Client.builder().storage(store).enableReconnect(false).build();
     client.observe(note);
     const done = client.shutdown();
     let shutdownDone = false;
     void done.then(() => {
       shutdownDone = true;
+      return undefined;
     });
     await Promise.resolve();
     await Promise.resolve();
@@ -412,31 +439,12 @@ describe("Client storage + observe", () => {
     const gate = new Promise<void>((resolve) => {
       finish = resolve;
     });
-    const store: EventStore = {
-      put: async () => "accepted",
+    const store: EventStore = stubStore({
       putMany: async (events) => {
         await gate;
         return events.map(() => "accepted");
       },
-      async get() {
-        return undefined;
-      },
-      async query() {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
-    };
+    });
     const client = Client.builder().storage(store).gossip(gossip).enableReconnect(false).build();
     client.observe(list);
     expect(gossip.outboxRelays(keys.publicKey).length).toBeGreaterThan(0);
@@ -451,32 +459,14 @@ describe("Client storage + observe", () => {
     const fn = (err: StorageError) => {
       seen.push(err);
     };
-    const store: EventStore = {
-      async put() {
+    const store: EventStore = stubStore({
+      put() {
         throw new Error("disk full");
       },
-      async putMany() {
+      putMany() {
         throw new Error("disk full");
       },
-      async get() {
-        return undefined;
-      },
-      async query() {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
-    };
+    });
     const client = Client.builder()
       .storage(store)
       .onstorageerror(fn)
@@ -496,32 +486,14 @@ describe("Client storage + observe", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("live").createdAt(1).signWithKeys(keys);
     const seen: StorageError[] = [];
-    const store: EventStore = {
-      async put() {
+    const store: EventStore = stubStore({
+      put() {
         throw new Error("disk full");
       },
-      async putMany() {
+      putMany() {
         throw new Error("disk full");
       },
-      async get() {
-        return undefined;
-      },
-      async query() {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
-    };
+    });
     const client = Client.builder()
       .storage(store)
       .onstorageerror((err) => {
@@ -536,7 +508,7 @@ describe("Client storage + observe", () => {
     const sub = client.subscribe([{ kinds: [1] }], {
       onevent: (e) => got.push(e.id),
     });
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const ws = MockWebSocket.last();
     const req = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [string, string];
     ws.receive(JSON.stringify(["EVENT", req[1], note]));
@@ -551,31 +523,13 @@ describe("Client storage + observe", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("skip").createdAt(1).signWithKeys(keys);
     let putManyCalls = 0;
-    const store: EventStore = {
-      put: async () => "accepted",
+    const store: EventStore = stubStore({
       putMany: async (events) => {
         putManyCalls += 1;
+        await Promise.resolve();
         return events.map(() => "accepted");
       },
-      async get() {
-        return undefined;
-      },
-      async query() {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
-    };
+    });
     const client = Client.builder()
       .storage(store)
       .persistEvents(false)
@@ -590,34 +544,16 @@ describe("Client storage + observe", () => {
   test("onstorageerror omitted does not throw when putMany fails", async () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("x").createdAt(1).signWithKeys(keys);
-    const store: EventStore = {
-      async put() {
+    const store: EventStore = stubStore({
+      put() {
         throw new Error("disk full");
       },
-      async putMany() {
+      putMany() {
         throw new Error("disk full");
       },
-      async get() {
-        return undefined;
-      },
-      async query() {
-        return [];
-      },
-      async count() {
-        return 0;
-      },
-      async negentropyItems() {
-        return [];
-      },
-      async remove() {
-        return 0;
-      },
-      async clear() {},
-      getOutboxBound: async () => undefined,
-      setOutboxBound: async () => {},
-    };
+    });
     const client = Client.builder().storage(store).enableReconnect(false).build();
-    expect(client.onstorageerror).toBeNull();
+    expect(client.onstorageerror).toBeUndefined();
     client.observe(note);
     await client.shutdown();
   });

@@ -1,13 +1,22 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
 import { normalizeURL } from "../src/core/util.ts";
-import { Client, EventBuilder, Kind, Keys, KeysSigner, MemoryEventStore, relayListEventBuilder, finalizeEvent } from '../src/index.ts';
-import type { Event, EventStore, Filter, PutResult } from '../src/index.ts';
+import {
+  Client,
+  EventBuilder,
+  Kind,
+  Keys,
+  KeysSigner,
+  MemoryEventStore,
+  relayListEventBuilder,
+  finalizeEvent,
+} from "../src/index.ts";
+import type { Event, EventStore, Filter, PutResult } from "../src/index.ts";
 import { Nip17Error, dmRelayListEventBuilder } from "../src/nips/nip17.ts";
 import { encryptToPubkey } from "../src/nips/nip44.ts";
 import { createGiftWrap, createRumor, createSeal, eventToJson, wrap } from "../src/nips/nip59.ts";
-import { createFakeRelayNetwork } from '../src/testing/index.ts';
-import type { FakeRelayNetwork } from '../src/testing/index.ts';
+import { createFakeRelayNetwork } from "../src/testing/index.ts";
+import type { FakeRelayNetwork } from "../src/testing/index.ts";
 
 const ALICE_SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const BOB_SK = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -36,7 +45,9 @@ function clientFrames(url: string): unknown[][] {
 function reqFilters(url: string): Filter[] {
   const filters: Filter[] = [];
   for (const msg of clientFrames(url)) {
-    if (msg[0] !== "REQ") {continue;}
+    if (msg[0] !== "REQ") {
+      continue;
+    }
     for (const item of msg.slice(2)) {
       if (!item || typeof item !== "object" || Array.isArray(item)) {
         throw new Error("REQ filter is not an object");
@@ -52,17 +63,52 @@ function giftWrapReqKinds(url: string, recipient: string): number[] {
     const p = f["#p"];
     return Array.isArray(p) && p.includes(recipient);
   });
-  if (hits.length === 0) {throw new Error(`no REQ with #p ${recipient} on ${url}`);}
-  const {kinds} = hits[hits.length - 1]!;
-  if (kinds === undefined) {throw new Error("REQ kinds missing");}
+  if (hits.length === 0) {
+    throw new Error(`no REQ with #p ${recipient} on ${url}`);
+  }
+  const { kinds } = hits.at(-1)!;
+  if (kinds === undefined) {
+    throw new Error("REQ kinds missing");
+  }
   return [...kinds];
+}
+
+const hasPTagArray = (f: Filter): boolean => Array.isArray(f["#p"]);
+
+const sawProgress = (
+  received: ReadonlyArray<unknown>,
+  persisted: ReadonlyArray<string>,
+  id: string,
+  decrypts: number,
+): boolean => received.length > 0 || persisted.includes(id) || decrypts > 0;
+
+const anyResultOk = (w: {
+  results: ReadonlyArray<{ result?: { ok: boolean } | undefined }>;
+}): boolean => w.results.some((r) => r.result?.ok === true);
+
+const firstCallGate = (count: number, gate: Promise<void>): Promise<void> | undefined =>
+  count === 1 ? gate : undefined;
+
+function requireWrapFor(
+  wraps: ReadonlyArray<{ recipient: string; wrap: Event }>,
+  recipient: string,
+): Event {
+  const found = wraps.find((w) => w.recipient === recipient);
+  if (found === undefined) {
+    throw new Error(`missing wrap for ${recipient}`);
+  }
+  return found.wrap;
 }
 
 async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 2000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (await check()) {return;}
-    await new Promise((r) => setTimeout(r, 10));
+    // oxlint-disable-next-line no-await-in-loop -- polling must await each probe
+    if (await check()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("timed out");
 }
@@ -85,21 +131,26 @@ function trackingStore(inner = new MemoryEventStore()): {
 } {
   const persistIds: string[] = [];
   const store: EventStore = {
-    put:  async (event) => inner.put(event),
+    put: async (event) => inner.put(event),
     putMany: async (events) => {
-      for (const event of events) {persistIds.push(event.id);}
+      for (const event of events) {
+        persistIds.push(event.id);
+      }
       const out: PutResult[] = [];
-      for (const event of events) {out.push(await inner.put(event));}
+      for (const event of events) {
+        // oxlint-disable-next-line no-await-in-loop -- forwarding must preserve call order
+        out.push(await inner.put(event));
+      }
       return out;
     },
-    get:  async (id) => inner.get(id),
-    query:  async (filters) => inner.query(filters),
-    count:  async (filters) => inner.count(filters),
-    negentropyItems:  async (filter) => inner.negentropyItems(filter),
-    remove:  async (ids) => inner.remove(ids),
-    clear:  async () => inner.clear(),
-    getOutboxBound:  async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-    setOutboxBound:  async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+    get: async (id) => inner.get(id),
+    query: async (filters) => inner.query(filters),
+    count: async (filters) => inner.count(filters),
+    negentropyItems: async (filter) => inner.negentropyItems(filter),
+    remove: async (ids) => inner.remove(ids),
+    clear: async () => inner.clear(),
+    getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
+    setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
   };
   return { store, persistIds };
 }
@@ -368,10 +419,10 @@ describe("Client NIP-17", () => {
         got.push(msg.rumor.content);
       },
     });
-    await new Promise((r) => setTimeout(r, 30));
+    await new Promise((resolve) => setTimeout(resolve, 30));
 
     await alice.sendPrivateMessage(bobKeys.publicKey, "live");
-    await new Promise((r) => setTimeout(r, 40));
+    await new Promise((resolve) => setTimeout(resolve, 40));
     expect(got).toContain("live");
 
     sub.close();
@@ -393,7 +444,7 @@ describe("Client NIP-17", () => {
     await bob.connect();
 
     const sub = await bob.subscribePrivateMessages();
-    await waitFor(() => reqFilters(BOB_DM).some((f) => Array.isArray(f["#p"])));
+    await waitFor(() => reqFilters(BOB_DM).some(hasPTagArray));
     expect(giftWrapReqKinds(BOB_DM, bobKeys.publicKey)).toStrictEqual([
       Kind.GiftWrap,
       Kind.GiftWrapEphemeral,
@@ -451,8 +502,7 @@ describe("Client NIP-17", () => {
     ]);
 
     const sent = await alice.sendPrivateMessage(bobKeys.publicKey, "stored-1059");
-    const wrap1059 = sent.wraps.find((w) => w.recipient === bobKeys.publicKey)?.wrap;
-    if (!wrap1059) {throw new Error("missing 1059 wrap for bob");}
+    const wrap1059 = requireWrapFor(sent.wraps, bobKeys.publicKey);
     expect(wrap1059.kind).toBe(Kind.GiftWrap);
 
     const { wrap: wrap21059, storedKind } = await wrapKind21059(
@@ -469,11 +519,15 @@ describe("Client NIP-17", () => {
     expect(got.some((m) => m.id === junk.id)).toBe(false);
 
     await waitFor(() => got.some((m) => m.content === "live-21059"));
-    expect(got.map((m) => m.content).sort()).toStrictEqual(["live-21059", "stored-1059"]);
+    expect(got.map((m) => m.content).toSorted()).toStrictEqual(["live-21059", "stored-1059"]);
     expect(got.find((m) => m.content === "live-21059")!.kind).toBe(Kind.GiftWrapEphemeral);
-    expect(got.find((m) => m.content === "stored-1059")!.kind).toBe(Kind.GiftWrap);
+    const storedMsg = got.find((m) => m.content === "stored-1059");
+    expect(storedMsg?.kind).toBe(Kind.GiftWrap);
 
-    await waitFor(async () => (await bob.queryLocal({ kinds: [Kind.GiftWrap] })).length > 0);
+    await waitFor(async () => {
+      const wraps = await bob.queryLocal({ kinds: [Kind.GiftWrap] });
+      return wraps.length > 0;
+    });
     const stored1059 = await bob.queryLocal({ kinds: [Kind.GiftWrap] });
     expect(stored1059.some((e) => e.id === wrap1059.id)).toBe(true);
     await expect(bob.queryLocal({ kinds: [Kind.GiftWrapEphemeral] })).resolves.toStrictEqual([]);
@@ -521,10 +575,10 @@ describe("Client NIP-17", () => {
         got.push(msg.rumor.content);
       },
     });
-    await waitFor(() => reqFilters(BOB_DM).some((f) => Array.isArray(f["#p"])));
+    await waitFor(() => reqFilters(BOB_DM).some(hasPTagArray));
     deliver(BOB_DM, gift);
     sub.close();
-    await waitQuiet(() => got.length > 0 || persistIds.includes(gift.id) || decrypts > 0);
+    await waitQuiet(() => sawProgress(got, persistIds, gift.id, decrypts));
     expect(got).toStrictEqual([]);
     expect(persistIds).not.toContain(gift.id);
     expect(decrypts).toBe(0);
@@ -558,7 +612,7 @@ describe("Client NIP-17", () => {
     });
     signer.nip44Decrypt = async (peer, payload) => {
       decryptEntered += 1;
-      if (decryptEntered === 1) {await held;}
+      await firstCallGate(decryptEntered, held);
       try {
         return await origDecrypt(peer, payload);
       } catch (error) {
@@ -582,7 +636,7 @@ describe("Client NIP-17", () => {
         got.push(msg.rumor.content);
       },
     });
-    await waitFor(() => reqFilters(BOB_DM).some((f) => Array.isArray(f["#p"])));
+    await waitFor(() => reqFilters(BOB_DM).some(hasPTagArray));
     deliver(BOB_DM, gift);
     await waitFor(() => decryptEntered === 1);
     sub.close();
@@ -621,7 +675,7 @@ describe("Client NIP-17", () => {
     });
     signer.nip44Decrypt = async (peer, payload) => {
       decryptEntered += 1;
-      if (decryptEntered === 1) {await held;}
+      await firstCallGate(decryptEntered, held);
       try {
         return await origDecrypt(peer, payload);
       } catch (error) {
@@ -647,7 +701,7 @@ describe("Client NIP-17", () => {
         got.push(msg.rumor.content);
       },
     });
-    await waitFor(() => reqFilters(BOB_DM).some((f) => Array.isArray(f["#p"])));
+    await waitFor(() => reqFilters(BOB_DM).some(hasPTagArray));
     deliver(BOB_DM, gift);
     await waitFor(() => decryptEntered === 1);
     ac.abort();
@@ -689,9 +743,9 @@ describe("Client NIP-17", () => {
         got.push(msg.rumor.content);
       },
     });
-    await waitFor(() => reqFilters(BOB_DM).some((f) => Array.isArray(f["#p"])));
+    await waitFor(() => reqFilters(BOB_DM).some(hasPTagArray));
     deliver(BOB_DM, junk);
-    await waitQuiet(() => got.length > 0 || persistIds.includes(junk.id));
+    await waitQuiet(() => sawProgress(got, persistIds, junk.id, 0));
     expect(got).toStrictEqual([]);
     expect(persistIds).not.toContain(junk.id);
     await expect(store.get(junk.id)).resolves.toBeUndefined();
@@ -814,9 +868,9 @@ describe("Client NIP-17", () => {
     await alice.hydrateGossip([aliceKeys.publicKey, bobKeys.publicKey]);
     await alice.pool.ensureRelay(ALICE_DM);
     await alice.pool.ensureRelay(BOB_DM);
-    await new Promise((r) => setTimeout(r, 40));
+    await new Promise((resolve) => setTimeout(resolve, 40));
     const sent = await alice.sendPrivateMessage(bobKeys.publicKey, "authed");
-    expect(sent.wraps.every((w) => w.results.some((r) => r.result?.ok))).toBe(true);
+    expect(sent.wraps.every(anyResultOk)).toBe(true);
 
     await alice.shutdown();
   });
@@ -848,7 +902,9 @@ describe("issue #125", () => {
     const summary = await syncClient.sync({ kinds: [1] }, { timeoutMs: 2000 });
     expect(summary.remote).toStrictEqual([syncNote.id]);
     expect(syncClient.index.get(syncNote.id)?.id).toBe(syncNote.id);
-    expect(syncClient.index.seenOn(syncNote.id)).toStrictEqual([normalizeURL("wss://sync-src.example")]);
+    expect(syncClient.index.seenOn(syncNote.id)).toStrictEqual([
+      normalizeURL("wss://sync-src.example"),
+    ]);
     await syncClient.shutdown();
 
     // (b) a Client.outbox live event is indexed with its relay
@@ -894,8 +950,8 @@ describe("issue #125", () => {
     const inbox = await bob.fetchPrivateMessages({ timeoutMs: 2000 });
     expect(inbox).toHaveLength(1);
     expect(bob.index.get(wrap1.id)?.id).toBe(wrap1.id);
-    const wantUrls = [normalizeURL(BOB_DM), normalizeURL(BOB_DM2)].sort();
-    expect([...bob.index.seenOn(wrap1.id)].sort()).toStrictEqual(wantUrls);
+    const wantUrls = [normalizeURL(BOB_DM), normalizeURL(BOB_DM2)].toSorted();
+    expect([...bob.index.seenOn(wrap1.id)].toSorted()).toStrictEqual(wantUrls);
 
     // (d) subscribePrivateMessages records every relay that delivered the same wrap
     const wrap2 = await wrap(
@@ -917,7 +973,7 @@ describe("issue #125", () => {
     await waitFor(() => bob.index.get(wrap2.id) !== undefined);
     await waitQuiet(() => bob.index.seenOn(wrap2.id).length === 2, 100);
     expect(got).toContain("two");
-    expect([...bob.index.seenOn(wrap2.id)].sort()).toStrictEqual(wantUrls);
+    expect([...bob.index.seenOn(wrap2.id)].toSorted()).toStrictEqual(wantUrls);
     sub.close();
     await bob.shutdown();
   });

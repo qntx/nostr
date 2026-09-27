@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
+import type { Filter } from "../src/core/filter.ts";
 import { normalizeURL } from "../src/core/util.ts";
 import {
   Client,
@@ -29,7 +30,7 @@ afterEach(() => {
   MockWebSocket.reset();
 });
 
- async function respondReplaceables(
+async function respondReplaceables(
   events: Array<{ kind: number; event: ReturnType<typeof EventBuilder.prototype.signWithKeys> }>,
 ) {
   // after microtasks, answer each REQ with matching events
@@ -38,12 +39,18 @@ afterEach(() => {
       for (const ws of MockWebSocket.instances) {
         for (const raw of ws.sent) {
           const msg = JSON.parse(raw) as unknown[];
-          if (msg[0] !== "REQ") {continue;}
+          if (msg[0] !== "REQ") {
+            continue;
+          }
           const subId = msg[1] as string;
           const filter = msg[2] as { kinds?: number[]; authors?: string[] };
           for (const { kind, event } of events) {
-            if (filter.kinds && !filter.kinds.includes(kind)) {continue;}
-            if (filter.authors && !filter.authors.includes(event.pubkey)) {continue;}
+            if (filter.kinds && !filter.kinds.includes(kind)) {
+              continue;
+            }
+            if (filter.authors && !filter.authors.includes(event.pubkey)) {
+              continue;
+            }
             ws.receive(JSON.stringify(["EVENT", subId, event]));
           }
           ws.receive(JSON.stringify(["EOSE", subId]));
@@ -57,11 +64,36 @@ afterEach(() => {
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) {return;}
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("timeout waiting for condition");
 }
+
+async function waitUntilAsync(pred: () => Promise<boolean>, timeoutMs = 500): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    // oxlint-disable-next-line no-await-in-loop -- polling must await each probe
+    if (await pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("timeout waiting for condition");
+}
+
+function requireRemainder(routed: { remainder?: Filter | undefined }): Filter {
+  if (routed.remainder === undefined) {
+    throw new Error("expected remainder");
+  }
+  return routed.remainder;
+}
+
+const isReq = (m: unknown): boolean => Array.isArray(m) && m[0] === "REQ";
 
 describe("Gossip", () => {
   test("ingest NIP-65 and route by authors", () => {
@@ -110,12 +142,12 @@ describe("Gossip", () => {
       kinds: [1],
       authors: [a.publicKey, b.publicKey],
     });
-    if (!routed.remainder) {throw new Error("expected remainder");}
-    expect(routed.remainder.authors).toStrictEqual([b.publicKey]);
-    expect(routed.remainder.kinds).toStrictEqual([1]);
+    const remainder = requireRemainder(routed);
+    expect(remainder.authors).toStrictEqual([b.publicKey]);
+    expect(remainder.kinds).toStrictEqual([1]);
     expect(routed.perRelay.size).toBe(1);
     const [url, filter] = [...routed.perRelay.entries()][0]!;
-    expect(url).toContain('out-a.example');
+    expect(url).toContain("out-a.example");
     expect(filter.authors).toStrictEqual([a.publicKey]);
     expect(filter.kinds).toStrictEqual([1]);
   });
@@ -134,12 +166,12 @@ describe("Gossip", () => {
       kinds: [1],
       "#p": [a.publicKey, b.publicKey],
     });
-    if (!routed.remainder) {throw new Error("expected remainder");}
-    expect(routed.remainder["#p"]).toStrictEqual([b.publicKey]);
-    expect(routed.remainder.kinds).toStrictEqual([1]);
+    const remainder = requireRemainder(routed);
+    expect(remainder["#p"]).toStrictEqual([b.publicKey]);
+    expect(remainder.kinds).toStrictEqual([1]);
     expect(routed.perRelay.size).toBe(1);
     const [url, filter] = [...routed.perRelay.entries()][0]!;
-    expect(url).toContain('in-a.example');
+    expect(url).toContain("in-a.example");
     expect(filter["#p"]).toStrictEqual([a.publicKey]);
   });
 
@@ -405,20 +437,16 @@ describe("loaders on the reactive index (issue #136)", () => {
       const pool = new Pool({ websocketImplementation: net.websocketImplementation });
       const index = new ReactiveEventStore();
       const keys = Keys.fromSecretKey(SK);
-      const reqs = () =>
-        net
-          .relay("wss://idx.example")
-          .clientMessages()
-          .filter((m) => Array.isArray(m) && m[0] === "REQ").length;
+      const reqs = () => net.relay("wss://idx.example").clientMessages().filter(isReq).length;
 
       const loaders = createLoaders({ pool, relays: ["wss://idx.example"], index });
       const miss = await loaders.profile(keys.publicKey);
-      expect(miss.event).toBeNull();
+      expect(miss.event).toBeUndefined();
       expect(miss.fresh).toBe(true);
       expect(reqs()).toBe(1);
       // a recent miss counts as fresh: no refetch
       const again = await loaders.profile(keys.publicKey);
-      expect(again.event).toBeNull();
+      expect(again.event).toBeUndefined();
       expect(again.fresh).toBe(false);
       expect(reqs()).toBe(1);
       // force always fetches
@@ -484,11 +512,7 @@ describe("loaders on the reactive index (issue #136)", () => {
       const keys = Keys.fromSecretKey(SK);
       const meta = EventBuilder.metadata({ name: "alice" }).createdAt(5).signWithKeys(keys);
       net.relay("wss://idx.example").seed([meta]);
-      const reqs = () =>
-        net
-          .relay("wss://idx.example")
-          .clientMessages()
-          .filter((m) => Array.isArray(m) && m[0] === "REQ").length;
+      const reqs = () => net.relay("wss://idx.example").clientMessages().filter(isReq).length;
 
       const loaders = createLoaders({ pool, relays: ["wss://idx.example"], index });
       const first = await loaders.profile(keys.publicKey);
@@ -539,10 +563,11 @@ describe("loaders on the reactive index (issue #136)", () => {
       // a fetched profile lands in persistent storage after the flush
       const user = await client.loaders.profile(keys.publicKey);
       expect(user.event?.id).toBe(meta.id);
-      const stored = async () => (await client.storage.query([{ ids: [meta.id] }])).length === 1;
-      for (let i = 0; i < 100 && !(await stored()); i++) {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-      }
+      const stored = async (): Promise<boolean> => {
+        const rows = await client.storage.query([{ ids: [meta.id] }]);
+        return rows.length === 1;
+      };
+      await waitUntilAsync(stored);
       await expect(stored()).resolves.toBe(true);
       await client.shutdown();
     } finally {

@@ -13,6 +13,7 @@ import {
   parseThreadTags,
   replyTo,
 } from "../src/index.ts";
+import type { AddressPointer, EventPointer } from "../src/nips/nip19.ts";
 import { isNostrURI, parseNostrURI } from "../src/nips/nip21.ts";
 import { parseContentBlocks } from "../src/nips/nip27.ts";
 
@@ -22,6 +23,17 @@ const keysB = Keys.generate();
 function signedNote(keys: Keys, content: string, tags: string[][] = []) {
   return EventBuilder.textNote(content).tags(tags).signWithKeys(keys);
 }
+
+const tagWith = (
+  tags: ReadonlyArray<ReadonlyArray<string>>,
+  ...expected: string[]
+): Tag | undefined => tags.find((t) => expected.every((v, i) => t[i] === v));
+
+const hasTagWith = (tags: ReadonlyArray<ReadonlyArray<string>>, ...expected: string[]): boolean =>
+  tagWith(tags, ...expected) !== undefined;
+
+const quoteAuthor = (quote: AddressPointer | EventPointer | undefined): string | undefined =>
+  quote !== undefined && "author" in quote ? quote.author : undefined;
 
 describe("nip10", () => {
   test("parseThreadTags reads marked root/reply", () => {
@@ -184,14 +196,14 @@ describe("nip10", () => {
       parent: { ...child, id: child.id.toUpperCase(), pubkey: child.pubkey.toUpperCase() },
       relayHint: "wss://parent.example",
     });
-    expect(nested.find((t) => t[0] === "e" && t[3] === "root")).toStrictEqual([
+    expect(tagWith(nested, "e", parent.id, "wss://root.example", "root")).toStrictEqual([
       "e",
       parent.id,
       "wss://root.example",
       "root",
       parent.pubkey,
     ]);
-    expect(nested.find((t) => t[0] === "e" && t[3] === "reply")).toStrictEqual([
+    expect(tagWith(nested, "e", child.id, "wss://parent.example", "reply")).toStrictEqual([
       "e",
       child.id,
       "wss://parent.example",
@@ -250,7 +262,7 @@ describe("nip10", () => {
     const rootId = "11".repeat(32);
     const parent = signedNote(keysB, "child", [["e", rootId, "wss://root.example", "root"]]);
     const tags = buildReplyTags({ parent, relayHint: "wss://parent.example" });
-    const rootTag = tags.find((t) => t[0] === "e" && t[3] === "root");
+    const rootTag = tagWith(tags, "e", rootId, "wss://root.example", "root");
     expect(rootTag).toStrictEqual(["e", rootId, "wss://root.example", "root"]);
     expect(rootTag?.[4]).toBeUndefined();
     expect(rootTag?.[4]).not.toBe(parent.pubkey);
@@ -283,9 +295,7 @@ describe("nip10", () => {
 
     const kind1 = replyTo({ id, pubkey, tags, kind: Kind.TextNote }, "also");
     expect(kind1.currentKind).toBe(Kind.TextNote);
-    expect(kind1.currentTags.some((t) => t[0] === "e" && t[1] === id && t[3] === "root")).toBe(
-      true,
-    );
+    expect(hasTagWith(kind1.currentTags, "e", id, "", "root")).toBe(true);
   });
 
   test("parseThreadTags hex q author is lowercased", () => {
@@ -296,14 +306,14 @@ describe("nip10", () => {
     ]);
 
     const thread = parseThreadTags(event);
-    const quote = thread.quotes[0];
+    const [quote] = thread.quotes;
     expect(thread.quotes).toHaveLength(1);
     expect(quote).toStrictEqual({
       id: quoteId,
       relays: ["wss://quote.example"],
       author,
     });
-    expect(quote && "id" in quote ? quote.author : undefined).toBe(author);
+    expect(quoteAuthor(quote)).toBe(author);
   });
 
   test("parseThreadTags address q becomes AddressPointer", () => {
@@ -358,7 +368,9 @@ describe("nip10", () => {
       ],
     });
 
-    expect(tags.filter((t) => t[0] === "q")).toStrictEqual([["q", quoteId, quoteRelay, quoteAuthor]]);
+    expect(tags.filter((t) => t[0] === "q")).toStrictEqual([
+      ["q", quoteId, quoteRelay, quoteAuthor],
+    ]);
     expect(tags).toContainEqual(["p", quoteAuthor, quoteRelay]);
 
     const viaReplyTo = replyTo(parent, "quoted", {
@@ -408,8 +420,8 @@ describe("nip10", () => {
     expect(qTags).not.toContainEqual(["q", "garbage"]);
     expect(tags).toContainEqual(["p", emptyRelayAuthor]);
     expect(tags).toContainEqual(["p", addrPk, addrRelay]);
-    expect(tags.some((t) => t[0] === "p" && t[1] === coordPk)).toBe(false);
-    expect(tags.some((t) => t[0] === "p" && t[1] === hexId)).toBe(false);
+    expect(hasTagWith(tags, "p", coordPk)).toBe(false);
+    expect(hasTagWith(tags, "p", hexId)).toBe(false);
   });
 
   test("Tag.e and replyTo builder", () => {
@@ -434,13 +446,11 @@ describe("nip10", () => {
     const builder = replyTo(parent, "hello back", { relayHint: "wss://r" });
     expect(builder.currentKind).toBe(1);
     expect(builder.currentContent).toBe("hello back");
-    expect(
-      builder.currentTags.some((t) => t[0] === "e" && t[1] === parent.id && t[3] === "root"),
-    ).toBe(true);
+    expect(hasTagWith(builder.currentTags, "e", parent.id, "wss://r", "root")).toBe(true);
 
     const signed = builder.signWithKeys(keysB);
     expect(signed.pubkey).toBe(keysB.publicKey);
-    expect(signed.tags.some((t) => t[0] === "p" && t[1] === parent.pubkey)).toBe(true);
+    expect(hasTagWith(signed.tags, "p", parent.pubkey)).toBe(true);
   });
 });
 

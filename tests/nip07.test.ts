@@ -1,9 +1,20 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { EventBuilder, Keys, Nip07Signer, getWindowNostr, isNip07Available, verifyEvent } from '../src/index.ts';
-import type { WindowNostr } from '../src/index.ts';
+import {
+  EventBuilder,
+  Keys,
+  Nip07Signer,
+  getWindowNostr,
+  isNip07Available,
+  verifyEvent,
+} from "../src/index.ts";
+import type { WindowNostr } from "../src/index.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
+
+const tick = async (): Promise<void> => {
+  await Promise.resolve();
+};
 
 describe("Nip07Signer", () => {
   test("isNip07Available is false without provider", () => {
@@ -15,9 +26,11 @@ describe("Nip07Signer", () => {
     const keys = Keys.fromSecretKey(SK);
     const provider: WindowNostr = {
       async getPublicKey() {
+        await tick();
         return keys.publicKey;
       },
       async signEvent(template) {
+        await tick();
         return EventBuilder.textNote(template.content)
           .kind(template.kind)
           .tags(template.tags.map((t) => [...t]))
@@ -26,9 +39,11 @@ describe("Nip07Signer", () => {
       },
       nip04: {
         async encrypt() {
+          await tick();
           return "enc";
         },
         async decrypt() {
+          await tick();
           return "plain";
         },
       },
@@ -53,9 +68,11 @@ describe("Nip07Signer", () => {
     const keys = Keys.fromSecretKey(SK);
     const provider: WindowNostr = {
       async getPublicKey() {
+        await tick();
         return keys.publicKey;
       },
       async signEvent() {
+        await tick();
         return EventBuilder.textNote("other").createdAt(1).signWithKeys(keys);
       },
     };
@@ -69,9 +86,11 @@ describe("Nip07Signer", () => {
     const keys = Keys.fromSecretKey(SK);
     const provider: WindowNostr = {
       async getPublicKey() {
+        await tick();
         return keys.publicKey;
       },
       async signEvent(template) {
+        await tick();
         return EventBuilder.textNote(template.content)
           .kind(template.kind)
           .tags([])

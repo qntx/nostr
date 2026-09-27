@@ -7,8 +7,8 @@ import {
   parseNostrConnectURI,
   toBunkerURL,
 } from "../src/nips/nip46.ts";
-import { createFakeNip46Signer, createFakeRelayNetwork } from '../src/testing/index.ts';
-import type { FakeRelayNetwork } from '../src/testing/index.ts';
+import { createFakeNip46Signer, createFakeRelayNetwork } from "../src/testing/index.ts";
+import type { FakeRelayNetwork } from "../src/testing/index.ts";
 import { stubReportError } from "./helpers/report-error.ts";
 
 const BUNKER_SK = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -35,8 +35,12 @@ afterEach(() => {
 async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 2000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (await check()) {return;}
-    await new Promise((r) => setTimeout(r, 5));
+    // oxlint-disable-next-line no-await-in-loop -- polling helper must check between sleeps
+    if (await check()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling helper must check between sleeps
+    await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("timed out");
 }
@@ -76,14 +80,14 @@ describe("nip46 protocol", () => {
   });
 
   test("parseBunkerURL rejects NIP-05 identifiers and other non-bunker strings", () => {
-    expect(parseBunkerURL("alice@example.com")).toBeNull();
-    expect(parseBunkerURL("bunker@example.com")).toBeNull();
-    expect(parseBunkerURL("example.com")).toBeNull();
-    expect(parseBunkerURL("")).toBeNull();
-    expect(parseBunkerURL("not a bunker")).toBeNull();
-    expect(parseBunkerURL("bunker://")).toBeNull();
-    expect(parseBunkerURL(`bunker://${getPublicKey(BUNKER_SK).slice(0, 63)}`)).toBeNull();
-    expect(parseBunkerURL(getPublicKey(BUNKER_SK))).toBeNull();
+    expect(parseBunkerURL("alice@example.com")).toBeUndefined();
+    expect(parseBunkerURL("bunker@example.com")).toBeUndefined();
+    expect(parseBunkerURL("example.com")).toBeUndefined();
+    expect(parseBunkerURL("")).toBeUndefined();
+    expect(parseBunkerURL("not a bunker")).toBeUndefined();
+    expect(parseBunkerURL("bunker://")).toBeUndefined();
+    expect(parseBunkerURL(`bunker://${getPublicKey(BUNKER_SK).slice(0, 63)}`)).toBeUndefined();
+    expect(parseBunkerURL(getPublicKey(BUNKER_SK))).toBeUndefined();
     expect(
       parseBunkerURL(
         createNostrConnectURI({
@@ -92,7 +96,7 @@ describe("nip46 protocol", () => {
           secret: "hello",
         }),
       ),
-    ).toBeNull();
+    ).toBeUndefined();
   });
 });
 
@@ -123,7 +127,11 @@ describe("Nip46Signer", () => {
         timeoutMs: 3000,
       });
 
-      expect(requests.map((r) => r.method)).toStrictEqual(["connect", "switch_relays", "get_public_key"]);
+      expect(requests.map((r) => r.method)).toStrictEqual([
+        "connect",
+        "switch_relays",
+        "get_public_key",
+      ]);
       await expect(signer.getPublicKey()).resolves.toBe(getPublicKey(USER_SK));
 
       const unsigned = EventBuilder.textNote("remote sign")
@@ -144,7 +152,7 @@ describe("Nip46Signer", () => {
     const url = toBunkerURL({
       pubkey: getPublicKey(BUNKER_SK),
       relays: ["wss://bunker.example"],
-      secret: null,
+      secret: undefined,
     });
     await expect(Nip46Signer.connect(url, { clientSecretKey: CLIENT_SK })).rejects.toThrow(
       /pool or createPool/,
@@ -240,7 +248,7 @@ describe("Nip46Signer", () => {
     );
 
     await waitFor(() => net.relay("wss://bunker.example").clientMessages().length > 0);
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((resolve) => setTimeout(resolve, 20));
     const frames = net.relay("wss://bunker.example").clientMessages();
     expect(frames.some((m) => (m as unknown[])[0] === "REQ")).toBe(true);
     expect(frames.some((m) => (m as unknown[])[0] === "EVENT")).toBe(false);
@@ -254,7 +262,7 @@ describe("Nip46Signer", () => {
         {
           pubkey: getPublicKey(BUNKER_SK),
           relays: ["wss://bunker.example"],
-          secret: null,
+          secret: undefined,
         },
         { createPool: testPool } as never,
       ),
@@ -345,7 +353,7 @@ describe("Nip46Signer", () => {
     try {
       await expect(
         Nip46Signer.connect(
-          { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: null },
+          { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: undefined },
           { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
         ),
       ).rejects.toThrow(/connect result is not ack or secret: tok/);
@@ -372,7 +380,10 @@ describe("Nip46Signer", () => {
                 subClosed = true;
               },
             }),
-            publish: async () => [{ result: { ok: true, message: "" } }],
+            publish: async () => {
+              await Promise.resolve();
+              return [{ result: { ok: true, message: "" } }];
+            },
             close: () => {
               poolClosed = true;
             },
@@ -508,7 +519,7 @@ describe("issue #130", () => {
         {
           pubkey: getPublicKey(BUNKER_SK),
           relays: ["wss://bunker.example"],
-          secret: null,
+          secret: undefined,
         },
         {
           clientSecretKey: CLIENT_SK,
@@ -533,16 +544,19 @@ describe("issue #130", () => {
       {
         pubkey: getPublicKey(BUNKER_SK),
         relays: ["wss://bunker.example"],
-        secret: null,
+        secret: undefined,
       },
       {
         clientSecretKey: CLIENT_SK,
         createPool: () => ({
           subscribe: () => ({ close: () => {} }),
-          publish: async () => [
-            { error: "blocked: spam" },
-            { result: { ok: false, message: "restricted: no" } },
-          ],
+          publish: async () => {
+            await Promise.resolve();
+            return [
+              { error: "blocked: spam" },
+              { result: { ok: false, message: "restricted: no" } },
+            ];
+          },
           close: () => {},
         }),
         timeoutMs: 500,
@@ -573,7 +587,7 @@ describe("issue #130", () => {
         {
           pubkey: getPublicKey(BUNKER_SK),
           relays: ["wss://bunker.example"],
-          secret: null,
+          secret: undefined,
         },
         {
           clientSecretKey: CLIENT_SK,

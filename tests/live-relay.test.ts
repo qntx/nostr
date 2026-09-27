@@ -19,7 +19,9 @@ const LIVE = process.env["NOSTR_LIVE_RELAY"]?.trim();
 const describeLive = LIVE ? describe : describe.skip;
 
 async function ensureNodeWebSocket(): Promise<void> {
-  if (globalThis.WebSocket !== undefined) {return;}
+  if (globalThis.WebSocket !== undefined) {
+    return;
+  }
   try {
     // Optional peer; avoid static resolve of `ws` types in typecheck.
     const mod = (await import(/* @vite-ignore */ "ws")) as {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { Kind, Keys, KeysSigner, normalizeURL } from '../src/index.ts';
-import type { Tag } from '../src/index.ts';
+import { Kind, Keys, KeysSigner, normalizeURL } from "../src/index.ts";
+import type { Tag } from "../src/index.ts";
 import {
   Nip17Error,
   buildChatMessageRumor,
@@ -11,8 +11,8 @@ import {
   requireDmRelays,
   wrapDirectMessage,
 } from "../src/nips/nip17.ts";
-import { unwrap } from '../src/nips/nip59.ts';
-import type { SealOptions, WrapOptions } from '../src/nips/nip59.ts';
+import { unwrap } from "../src/nips/nip59.ts";
+import type { SealOptions, WrapOptions } from "../src/nips/nip59.ts";
 
 const ALICE_SK = "000000000000000000000000000000000000000000000000000000000000a1ce";
 const BOB_SK = "00000000000000000000000000000000000000000000000000000000000000b0";

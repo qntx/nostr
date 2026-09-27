@@ -3,8 +3,8 @@ import { bech32 } from "@scure/base";
 import { describe, expect, test } from "vite-plus/test";
 
 import { utf8Encoder } from "../src/core/util.ts";
-import { EventBuilder, EventValidationError, Keys, Kind, hexToBytes } from '../src/index.ts';
-import type { Event, Tag } from '../src/index.ts';
+import { EventBuilder, EventValidationError, Keys, Kind, hexToBytes } from "../src/index.ts";
+import type { Event, Tag } from "../src/index.ts";
 import {
   makeZapRequest,
   parseBolt11,
@@ -142,8 +142,8 @@ describe("makeZapRequest", () => {
     });
     expect(zr.tags).toContainEqual(["p", event.pubkey]);
     expect(zr.tags).toContainEqual(["e", event.id]);
-    expect(zr.tags.some((t) => t[0] === "p" && t[1] === event.pubkey.toUpperCase())).toBe(false);
-    expect(zr.tags.some((t) => t[0] === "e" && t[1] === event.id.toUpperCase())).toBe(false);
+    expect(hasTagValue(zr.tags, "p", event.pubkey.toUpperCase())).toBe(false);
+    expect(hasTagValue(zr.tags, "e", event.id.toUpperCase())).toBe(false);
   });
 
   test("optional lnurl tag", () => {
@@ -170,9 +170,15 @@ const APPENDIX_E_PREIMAGE = "5d006d2cf1e73c7148e7519a4c68adc81642ce0e25a432b2434
 const LNURL =
   "lnurl1dp68gurn8ghj7um5v93kketj9ehx2amn9uh8wetvdskkkmn0wahz7mrww4excup0dajx2mrv92x9xp";
 
+const hasTagValue = (tags: ReadonlyArray<Tag>, name: string, value: string): boolean =>
+  tags.some((t) => t[0] === name && t[1] === value);
+
+const rewriteTagValue = (tag: Tag, name: string, value: string): Tag =>
+  tag[0] === name ? [name, value] : tag;
+
 function taggedField(type: number, data: Uint8Array): number[] {
   const dataWords = bech32.toWords(data);
-  return [type, (dataWords.length >> 5) & 31, dataWords.length & 31, ...dataWords];
+  return [type, Math.trunc(dataWords.length / 32), dataWords.length % 32, ...dataWords];
 }
 
 function encodeBolt11(
@@ -180,10 +186,16 @@ function encodeBolt11(
   fields: { paymentHash?: Uint8Array; descriptionHash?: Uint8Array },
 ): string {
   const words = [0, 0, 0, 0, 0, 0, 0];
-  if (fields.paymentHash) {words.push(...taggedField(1, fields.paymentHash));}
-  if (fields.descriptionHash) {words.push(...taggedField(23, fields.descriptionHash));}
+  if (fields.paymentHash) {
+    words.push(...taggedField(1, fields.paymentHash));
+  }
+  if (fields.descriptionHash) {
+    words.push(...taggedField(23, fields.descriptionHash));
+  }
   // BOLT11 data part ends with 104 5-bit words of secp256k1 signature.
-  for (let i = 0; i < 104; i++) {words.push(0);}
+  for (let i = 0; i < 104; i++) {
+    words.push(0);
+  }
   return bech32.encode(hrp, words, false);
 }
 
@@ -195,9 +207,15 @@ function signedZapRequest(opts?: { amount?: number; lnurl?: string; extraTags?: 
   const builder = new EventBuilder(Kind.ZapRequest, "")
     .tag(["p", keys.publicKey])
     .tag(["relays", "wss://r.example"]);
-  if (opts?.amount !== undefined) {builder.tag(["amount", String(opts.amount)]);}
-  if (opts?.lnurl !== undefined) {builder.tag(["lnurl", opts.lnurl]);}
-  if (opts?.extraTags) {builder.tags(opts.extraTags);}
+  if (opts?.amount !== undefined) {
+    builder.tag(["amount", String(opts.amount)]);
+  }
+  if (opts?.lnurl !== undefined) {
+    builder.tag(["lnurl", opts.lnurl]);
+  }
+  if (opts?.extraTags) {
+    builder.tags(opts.extraTags);
+  }
   const request = builder.signWithKeys(payer);
   return { request, json: JSON.stringify(request) };
 }
@@ -224,9 +242,14 @@ function receiptFor(
     ["bolt11", invoice],
     ["description", json],
   ];
-  if (extra?.preimage === undefined) {tags.push(["preimage", APPENDIX_E_PREIMAGE]);}
-  else {tags.push(["preimage", extra.preimage]);}
-  if (extra?.extraTags) {tags.push(...extra.extraTags);}
+  if (extra?.preimage === undefined) {
+    tags.push(["preimage", APPENDIX_E_PREIMAGE]);
+  } else {
+    tags.push(["preimage", extra.preimage]);
+  }
+  if (extra?.extraTags) {
+    tags.push(...extra.extraTags);
+  }
   return signedReceipt(provider, tags);
 }
 
@@ -285,9 +308,7 @@ describe("parseZapRequestFromReceipt", () => {
     const receipt = receiptFor(provider, request, json, { invoice: APPENDIX_E_INVOICE });
     const forged: Event = {
       ...receipt,
-      tags: receipt.tags.map((t) =>
-        t[0] === "description" ? ["description", APPENDIX_E_DESCRIPTION] : t,
-      ),
+      tags: receipt.tags.map((t) => rewriteTagValue(t, "description", APPENDIX_E_DESCRIPTION)),
     };
     expect(parseZapRequestFromReceipt(forged)).toBeUndefined();
   });
@@ -649,7 +670,7 @@ describe("validateZapReceipt", () => {
     const wrongPBase = receiptFor(provider, wrongP.request, wrongP.json);
     const wrongPReceipt = signedReceipt(
       provider,
-      wrongPBase.tags.map((t) => (t[0] === "p" ? (["p", provider.publicKey] as Tag) : t)),
+      wrongPBase.tags.map((t) => rewriteTagValue(t, "p", provider.publicKey)),
     );
     expect(validateZapReceipt(wrongPReceipt, { nostrPubkey: provider.publicKey }).reason).toBe(
       "missing p",
@@ -707,9 +728,7 @@ describe("validateZapReceipt", () => {
     });
     const mixedHexBase = receiptFor(provider, mixedHex.request, mixedHex.json);
     const mixedHexReceipt = signedReceipt(provider, [
-      ...mixedHexBase.tags.map((t) =>
-        t[0] === "p" ? (["p", keys.publicKey.toUpperCase()] as Tag) : t,
-      ),
+      ...mixedHexBase.tags.map((t) => rewriteTagValue(t, "p", keys.publicKey.toUpperCase())),
       ["e", eventId.toUpperCase()],
       ["a", `30023:${keys.publicKey.toUpperCase()}:hello`],
     ]);

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vite-plus/test";
 
 import { hexToBytes, nsecEncode } from "../src/index.ts";
-import { decrypt, encrypt, Nip49Error } from '../src/nips/nip49.ts';
-import type { KeySecurityByte } from '../src/nips/nip49.ts';
+import { decrypt, encrypt, Nip49Error } from "../src/nips/nip49.ts";
+import type { KeySecurityByte } from "../src/nips/nip49.ts";
 
 describe("nip49", () => {
   test("encrypt and decrypt vectors", () => {

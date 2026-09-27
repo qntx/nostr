@@ -8,8 +8,23 @@ import {
   Kind,
   normalizeURL,
 } from "../src/index.ts";
-import { bookmarkListEventBuilder, decryptPrivateTags, encryptPrivateTags, muteListEventBuilder, parseBookmarkList, parseEmojiSet, parseFavoriteRelays, parseFollowPack, parseMuteList, parseMuteListPrivate, parsePinList, parseRelaySet, parseUserEmojiList, pinListEventBuilder } from '../src/nips/nip51.ts';
-import type { MuteItem, Nip51Crypto } from '../src/nips/nip51.ts';
+import {
+  bookmarkListEventBuilder,
+  decryptPrivateTags,
+  encryptPrivateTags,
+  muteListEventBuilder,
+  parseBookmarkList,
+  parseEmojiSet,
+  parseFavoriteRelays,
+  parseFollowPack,
+  parseMuteList,
+  parseMuteListPrivate,
+  parsePinList,
+  parseRelaySet,
+  parseUserEmojiList,
+  pinListEventBuilder,
+} from "../src/nips/nip51.ts";
+import type { MuteItem, Nip51Crypto } from "../src/nips/nip51.ts";
 
 const PK = "aa".repeat(32);
 const PK2 = "cc".repeat(32);
@@ -21,23 +36,36 @@ const EMOJI_SET = `30030:${PK}:cats`;
 const PEOPLE_SET = `30000:${PK}:friends`;
 const AUTHOR_SK = "000000000000000000000000000000000000000000000000000000000000a1ce";
 
- async function unusedEncrypt(): Promise<string> {
+async function unusedEncrypt(): Promise<string> {
+  await Promise.resolve();
   throw new Error("nip44Encrypt should not be invoked");
 }
 
+const catchError = async (p: Promise<unknown>): Promise<unknown> => {
+  try {
+    await p;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected rejection");
+};
+
 function trackingCrypto(opts: {
   pubkey: string;
-  decrypt?: Nip51Crypto["nip44Decrypt"];
+  decrypt?: ((peer: string, payload: string) => string | Promise<string>) | undefined;
 }): Nip51Crypto & { decryptInvocations: number } {
   const stub = {
     decryptInvocations: 0,
     async getPublicKey() {
+      await Promise.resolve();
       return opts.pubkey;
     },
     nip44Encrypt: unusedEncrypt,
     async nip44Decrypt(peer: string, payload: string) {
       stub.decryptInvocations += 1;
-      if (!opts.decrypt) {throw new Error("nip44Decrypt should not be invoked");}
+      if (!opts.decrypt) {
+        throw new Error("nip44Decrypt should not be invoked");
+      }
       return opts.decrypt(peer, payload);
     },
   };
@@ -82,7 +110,9 @@ describe("nip51 mute list", () => {
       ["t", "spam"],
       ["word", "scam"],
     ]);
-    expect(parseMuteList({ kind: built.currentKind, tags: built.currentTags })).toStrictEqual(items);
+    expect(parseMuteList({ kind: built.currentKind, tags: built.currentTags })).toStrictEqual(
+      items,
+    );
   });
 
   test("muteListEventBuilder lowercases hex and words; skips empty t/word", () => {
@@ -128,7 +158,10 @@ describe("nip51 pin list", () => {
       ["e", ID],
       ["e", ID2],
     ]);
-    expect(parsePinList({ kind: built.currentKind, tags: built.currentTags })).toStrictEqual([ID, ID2]);
+    expect(parsePinList({ kind: built.currentKind, tags: built.currentTags })).toStrictEqual([
+      ID,
+      ID2,
+    ]);
   });
 
   test("pinListEventBuilder rejects non-hex ids", () => {
@@ -318,7 +351,7 @@ describe("nip51 private tags", () => {
     const author = await signer.getPublicKey();
     const peers: string[] = [];
     const crypto: Nip51Crypto = {
-      getPublicKey:  async () => signer.getPublicKey(),
+      getPublicKey: async () => signer.getPublicKey(),
       nip44Encrypt: async (peer, plaintext) => {
         peers.push(peer);
         return signer.nip44Encrypt(peer, plaintext);
@@ -379,7 +412,9 @@ describe("nip51 private tags", () => {
     expect(parsed.public).toStrictEqual<MuteItem[]>([{ type: "pubkey", value: PK2 }]);
     expect(parsed.private).toStrictEqual<MuteItem[]>([]);
     expect(crypto.decryptInvocations).toBe(0);
-    await expect(decryptPrivateTags(crypto, { pubkey: PK2, content: "" })).resolves.toStrictEqual([]);
+    await expect(decryptPrivateTags(crypto, { pubkey: PK2, content: "" })).resolves.toStrictEqual(
+      [],
+    );
     expect(crypto.decryptInvocations).toBe(0);
   });
 
@@ -397,7 +432,7 @@ describe("nip51 private tags", () => {
   test("mixed-case author pubkey is accepted", async () => {
     const crypto = trackingCrypto({
       pubkey: PK,
-      decrypt: async () => JSON.stringify([["p", PK2]]),
+      decrypt: () => JSON.stringify([["p", PK2]]),
     });
     const tags = await decryptPrivateTags(crypto, {
       pubkey: PK.toUpperCase(),
@@ -412,19 +447,15 @@ describe("nip51 private tags", () => {
     const author = await signer.getPublicKey();
     const tags = [["p", PK]] as const;
     const nip04Content = await signer.nip04Encrypt(author, JSON.stringify(tags));
-    expect(nip04Content).toContain('?iv=');
+    expect(nip04Content).toContain("?iv=");
     await expect(
       decryptPrivateTags(signer, { pubkey: author, content: nip04Content }),
     ).rejects.toThrow(CryptoError);
-    let succeeded: unknown;
-    try {
-      succeeded = await decryptPrivateTags(signer, { pubkey: author, content: nip04Content });
-    } catch (error) {
-      expect(error).toBeInstanceOf(CryptoError);
-      expect(error).not.toBeInstanceOf(EventValidationError);
-      return;
-    }
-    throw new Error(`NIP-04 content must not decrypt, got ${JSON.stringify(succeeded)}`);
+    const error = await catchError(
+      decryptPrivateTags(signer, { pubkey: author, content: nip04Content }),
+    );
+    expect(error).toBeInstanceOf(CryptoError);
+    expect(error).not.toBeInstanceOf(EventValidationError);
   });
 
   test("plaintext JSON in content is not a parse-first fallback", async () => {
@@ -435,55 +466,50 @@ describe("nip51 private tags", () => {
     expect(() => JSON.parse(plaintextJson)).not.toThrow();
     const crypto = trackingCrypto({
       pubkey: author,
-      decrypt:  async (peer, payload) => signer.nip44Decrypt(peer, payload),
+      decrypt: async (peer, payload) => {
+        await Promise.resolve();
+        return signer.nip44Decrypt(peer, payload);
+      },
     });
-    let succeeded: unknown;
-    try {
-      succeeded = await decryptPrivateTags(crypto, { pubkey: author, content: plaintextJson });
-    } catch (error) {
-      expect(error).toBeInstanceOf(CryptoError);
-      expect(error).not.toBeInstanceOf(EventValidationError);
-      expect(crypto.decryptInvocations).toBe(1);
-      return;
-    }
-    throw new Error(`plaintext JSON must not decrypt, got ${JSON.stringify(succeeded)}`);
+    const error = await catchError(
+      decryptPrivateTags(crypto, { pubkey: author, content: plaintextJson }),
+    );
+    expect(error).toBeInstanceOf(CryptoError);
+    expect(error).not.toBeInstanceOf(EventValidationError);
+    expect(crypto.decryptInvocations).toBe(1);
   });
 
   test("NIP-44 decrypt of not-json throws EventValidationError not SyntaxError", async () => {
     const crypto = trackingCrypto({
       pubkey: PK,
-      decrypt: async () => "not-json",
+      decrypt: () => "not-json",
     });
-    try {
-      await decryptPrivateTags(crypto, { pubkey: PK, content: "payload" });
-      throw new Error("expected throw");
-    } catch (error) {
-      expect(error).toBeInstanceOf(EventValidationError);
-      expect(error).not.toBeInstanceOf(SyntaxError);
-      expect((error as EventValidationError).message).toBe("invalid NIP-51 private tags");
-      expect((error as EventValidationError).cause).toBeInstanceOf(SyntaxError);
-    }
+    const error = await catchError(decryptPrivateTags(crypto, { pubkey: PK, content: "payload" }));
+    expect(error).toBeInstanceOf(EventValidationError);
+    expect(error).not.toBeInstanceOf(SyntaxError);
+    const validationError = error as EventValidationError;
+    expect(validationError.message).toBe("invalid NIP-51 private tags");
+    expect(validationError.cause).toBeInstanceOf(SyntaxError);
     expect(crypto.decryptInvocations).toBe(1);
   });
 
-  test("decrypted JSON that is not a tag array throws EventValidationError", async () => {
-    const cases = ["{}", "null", "1", '"x"', "[[]]", '[["p", 1]]', "[1]"];
-    for (const plaintext of cases) {
+  test.each(["{}", "null", "1", '"x"', "[[]]", '[["p", 1]]', "[1]"])(
+    "decrypted JSON %s that is not a tag array throws EventValidationError",
+    async (plaintext) => {
       const crypto = trackingCrypto({
         pubkey: PK,
-        decrypt: async () => plaintext,
+        decrypt: () => plaintext,
       });
-      try {
-        await decryptPrivateTags(crypto, { pubkey: PK, content: "payload" });
-        throw new Error(`expected throw for ${plaintext}`);
-      } catch (error) {
-        expect(error).toBeInstanceOf(EventValidationError);
-        expect((error as EventValidationError).message).toBe("invalid NIP-51 private tags");
-        expect((error as EventValidationError).cause).toBeUndefined();
-      }
+      const error = await catchError(
+        decryptPrivateTags(crypto, { pubkey: PK, content: "payload" }),
+      );
+      expect(error).toBeInstanceOf(EventValidationError);
+      const validationError = error as EventValidationError;
+      expect(validationError.message).toBe("invalid NIP-51 private tags");
+      expect(validationError.cause).toBeUndefined();
       expect(crypto.decryptInvocations).toBe(1);
-    }
-  });
+    },
+  );
 
   test("muteListEventBuilder still emits empty content; caller sets encrypted content", async () => {
     const signer = new KeysSigner(AUTHOR_SK);

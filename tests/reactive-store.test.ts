@@ -28,8 +28,19 @@ function meta(created_at: number): Event {
     .signWithKeys(keys);
 }
 
- async function flush(): Promise<void> {
-  return Promise.resolve();
+function once(fn: () => void): () => void {
+  let done = false;
+  return () => {
+    if (done) {
+      return;
+    }
+    done = true;
+    fn();
+  };
+}
+
+async function flush(): Promise<void> {
+  await Promise.resolve();
 }
 
 describe("ReactiveEventStore writes", () => {
@@ -70,7 +81,9 @@ describe("ReactiveEventStore writes", () => {
     const store = new ReactiveEventStore();
     const e = note("a", 1);
     store.add(e);
-    for (let i = 0; i < 20; i++) {store.markSeen(e.id, `wss://r${i}`);}
+    for (let i = 0; i < 20; i++) {
+      store.markSeen(e.id, `wss://r${i}`);
+    }
     expect(store.seenOn(e.id)).toHaveLength(16);
     expect(store.seenOn(e.id)[0]).toBe(normalizeURL("wss://r0"));
     expect(store.seenOn(e.id)[15]).toBe(normalizeURL("wss://r15"));
@@ -79,7 +92,9 @@ describe("ReactiveEventStore writes", () => {
   test("maxSeenOnEntries evicts the oldest id", () => {
     const store = new ReactiveEventStore({ maxSeenOnEntries: 3 });
     const events = [note("a", 1), note("b", 2), note("c", 3), note("d", 4)];
-    for (const e of events) {store.add(e, `wss://${e.content}`);}
+    for (const e of events) {
+      store.add(e, `wss://${e.content}`);
+    }
     expect(store.seenOn(events[0]!.id)).toStrictEqual([]);
     expect(store.seenOn(events[3]!.id)).toStrictEqual([normalizeURL("wss://d")]);
   });
@@ -94,7 +109,7 @@ describe("ReactiveEventStore writes", () => {
     expect(store.isDeleted(e.id)).toBe(true);
   });
 
-  test("remove invalidates and clear empties", async () => {
+  test("remove invalidates and clear empties", () => {
     const store = new ReactiveEventStore();
     const a = note("a", 1);
     const b = note("b", 2);
@@ -188,7 +203,7 @@ describe("ReactiveEventStore watches", () => {
     expect(watch.getSnapshot()).toHaveLength(2);
   });
 
-  test("unsubscribed watch recomputes on version change but keeps identical reference", async () => {
+  test("unsubscribed watch recomputes on version change but keeps identical reference", () => {
     const store = new ReactiveEventStore();
     const a = note("a", 1);
     store.add(a);
@@ -362,7 +377,9 @@ describe("issue #125", () => {
   test("#7 query and hydrate keep LRU order (newest stay hottest)", () => {
     const store = new ReactiveEventStore({ maxEvents: 3 });
     const notes = [1, 2, 3, 4].map((t) => note(`n${t}`, t));
-    for (const n of notes) {store.add(n);}
+    for (const n of notes) {
+      store.add(n);
+    }
     store.query([{ kinds: [1] }]);
     store.add(note("n5", 5));
     // t2 is least-recently-used; t4 (just returned by query) must survive
@@ -399,9 +416,10 @@ describe("issue #125", () => {
     // a re-entrant add inside onChange must trigger a second notification
     const watch = store.watchQuery([{ kinds: [1] }]);
     let calls = 0;
+    const reAdd = once(() => store.add(b));
     watch.subscribe(() => {
       calls += 1;
-      if (calls === 1) {store.add(b);}
+      reAdd();
     });
     watch.getSnapshot();
     store.add(a);

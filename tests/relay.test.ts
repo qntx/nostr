@@ -1,19 +1,35 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
-import { EventBuilder, Keys, KeysSigner, MessageError, Pool, Relay, RelayClosedError, RelayStatus, RelayTimeoutError, SUBSCRIPTION_ID_MAX_CHARS, WasmVerifyPoisonedError, isInsecureRelayUrl, useWebSocketImplementation, verifyEvent } from '../src/index.ts';
-import type { Event, EventTemplate } from '../src/index.ts';
+import {
+  EventBuilder,
+  Keys,
+  KeysSigner,
+  MessageError,
+  Pool,
+  Relay,
+  RelayClosedError,
+  RelayConnectionError,
+  RelayStatus,
+  RelayTimeoutError,
+  SUBSCRIPTION_ID_MAX_CHARS,
+  WasmVerifyPoisonedError,
+  isInsecureRelayUrl,
+  useWebSocketImplementation,
+  verifyEvent,
+} from "../src/index.ts";
+import type { Event, EventTemplate } from "../src/index.ts";
 import { NegentropyStorageVector, Nip77Error } from "../src/nips/nip77.ts";
-import { subscriptionToAsyncIterable } from '../src/relay/index.ts';
-import type { SubscriptionHandlers } from '../src/relay/index.ts';
+import { subscriptionToAsyncIterable } from "../src/relay/index.ts";
+import type { SubscriptionHandlers } from "../src/relay/index.ts";
 import type { WebSocketConstructor } from "../src/relay/websocket.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 import { stubReportError } from "./helpers/report-error.ts";
 
- async function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
- async function captureError(p: Promise<unknown>): Promise<unknown> {
+async function captureError(p: Promise<unknown>): Promise<unknown> {
   return p.then(
     () => {
       throw new Error("expected reject");
@@ -34,7 +50,10 @@ function syncThrow(fn: () => unknown): unknown {
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) {return;}
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must alternate check and sleep sequentially
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -42,6 +61,84 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
 
 function sentMessages(ws: MockWebSocket): unknown[][] {
   return ws.sent.map((s) => JSON.parse(s) as unknown[]);
+}
+
+function authSignerFor(keys: Keys): (template: EventTemplate) => Promise<Event> {
+  return async (template) => {
+    await Promise.resolve();
+    return EventBuilder.textNote("")
+      .kind(template.kind)
+      .tags(template.tags)
+      .content(template.content)
+      .createdAt(template.created_at)
+      .signWithKeys(keys);
+  };
+}
+
+function must<T>(value: T | undefined, what: string): T {
+  if (value === undefined) {
+    throw new Error(`expected ${what}`);
+  }
+  return value;
+}
+
+function errText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function all(...preds: ReadonlyArray<() => boolean>): () => boolean {
+  return () => preds.every((pred) => pred());
+}
+
+function hasSent(ws: MockWebSocket, type: string): boolean {
+  return sentMessages(ws).some((m) => m[0] === type);
+}
+
+function instanceCountIs(n: number): () => boolean {
+  return () => MockWebSocket.instances.length === n;
+}
+
+function everyInstanceSent(type: string): () => boolean {
+  return () => MockWebSocket.instances.every((ws) => hasSent(ws, type));
+}
+
+function openInstance(exclude: MockWebSocket, urlPart: string): MockWebSocket | undefined {
+  return MockWebSocket.instances.find(
+    (ws) => ws !== exclude && ws.url.includes(urlPart) && ws.readyState === MockWebSocket.OPEN,
+  );
+}
+
+function otherOpenInstanceSent(exclude: MockWebSocket, urlPart: string, type: string): boolean {
+  const ws = openInstance(exclude, urlPart);
+  return ws !== undefined && hasSent(ws, type);
+}
+
+function urlSent(urlPart: string, type: string): (ws: MockWebSocket) => boolean {
+  return (ws) => ws.url.includes(urlPart) && hasSent(ws, type);
+}
+
+function sentCloseFor(ws: MockWebSocket, subId: unknown): boolean {
+  return sentMessages(ws).some((m) => m[0] === "CLOSE" && m[1] === subId);
+}
+
+function isNegFrame(m: unknown[]): boolean {
+  return m[0] === "NEG-OPEN" || m[0] === "NEG-MSG" || m[0] === "NEG-CLOSE";
+}
+
+function heldTimeout(
+  targetDelay: number,
+  held: Array<() => void>,
+  realSetTimeout: typeof globalThis.setTimeout,
+): typeof globalThis.setTimeout {
+  return ((handler: unknown, delay?: number, ...args: unknown[]) => {
+    if (delay === targetDelay && typeof handler === "function") {
+      held.push(() => {
+        (handler as (...a: unknown[]) => void)(...args);
+      });
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }
+    return realSetTimeout(handler as Parameters<typeof setTimeout>[0], delay, ...args);
+  }) as typeof setTimeout;
 }
 
 type AuthWireEvent = { id: string; tags: string[][] };
@@ -71,18 +168,26 @@ class NativePingSocket extends MockWebSocket {
   readonly #once = new Map<string, Set<(...args: unknown[]) => void>>();
 
   override addEventListener(type: string, listener: (ev: unknown) => void): void {
-    if (type === "pong") {this.pongAddEventListenerCalls += 1;}
+    if (type === "pong") {
+      this.pongAddEventListenerCalls += 1;
+    }
     super.addEventListener(type, listener);
   }
 
   ping(): void {
     this.pingCalls += 1;
-    if (!this.pongEnabled) {return;}
+    if (!this.pongEnabled) {
+      return;
+    }
     queueMicrotask(() => {
       const set = this.#once.get("pong");
-      if (!set) {return;}
+      if (!set) {
+        return;
+      }
       this.#once.delete("pong");
-      for (const fn of set) {fn();}
+      for (const fn of set) {
+        fn();
+      }
     });
   }
 
@@ -111,9 +216,13 @@ class NodeWsPingSocket extends MockWebSocket {
 
   ping(): void {
     this.pingCalls += 1;
-    if (!this.pongEnabled) {return;}
+    if (!this.pongEnabled) {
+      return;
+    }
     queueMicrotask(() => {
-      for (const fn of this.#listeners.get("pong") ?? []) {fn();}
+      for (const fn of this.#listeners.get("pong") ?? []) {
+        fn();
+      }
     });
   }
 
@@ -239,13 +348,7 @@ describe("Relay", () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://pub-auth-timeout.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      authSigner: authSignerFor(keys),
     });
     const note = EventBuilder.textNote("slow-auth").createdAt(2).signWithKeys(keys);
     const publishP = relay.publish(note, { timeoutMs: 40 });
@@ -253,9 +356,11 @@ describe("Relay", () => {
     void publishP.then(
       () => {
         settled = true;
+        return undefined;
       },
       () => {
         settled = true;
+        return undefined;
       },
     );
     const ws = MockWebSocket.last();
@@ -277,13 +382,7 @@ describe("Relay", () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://pub-auth-post-timeout.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      authSigner: authSignerFor(keys),
     });
     const note = EventBuilder.textNote("post-auth-timeout").createdAt(2).signWithKeys(keys);
     const publishP = relay.publish(note, { timeoutMs: 40 });
@@ -291,9 +390,11 @@ describe("Relay", () => {
     void publishP.then(
       () => {
         settled = true;
+        return undefined;
       },
       () => {
         settled = true;
+        return undefined;
       },
     );
     const ws = MockWebSocket.last();
@@ -315,13 +416,7 @@ describe("Relay", () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://pub-auth-fail.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      authSigner: authSignerFor(keys),
     });
     const note = EventBuilder.textNote("auth-fail").createdAt(2).signWithKeys(keys);
     const publishP = relay.publish(note, { timeoutMs: 40 });
@@ -329,9 +424,11 @@ describe("Relay", () => {
     void publishP.then(
       () => {
         settled = true;
+        return undefined;
       },
       () => {
         settled = true;
+        return undefined;
       },
     );
     const ws = MockWebSocket.last();
@@ -351,13 +448,7 @@ describe("Relay", () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://pub-auth-reuse.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      authSigner: authSignerFor(keys),
     });
     const note = EventBuilder.textNote("auth-reuse").createdAt(2).signWithKeys(keys);
     const first = relay.publish(note, { timeoutMs: 2000 });
@@ -383,7 +474,7 @@ describe("Relay", () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://pub-auth-throw.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async () => {
+      authSigner: () => {
         throw boom;
       },
     });
@@ -399,7 +490,7 @@ describe("Relay", () => {
   test("authSigner throw drops the subscription", async () => {
     const relay = await Relay.connect("wss://sub-auth-throw.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async () => {
+      authSigner: () => {
         throw new Error("sign failed");
       },
     });
@@ -422,13 +513,7 @@ describe("Relay", () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://auth-rotate.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      authSigner: authSignerFor(keys),
     });
     const events: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
@@ -465,13 +550,7 @@ describe("Relay", () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://auth-rotate-pub.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      authSigner: authSignerFor(keys),
     });
     const note = EventBuilder.textNote("rotate-pub").createdAt(2).signWithKeys(keys);
     const publishP = relay.publish(note);
@@ -501,13 +580,7 @@ describe("Relay", () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://auth-hostile.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      authSigner: authSignerFor(keys),
     });
     const reasons: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
@@ -520,6 +593,7 @@ describe("Relay", () => {
     ws.receive(JSON.stringify(["CLOSED", sub.id, "auth-required: login"]));
 
     for (let i = 0; i < 3; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- challenge rounds must be answered in order
       await waitUntil(() => sentAuthEvents(ws).length >= i + 1);
       const event = sentAuthEvents(ws)[i]!;
       expect(challengeTag(event)).toBe(`ch${i + 1}`);
@@ -542,13 +616,7 @@ describe("Relay", () => {
       websocketImplementation: MockWebSocketCtor,
       enableReconnect: true,
       reconnectBackoffMs: [5],
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      authSigner: authSignerFor(keys),
     });
     const sub = relay.subscribe([{ kinds: [1] }]);
     const first = MockWebSocket.last();
@@ -561,7 +629,12 @@ describe("Relay", () => {
     await waitUntil(() => sentMessages(first).filter((m) => m[0] === "REQ").length >= 2);
 
     first.close();
-    await waitUntil(() => relay.connected && MockWebSocket.instances.length >= 2);
+    await waitUntil(
+      all(
+        () => relay.connected,
+        () => MockWebSocket.instances.length >= 2,
+      ),
+    );
     const second = MockWebSocket.last();
     expect(second).not.toBe(first);
     await waitUntil(() => sentMessages(second).some((m) => m[0] === "REQ"));
@@ -578,18 +651,7 @@ describe("Relay", () => {
     const relay = await Relay.connect("wss://auth-identity.example", {
       websocketImplementation: MockWebSocketCtor,
     });
-    const sign = async (template: {
-      kind: number;
-      tags: ReadonlyArray<ReadonlyArray<string>>;
-      content: string;
-      created_at: number;
-    }) =>
-      EventBuilder.textNote("")
-        .kind(template.kind)
-        .tags(template.tags)
-        .content(template.content)
-        .createdAt(template.created_at)
-        .signWithKeys(keys);
+    const sign = authSignerFor(keys);
 
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["AUTH", "ch1"]));
@@ -597,6 +659,7 @@ describe("Relay", () => {
     let firstResult: { ok: boolean; message: string } | undefined;
     void first.then((r) => {
       firstResult = r;
+      return undefined;
     });
     await waitUntil(() => sentAuthEvents(ws).length > 0);
     const stale = sentAuthEvents(ws)[0]!;
@@ -608,9 +671,11 @@ describe("Relay", () => {
     void second.then(
       () => {
         secondSettled = true;
+        return undefined;
       },
       () => {
         secondSettled = true;
+        return undefined;
       },
     );
     await waitUntil(() => sentAuthEvents(ws).length >= 2);
@@ -649,7 +714,7 @@ describe("Relay", () => {
     ws.receive(JSON.stringify(["EOSE", req[1]]));
 
     const events = await fetchP;
-    expect(events.map((e) => e.content).sort()).toStrictEqual(["a", "b"]);
+    expect(events.map((e) => e.content).toSorted()).toStrictEqual(["a", "b"]);
     relay.close();
   });
 
@@ -896,11 +961,7 @@ describe("Relay", () => {
         id: "a".repeat(SUBSCRIPTION_ID_MAX_CHARS + 1),
       }),
     ).rejects.toThrow(MessageError);
-    expect(
-      sentMessages(MockWebSocket.last()).filter(
-        (m) => m[0] === "NEG-OPEN" || m[0] === "NEG-MSG" || m[0] === "NEG-CLOSE",
-      ),
-    ).toHaveLength(0);
+    expect(sentMessages(MockWebSocket.last()).filter(isNegFrame)).toHaveLength(0);
     relay.close();
   });
 
@@ -1018,7 +1079,7 @@ describe("Pool", () => {
     });
 
     // wait for both sockets
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(MockWebSocket.instances).toHaveLength(2);
 
     for (const ws of MockWebSocket.instances) {
@@ -1039,7 +1100,7 @@ describe("Pool", () => {
     const note = EventBuilder.textNote("fan").createdAt(1).signWithKeys(keys);
 
     const publishP = pool.publish(["wss://a.example", "wss://b.example"], note);
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     for (const ws of MockWebSocket.instances) {
       const eventMsg = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "EVENT") as [
@@ -1063,7 +1124,7 @@ describe("Pool", () => {
     try {
       await pool.ensureRelay("wss://up.example");
       MockWebSocket.failConnect = true;
-      await expect(pool.ensureRelay("wss://down.example")).rejects.toThrow();
+      await expect(pool.ensureRelay("wss://down.example")).rejects.toThrow(RelayConnectionError);
       const listed = pool.listRelays();
       expect(listed.some((u) => u.includes("up.example"))).toBe(true);
       expect(listed.some((u) => u.includes("down.example"))).toBe(true);
@@ -1196,11 +1257,7 @@ describe("alreadyHaveEvent / receivedEvent", () => {
       onevent: (e) => events.push(e.id),
     });
 
-    await waitUntil(
-      () =>
-        MockWebSocket.instances.length === 2 &&
-        MockWebSocket.instances.every((ws) => sentMessages(ws).some((m) => m[0] === "REQ")),
-    );
+    await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
     for (const ws of MockWebSocket.instances) {
       const req = sentMessages(ws).find((m) => m[0] === "REQ") as [string, string];
       ws.receive(JSON.stringify(["EVENT", req[1], note]));
@@ -1231,9 +1288,10 @@ describe("alreadyHaveEvent / receivedEvent", () => {
       onevent: (e) => events.push(e.id),
     });
     await waitUntil(
-      () =>
-        MockWebSocket.instances.length > 0 &&
-        sentMessages(MockWebSocket.last()).some((m) => m[0] === "REQ"),
+      all(
+        () => MockWebSocket.instances.length > 0,
+        () => hasSent(MockWebSocket.last(), "REQ"),
+      ),
     );
     const ws = MockWebSocket.last();
     const req = sentMessages(ws).find((m) => m[0] === "REQ") as [string, string];
@@ -1384,7 +1442,7 @@ describe("ping", () => {
       ws.receive(JSON.stringify(["EOSE", ping[1]]));
       expect(relay.subscriptionCount).toBe(0);
       expect(relay.connected).toBe(true);
-      expect(sentMessages(ws).some((m) => m[0] === "CLOSE" && m[1] === ping[1])).toBe(true);
+      expect(sentCloseFor(ws, ping[1])).toBe(true);
     } finally {
       relay.close();
     }
@@ -1404,7 +1462,7 @@ describe("ping", () => {
       ws.receive(JSON.stringify(["CLOSED", ping[1], "rate-limited"]));
       expect(relay.subscriptionCount).toBe(0);
       expect(relay.connected).toBe(true);
-      expect(sentMessages(ws).some((m) => m[0] === "CLOSE" && m[1] === ping[1])).toBe(true);
+      expect(sentCloseFor(ws, ping[1])).toBe(true);
     } finally {
       relay.close();
     }
@@ -1587,15 +1645,7 @@ describe("Relay generation / close", () => {
   test("stale connect timeout after close() does not kill the next socket", async () => {
     const realSetTimeout = globalThis.setTimeout;
     const held: Array<() => void> = [];
-    globalThis.setTimeout = ((handler: unknown, delay?: number, ...args: unknown[]) => {
-      if (delay === 80 && typeof handler === "function") {
-        held.push(() => {
-          (handler as (...a: unknown[]) => void)(...args);
-        });
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      }
-      return realSetTimeout(handler as Parameters<typeof setTimeout>[0], delay, ...args);
-    }) as typeof setTimeout;
+    globalThis.setTimeout = heldTimeout(80, held, realSetTimeout);
 
     try {
       MockWebSocket.autoConnect = false;
@@ -1631,7 +1681,12 @@ describe("Relay generation / close", () => {
       relay.subscribe([{ kinds: [1] }], {});
       const before = MockWebSocket.instances.length;
       secondWs.close();
-      await waitUntil(() => MockWebSocket.instances.length > before && relay.connected);
+      await waitUntil(
+        all(
+          () => MockWebSocket.instances.length > before,
+          () => relay.connected,
+        ),
+      );
       expect(relay.connected).toBe(true);
       relay.close();
     } finally {
@@ -1675,13 +1730,17 @@ describe("Relay generation / close", () => {
 
 function socketFor(substr: string): MockWebSocket {
   const ws = MockWebSocket.instances.find((s) => s.url.includes(substr));
-  if (!ws) {throw new Error(`no socket matching ${substr}`);}
+  if (!ws) {
+    throw new Error(`no socket matching ${substr}`);
+  }
   return ws;
 }
 
 function reqId(ws: MockWebSocket): string {
   const req = sentMessages(ws).find((m) => m[0] === "REQ") as [string, string] | undefined;
-  if (!req) {throw new Error(`no REQ on ${ws.url}`);}
+  if (!req) {
+    throw new Error(`no REQ on ${ws.url}`);
+  }
   return req[1];
 }
 
@@ -1714,21 +1773,8 @@ describe("Relay synthetic EOSE", () => {
     expect(eose).toBe(1);
 
     first.close();
-    await waitUntil(() => {
-      const live = MockWebSocket.instances.find(
-        (ws) =>
-          ws !== first &&
-          ws.url.includes("synth-eose.example") &&
-          ws.readyState === MockWebSocket.OPEN,
-      );
-      return Boolean(live && sentMessages(live).some((m) => m[0] === "REQ"));
-    });
-    const second = MockWebSocket.instances.find(
-      (ws) =>
-        ws !== first &&
-        ws.url.includes("synth-eose.example") &&
-        ws.readyState === MockWebSocket.OPEN,
-    )!;
+    await waitUntil(() => otherOpenInstanceSent(first, "synth-eose.example", "REQ"));
+    const second = must(openInstance(first, "synth-eose.example"), "second socket");
     second.receive(JSON.stringify(["EOSE", sub.id]));
     expect(eose).toBe(2);
     relay.close();
@@ -1738,13 +1784,7 @@ describe("Relay synthetic EOSE", () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://auth-synth-eose.example", {
       websocketImplementation: MockWebSocketCtor,
-      authSigner: async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      authSigner: authSignerFor(keys),
     });
     const events: string[] = [];
     let eose = 0;
@@ -1783,11 +1823,7 @@ describe("Pool aggregated EOSE", () => {
         eose += 1;
       },
     });
-    await waitUntil(
-      () =>
-        MockWebSocket.instances.length === 2 &&
-        MockWebSocket.instances.every((ws) => sentMessages(ws).some((m) => m[0] === "REQ")),
-    );
+    await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
     for (const ws of MockWebSocket.instances) {
       ws.receive(JSON.stringify(["EOSE", reqId(ws)]));
     }
@@ -1809,11 +1845,7 @@ describe("Pool aggregated EOSE", () => {
         },
       },
     );
-    await waitUntil(
-      () =>
-        MockWebSocket.instances.length === 2 &&
-        MockWebSocket.instances.every((ws) => sentMessages(ws).some((m) => m[0] === "REQ")),
-    );
+    await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
     const loud = socketFor("loud.example");
     const silent = socketFor("silent.example");
     loud.receive(JSON.stringify(["EOSE", reqId(loud)]));
@@ -1847,9 +1879,9 @@ describe("Pool aggregated EOSE", () => {
       },
     });
     await waitUntil(
-      () =>
-        MockWebSocket.instances.length === 1 &&
-        MockWebSocket.instances[0]!.readyState === MockWebSocket.CLOSED,
+      all(instanceCountIs(1), () =>
+        MockWebSocket.instances.every((ws) => ws.readyState === MockWebSocket.CLOSED),
+      ),
     );
     expect(eose).toBe(0);
     expect(closed).toBeUndefined();
@@ -1859,24 +1891,19 @@ describe("Pool aggregated EOSE", () => {
     await sleep(20);
     expect(eose).toBe(0);
     expect(closed).toBeUndefined();
-    await waitUntil(() => {
-      const second = MockWebSocket.instances.find(
-        (ws) => ws !== MockWebSocket.instances[0] && ws.readyState === MockWebSocket.OPEN,
-      );
-      return Boolean(second && sentMessages(second).some((m) => m[0] === "REQ"));
-    });
+    const firstSocket = must(MockWebSocket.instances[0], "first socket");
+    await waitUntil(() => otherOpenInstanceSent(firstSocket, "", "REQ"));
     expect(eose).toBe(0);
     expect(closed).toBeUndefined();
 
-    const first = MockWebSocket.instances[0]!;
-    const second = MockWebSocket.instances.find(
-      (ws) => ws !== first && ws.readyState === MockWebSocket.OPEN,
+    const first = must(MockWebSocket.instances[0], "first socket");
+    const second = must(openInstance(first, ""), "second socket");
+    const req = must(
+      sentMessages(second).find((m) => m[0] === "REQ") as
+        | [string, string, ...unknown[]]
+        | undefined,
+      "REQ on socket 2",
     );
-    if (!second) {throw new Error("expected second socket");}
-    const req = sentMessages(second).find((m) => m[0] === "REQ") as
-      | [string, string, ...unknown[]]
-      | undefined;
-    if (!req) {throw new Error("expected REQ on socket 2");}
     expect(req[0]).toBe("REQ");
     expect(req[1]).toBeTypeOf("string");
     expect(req[1].length).toBeGreaterThan(0);
@@ -1926,11 +1953,7 @@ describe("Pool aggregated EOSE", () => {
         closed = reason;
       },
     });
-    await waitUntil(
-      () =>
-        MockWebSocket.instances.length === 2 &&
-        MockWebSocket.instances.every((ws) => sentMessages(ws).some((m) => m[0] === "REQ")),
-    );
+    await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
     closer.close("stop");
     expect(closed).toBe("stop");
     expect(eose).toBe(0);
@@ -1951,11 +1974,7 @@ describe("Pool aggregated EOSE", () => {
         closed = reason;
       },
     });
-    await waitUntil(
-      () =>
-        MockWebSocket.instances.length === 2 &&
-        MockWebSocket.instances.every((ws) => sentMessages(ws).some((m) => m[0] === "REQ")),
-    );
+    await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
     ac.abort();
     expect(closed).toBe("aborted");
     expect(eose).toBe(0);
@@ -2054,27 +2073,15 @@ describe("Pool aggregated EOSE", () => {
         eose += 1;
       },
     });
-    await waitUntil(
-      () =>
-        MockWebSocket.instances.length === 2 &&
-        MockWebSocket.instances.every((ws) => sentMessages(ws).some((m) => m[0] === "REQ")),
-    );
+    await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
     const firstA = socketFor("a.example");
     const b = socketFor("b.example");
     firstA.receive(JSON.stringify(["EOSE", reqId(firstA)]));
     expect(eose).toBe(0);
 
     firstA.close();
-    await waitUntil(() => {
-      const live = MockWebSocket.instances.find(
-        (ws) =>
-          ws !== firstA && ws.url.includes("a.example") && ws.readyState === MockWebSocket.OPEN,
-      );
-      return Boolean(live && sentMessages(live).some((m) => m[0] === "REQ"));
-    });
-    const secondA = MockWebSocket.instances.find(
-      (ws) => ws !== firstA && ws.url.includes("a.example") && ws.readyState === MockWebSocket.OPEN,
-    )!;
+    await waitUntil(() => otherOpenInstanceSent(firstA, "a.example", "REQ"));
+    const secondA = must(openInstance(firstA, "a.example"), "second socket");
     secondA.receive(JSON.stringify(["EOSE", reqId(secondA)]));
     await sleep(20);
     expect(eose).toBe(0);
@@ -2124,8 +2131,7 @@ describe("Pool aggregated EOSE", () => {
     MockWebSocket.failConnect = true;
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     let n = 0;
-    let closer!: { close: (reason?: string) => void };
-    closer = pool.subscribe(["wss://a.example", "wss://b.example"], [{ kinds: [1] }], {
+    const closer = pool.subscribe(["wss://a.example", "wss://b.example"], [{ kinds: [1] }], {
       onclose: () => {
         n += 1;
         closer.close();
@@ -2140,11 +2146,7 @@ describe("Pool aggregated EOSE", () => {
   test("invalid URL after a valid one does not throw and caller close CLOSEs the valid REQ", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     const closer = pool.subscribe(["wss://ok.example", "not a url"], [{ kinds: [1] }]);
-    await waitUntil(() =>
-      MockWebSocket.instances.some(
-        (ws) => ws.url.includes("ok.example") && sentMessages(ws).some((m) => m[0] === "REQ"),
-      ),
-    );
+    await waitUntil(() => MockWebSocket.instances.some(urlSent("ok.example", "REQ")));
     const ok = socketFor("ok.example");
     closer.close();
     expect(sentMessages(ok).some((m) => m[0] === "CLOSE")).toBe(true);
@@ -2159,13 +2161,7 @@ describe("Pool aggregated EOSE", () => {
       automaticallyAuth: (url) => {
         calls += 1;
         expect(url).toContain("auth-once.example");
-        return async (template) =>
-          EventBuilder.textNote("")
-            .kind(template.kind)
-            .tags(template.tags)
-            .content(template.content)
-            .createdAt(template.created_at)
-            .signWithKeys(keys);
+        return authSignerFor(keys);
       },
     });
     await pool.ensureRelay("wss://auth-once.example");
@@ -2181,13 +2177,7 @@ describe("Pool aggregated EOSE", () => {
     const keys = Keys.fromSecretKey(SK);
     const pool = new Pool({
       websocketImplementation: MockWebSocketCtor,
-      automaticallyAuth: () => async (template) =>
-        EventBuilder.textNote("")
-          .kind(template.kind)
-          .tags(template.tags)
-          .content(template.content)
-          .createdAt(template.created_at)
-          .signWithKeys(keys),
+      automaticallyAuth: () => authSignerFor(keys),
     });
     try {
       await pool.ensureRelay("wss://auth-dup.example");
@@ -2288,8 +2278,9 @@ describe("live REQ coalescing", () => {
     const ws = MockWebSocket.last();
     const reqs = framesOf(ws, "REQ") as Array<[string, string]>;
     expect(reqs).toHaveLength(2);
-    expect(reqs[0]![1]).toBe(live.id);
-    const fetchId = reqs[1]![1];
+    const [, firstReqId] = must(reqs[0], "first REQ");
+    expect(firstReqId).toBe(live.id);
+    const [, fetchId] = must(reqs[1], "second REQ");
     expect(fetchId).not.toBe(live.id);
     ws.receive(JSON.stringify(["EVENT", fetchId, fetchNote]));
     ws.receive(JSON.stringify(["EOSE", fetchId]));
@@ -2452,10 +2443,11 @@ describe("live REQ coalescing", () => {
     expect(framesOf(first, "REQ")).toHaveLength(1);
     first.close();
     await waitUntil(
-      () =>
-        relay.connected &&
-        MockWebSocket.instances.length >= 2 &&
-        framesOf(MockWebSocket.last(), "REQ").length > 0,
+      all(
+        () => relay.connected,
+        () => MockWebSocket.instances.length >= 2,
+        () => framesOf(MockWebSocket.last(), "REQ").length > 0,
+      ),
     );
     const second = MockWebSocket.last();
     expect(second).not.toBe(first);
@@ -2545,11 +2537,7 @@ describe("live REQ coalescing", () => {
     } finally {
       restore();
     }
-    expect(reported.map((err) => (err instanceof Error ? err.message : String(err)))).toStrictEqual([
-      "a-onevent",
-      "a-oneose",
-      "a-onclose",
-    ]);
+    expect(reported.map(errText)).toStrictEqual(["a-onevent", "a-oneose", "a-onclose"]);
   });
 
   test("Pool.subscribe twice same URL+filters sends one REQ", async () => {
@@ -2567,11 +2555,16 @@ describe("live REQ coalescing", () => {
       onevent: (e) => bEvents.push(e.id),
     });
     const ws = socketFor("coal-pool.example");
-    await waitUntil(() => relay.subscriptionCount === 1 && framesOf(ws, "REQ").length > 0);
+    await waitUntil(
+      all(
+        () => relay.subscriptionCount === 1,
+        () => framesOf(ws, "REQ").length > 0,
+      ),
+    );
     await Promise.resolve();
     await Promise.resolve();
     expect(framesOf(ws, "REQ")).toHaveLength(1);
-    const id = (framesOf(ws, "REQ")[0] as [string, string])[1];
+    const [, id] = framesOf(ws, "REQ")[0] as [string, string];
     ws.receive(JSON.stringify(["EVENT", id, note]));
     expect(aEvents).toStrictEqual([note.id]);
     expect(bEvents).toStrictEqual([note.id]);
@@ -2594,8 +2587,13 @@ describe("live REQ coalescing", () => {
       },
     });
     const ws = socketFor("coal-pool-late.example");
-    await waitUntil(() => relay.subscriptionCount === 1 && framesOf(ws, "REQ").length > 0);
-    const id = (framesOf(ws, "REQ")[0] as [string, string])[1];
+    await waitUntil(
+      all(
+        () => relay.subscriptionCount === 1,
+        () => framesOf(ws, "REQ").length > 0,
+      ),
+    );
+    const [, id] = framesOf(ws, "REQ")[0] as [string, string];
     ws.receive(JSON.stringify(["EOSE", id]));
     expect(eoseA).toBe(1);
     const b = pool.subscribe([url], [{ kinds: [1] }], {
@@ -2671,7 +2669,8 @@ describe("issue #125", () => {
     const first = relay2.auth(sign2);
     await waitUntil(() => sentAuthEvents(ws2).length === 1);
     ws2.receive(JSON.stringify(["OK", sentAuthEvents(ws2)[0]!.id, false, "error: rejected"]));
-    expect((await first).ok).toBe(false);
+    const firstResult = await first;
+    expect(firstResult.ok).toBe(false);
 
     const cached = await relay2.auth(sign2);
     expect(cached.ok).toBe(false);
@@ -2682,7 +2681,8 @@ describe("issue #125", () => {
     const second = relay2.auth(sign2);
     await waitUntil(() => sentAuthEvents(ws2).length === 2);
     ws2.receive(JSON.stringify(["OK", sentAuthEvents(ws2)[1]!.id, true, ""]));
-    expect((await second).ok).toBe(true);
+    const secondResult = await second;
+    expect(secondResult.ok).toBe(true);
     expect(signs2).toBe(2);
     relay2.close();
   });
@@ -2768,6 +2768,7 @@ describe("issue #130", () => {
       relay.onnotice = () => {
         throw noticeBoom;
       };
+      // oxlint-disable-next-line prefer-add-event-listener -- Relay.onclose is a callback property of our API, not a DOM EventTarget
       relay.onclose = () => {
         throw closeBoom;
       };
@@ -2871,8 +2872,10 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
     fire().onclose?.("relay went away");
 
     const it = iterable[Symbol.asyncIterator]();
-    expect((await it.next()).value?.id).toBe(a.id);
-    expect((await it.next()).value?.id).toBe(b.id);
+    const nextA = await it.next();
+    expect(nextA.value?.id).toBe(a.id);
+    const nextB = await it.next();
+    expect(nextB.value?.id).toBe(b.id);
     const err = await it.next().then(
       () => {
         throw new Error("expected throw");
@@ -2902,8 +2905,10 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
     fire().onevent?.(a);
     ctrl.abort(new Error("stop"));
     const it = iterable[Symbol.asyncIterator]();
-    expect((await it.next()).value?.id).toBe(a.id);
-    expect((await it.next()).done).toBe(true);
+    const abortedNext = await it.next();
+    expect(abortedNext.value?.id).toBe(a.id);
+    const abortedDone = await it.next();
+    expect(abortedDone.done).toBe(true);
     expect(closeReasons).toStrictEqual(["aborted"]);
   });
 
@@ -2913,8 +2918,10 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
     fire().onevent?.(a);
     fire().oneose?.();
     const it = iterable[Symbol.asyncIterator]();
-    expect((await it.next()).value?.id).toBe(a.id);
-    expect((await it.next()).done).toBe(true);
+    const eoseNext = await it.next();
+    expect(eoseNext.value?.id).toBe(a.id);
+    const eoseDone = await it.next();
+    expect(eoseDone.done).toBe(true);
     expect(closeReasons).toStrictEqual(["eose"]);
   });
 
@@ -2924,7 +2931,8 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
     iterable.close();
     const it = iterable[Symbol.asyncIterator]();
     await it.next();
-    expect((await it.next()).done).toBe(true);
+    const closedNext = await it.next();
+    expect(closedNext.done).toBe(true);
     expect(closeReasons).toStrictEqual(["closed by client"]);
   });
 });
@@ -2944,15 +2952,17 @@ describe("relay.stream abort semantics (issue #134)", () => {
     const ws = MockWebSocket.last();
     const req = ws.lastSent() as [string, string, ...unknown[]];
     expect(req[0]).toBe("REQ");
-    const subId = req[1];
+    const [, subId] = req;
     ws.receive(JSON.stringify(["EVENT", subId, a]));
     ws.receive(JSON.stringify(["EVENT", subId, b]));
 
     // The Subscription's abort listener fires before the iterable wrapper's;
     // both are local closes, so no RelayClosedError reaches the consumer.
     ctrl.abort(new Error("caller aborted"));
-    expect((await it.next()).value?.id).toBe(a.id);
-    expect((await it.next()).value?.id).toBe(b.id);
+    const drainA = await it.next();
+    expect(drainA.value?.id).toBe(a.id);
+    const drainB = await it.next();
+    expect(drainB.value?.id).toBe(b.id);
     await expect(it.next()).resolves.toStrictEqual({ value: undefined, done: true });
     relay.close();
   });

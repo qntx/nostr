@@ -1,8 +1,44 @@
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { expect, test, describe } from "vite-plus/test";
 
-import { Kind, Keys, MessageError, UrlError, SUBSCRIPTION_ID_MAX_CHARS, SecretKey, assertSubscriptionId, canonicalizeFilter, canonicalizeFilters, classifyKind, createSubscriptionId, eventAddress, formatEventAddress, encodeClientMessage, finalizeEvent, getEventHash, getPublicKey, isAddressableKind, isEphemeralKind, isRegularKind, isReplaceableKind, filterFingerprint, matchFilter, matchFilters, mergeFilters, parseClientMessage, parseEventAddress, parseRelayMessage, serializeEvent, normalizeURL, Tag, validateEvent, validateSignedEvent, verifyEvent } from '../src/index.ts';
-import type { Event, Filter } from '../src/index.ts';
+import {
+  Kind,
+  Keys,
+  MessageError,
+  UrlError,
+  SUBSCRIPTION_ID_MAX_CHARS,
+  SecretKey,
+  assertSubscriptionId,
+  canonicalizeFilter,
+  canonicalizeFilters,
+  classifyKind,
+  createSubscriptionId,
+  eventAddress,
+  formatEventAddress,
+  encodeClientMessage,
+  finalizeEvent,
+  getEventHash,
+  getPublicKey,
+  isAddressableKind,
+  isEphemeralKind,
+  isRegularKind,
+  isReplaceableKind,
+  filterFingerprint,
+  matchFilter,
+  EventValidationError,
+  matchFilters,
+  mergeFilters,
+  parseClientMessage,
+  parseEventAddress,
+  parseRelayMessage,
+  serializeEvent,
+  normalizeURL,
+  Tag,
+  validateEvent,
+  validateSignedEvent,
+  verifyEvent,
+} from "../src/index.ts";
+import type { ClientMessage, Event, Filter } from "../src/index.ts";
 
 const SK_HEX = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
@@ -126,7 +162,7 @@ describe("events", () => {
       expect(verifyEvent(bad)).toBe(false);
     }
     // serializeEvent must not silently lowercase a non-canonical pubkey
-    expect(() => serializeEvent(upperPk)).toThrow();
+    expect(() => serializeEvent(upperPk)).toThrow(EventValidationError);
   });
 });
 
@@ -225,6 +261,11 @@ describe("tags", () => {
   });
 });
 
+const sortedNums = (values: ReadonlyArray<number> | undefined): number[] =>
+  [...(values ?? [])].toSorted((a, b) => a - b);
+const sortedStrs = (values: ReadonlyArray<string> | undefined): string[] =>
+  [...(values ?? [])].toSorted((a, b) => a.localeCompare(b));
+
 describe("filter", () => {
   const base = finalizeEvent(
     {
@@ -262,8 +303,8 @@ describe("filter", () => {
 
   test("mergeFilters unions list fields", () => {
     const merged = mergeFilters({ kinds: [1], authors: ["a"] }, { kinds: [2], authors: ["b"] });
-    expect([...(merged.kinds ?? [])].sort((a, b) => a - b)).toStrictEqual([1, 2]);
-    expect([...(merged.authors ?? [])].sort((a, b) => a.localeCompare(b))).toStrictEqual(["a", "b"]);
+    expect(sortedNums(merged.kinds)).toStrictEqual([1, 2]);
+    expect(sortedStrs(merged.authors)).toStrictEqual(["a", "b"]);
   });
 
   test("filterFingerprint sorts keys, list items, and filter order", () => {
@@ -342,7 +383,10 @@ describe("filter", () => {
     expect(out["#t"]).toStrictEqual(["a", "b"]);
     expect(canonicalizeFilter({ "#t": ["Nostr"] })["#t"]).toStrictEqual(["Nostr"]);
     expect("since" in canonicalizeFilter(withUndef)).toBe(false);
-    expect(canonicalizeFilter({ kinds: [1], authors: [] })).toStrictEqual({ authors: [], kinds: [1] });
+    expect(canonicalizeFilter({ kinds: [1], authors: [] })).toStrictEqual({
+      authors: [],
+      kinds: [1],
+    });
     expect(canonicalizeFilter({ kinds: [1] })).toStrictEqual({ kinds: [1] });
     expect(filter.authors).toStrictEqual([pkB.toUpperCase(), pkA]);
     expect(filter.kinds).toStrictEqual([2, 1]);
@@ -362,6 +406,13 @@ describe("filter", () => {
   });
 });
 
+function eventPayload(message: ClientMessage): Event {
+  if (message[0] !== "EVENT") {
+    throw new Error("expected an EVENT client message");
+  }
+  return message[1];
+}
+
 describe("messages", () => {
   test("encode and parse EVENT client message", () => {
     const event = finalizeEvent(
@@ -371,9 +422,7 @@ describe("messages", () => {
     const raw = encodeClientMessage(["EVENT", event]);
     const parsed = parseClientMessage(raw);
     expect(parsed[0]).toBe("EVENT");
-    if (parsed[0] === "EVENT") {
-      expect(parsed[1].id).toBe(event.id);
-    }
+    expect(eventPayload(parsed).id).toBe(event.id);
   });
 
   test("parse relay EVENT / EOSE / OK", () => {

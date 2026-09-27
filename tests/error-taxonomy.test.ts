@@ -35,7 +35,7 @@ import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
- async function captureError(p: Promise<unknown>): Promise<unknown> {
+async function captureError(p: Promise<unknown>): Promise<unknown> {
   return p.then(
     () => {
       throw new Error("expected reject");
@@ -56,7 +56,10 @@ function syncThrow(fn: () => unknown): unknown {
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) {return;}
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("timeout waiting for condition");
@@ -72,8 +75,9 @@ describe("event loader nsec/npub", () => {
       relays: [],
       index: new ReactiveEventStore(),
     });
-    // oxlint-disable-next-line typescript/promise-function-async -- asserting the synchronous throw
-    const err = syncThrow(() => loaders.event(nsec));
+    const err = syncThrow(() => {
+      void loaders.event(nsec);
+    });
     expect(err).toBeInstanceOf(Nip19Error);
     expect((err as Nip19Error).message).toBe("cannot load event from nsec");
   });
@@ -87,8 +91,9 @@ describe("event loader nsec/npub", () => {
       relays: [],
       index: new ReactiveEventStore(),
     });
-    // oxlint-disable-next-line typescript/promise-function-async -- asserting the synchronous throw
-    const err = syncThrow(() => loaders.event(npub));
+    const err = syncThrow(() => {
+      void loaders.event(npub);
+    });
     expect(err).toBeInstanceOf(Nip19Error);
     expect((err as Nip19Error).message).toBe("cannot load event from npub");
   });
@@ -115,7 +120,7 @@ describe("OutboxFeed closed", () => {
 describe("DataLoader batch length", () => {
   test("values.length !== keys.length rejects LoaderError", async () => {
     let batchLen = 0;
-    const loader = new DataLoader<string, string>((keys) => {
+    const loader = new DataLoader<string, string>(async (keys) => {
       batchLen = keys.length;
       return Promise.resolve([]);
     });
@@ -132,6 +137,42 @@ describe("DataLoader batch length", () => {
   });
 });
 
+function restoreGlobal(name: string, value: unknown): void {
+  if (value === undefined) {
+    Reflect.deleteProperty(globalThis, name);
+  } else {
+    Reflect.set(globalThis, name, value);
+  }
+}
+
+type MinimalFetchResponse = {
+  ok: boolean;
+  status: number;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+};
+
+function notFoundFetch(
+  href: string,
+  prev: typeof fetch,
+  onCall: () => void,
+): (input: URL | string) => Promise<Response | MinimalFetchResponse> {
+  return async (input: URL | string) => {
+    const url = input instanceof URL ? input.href : input;
+    if (url !== href) {
+      return prev(input);
+    }
+    onCall();
+    return {
+      ok: false,
+      status: 404,
+      arrayBuffer: async () => {
+        await Promise.resolve();
+        return new ArrayBuffer(0);
+      },
+    };
+  };
+}
+
 describe("wasm HTTP load", () => {
   afterEach(() => {
     resetNostrWasmForTests();
@@ -142,12 +183,13 @@ describe("wasm HTTP load", () => {
     const href = "https://wasm-404.qntx.test/nostr_crypto_wasm_bg.wasm";
     const prev = globalThis.fetch;
     let fetchCalls = 0;
-    globalThis.fetch = (async (input: URL | string) => {
-      const url = input instanceof URL ? input.href : input;
-      if (url !== href) {return prev(input);}
-      fetchCalls += 1;
-      return { ok: false, status: 404, arrayBuffer: () => new ArrayBuffer(0) };
-    }) as typeof fetch;
+    Reflect.set(
+      globalThis,
+      "fetch",
+      notFoundFetch(href, prev, () => {
+        fetchCalls += 1;
+      }),
+    );
     try {
       const err = await captureError(loadNostrWasm({ module: new URL(href) }));
       expect(fetchCalls).toBe(1);
@@ -167,8 +209,8 @@ describe("subscriptionToAsyncIterable close reasons", () => {
     next: () => Promise<IteratorResult<unknown>>;
   } {
     let handlersRef: {
-      oneose?: () => void;
-      onclose?: (reason: string) => void;
+      oneose?: (() => void) | undefined;
+      onclose?: ((reason: string) => void) | undefined;
     } = {};
     const stream = subscriptionToAsyncIterable((handlers) => {
       handlersRef = handlers;
@@ -178,13 +220,15 @@ describe("subscriptionToAsyncIterable close reasons", () => {
         },
       };
     }, opts);
-    if (!handlersRef.onclose) {throw new Error("start omitted onclose");}
+    if (!handlersRef.onclose) {
+      throw new Error("start omitted onclose");
+    }
     const iterator = stream[Symbol.asyncIterator]();
     return {
       stream,
       oneose: () => handlersRef.oneose?.(),
       onclose: (reason: string) => handlersRef.onclose?.(reason),
-      next:  async () => iterator.next(),
+      next: async () => iterator.next(),
     };
   }
 
@@ -255,7 +299,7 @@ describe("Pool.publishAny rejected OK", () => {
     MockWebSocket.last().receive(JSON.stringify(["OK", note.id, false, "blocked: spam"]));
     const err = await captureError(pending);
     expect(err).toBeInstanceOf(AggregateError);
-    const inner = (err as AggregateError).errors[0];
+    const [inner] = (err as AggregateError).errors;
     expect(inner).toBeInstanceOf(RelayPublishError);
     expect((inner as RelayPublishError).message).toContain("blocked: spam");
     pool.close();
@@ -275,8 +319,7 @@ describe("IndexedDbEventStore missing IndexedDB", () => {
       expect(err).toBeInstanceOf(NostrError);
       expect((err as StorageError).message).toBe("IndexedDB is not available in this environment");
     } finally {
-      if (prev === undefined) {delete g.indexedDB;}
-      else {g.indexedDB = prev;}
+      restoreGlobal("indexedDB", prev);
     }
   });
 });
@@ -328,6 +371,7 @@ describe("ClientError", () => {
     expect((err as ClientError).message).toBe(message);
   }
 
+  // oxlint-disable-next-line expect-expect -- assertions live in the pinClientError helper
   test("getPublicKey/signEvent/signEventBuilder/signTemplate without signer", async () => {
     const client = new Client();
     pinClientError(await captureError(client.getPublicKey()), "no signer configured");
@@ -342,6 +386,7 @@ describe("ClientError", () => {
     );
   });
 
+  // oxlint-disable-next-line expect-expect -- assertions live in the pinClientError helper
   test("requireNip59Crypto methods without signer", async () => {
     const client = new Client({ relays: ["wss://a.example"] });
     pinClientError(
@@ -352,6 +397,7 @@ describe("ClientError", () => {
     pinClientError(await captureError(client.subscribePrivateMessages()), "no signer configured");
   });
 
+  // oxlint-disable-next-line expect-expect -- assertions live in the pinClientError helper
   test("assertAlive after shutdown", async () => {
     const client = new Client({ relays: ["wss://a.example"] });
     await client.shutdown();
@@ -362,6 +408,7 @@ describe("ClientError", () => {
     );
   });
 
+  // oxlint-disable-next-line expect-expect -- assertions live in the pinClientError helper
   test("defaultRelays with no relays configured", () => {
     const client = new Client();
     pinClientError(
@@ -410,7 +457,7 @@ describe("NoSignerError", () => {
       });
       const ws = MockWebSocket.last();
       ws.receive(JSON.stringify(["AUTH", "chal"]));
-      const result = await relay.auth( async () =>
+      const result = await relay.auth(async () =>
         Promise.reject(new NoSignerError("no signer configured for AUTH")),
       );
       expect(result.ok).toBe(false);

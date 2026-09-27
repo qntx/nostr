@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { EventBuilder, Keys, SqliteEventStore, StorageError } from '../src/index.ts';
-import type { Event } from '../src/index.ts';
+import { EventBuilder, Keys, SqliteEventStore, StorageError } from "../src/index.ts";
+import type { Event } from "../src/index.ts";
 import { eventStoreConformanceCases } from "../src/testing/index.ts";
 import { SqliteTestDriver } from "./helpers/sqlite-driver.ts";
 
@@ -25,16 +25,15 @@ async function openStore(): Promise<{ driver: SqliteTestDriver; store: SqliteEve
 }
 
 describe("SqliteEventStore conformance", () => {
-  for (const c of eventStoreConformanceCases) {
-    test(c.name, async () => {
-      const { driver, store } = await openStore();
-      try {
-        await c.run(store);
-      } finally {
-        driver.close();
-      }
-    });
-  }
+  // oxlint-disable-next-line expect-expect -- assertions live inside each case's run()
+  test.each(eventStoreConformanceCases)("$name", async (c) => {
+    const { driver, store } = await openStore();
+    try {
+      await c.run(store);
+    } finally {
+      driver.close();
+    }
+  });
 });
 
 describe("SqliteEventStore", () => {
@@ -104,7 +103,8 @@ describe("SqliteEventStore", () => {
         .createdAt(9)
         .signWithKeys(alice());
       await expect(second.put(fresh)).resolves.toBe("accepted");
-      expect((await second.get(fresh.id))?.content).toBe("fresh");
+      const freshRow = await second.get(fresh.id);
+      expect(freshRow?.content).toBe("fresh");
     } finally {
       driver.close();
     }
@@ -138,11 +138,14 @@ describe("SqliteEventStore", () => {
       const filler = (n: number): string[] =>
         Array.from({ length: n }, (_, i) => (i + 1).toString(16).padStart(64, "0"));
       const manyIds = [...filler(600), mine.id];
-      expect((await store.query([{ ids: manyIds }])).map((e) => e.id)).toStrictEqual([mine.id]);
+      const idRows = await store.query([{ ids: manyIds }]);
+      expect(idRows.map((e) => e.id)).toStrictEqual([mine.id]);
       const manyAuthors = [...filler(600), alice().publicKey];
-      expect((await store.query([{ authors: manyAuthors }])).map((e) => e.id)).toStrictEqual([mine.id]);
+      const authorRows = await store.query([{ authors: manyAuthors }]);
+      expect(authorRows.map((e) => e.id)).toStrictEqual([mine.id]);
       await expect(store.count([{ ids: manyIds, kinds: [1] }])).resolves.toBe(1);
-      expect((await store.negentropyItems({ ids: manyIds })).map((i) => i.id)).toStrictEqual([mine.id]);
+      const negRows = await store.negentropyItems({ ids: manyIds });
+      expect(negRows.map((i) => i.id)).toStrictEqual([mine.id]);
     } finally {
       driver.close();
     }
@@ -159,13 +162,18 @@ describe("SqliteEventStore", () => {
       const v1 = put("v1", 1);
       const v2 = put("v2", 2);
       const v3 = put("v3", 3);
-      await expect(store.putMany([v1, v2, v3])).resolves.toStrictEqual(["accepted", "replaced", "replaced"]);
+      await expect(store.putMany([v1, v2, v3])).resolves.toStrictEqual([
+        "accepted",
+        "replaced",
+        "replaced",
+      ]);
       const rows = await driver.all<{ id: string }>(`SELECT id FROM events WHERE address = ?`, [
         `30001:${alice().publicKey}:x`,
       ]);
       expect(rows).toHaveLength(1);
       expect(rows[0]?.id).toBe(v3.id);
-      expect((await store.query([{ kinds: [30001] }])).map((e) => e.id)).toStrictEqual([v3.id]);
+      const kindRows = await store.query([{ kinds: [30001] }]);
+      expect(kindRows.map((e) => e.id)).toStrictEqual([v3.id]);
       await expect(store.get(v1.id)).resolves.toBeUndefined();
     } finally {
       driver.close();
@@ -193,7 +201,8 @@ describe("SqliteEventStore", () => {
       const del = EventBuilder.deletion(targets, "").createdAt(5).signWithKeys(alice());
       await expect(store.put(del)).resolves.toBe("deleted");
       await expect(store.get(target.id)).resolves.toBeUndefined();
-      expect((await store.get(keep.id))?.content).toBe("keep");
+      const keepRow = await store.get(keep.id);
+      expect(keepRow?.content).toBe("keep");
     } finally {
       driver.close();
     }
@@ -205,9 +214,8 @@ describe("SqliteEventStore", () => {
       const tagged = note(alice(), "tagged", 1, [["client", "test-app"]]);
       const plain = note(alice(), "plain", 2);
       await store.putMany([tagged, plain]);
-      expect((await store.query([{ "#client": ["test-app"] }])).map((e) => e.id)).toStrictEqual([
-        tagged.id,
-      ]);
+      const tagRows = await store.query([{ "#client": ["test-app"] }]);
+      expect(tagRows.map((e) => e.id)).toStrictEqual([tagged.id]);
       await expect(store.count([{ "#client": ["test-app"] }])).resolves.toBe(1);
     } finally {
       driver.close();

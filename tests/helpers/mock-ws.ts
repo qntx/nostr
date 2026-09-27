@@ -44,7 +44,9 @@ export class MockWebSocket implements WebSocketLike {
 
   static last(): MockWebSocket {
     const ws = MockWebSocket.instances.at(-1);
-    if (!ws) {throw new Error("no MockWebSocket instances");}
+    if (!ws) {
+      throw new Error("no MockWebSocket instances");
+    }
     return ws;
   }
 
@@ -88,13 +90,17 @@ export class MockWebSocket implements WebSocketLike {
   /** Parse last client message sent on this socket. */
   lastSent(): unknown {
     const raw = this.sent.at(-1);
-    if (!raw) {throw new Error("no messages sent");}
+    if (raw === undefined) {
+      throw new Error("no messages sent");
+    }
     return JSON.parse(raw);
   }
 
   #emit(type: string, ev: unknown): void {
-    for (const listener of this.#listeners.get(type) ?? []) {listener(ev);}
+    for (const listener of this.#listeners.get(type) ?? []) {
+      listener(ev);
+    }
   }
 }
 
-export const MockWebSocketCtor = MockWebSocket as unknown as WebSocketConstructor;
+export const MockWebSocketCtor: WebSocketConstructor = MockWebSocket;

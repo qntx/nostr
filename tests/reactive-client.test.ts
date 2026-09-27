@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
 import { normalizeURL } from "../src/core/util.ts";
 import { Client, EventBuilder, Keys } from "../src/index.ts";
-import { createFakeRelayNetwork } from '../src/testing/index.ts';
-import type { FakeRelayNetwork } from '../src/testing/index.ts';
+import { createFakeRelayNetwork } from "../src/testing/index.ts";
+import type { FakeRelayNetwork } from "../src/testing/index.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -11,14 +11,24 @@ const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const A = normalizeURL("wss://a.example");
 const B = normalizeURL("wss://b.example");
 
- async function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+const indexOrderLabel = (event: unknown): string =>
+  event === undefined ? "index-late" : "index-first";
+
+const lastSocketSentReq = (): boolean =>
+  MockWebSocket.instances.length > 0 &&
+  MockWebSocket.last().sent.some((s) => (JSON.parse(s) as unknown[])[0] === "REQ");
 
 async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (pred()) {return;}
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -85,7 +95,7 @@ describe("Client + ReactiveEventStore", () => {
       {
         onevent: (event) => {
           // index must already contain the event when the caller sees it
-          order.push(client.index.get(event.id) === undefined ? "index-late" : "index-first");
+          order.push(indexOrderLabel(client.index.get(event.id)));
         },
         receivedEvent: (id) => received.push(id),
       },
@@ -119,7 +129,7 @@ describe("Client + ReactiveEventStore", () => {
     expect(ids.has(inStorage.id)).toBe(true);
     expect(ids.has(inNet.id)).toBe(true);
     // storage hit hydrated into the index, network event indexed with its url
-    expect(client.index.get(inStorage.id) !== undefined).toBe(true);
+    expect(client.index.get(inStorage.id)).toBeDefined();
     expect(client.index.seenOn(inNet.id)).toStrictEqual([A]);
     await client.shutdown();
   });
@@ -192,14 +202,10 @@ describe("issue #125", () => {
     const eph = EventBuilder.textNote("live-only").kind(20001).createdAt(1).signWithKeys(keys);
 
     const pending = client.fetchEvents({ kinds: [20001] });
-    await waitUntil(
-      () =>
-        MockWebSocket.instances.length > 0 &&
-        MockWebSocket.last().sent.some((s) => (JSON.parse(s) as unknown[])[0] === "REQ"),
-    );
+    await waitUntil(lastSocketSentReq);
     const ws = MockWebSocket.last();
     const req = ws.sent.map((s) => JSON.parse(s) as unknown[]).find((m) => m[0] === "REQ")!;
-    const subId = req[1];
+    const [, subId] = req;
     ws.receive(JSON.stringify(["EVENT", subId, eph]));
     ws.receive(JSON.stringify(["EOSE", subId]));
 

@@ -41,7 +41,8 @@ describe("nip98", () => {
     expect(token.startsWith("Nostr ")).toBe(true);
     const raw = token.slice("Nostr ".length);
     expect(/^[A-Za-z0-9+/]+=*$/.test(raw)).toBe(true);
-    expect(raw.includes("-") || raw.includes("_")).toBe(false);
+    expect(raw).not.toContain("-");
+    expect(raw).not.toContain("_");
 
     const event = unpackEventFromToken(token);
     expect(validateAuthEvent(event, URL, METHOD)).toBe(true);
@@ -83,7 +84,10 @@ describe("nip98", () => {
 
     const raw = "raw-body";
     const rawEvent = unpackEventFromToken(await getToken(URL, METHOD, sign, { payload: raw }));
-    expect(rawEvent.tags[2]).toStrictEqual(["payload", bytesToHex(sha256(utf8Encoder.encode(raw)))]);
+    expect(rawEvent.tags[2]).toStrictEqual([
+      "payload",
+      bytesToHex(sha256(utf8Encoder.encode(raw))),
+    ]);
     expect(rawEvent.tags[2]?.[1]).not.toBe(
       bytesToHex(sha256(utf8Encoder.encode(JSON.stringify(raw)))),
     );
@@ -125,7 +129,7 @@ describe("nip98", () => {
     const spec =
       "eyJpZCI6ImZlOTY0ZTc1ODkwMzM2MGYyOGQ4NDI0ZDA5MmRhODQ5NGVkMjA3Y2JhODIzMTEwYmUzYTU3ZGZlNGI1Nzg3MzQiLCJwdWJrZXkiOiI2M2ZlNjMxOGRjNTg1ODNjZmUxNjgxMGY4NmRkMDllMThiZmQ3NmFhYmMyNGEwMDgxY2UyODU2ZjMzMDUwNGVkIiwiY29udGVudCI6IiIsImtpbmQiOjI3MjM1LCJjcmVhdGVkX2F0IjoxNjgyMzI3ODUyLCJ0YWdzIjpbWyJ1IiwiaHR0cHM6Ly9hcGkuc25vcnQuc29jaWFsL2FwaS92MS9uNXNwL2xpc3QiXSxbIm1ldGhvZCIsIkdFVCJdXSwic2lnIjoiNWVkOWQ4ZWM5NThiYzg1NGY5OTdiZGMyNGFjMzM3ZDAwNWFmMzcyMzI0NzQ3ZWZlNGEwMGUyNGY0YzMwNDM3ZmY0ZGQ4MzA4Njg0YmVkNDY3ZDlkNmJlM2U1YTUxN2JiNDNiMTczMmNjN2QzMzk0OWEzYWFmODY3MDVjMjIxODQifQ";
     expect(spec.length % 4).toBe(2);
-    expect(spec).not.toContain('=');
+    expect(spec).not.toContain("=");
 
     const event = unpackEventFromToken(spec);
     expect(event.id).toBe("fe964e758903360f28d8424d092da8494ed207cba823110be3a57dfe4b578734");

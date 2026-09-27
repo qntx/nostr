@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { getEventHash, hexToBytes } from '../src/index.ts';
-import type { UnsignedEvent } from '../src/index.ts';
+import { getEventHash, hexToBytes } from "../src/index.ts";
+import type { UnsignedEvent } from "../src/index.ts";
 import { getPow, minePow, Nip13Error } from "../src/nips/nip13.ts";
 
 const NIP13_EXAMPLE_ID = "000006d8c378af1779d2feebc7603a125d99eca0ccf1085959b307f64e5dd358";

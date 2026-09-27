@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
@@ -36,7 +35,7 @@ describe("package.json wasm publish", () => {
   test("prepublishOnly packs wasm", () => {
     // The setup-wasm reusable workflow requires this exact string;
     // package checks run at the end of build:wasm instead.
-    expect(readPkg().scripts.prepublishOnly).toBe("bun run build:wasm");
+    expect(readPkg().scripts["prepublishOnly"]).toBe("bun run build:wasm");
   });
 
   test("wasm subpath does not export resetNostrWasmForTests", () => {
@@ -51,15 +50,15 @@ describe("package.json wasm publish", () => {
       "bash scripts/build-wasm.sh && WASM_PACK=1 vp pack && ls dist/*.wasm >/dev/null && publint && attw --pack . --profile esm-only",
     );
     expect(script).not.toMatch(/(^|[\s;|&])cp(\s|$)/);
-    expect(script).not.toContain('then cp ');
+    expect(script).not.toContain("then cp ");
     expect(script.endsWith("attw --pack . --profile esm-only")).toBe(true);
   });
 
   test("bun run build does not set WASM_PACK", () => {
-    const build = readPkg().scripts.build!;
+    const build = readPkg().scripts["build"]!;
     expect(build).toBe("vp pack");
-    expect(build).not.toContain('WASM_PACK');
-    expect(build).not.toContain('build:wasm');
+    expect(build).not.toContain("WASM_PACK");
+    expect(build).not.toContain("build:wasm");
   });
 });
 
@@ -109,16 +108,25 @@ describe("applyPackExports", () => {
   });
 
   test("writes ./wasm when WASM_PACK is unset", () => {
-    const prev = process.env.WASM_PACK;
-    delete process.env.WASM_PACK;
+    const prev = process.env["WASM_PACK"];
+    delete process.env["WASM_PACK"];
     try {
-      expect(applyPackExports({ "./relay": "./dist/relay.mjs" })["./wasm"]).toStrictEqual(WASM_EXPORT);
+      expect(applyPackExports({ "./relay": "./dist/relay.mjs" })["./wasm"]).toStrictEqual(
+        WASM_EXPORT,
+      );
     } finally {
-      if (prev === undefined) {delete process.env.WASM_PACK;}
-      else {process.env.WASM_PACK = prev;}
+      restoreEnv("WASM_PACK", prev);
     }
   });
 });
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, name);
+  } else {
+    process.env[name] = value;
+  }
+}
 
 describe("vite pack.entry.wasm gate", () => {
   test("wasm entry stays WASM_PACK-gated", () => {

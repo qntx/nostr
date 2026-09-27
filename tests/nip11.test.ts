@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { Nip11Error, fetchRelayInformation, relayInfoHttpUrl } from '../src/nips/nip11.ts';
-import type { Nip11Fetch } from '../src/nips/nip11.ts';
+import { Nip11Error, fetchRelayInformation, relayInfoHttpUrl } from "../src/nips/nip11.ts";
+import type { Nip11Fetch, RelayInformation } from "../src/nips/nip11.ts";
 
 describe("relayInfoHttpUrl", () => {
   test("rewrites websocket schemes", () => {
@@ -27,14 +27,38 @@ describe("relayInfoHttpUrl", () => {
   });
 });
 
+const tick = async (): Promise<void> => {
+  await Promise.resolve();
+};
+
+const rejectionOf = async (promise: Promise<unknown>): Promise<unknown> => {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected rejection");
+};
+
+const causeOf = (error: unknown): unknown => (error instanceof Error ? error.cause : undefined);
+
+const lacksLimitationField = (info: RelayInformation, key: string): boolean =>
+  info.limitation === undefined || !(key in info.limitation);
+
 describe("fetchRelayInformation", () => {
   function jsonResponse(status: number, body: unknown): Awaited<ReturnType<Nip11Fetch>> {
     return {
       ok: status >= 200 && status < 300,
       status,
       headers: { get: () => null },
-      json: () => body,
-      arrayBuffer: () => new ArrayBuffer(0),
+      json: async () => {
+        await tick();
+        return body;
+      },
+      arrayBuffer: async () => {
+        await tick();
+        return new ArrayBuffer(0);
+      },
     };
   }
 
@@ -47,7 +71,8 @@ describe("fetchRelayInformation", () => {
   test("GETs the rewritten URL with Accept and redirect: manual", async () => {
     let seenUrl: string | undefined;
     let seenInit: Parameters<Nip11Fetch>[1];
-    const fetchImpl: Nip11Fetch = (url, init) => {
+    const fetchImpl: Nip11Fetch = async (url, init) => {
+      await tick();
       seenUrl = url;
       seenInit = init;
       return jsonResponse(200, { name: "Example" });
@@ -61,7 +86,10 @@ describe("fetchRelayInformation", () => {
   });
 
   test("404 throws Nip11Error", async () => {
-    const fetchImpl: Nip11Fetch = () => jsonResponse(404, { name: "missing" });
+    const fetchImpl: Nip11Fetch = async () => {
+      await tick();
+      return jsonResponse(404, { name: "missing" });
+    };
     await expect(
       fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl }),
     ).rejects.toThrow(Nip11Error);
@@ -71,15 +99,19 @@ describe("fetchRelayInformation", () => {
   });
 
   test("3xx throws Nip11Error", async () => {
-    const fetchImpl: Nip11Fetch = () => jsonResponse(302, { name: "redir" });
+    const fetchImpl: Nip11Fetch = async () => {
+      await tick();
+      return jsonResponse(302, { name: "redir" });
+    };
     await expect(
       fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl }),
     ).rejects.toThrow(/HTTP 302/);
   });
 
   test("extra fields ignored and missing fields omitted", async () => {
-    const fetchImpl: Nip11Fetch = () =>
-      jsonResponse(200, {
+    const fetchImpl: Nip11Fetch = async () => {
+      await tick();
+      return jsonResponse(200, {
         name: "relay",
         unknown_field: "drop-me",
         tags: ["bitcoin", "nsfw"],
@@ -96,6 +128,7 @@ describe("fetchRelayInformation", () => {
         },
         fees: { admission: [] },
       });
+    };
 
     const info = await fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl });
     expect(info).toStrictEqual({
@@ -113,16 +146,18 @@ describe("fetchRelayInformation", () => {
     expect("fees" in info).toBe(false);
     expect("tags" in info).toBe(false);
     expect("description" in info).toBe(false);
-    expect(info.limitation && "max_filters" in info.limitation).toBe(false);
+    expect(lacksLimitationField(info, "max_filters")).toBe(true);
   });
 
   test("limitation omitted when only unknown keys are present", async () => {
-    const fetchImpl: Nip11Fetch = () =>
-      jsonResponse(200, {
+    const fetchImpl: Nip11Fetch = async () => {
+      await tick();
+      return jsonResponse(200, {
         name: "relay",
         tags: ["bitcoin"],
         limitation: { max_filters: 10, extra: true },
       });
+    };
 
     const info = await fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl });
     expect(info).toStrictEqual({ name: "relay" });
@@ -131,7 +166,10 @@ describe("fetchRelayInformation", () => {
   });
 
   test("non-object JSON throws", async () => {
-    const fetchImpl: Nip11Fetch = () => jsonResponse(200, ["not", "an", "object"]);
+    const fetchImpl: Nip11Fetch = async () => {
+      await tick();
+      return jsonResponse(200, ["not", "an", "object"]);
+    };
     await expect(
       fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl }),
     ).rejects.toThrow(/must be a JSON object/);
@@ -142,14 +180,12 @@ describe("fetchRelayInformation", () => {
     const fetchImpl: Nip11Fetch = () => {
       throw net;
     };
-    try {
-      await fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl });
-      throw new Error("expected reject");
-    } catch (error) {
-      expect(error).toBeInstanceOf(Nip11Error);
-      expect((error as Nip11Error).cause).toBe(net);
-      expect(error).not.toBe(net);
-    }
+    const error = await rejectionOf(
+      fetchRelayInformation("wss://relay.example.com", { fetch: fetchImpl }),
+    );
+    expect(error).toBeInstanceOf(Nip11Error);
+    expect(causeOf(error)).toBe(net);
+    expect(error).not.toBe(net);
   });
 
   test("AbortError is not wrapped into Nip11Error", async () => {

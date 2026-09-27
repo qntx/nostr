@@ -7,13 +7,19 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
-import { IndexedDbEventStore, Kind, MemoryEventStore, SqliteEventStore, sortEvents } from '../src/index.ts';
-import type { Event, EventStore } from '../src/index.ts';
-import { installIdbMock } from './helpers/idb-mock.ts';
-import type { IdbMock } from './helpers/idb-mock.ts';
+import {
+  IndexedDbEventStore,
+  Kind,
+  MemoryEventStore,
+  SqliteEventStore,
+  sortEvents,
+} from "../src/index.ts";
+import type { Event, EventStore } from "../src/index.ts";
+import { installIdbMock } from "./helpers/idb-mock.ts";
+import type { IdbMock } from "./helpers/idb-mock.ts";
 import { SqliteTestDriver } from "./helpers/sqlite-driver.ts";
 
-const SCALE = process.env.STORE_SCALE === "1";
+const SCALE = process.env["STORE_SCALE"] === "1";
 const describeScale = SCALE ? describe : describe.skip;
 
 const N = 10_000;
@@ -81,7 +87,7 @@ function buildScaleSet(): {
     const pubkey = n % 5 === 0 ? outsiders[n % outsiders.length]! : follow[n % follow.length]!;
     const kind = kinds[n % kinds.length]!;
     const tags: Event["tags"] =
-      n % 3 === 0 ? [["t", "nostr"]] : (n % 3 === 1 ? [["e", E_REF]] : [["p", a]]);
+      n % 3 === 0 ? [["t", "nostr"]] : n % 3 === 1 ? [["e", E_REF]] : [["p", a]];
     push(pubkey, kind, fillerT, tags);
     fillerT += 1;
   }
@@ -91,7 +97,7 @@ function buildScaleSet(): {
   const expectedIds = sortEvents([...matching])
     .slice(0, LIMIT)
     .map((e) => e.id);
-  const firstAuthorIds = sortEvents([...matching.filter((e) => e.pubkey === a)])
+  const firstAuthorIds = sortEvents(matching.filter((e) => e.pubkey === a))
     .slice(0, LIMIT)
     .map((e) => e.id);
 
@@ -127,11 +133,8 @@ describeScale("store scale 10^4", () => {
     const memory = new MemoryEventStore();
     await fill(memory, events);
     expect(memory.size).toBe(N);
-    expect(
-      (await memory.query([{ authors: follow, kinds: [Kind.TextNote], limit: LIMIT }])).map(
-        (e) => e.id,
-      ),
-    ).toStrictEqual(expectedIds);
+    const rows = await memory.query([{ authors: follow, kinds: [Kind.TextNote], limit: LIMIT }]);
+    expect(rows.map((e) => e.id)).toStrictEqual(expectedIds);
 
     const idb = new IndexedDbEventStore({ dbName: "scale-104" });
     await idb.open();

@@ -61,8 +61,12 @@ export class SqliteTestDriver implements SqlDriver {
 
   #guard(sql: string): void {
     const injected = this.#injected;
-    if (!injected) {return;}
-    if (injected.pattern && !injected.pattern.test(sql)) {return;}
+    if (!injected) {
+      return;
+    }
+    if (injected.pattern && !injected.pattern.test(sql)) {
+      return;
+    }
     if (injected.skip > 0) {
       injected.skip -= 1;
       return;

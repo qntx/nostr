@@ -56,11 +56,9 @@ describe("EventBuilder", () => {
     const protectedTarget = EventBuilder.textNote("p").tag(["-"]).createdAt(1).signWithKeys(keys);
     expect(EventBuilder.repost(protectedTarget, RELAY_HINT).currentContent).toBe("");
     expect(JSON.parse(EventBuilder.repost(target, RELAY_HINT).currentContent).id).toBe(target.id);
-    expect(EventBuilder.repost(target, RELAY_HINT).currentTags.find((t) => t[0] === "e")).toStrictEqual([
-      "e",
-      target.id,
-      RELAY,
-    ]);
+    expect(
+      EventBuilder.repost(target, RELAY_HINT).currentTags.find((t) => t[0] === "e"),
+    ).toStrictEqual(["e", target.id, RELAY]);
     expect(EventBuilder.repost(target, RELAY_HINT).currentTags).toContainEqual([
       "p",
       target.pubkey,

@@ -1,10 +1,24 @@
 import { describe, expect, test } from "vite-plus/test";
 
+import { CryptoError } from "../src/core/error.ts";
 import { verifyEvent } from "../src/core/key.ts";
 import { Kind, Keys, KeysSigner, finalizeEvent } from "../src/index.ts";
 import { encryptToPubkey } from "../src/nips/nip44.ts";
-import { Nip59Error, TWO_DAYS_SECS, createGiftWrap, createRumor, createSeal, eventToJson, isGiftWrapKind, randomPastTimestamp, requireNip44Decryptor, requireNip59Crypto, unwrap, wrap } from '../src/nips/nip59.ts';
-import type { SealOptions, WrapOptions } from '../src/nips/nip59.ts';
+import {
+  Nip59Error,
+  TWO_DAYS_SECS,
+  createGiftWrap,
+  createRumor,
+  createSeal,
+  eventToJson,
+  isGiftWrapKind,
+  randomPastTimestamp,
+  requireNip44Decryptor,
+  requireNip59Crypto,
+  unwrap,
+  wrap,
+} from "../src/nips/nip59.ts";
+import type { SealOptions, WrapOptions } from "../src/nips/nip59.ts";
 
 const ALICE_SK = "000000000000000000000000000000000000000000000000000000000000a1ce";
 const BOB_SK = "00000000000000000000000000000000000000000000000000000000000000b0";
@@ -284,7 +298,9 @@ describe("nip59", () => {
 
     const rumorJson = await bob.nip44Decrypt(aliceKeys.publicKey, seal.content);
     expect(JSON.parse(rumorJson).content).toBe("sealed");
-    await expect(mallory.nip44Decrypt(aliceKeys.publicKey, seal.content)).rejects.toThrow();
+    await expect(mallory.nip44Decrypt(aliceKeys.publicKey, seal.content)).rejects.toThrow(
+      CryptoError,
+    );
   });
 
   test("wrap ciphertext decrypts only for the p-tag recipient", async () => {
@@ -324,12 +340,13 @@ describe("nip59", () => {
     const { alice, aliceKeys, bobKeys } = pair();
     const rumor = createRumor(aliceKeys.publicKey, { kind: 14, content: "x" });
     const broken = {
-      getPublicKey:  async () => alice.getPublicKey(),
-      signEvent:  async (unsigned: Parameters<KeysSigner["signEvent"]>[0]) => alice.signEvent(unsigned),
-      nip44Encrypt: async () => {
+      getPublicKey: async () => alice.getPublicKey(),
+      signEvent: async (unsigned: Parameters<KeysSigner["signEvent"]>[0]) =>
+        alice.signEvent(unsigned),
+      nip44Encrypt: () => {
         throw new Error("boom");
       },
-      nip44Decrypt:  async (peer: string, payload: string) => alice.nip44Decrypt(peer, payload),
+      nip44Decrypt: async (peer: string, payload: string) => alice.nip44Decrypt(peer, payload),
     };
     await expect(createSeal(broken, bobKeys.publicKey, rumor)).rejects.toThrow(Nip59Error);
     await expect(createSeal(broken, bobKeys.publicKey, rumor)).rejects.toThrow(/failed to encrypt/);
@@ -338,8 +355,12 @@ describe("nip59", () => {
   test("requireNip59Crypto and requireNip44Decryptor reject missing nip44", () => {
     expect(() =>
       requireNip59Crypto({
-        getPublicKey: async () => "00".repeat(32),
+        getPublicKey: async () => {
+          await Promise.resolve();
+          return "00".repeat(32);
+        },
         signEvent: async () => {
+          await Promise.resolve();
           throw new Error("unused");
         },
       }),
@@ -369,7 +390,10 @@ describe("nip59", () => {
     expect(seal.created_at).toBe(rumor.created_at);
   });
 
-  test('default and randomize: "seal+wrap" jitter both timestamps', async () => {
+  test.each([
+    { name: "default", extra: {} },
+    { name: "seal+wrap", extra: { randomize: "seal+wrap" as const } },
+  ])("randomize $name jitters both timestamps", async ({ extra }) => {
     const { alice, bob, aliceKeys, bobKeys } = pair();
     const rumor = createRumor(aliceKeys.publicKey, {
       kind: 14,
@@ -378,19 +402,17 @@ describe("nip59", () => {
     });
     const now = 1_710_000_000;
     const offset = 42;
-    for (const randomize of [undefined, "seal+wrap"] as const) {
-      const gift = await wrap(alice, bobKeys.publicKey, rumor, {
-        now,
-        randomInt: () => offset,
-        ...(randomize ? { randomize } : {}),
-      });
-      expect(gift.created_at).toBe(now - offset);
-      expect(gift.created_at).not.toBe(rumor.created_at);
-      const sealJson = await bob.nip44Decrypt(gift.pubkey, gift.content);
-      const seal = JSON.parse(sealJson) as { created_at: number };
-      expect(seal.created_at).toBe(now - offset);
-      expect(seal.created_at).not.toBe(rumor.created_at);
-    }
+    const gift = await wrap(alice, bobKeys.publicKey, rumor, {
+      now,
+      randomInt: () => offset,
+      ...extra,
+    });
+    expect(gift.created_at).toBe(now - offset);
+    expect(gift.created_at).not.toBe(rumor.created_at);
+    const sealJson = await bob.nip44Decrypt(gift.pubkey, gift.content);
+    const seal = JSON.parse(sealJson) as { created_at: number };
+    expect(seal.created_at).toBe(now - offset);
+    expect(seal.created_at).not.toBe(rumor.created_at);
   });
 
   test("unwrap NIP-59 spec example wrap", async () => {

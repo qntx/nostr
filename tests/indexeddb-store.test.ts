@@ -10,21 +10,24 @@ import {
   MemoryEventStore,
   StorageError,
 } from "../src/index.ts";
-import { installIdbMock, seedIdbV1, seedIdbV2, seedIdbV3 } from './helpers/idb-mock.ts';
-import type { IdbMock } from './helpers/idb-mock.ts';
+import { installIdbMock, seedIdbV1, seedIdbV2, seedIdbV3 } from "./helpers/idb-mock.ts";
+import type { IdbMock } from "./helpers/idb-mock.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const EID = "aa".repeat(32);
 
 async function tickUntil(pred: () => boolean): Promise<void> {
   for (let i = 0; i < 50; i++) {
-    if (pred()) {return;}
+    if (pred()) {
+      return;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- polling helper must yield between checks
     await Promise.resolve();
   }
   throw new Error("timed out waiting for IndexedDB mock");
 }
 
- async function idbGet(dbName: string, storeName: string, key: string): Promise<unknown> {
+async function idbGet(dbName: string, storeName: string, key: string): Promise<unknown> {
   type Req<T> = {
     result: T;
     error: Error | null;
@@ -34,24 +37,26 @@ async function tickUntil(pred: () => boolean): Promise<void> {
   const factory = (
     globalThis as unknown as {
       indexedDB: {
-        open(name: string): Req<{
-          transaction(
+        open: (name: string) => Req<{
+          transaction: (
             name: string,
             mode?: "readonly",
-          ): {
-            objectStore(name: string): { get(key: string): Req<unknown> };
+          ) => {
+            objectStore: (name: string) => { get: (key: string) => Req<unknown> };
           };
-          close(): void;
+          close: () => void;
         }>;
       };
     }
   ).indexedDB;
   return new Promise((resolve, reject) => {
     const open = factory.open(dbName);
+    // oxlint-disable-next-line prefer-add-event-listener -- fake IDBOpenDBRequest mirrors the on* handler API
     open.onerror = () => reject(open.error ?? new Error("idbGet open failed"));
     open.onsuccess = () => {
       const db = open.result;
       const get = db.transaction(storeName, "readonly").objectStore(storeName).get(key);
+      // oxlint-disable-next-line prefer-add-event-listener -- fake IDBRequest mirrors the on* handler API
       get.onerror = () => {
         db.close();
         reject(get.error ?? new Error("idbGet failed"));
@@ -107,7 +112,8 @@ describe("IndexedDbEventStore", () => {
     await expect(store.put(meta1)).resolves.toBe("accepted");
     await expect(store.put(meta2)).resolves.toBe("replaced");
     await expect(store.get(meta1.id)).resolves.toBeUndefined();
-    expect((await store.get(meta2.id))?.content).toContain("v2");
+    const got1 = await store.get(meta2.id);
+    expect(got1?.content).toContain("v2");
 
     const note = EventBuilder.textNote("keep").createdAt(1).signWithKeys(keys);
     await store.put(note);
@@ -164,7 +170,8 @@ describe("IndexedDbEventStore", () => {
 
     const b = new IndexedDbEventStore({ dbName: "persist-db" });
     await b.open();
-    expect((await b.get(note.id))?.content).toBe("persist");
+    const got2 = await b.get(note.id);
+    expect(got2?.content).toBe("persist");
     const q = await b.query([{ kinds: [Kind.TextNote], authors: [keys.publicKey] }]);
     expect(q.map((e) => e.id)).toStrictEqual([note.id]);
     b.close();
@@ -322,7 +329,7 @@ describe("IndexedDbEventStore", () => {
         .createdAt(t)
         .signWithKeys(keys),
     );
-    for (const n of notes) {await store.put(n);}
+    await store.putMany(notes);
 
     const windowed = await store.query([{ since: 2, until: 4 }]);
     expect(windowed.map((e) => e.created_at)).toStrictEqual([4, 3, 2]);
@@ -351,20 +358,20 @@ describe("IndexedDbEventStore", () => {
     const other = Keys.generate();
     const store = new IndexedDbEventStore({ dbName: "prefix" });
     await store.open();
-    for (let i = 0; i < 30; i++) {
-      await store.put(
+    await store.putMany(
+      Array.from({ length: 30 }, (_, i) =>
         EventBuilder.textNote(`o${i}`)
           .createdAt(100 + i)
           .signWithKeys(other),
-      );
-    }
-    for (let i = 0; i < 3; i++) {
-      await store.put(
+      ),
+    );
+    await store.putMany(
+      Array.from({ length: 3 }, (_, i) =>
         EventBuilder.textNote(`m${i}`)
           .createdAt(10 + i)
           .signWithKeys(keys),
-      );
-    }
+      ),
+    );
 
     mock.resetStats();
     const one = await store.query([{ authors: [keys.publicKey], kinds: [1], limit: 1 }]);
@@ -434,8 +441,11 @@ describe("IndexedDbEventStore", () => {
     const mixed = { ...note, id: note.id.toUpperCase(), pubkey: note.pubkey.toUpperCase() };
     await expect(store.put(mixed)).resolves.toBe("invalid");
     await expect(store.put(note)).resolves.toBe("accepted");
-    expect((await store.get(note.id.toUpperCase()))?.id).toBe(note.id);
-    await expect(store.query([{ authors: [keys.publicKey.toUpperCase()], kinds: [1] }])).resolves.toHaveLength(1);
+    const got3 = await store.get(note.id.toUpperCase());
+    expect(got3?.id).toBe(note.id);
+    await expect(
+      store.query([{ authors: [keys.publicKey.toUpperCase()], kinds: [1] }]),
+    ).resolves.toHaveLength(1);
     await expect(store.query([{ "#e": [EID.toUpperCase()] }])).resolves.toHaveLength(1);
     await expect(store.query([{ "#p": [keys.publicKey.toUpperCase()] }])).resolves.toHaveLength(1);
     store.close();
@@ -466,7 +476,8 @@ describe("IndexedDbEventStore", () => {
     mock.resetStats();
     const n = await store.count([{ kinds: [1], authors: [keys.publicKey] }]);
     expect(n).toBe(2);
-    expect(n).toBe((await store.query([{ kinds: [1], authors: [keys.publicKey] }])).length);
+    const got4 = await store.query([{ kinds: [1], authors: [keys.publicKey] }]);
+    expect(n).toBe(got4.length);
     expect(mock.eventsGetAllCount()).toBe(0);
 
     mock.resetStats();
@@ -546,7 +557,8 @@ describe("IndexedDbEventStore", () => {
     const found = await store.query([filter]);
     expect(found.map((e) => e.id)).toStrictEqual([e00.id, e80.id]);
     await expect(store.count([filter])).resolves.toBe(2);
-    expect((await store.negentropyItems(filter)).map((i) => i.id)).toStrictEqual([e00.id, e80.id]);
+    const got5 = await store.negentropyItems(filter);
+    expect(got5.map((i) => i.id)).toStrictEqual([e00.id, e80.id]);
 
     const oneAuthor = Keys.generate();
     const p00 = mk("01".repeat(32), oneAuthor.publicKey);
@@ -556,7 +568,8 @@ describe("IndexedDbEventStore", () => {
     await store.put(p00);
     await store.put(p80);
     const inner = { authors: [oneAuthor.publicKey], kinds: [1], limit: 2 };
-    expect((await store.query([inner])).map((e) => e.id)).toStrictEqual([p00.id, p80.id]);
+    const got6 = await store.query([inner]);
+    expect(got6.map((e) => e.id)).toStrictEqual([p00.id, p80.id]);
     store.close();
   });
 
@@ -572,7 +585,8 @@ describe("IndexedDbEventStore", () => {
     await store.put(c);
     await store.remove([c.id]);
     const filter = { authors: [keys.publicKey], kinds: [1], limit: 1 };
-    expect((await store.query([filter])).map((e) => e.id)).toStrictEqual([b.id]);
+    const got7 = await store.query([filter]);
+    expect(got7.map((e) => e.id)).toStrictEqual([b.id]);
     await expect(store.count([filter])).resolves.toBe(1);
     store.close();
   });
@@ -587,7 +601,8 @@ describe("IndexedDbEventStore", () => {
     await store.put(newer);
     const filter = { authors: [keys.publicKey], kinds: [1], "#t": ["nostr"], limit: 1 };
     expect(filter["#t"]).toStrictEqual(["nostr"]);
-    expect((await store.query([filter])).map((e) => e.id)).toStrictEqual([tagged.id]);
+    const got8 = await store.query([filter]);
+    expect(got8.map((e) => e.id)).toStrictEqual([tagged.id]);
     await expect(store.count([filter])).resolves.toBe(1);
     store.close();
   });
@@ -597,14 +612,14 @@ describe("IndexedDbEventStore", () => {
     const b = Keys.generate();
     const store = new IndexedDbEventStore({ dbName: "tx-lifetime" });
     await store.open();
-    for (const t of [1, 2, 3, 4, 5]) {
-      await store.put(EventBuilder.textNote(`a${t}`).createdAt(t).signWithKeys(a));
-      await store.put(
+    await store.putMany(
+      [1, 2, 3, 4, 5].flatMap((t) => [
+        EventBuilder.textNote(`a${t}`).createdAt(t).signWithKeys(a),
         EventBuilder.textNote(`b${t}`)
           .createdAt(t + 10)
           .signWithKeys(b),
-      );
-    }
+      ]),
+    );
     mock.resetStats();
     const n = 3;
     const found = await store.query([
@@ -638,7 +653,8 @@ describe("IndexedDbEventStore", () => {
     await expect(store.count([{ kinds: [Kind.Metadata] }])).resolves.toBe(1);
     await expect(store.get(meta1.id)).resolves.toBeUndefined();
     expect(mock.eventsGetAllCount()).toBe(0);
-    expect((await store.query([{ "#e": [EID] }])).map((e) => e.id)).toStrictEqual([meta2.id]);
+    const got9 = await store.query([{ "#e": [EID] }]);
+    expect(got9.map((e) => e.id)).toStrictEqual([meta2.id]);
     await expect(store.query([{ "#p": [keys.publicKey] }])).resolves.toStrictEqual([]);
     store.close();
   });
@@ -691,7 +707,8 @@ describe("IndexedDbEventStore", () => {
     expect(found).toHaveLength(1);
     expect(found[0]!.id).toBe(winner.id);
     await expect(store.get(loser.id)).resolves.toBeUndefined();
-    expect((await store.query([{ "#e": [EID] }])).map((e) => e.id)).toStrictEqual([winner.id]);
+    const got10 = await store.query([{ "#e": [EID] }]);
+    expect(got10.map((e) => e.id)).toStrictEqual([winner.id]);
     await expect(store.query([{ "#p": [keys.publicKey] }])).resolves.toStrictEqual([]);
     mock.resetStats();
     await store.query([{ kinds: [0] }]);
@@ -733,8 +750,10 @@ describe("IndexedDbEventStore", () => {
     const miss = EventBuilder.textNote("miss").tag(["t", "other"]).createdAt(2).signWithKeys(keys);
     await store.put(hit);
     await store.put(miss);
-    expect((await store.query([{ "#t": ["nostr"] }])).map((e) => e.id)).toStrictEqual([hit.id]);
-    expect((await store.query([{ "#t": ["other"] }])).map((e) => e.id)).toStrictEqual([miss.id]);
+    const got11 = await store.query([{ "#t": ["nostr"] }]);
+    expect(got11.map((e) => e.id)).toStrictEqual([hit.id]);
+    const got12 = await store.query([{ "#t": ["other"] }]);
+    expect(got12.map((e) => e.id)).toStrictEqual([miss.id]);
     store.close();
   });
 
@@ -749,9 +768,8 @@ describe("IndexedDbEventStore", () => {
     mock.resetStats();
     const items = await store.negentropyItems({ ids: [older.id, newer.id], limit: 1 });
     expect(items.map((i) => i.id)).toStrictEqual([newer.id]);
-    expect((await store.query([{ ids: [older.id, newer.id], limit: 1 }])).map((e) => e.id)).toStrictEqual(
-      [newer.id],
-    );
+    const got13 = await store.query([{ ids: [older.id, newer.id], limit: 1 }]);
+    expect(got13.map((e) => e.id)).toStrictEqual([newer.id]);
     await expect(store.count([{ ids: [older.id, newer.id], limit: 1 }])).resolves.toBe(1);
     await expect(store.query([{ ids: ["ab".repeat(32)], limit: 1 }])).resolves.toStrictEqual([]);
     expect(mock.eventsGetAllCount()).toBe(0);
@@ -769,8 +787,7 @@ describe("IndexedDbEventStore", () => {
     const bNotes = [10, 11, 12].map((t) =>
       EventBuilder.textNote(`b${t}`).createdAt(t).signWithKeys(b),
     );
-    for (const n of aNotes) {await store.put(n);}
-    for (const n of bNotes) {await store.put(n);}
+    await store.putMany([...aNotes, ...bNotes]);
 
     const filter = { authors: [a.publicKey, b.publicKey], kinds: [1], limit: 2 };
     mock.resetStats();
@@ -782,14 +799,11 @@ describe("IndexedDbEventStore", () => {
     const items = await store.negentropyItems(filter);
     expect(items.map((i) => i.created_at)).toStrictEqual([11, 12]);
     expect(items.map((i) => i.id)).toStrictEqual(
-      [bNotes[1]!, bNotes[2]!].sort((x, y) => itemCompare(x, y)).map((e) => e.id),
+      [bNotes[1]!, bNotes[2]!].toSorted((x, y) => itemCompare(x, y)).map((e) => e.id),
     );
-    expect(items.map((i) => i.id).sort()).toStrictEqual(queried.map((e) => e.id).sort());
-    expect(
-      (await store.query([{ authors: [a.publicKey, b.publicKey], limit: 2 }])).map(
-        (e) => e.created_at,
-      ),
-    ).toStrictEqual([12, 11]);
+    expect(items.map((i) => i.id).toSorted()).toStrictEqual(queried.map((e) => e.id).toSorted());
+    const got14 = await store.query([{ authors: [a.publicKey, b.publicKey], limit: 2 }]);
+    expect(got14.map((e) => e.created_at)).toStrictEqual([12, 11]);
     expect(mock.eventsGetAllCount()).toBe(0);
     store.close();
   });
@@ -815,13 +829,17 @@ describe("IndexedDbEventStore", () => {
     await expect(store.query([{ kinds: [Kind.GiftWrapEphemeral] }])).resolves.toStrictEqual([]);
     await expect(store.query([{ "#p": [keys.publicKey] }])).resolves.toStrictEqual([]);
     await expect(store.query([{ "#e": [EID] }])).resolves.toStrictEqual([]);
-    await expect(store.count([{ kinds: [Kind.ClientAuth, Kind.GiftWrapEphemeral] }])).resolves.toBe(0);
+    await expect(store.count([{ kinds: [Kind.ClientAuth, Kind.GiftWrapEphemeral] }])).resolves.toBe(
+      0,
+    );
     await expect(store.negentropyItems({ kinds: [Kind.ClientAuth] })).resolves.toStrictEqual([]);
 
     const note = EventBuilder.textNote("keep").tag(["e", EID]).createdAt(3).signWithKeys(keys);
     await expect(store.put(note)).resolves.toBe("accepted");
-    expect((await store.get(note.id))?.id).toBe(note.id);
-    expect((await store.query([{ "#e": [EID] }])).map((e) => e.id)).toStrictEqual([note.id]);
+    const got15 = await store.get(note.id);
+    expect(got15?.id).toBe(note.id);
+    const got16 = await store.query([{ "#e": [EID] }]);
+    expect(got16.map((e) => e.id)).toStrictEqual([note.id]);
     store.close();
   });
 
@@ -860,7 +878,8 @@ describe("IndexedDbEventStore", () => {
     mock.resetStats();
     await expect(store.query([{ kinds: [1] }])).resolves.toHaveLength(1);
     await expect(store.get(bad.id)).resolves.toBeUndefined();
-    expect((await store.get(good.id))?.id).toBe(good.id);
+    const got17 = await store.get(good.id);
+    expect(got17?.id).toBe(good.id);
     expect(mock.eventsGetAllCount()).toBe(0);
     store.close();
   });
@@ -890,7 +909,8 @@ describe("IndexedDbEventStore", () => {
       "addresses",
       "tombstones",
     ]);
-    expect((await store.query([{ kinds: [1] }])).map((e) => e.created_at)).toStrictEqual([3, 2, 1]);
+    const got18 = await store.query([{ kinds: [1] }]);
+    expect(got18.map((e) => e.created_at)).toStrictEqual([3, 2, 1]);
     store.close();
   });
 
@@ -904,11 +924,13 @@ describe("IndexedDbEventStore", () => {
     await expect(store.putMany([old, neu])).resolves.toStrictEqual(["accepted", "replaced"]);
     expect(mock.readwriteTransactions()).toHaveLength(1);
     await expect(store.get(old.id)).resolves.toBeUndefined();
-    expect((await store.get(neu.id))?.content).toContain("v2");
+    const got19 = await store.get(neu.id);
+    expect(got19?.content).toContain("v2");
 
     const older = EventBuilder.metadata({ name: "v0" }).createdAt(5).signWithKeys(keys);
     await expect(store.putMany([older])).resolves.toStrictEqual(["rejected"]);
-    expect((await store.get(neu.id))?.id).toBe(neu.id);
+    const got20 = await store.get(neu.id);
+    expect(got20?.id).toBe(neu.id);
     store.close();
   });
 
@@ -945,7 +967,8 @@ describe("IndexedDbEventStore", () => {
     await expect(first).resolves.toStrictEqual(["accepted"]);
     await expect(second).resolves.toStrictEqual(["accepted", "accepted"]);
     expect(mock.readwriteTransactions()).toHaveLength(2);
-    expect((await store.query([{ kinds: [1] }])).map((e) => e.id)).toStrictEqual([c.id, b.id, a.id]);
+    const got21 = await store.query([{ kinds: [1] }]);
+    expect(got21.map((e) => e.id)).toStrictEqual([c.id, b.id, a.id]);
     store.close();
   });
 
@@ -966,7 +989,10 @@ describe("IndexedDbEventStore", () => {
     await expect(put).resolves.toStrictEqual(["accepted"]);
     await boundP;
     expect(mock.readwriteTransactions()).toContainEqual(["outbox_bounds"]);
-    await expect(store.getOutboxBound(keys.publicKey, 1)).resolves.toStrictEqual({ oldest: 1, newest: 2 });
+    await expect(store.getOutboxBound(keys.publicKey, 1)).resolves.toStrictEqual({
+      oldest: 1,
+      newest: 2,
+    });
     store.close();
   });
 
@@ -988,7 +1014,10 @@ describe("IndexedDbEventStore", () => {
     await put1;
     await clear1;
     await bound1;
-    await expect(store.getOutboxBound(keys.publicKey, 1)).resolves.toStrictEqual({ oldest: 1, newest: 2 });
+    await expect(store.getOutboxBound(keys.publicKey, 1)).resolves.toStrictEqual({
+      oldest: 1,
+      newest: 2,
+    });
 
     const later = EventBuilder.textNote("m").createdAt(51).signWithKeys(keys);
     mock.resetStats();
@@ -1039,7 +1068,10 @@ describe("IndexedDbEventStore", () => {
     const store = new IndexedDbEventStore({ dbName: "v3-bounds" });
     await store.open();
     await store.setOutboxBound(keys.publicKey, 1, { oldest: 4, newest: 8 });
-    await expect(store.getOutboxBound(keys.publicKey, 1)).resolves.toStrictEqual({ oldest: 4, newest: 8 });
+    await expect(store.getOutboxBound(keys.publicKey, 1)).resolves.toStrictEqual({
+      oldest: 4,
+      newest: 8,
+    });
     store.close();
   });
 
@@ -1048,12 +1080,18 @@ describe("IndexedDbEventStore", () => {
     const other = Keys.generate();
     const store = new IndexedDbEventStore({ dbName: "bounds-derive" });
     await store.open();
-    for (let t = 0; t < 20; t++) {
-      await store.put(EventBuilder.textNote(`n${t}`).createdAt(t).signWithKeys(keys));
-    }
-    for (let t = 100; t < 110; t++) {
-      await store.put(EventBuilder.textNote(`o${t}`).createdAt(t).signWithKeys(other));
-    }
+    await store.putMany(
+      Array.from({ length: 20 }, (_, i) =>
+        EventBuilder.textNote(`n${i}`).createdAt(i).signWithKeys(keys),
+      ),
+    );
+    await store.putMany(
+      Array.from({ length: 10 }, (_, i) =>
+        EventBuilder.textNote(`o${100 + i}`)
+          .createdAt(100 + i)
+          .signWithKeys(other),
+      ),
+    );
     mock.resetStats();
     await expect(store.getOutboxBound(keys.publicKey, Kind.TextNote)).resolves.toStrictEqual({
       oldest: 0,
@@ -1200,19 +1238,19 @@ describe("scanFilter merge cursor cap (issue #134)", () => {
     const pks = authors.map((k) => k.publicKey);
     // authors × kinds exceeds MAX_MERGE_CURSORS → one cursor per kind.
     const filter = { authors: pks, kinds: [Kind.TextNote] };
-    expect((await idb.query([filter])).map((e) => e.id)).toStrictEqual(
-      (await mem.query([filter])).map((e) => e.id),
-    );
+    const got22 = await idb.query([filter]);
+    const got23 = await mem.query([filter]);
+    expect(got22.map((e) => e.id)).toStrictEqual(got23.map((e) => e.id));
     // Per-filter limit still applies on the fallback path (newest-first).
     const limited = { ...filter, limit: 25 };
-    expect((await idb.query([limited])).map((e) => e.id)).toStrictEqual(
-      (await mem.query([limited])).map((e) => e.id),
-    );
+    const got24 = await idb.query([limited]);
+    const got25 = await mem.query([limited]);
+    expect(got24.map((e) => e.id)).toStrictEqual(got25.map((e) => e.id));
     // Authors alone over the cap collapse to a single created_at cursor.
     const authorsOnly = { authors: pks, limit: 40 };
-    expect((await idb.query([authorsOnly])).map((e) => e.id)).toStrictEqual(
-      (await mem.query([authorsOnly])).map((e) => e.id),
-    );
+    const got26 = await idb.query([authorsOnly]);
+    const got27 = await mem.query([authorsOnly]);
+    expect(got26.map((e) => e.id)).toStrictEqual(got27.map((e) => e.id));
     idb.close();
   });
 });

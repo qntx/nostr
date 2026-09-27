@@ -10,8 +10,8 @@ import {
   relayListEventBuilder,
   Pool,
 } from "../src/index.ts";
-import { createFakeRelayNetwork } from '../src/testing/index.ts';
-import type { FakeRelayNetwork } from '../src/testing/index.ts';
+import { createFakeRelayNetwork } from "../src/testing/index.ts";
+import type { FakeRelayNetwork } from "../src/testing/index.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const SK_B = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -43,7 +43,7 @@ describe("integration via createFakeRelayNetwork", () => {
     const results = await client.publish(EventBuilder.textNote("bus hello").createdAt(42));
     expect(results.every((r) => r.result?.ok)).toBe(true);
 
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const local = await client.queryLocal({ kinds: [Kind.TextNote] });
     expect(local).toHaveLength(1);
     expect(local[0]!.content).toBe("bus hello");
@@ -105,13 +105,15 @@ describe("integration via createFakeRelayNetwork", () => {
       enableReconnect: false,
       automaticallyAuth: () => {
         authCalls += 1;
-        return async (template) =>
-          EventBuilder.textNote("")
+        return async (template) => {
+          await Promise.resolve();
+          return EventBuilder.textNote("")
             .kind(template.kind)
             .tags(template.tags)
             .content(template.content)
             .createdAt(template.created_at)
             .signWithKeys(keys);
+        };
       },
     });
 
@@ -119,7 +121,7 @@ describe("integration via createFakeRelayNetwork", () => {
     // ensureRelay triggers connect → AUTH challenge → auto auth
     await pool.ensureRelay("wss://auth.example");
     expect(authCalls).toBe(1);
-    await new Promise((r) => setTimeout(r, 30));
+    await new Promise((resolve) => setTimeout(resolve, 30));
 
     const results = await pool.publish(["wss://auth.example"], note);
     expect(results[0]?.result?.ok).toBe(true);
