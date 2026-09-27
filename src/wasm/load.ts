@@ -1,9 +1,16 @@
 import { CryptoError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
-import { instantiateCryptoWasm, wasmPublicKey, wasmSign, wasmVerify, wasmVerifySerialized } from './abi.ts';
-import type { CryptoWasmExports } from './abi.ts';
+import {
+  instantiateCryptoWasm,
+  wasmPublicKey,
+  wasmSign,
+  wasmVerify,
+  wasmVerifySerialized,
+} from "./abi.ts";
+import type { CryptoWasmExports } from "./abi.ts";
 import { makeVerifyEvent, WasmVerifyPoisonedError } from "./adapter.ts";
 
+export { WasmVerifyPoisonedError } from "./adapter.ts";
 export type LoadNostrWasmOptions = {
   /** Bytes, or a URL whose bytes will be read (Node fs for file:; fetch otherwise). */
   module?: ArrayBuffer | ArrayBufferView | URL;
@@ -22,20 +29,18 @@ export type NostrWasm = {
   publicKey: (seckey: Uint8Array) => Uint8Array;
 };
 
-export { WasmVerifyPoisonedError };
-
 let interned: Promise<NostrWasm> | undefined;
 
 function isNode(): boolean {
   return (
-    typeof process !== "undefined" &&
+    process !== undefined &&
     typeof process.versions === "object" &&
     process.versions !== null &&
     typeof process.versions.node === "string"
   );
 }
 
-function isWasmBytes(value: object): value is ArrayBuffer | ArrayBufferView {
+function isWasmBytes(value: unknown): value is ArrayBuffer | ArrayBufferView {
   return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
 }
 
@@ -59,7 +64,9 @@ async function readWasmUrl(url: URL): Promise<Uint8Array> {
 
 async function wasmBytes(opts?: LoadNostrWasmOptions): Promise<ArrayBuffer | ArrayBufferView> {
   const source = opts?.module;
-  if (source !== undefined && isWasmBytes(source)) {return source;}
+  if (source !== undefined && isWasmBytes(source)) {
+    return source;
+  }
   const href = source instanceof URL ? source : new URL(await defaultWasmHref(), import.meta.url);
   return readWasmUrl(href);
 }
@@ -71,7 +78,9 @@ function requireByteLength(bytes: Uint8Array, expected: number, label: string): 
 }
 
 function wrapPoison<T>(poison: { error?: Error }, fn: () => T): T {
-  if (poison.error) {throw poison.error;}
+  if (poison.error) {
+    throw poison.error;
+  }
   try {
     return fn();
   } catch (error) {
@@ -104,14 +113,18 @@ function bindExports(exports: CryptoWasmExports): NostrWasm {
         requireByteLength(seckey, 32, "secret key");
         requireByteLength(aux, 32, "aux");
         const sig = wasmSign(exports, id, seckey, aux);
-        if (sig.length !== 64) {throw new CryptoError("wasm sign failed");}
+        if (sig.length !== 64) {
+          throw new CryptoError("wasm sign failed");
+        }
         return sig;
       }),
     publicKey: (seckey) =>
       wrapPoison(poison, () => {
         requireByteLength(seckey, 32, "secret key");
         const pk = wasmPublicKey(exports, seckey);
-        if (pk.length !== 32) {throw new CryptoError("wasm publicKey failed");}
+        if (pk.length !== 32) {
+          throw new CryptoError("wasm publicKey failed");
+        }
         return pk;
       }),
   };
@@ -125,13 +138,19 @@ async function instantiateNostrWasm(opts?: LoadNostrWasmOptions): Promise<NostrW
 
 /** Instantiate once. Repeats reuse the same module. Failure throws; no noble fallback. */
 export async function loadNostrWasm(opts?: LoadNostrWasmOptions): Promise<NostrWasm> {
-  if (interned) {return interned;}
-  const pending = instantiateNostrWasm(opts).catch((error: unknown) => {
-    if (interned === pending) {interned = undefined;}
-    throw error;
-  });
+  if (interned) {
+    return interned;
+  }
+  const pending = instantiateNostrWasm(opts);
   interned = pending;
-  return pending;
+  try {
+    return await pending;
+  } catch (error) {
+    if (interned === pending) {
+      interned = undefined;
+    }
+    throw error;
+  }
 }
 
 /** Clears intern so tests can re-instantiate. Not exported from the wasm subpath. */
