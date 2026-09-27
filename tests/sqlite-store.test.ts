@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
 import { EventBuilder, Keys, SqliteEventStore, StorageError } from "../src/index.ts";
-import type { Event } from "../src/index.ts";
+import type { Event, SqlDriver, SqlValue } from "../src/index.ts";
 import { eventStoreConformanceCases } from "../src/testing/index.ts";
 import { SqliteTestDriver } from "./helpers/sqlite-driver.ts";
 
@@ -22,6 +22,36 @@ function note(keys: Keys, content: string, createdAt: number, tags: string[][] =
 async function openStore(): Promise<{ driver: SqliteTestDriver; store: SqliteEventStore }> {
   const driver = await SqliteTestDriver.open();
   return { driver, store: await SqliteEventStore.open(driver) };
+}
+
+/**
+ * Wraps a driver so a second exec/run/all starting before the previous one settles is recorded —
+ * the store's sequential-statement contract must hold inside and outside transactions.
+ */
+function serializedDriver(inner: SqlDriver): SqlDriver & { overlapped: () => boolean } {
+  let inflight = 0;
+  let overlap = false;
+  const track = async <T>(call: () => Promise<T>): Promise<T> => {
+    if (inflight > 0) {
+      overlap = true;
+    }
+    inflight += 1;
+    try {
+      return await call();
+    } finally {
+      inflight -= 1;
+    }
+  };
+  const wrap = (driver: SqlDriver): SqlDriver => ({
+    exec: async (sql) => track(async () => driver.exec(sql)),
+    run: async (sql, params?: ReadonlyArray<SqlValue>) =>
+      track(async () => driver.run(sql, params)),
+    all: async <Row>(sql: string, params?: ReadonlyArray<SqlValue>) =>
+      track(async () => driver.all<Row>(sql, params)),
+    transaction: async (fn) => driver.transaction(async (tx) => fn(wrap(tx))),
+  });
+  const wrapped = wrap(inner);
+  return { ...wrapped, overlapped: () => overlap };
 }
 
 describe("SqliteEventStore conformance", () => {
@@ -205,6 +235,37 @@ describe("SqliteEventStore", () => {
       expect(keepRow?.content).toBe("keep");
     } finally {
       driver.close();
+    }
+  });
+
+  test("issues driver statements sequentially", async () => {
+    const raw = await SqliteTestDriver.open();
+    const driver = serializedDriver(raw);
+    const store = await SqliteEventStore.open(driver);
+    try {
+      const pending = note(alice(), "pending", 2);
+      const target = new EventBuilder(30001, "v")
+        .tags([["d", "x"]])
+        .createdAt(1)
+        .signWithKeys(alice());
+      await store.putMany([note(alice(), "a", 1), target]);
+      // A deletion over a missing id and a coordinate exercises the tombstone
+      // read-then-write paths plus the removeIds delete loop.
+      const del = EventBuilder.deletion(
+        [pending.id, { address: `30001:${alice().publicKey}:x` }],
+        "",
+      )
+        .createdAt(5)
+        .signWithKeys(alice());
+      await expect(store.put(del)).resolves.toBe("deleted");
+      await store.remove([target.id, "00".repeat(32)]);
+      await expect(store.query([{ kinds: [1] }, { kinds: [30001] }])).resolves.toBeInstanceOf(
+        Array,
+      );
+      await expect(store.count([{ kinds: [1] }, { kinds: [30001] }])).resolves.toBe(1);
+      expect(driver.overlapped()).toBe(false);
+    } finally {
+      raw.close();
     }
   });
 
