@@ -15,5 +15,5 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src", "tests", "wasm-tests"]
+  "include": ["src", "tests", "wasm-tests", "bench", "scripts", "vite.config.ts"]
 }

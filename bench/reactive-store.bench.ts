@@ -38,8 +38,8 @@ describe("reactive store bench", () => {
     const events: Event[] = Array.from({ length: N }, (_, i) => event(i, pubkey));
 
     const t0 = performance.now();
-    for (let i = 0; i < N; i++) {
-      store.add(events[i], "wss://bench");
+    for (const ev of events) {
+      store.add(ev, "wss://bench");
     }
     const ms = performance.now() - t0;
 

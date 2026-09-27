@@ -13,6 +13,13 @@ function hex32(n: number): string {
   return n.toString(16).padStart(64, "0");
 }
 
+/** `next().value` narrows to `T` because the generator never completes. */
+function* roundRobin<T>(items: ReadonlyArray<T>): Generator<T, never> {
+  for (;;) {
+    yield* items;
+  }
+}
+
 // Structural validation only checks hex id/sig, so fabricating rows keeps the
 // measurement on the store and not on schnorr signing.
 function event(i: number, pubkey: string): Event {
@@ -33,10 +40,12 @@ describe("sqlite store bench", () => {
     const store = await SqliteEventStore.open(driver);
     const authors = Array.from({ length: AUTHORS }, (_, i) => hex32(0x1000 + i));
 
+    const author = roundRobin(authors);
+
     const t0 = performance.now();
     const batch: Event[] = [];
     for (let i = 0; i < N; i++) {
-      batch.push(event(i, authors[i % AUTHORS]));
+      batch.push(event(i, author.next().value));
       if (batch.length === 1000) {
         // oxlint-disable-next-line no-await-in-loop -- batched fill must serialize writes
         await store.putMany(batch.splice(0));

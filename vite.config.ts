@@ -7,9 +7,9 @@ import type { UserConfig } from "vite-plus";
 import { fmt } from "@qntx/oxfmt";
 import { config as lintConfig, merge } from "@qntx/oxlint";
 
-const packWasm = process.env.WASM_PACK === "1";
-const wasmTest = process.env.WASM_TEST === "1";
-const storeBench = process.env.STORE_BENCH === "1";
+const packWasm = process.env["WASM_PACK"] === "1";
+const wasmTest = process.env["WASM_TEST"] === "1";
+const storeBench = process.env["STORE_BENCH"] === "1";
 
 /** Always declare ./wasm so `vp pack` without WASM_PACK does not strip the export. */
 export function applyPackExports(pkgExports: Record<string, unknown>): Record<string, unknown> {
