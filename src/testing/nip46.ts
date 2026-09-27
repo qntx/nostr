@@ -1,12 +1,14 @@
 import { Keys, finalizeEvent } from "../core/index.ts";
 import { Kind } from "../core/kind.ts";
 import { isTag } from "../core/tag.ts";
+import { isRecord } from "../core/util.ts";
 import {
   getConversationKey,
   decrypt as nip44Decrypt,
   encrypt as nip44Encrypt,
 } from "../nips/nip44.ts";
 import { decodeNip46Request, encodeNip46Response } from "../nips/nip46.ts";
+import type { Nip46Response } from "../nips/nip46.ts";
 import type { FakeRelayNetwork } from "./network.ts";
 
 export type FakeNip46SignerOptions = {
@@ -30,6 +32,13 @@ export type FakeNip46SignerOptions = {
   switchRelays?: string[] | undefined;
   /** Override `connect` RPC result. Default `"ack"`. */
   connectResult?: string;
+  /** Reply with neither `result` nor `error` for these methods. */
+  emptyMethods?: ReadonlyArray<string>;
+  /**
+   * Serialize the response JSON; default {@link encodeNip46Response}, which omits absent fields.
+   * Lets tests put explicit `null`s on the wire like some remote signers do.
+   */
+  encodeResponse?: (res: Nip46Response) => string;
 };
 
 export type FakeNip46Signer = {
@@ -41,10 +50,6 @@ export type FakeNip46Signer = {
   confirmHandshake: (secret: string) => void;
   close: () => void;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * In-process NIP-46 remote signer: subscribes to kind:24133 requests on `relayUrl` and answers as a
@@ -127,7 +132,7 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
 
       let result: string | undefined;
       let error: string | undefined;
-      switch (req.method) {
+      switch (opts.emptyMethods?.includes(req.method) === true ? "#empty" : req.method) {
         case "connect":
           result = opts.connectResult ?? "ack";
           break;
@@ -168,6 +173,8 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
           );
           break;
         }
+        case "#empty":
+          break;
         default:
           error = `unsupported method ${req.method}`;
       }
@@ -197,7 +204,7 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
     if (closed) {
       return;
     }
-    const payload = encodeNip46Response({ id, result, error });
+    const payload = (opts.encodeResponse ?? encodeNip46Response)({ id, result, error });
     const event = finalizeEvent(
       {
         kind: Kind.NostrConnect,

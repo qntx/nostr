@@ -43,7 +43,7 @@ export type DmDeps = {
 export function giftWrapRelays(gossip: Gossip, event: Event): string[] {
   const targets: string[] = [];
   for (const tag of event.tags) {
-    if (tag[0] === "p" && tag[1] !== undefined) {
+    if (tag[0] === "p" && tag[1] !== undefined && tag[1] !== "") {
       targets.push(tag[1].toLowerCase());
     }
   }

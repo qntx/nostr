@@ -13,7 +13,7 @@ import { EventValidationError, NostrError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
-import { assertHex32, bytesToHex, utf8Encoder } from "../core/util.ts";
+import { assertHex32, bytesToHex, isRecord, utf8Encoder } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch, sendManual } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 
@@ -85,10 +85,7 @@ export async function verifyBlob(
   return (await sha256Blob(data)) === expected;
 }
 
-/**
- * `Nostr ` + base64url(utf8 JSON), padding stripped. NIP-98 uses standard base64; mixing them is a
- * 401.
- */
+/** `Nostr ` + base64url(utf8 JSON), padding stripped. NIP-98 uses standard base64; mixing them is a 401. */
 export function encodeAuthorizationHeader(event: Event): string {
   return `Nostr ${base64urlnopad.encode(utf8Encoder.encode(JSON.stringify(event)))}`;
 }
@@ -447,9 +444,13 @@ function blossomHttpError(method: string, url: string, res: ManualResponse): Blo
   } catch {
     reason = undefined;
   }
-  return new BlossomError(reason?.trim() ?? `blossom ${method} ${url} failed (${res.status})`, {
-    status: res.status,
-  });
+  const detail = reason?.trim();
+  return new BlossomError(
+    detail === undefined || detail === ""
+      ? `blossom ${method} ${url} failed (${res.status})`
+      : detail,
+    { status: res.status },
+  );
 }
 
 async function blossomFetch(
@@ -519,10 +520,6 @@ async function readJson(res: ManualResponse): Promise<unknown> {
       status: res.status,
     });
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseBlobDescriptor(json: unknown): BlobDescriptor {

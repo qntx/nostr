@@ -1,3 +1,4 @@
+// oxlint-disable no-await-in-loop -- SqlDriver statements are issued sequentially; drivers are not required to support overlapping statements on one connection
 import { compareEventsDesc, itemCompare, sortEvents } from "../core/event.ts";
 import type { Event } from "../core/event.ts";
 import { matchFilter } from "../core/filter.ts";
@@ -21,6 +22,10 @@ export type SqlValue = string | number | null | Uint8Array;
  * `transaction` must serialize `fn` exclusively — no interleaved statements from other callers may
  * run while the callback transaction is active. It commits when `fn` resolves and rolls back when
  * `fn` rejects.
+ *
+ * The store always issues statements sequentially — a driver never sees a second `exec`/`run`/`all`
+ * start before the previous one settles, inside or outside a transaction — so drivers need not
+ * support overlapping statements on one connection.
  *
  * `expo-sqlite` maps onto this interface without changes to query code:
  *
@@ -325,11 +330,9 @@ export class SqliteEventStore implements EventStore {
   async #putAllInTx(tx: SqlDriver, batch: ReadonlyArray<Event>): Promise<PutResult[]> {
     const results: PutResult[] = [];
     for (const event of batch) {
-      // oxlint-disable eslint/no-await-in-loop -- batch events must see earlier writes of the same transaction
       const lookup = await this.#buildLookup(tx, event);
       const decision = decidePut(event, lookup);
       await this.#applyDecision(tx, decision);
-      // oxlint-enable eslint/no-await-in-loop
       results.push(decision.result);
     }
     return results;
@@ -370,19 +373,16 @@ export class SqliteEventStore implements EventStore {
         }
       }
     }
-    const addressRows = await Promise.all(
-      chunkValues(addressList).map(async (chunk) =>
-        tx.all<{
-          address: string;
-          id: string;
-          created_at: number;
-        }>(
+    const addressRows: Array<{ address: string; id: string; created_at: number }> = [];
+    for (const chunk of chunkValues(addressList)) {
+      addressRows.push(
+        ...(await tx.all<{ address: string; id: string; created_at: number }>(
           `SELECT address, id, created_at FROM events
            WHERE ${inClause("address", chunk.length)}`,
           chunk,
-        ),
-      ),
-    );
+        )),
+      );
+    }
     for (const row of addressRows.flat()) {
       byAddress.set(row.address, { id: row.id, created_at: row.created_at });
     }
@@ -415,16 +415,18 @@ export class SqliteEventStore implements EventStore {
   }
 
   async #eventRowsByIds(tx: SqlDriver, ids: ReadonlyArray<string>): Promise<Event[]> {
-    const chunkRows = await Promise.all(
-      chunkValues(ids).map(async (chunk) =>
-        tx.all<EventRow>(
-          `SELECT id, pubkey, kind, created_at, content, tags, sig FROM events
-           WHERE ${inClause("id", chunk.length)}`,
-          chunk,
-        ),
-      ),
-    );
-    return chunkRows.flat().map(rowToEvent);
+    const events: Event[] = [];
+    for (const chunk of chunkValues(ids)) {
+      const rows = await tx.all<EventRow>(
+        `SELECT id, pubkey, kind, created_at, content, tags, sig FROM events
+         WHERE ${inClause("id", chunk.length)}`,
+        chunk,
+      );
+      for (const row of rows) {
+        events.push(rowToEvent(row));
+      }
+    }
+    return events;
   }
 
   async #applyDecision(tx: SqlDriver, d: PutDecision): Promise<void> {
@@ -437,9 +439,9 @@ export class SqliteEventStore implements EventStore {
         return;
       case "delete":
         await this.#persistPlan(tx, d.event.id, d.plan, d.coordIds);
-        await Promise.all(
-          [...d.plan.removeIds, ...d.coordIds].map(async (id) => this.#deleteEvent(tx, id)),
-        );
+        for (const id of [...d.plan.removeIds, ...d.coordIds]) {
+          await this.#deleteEvent(tx, id);
+        }
         await this.#insertEvent(tx, d.event);
         return;
       case "insert":
@@ -458,32 +460,30 @@ export class SqliteEventStore implements EventStore {
     coordIds: ReadonlyArray<string>,
   ): Promise<void> {
     await this.#deleteTombstone(tx, "pending", deletionId);
-    await Promise.all([
-      ...[...plan.removeIds, ...coordIds].map(async (id) => {
-        await this.#putTombstone(tx, "id", id);
-        await this.#deleteTombstone(tx, "pending", id);
-      }),
-      ...plan.pendingIds.map(async (p) => {
-        const covered = await tx.all<{ found: number }>(
-          `SELECT 1 AS found FROM tombstones WHERE kind = 'id' AND key = ?`,
-          [p.id],
+    for (const id of [...plan.removeIds, ...coordIds]) {
+      await this.#putTombstone(tx, "id", id);
+      await this.#deleteTombstone(tx, "pending", id);
+    }
+    for (const p of plan.pendingIds) {
+      const covered = await tx.all<{ found: number }>(
+        `SELECT 1 AS found FROM tombstones WHERE kind = 'id' AND key = ?`,
+        [p.id],
+      );
+      if (covered.length === 0) {
+        await tx.run(
+          `INSERT OR REPLACE INTO tombstones (kind, key, pubkey) VALUES ('pending', ?, ?)`,
+          [p.id, p.pubkey],
         );
-        if (covered.length === 0) {
-          await tx.run(
-            `INSERT OR REPLACE INTO tombstones (kind, key, pubkey) VALUES ('pending', ?, ?)`,
-            [p.id, p.pubkey],
-          );
-        }
-      }),
-      ...plan.coordinates.map(async (c) =>
-        tx.run(
-          `INSERT INTO tombstones (kind, key, until) VALUES ('coord', ?, ?)
-           ON CONFLICT(kind, key)
-           DO UPDATE SET until = MAX(tombstones.until, excluded.until)`,
-          [c.key, c.until],
-        ),
-      ),
-    ]);
+      }
+    }
+    for (const c of plan.coordinates) {
+      await tx.run(
+        `INSERT INTO tombstones (kind, key, until) VALUES ('coord', ?, ?)
+         ON CONFLICT(kind, key)
+         DO UPDATE SET until = MAX(tombstones.until, excluded.until)`,
+        [c.key, c.until],
+      );
+    }
   }
 
   async #putTombstone(tx: SqlDriver, kind: TombstoneKind, key: string): Promise<void> {
@@ -509,19 +509,17 @@ export class SqliteEventStore implements EventStore {
         eventAddress(event) ?? null,
       ],
     );
-    await Promise.all(
-      event.tags.map(async (tag) => {
-        if (tag[0] === undefined || tag[1] === undefined || tag[0].length !== 1) {
-          return;
-        }
-        await tx.run(`INSERT INTO tags (event_id, name, value, created_at) VALUES (?, ?, ?, ?)`, [
-          event.id,
-          tag[0],
-          tag[0] === "e" || tag[0] === "p" ? tag[1].toLowerCase() : tag[1],
-          event.created_at,
-        ]);
-      }),
-    );
+    for (const tag of event.tags) {
+      if (tag[0] === undefined || tag[1] === undefined || tag[0].length !== 1) {
+        continue;
+      }
+      await tx.run(`INSERT INTO tags (event_id, name, value, created_at) VALUES (?, ?, ?, ?)`, [
+        event.id,
+        tag[0],
+        tag[0] === "e" || tag[0] === "p" ? tag[1].toLowerCase() : tag[1],
+        event.created_at,
+      ]);
+    }
   }
 
   async #deleteEvent(tx: SqlDriver, id: string): Promise<number> {
@@ -545,9 +543,10 @@ export class SqliteEventStore implements EventStore {
 
   async query(filters: Filter[]): Promise<Event[]> {
     try {
-      const perFilter = await Promise.all(
-        filters.map(async (filter) => this.#filterRows(filter, "*")),
-      );
+      const perFilter: Event[][] = [];
+      for (const filter of filters) {
+        perFilter.push(await this.#filterRows(filter, "*"));
+      }
       const seen = new Set<string>();
       const events: Event[] = [];
       for (const rows of perFilter) {
@@ -567,9 +566,10 @@ export class SqliteEventStore implements EventStore {
 
   async count(filters: Filter[]): Promise<number> {
     try {
-      const perFilter = await Promise.all(
-        filters.map(async (filter) => this.#filterRows(filter, "id, created_at")),
-      );
+      const perFilter: NegentropyItem[][] = [];
+      for (const filter of filters) {
+        perFilter.push(await this.#filterRows(filter, "id, created_at"));
+      }
       const seen = new Set<string>();
       for (const rows of perFilter) {
         for (const row of rows) {
@@ -636,13 +636,14 @@ export class SqliteEventStore implements EventStore {
     limit: number | undefined,
   ): Promise<Row[]> {
     const tail = ` ORDER BY created_at DESC, id ASC${limit === undefined ? "" : " LIMIT ?"}`;
-    const perPlan = await Promise.all(
-      plans.map(async (plan) => {
-        const where = plan.wheres.length > 0 ? ` WHERE ${plan.wheres.join(" AND ")}` : "";
-        const params = limit === undefined ? plan.params : [...plan.params, limit];
-        return this.#driver.all<Row>(`SELECT ${select} FROM events${where}${tail}`, params);
-      }),
-    );
+    const perPlan: Row[][] = [];
+    for (const plan of plans) {
+      const where = plan.wheres.length > 0 ? ` WHERE ${plan.wheres.join(" AND ")}` : "";
+      const params = limit === undefined ? plan.params : [...plan.params, limit];
+      perPlan.push(
+        await this.#driver.all<Row>(`SELECT ${select} FROM events${where}${tail}`, params),
+      );
+    }
     const sorted = perPlan.flat().sort(compareEventsDesc);
     const seen = new Set<string>();
     const merged: Row[] = [];
@@ -710,15 +711,13 @@ export class SqliteEventStore implements EventStore {
     return this.#enqueueWrite(async () => {
       try {
         return await this.#driver.transaction(async (tx) => {
-          const counts = await Promise.all(
-            lowered.map(async (id) => {
-              const removed = await this.#deleteEvent(tx, id);
-              await this.#putTombstone(tx, "id", id);
-              await this.#deleteTombstone(tx, "pending", id);
-              return removed;
-            }),
-          );
-          return counts.reduce((sum, n) => sum + n, 0);
+          let removed = 0;
+          for (const id of lowered) {
+            removed += await this.#deleteEvent(tx, id);
+            await this.#putTombstone(tx, "id", id);
+            await this.#deleteTombstone(tx, "pending", id);
+          }
+          return removed;
         });
       } catch (error) {
         throw toStorageError(error);

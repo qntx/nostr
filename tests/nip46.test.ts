@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import { EventBuilder, Nip46Signer, Pool, getPublicKey, verifyEvent } from "../src/index.ts";
 import {
   createNostrConnectURI,
+  decodeNip46Response,
   parseBunkerURL,
   parseNostrConnectURI,
   toBunkerURL,
 } from "../src/nips/nip46.ts";
+import type { Nip46Response } from "../src/nips/nip46.ts";
 import { createFakeNip46Signer, createFakeRelayNetwork } from "../src/testing/index.ts";
 import type { FakeRelayNetwork } from "../src/testing/index.ts";
 import { stubReportError } from "./helpers/report-error.ts";
@@ -23,6 +25,10 @@ function testPool() {
     enableReconnect: true,
   });
 }
+
+// Some remote signers serialize absent fields as explicit nulls.
+const nullsEncoder = (res: Nip46Response): string =>
+  JSON.stringify({ id: res.id, result: res.result ?? null, error: res.error ?? null });
 
 beforeEach(() => {
   net = createFakeRelayNetwork();
@@ -98,6 +104,20 @@ describe("nip46 protocol", () => {
       ),
     ).toBeUndefined();
   });
+
+  test("decodeNip46Response treats explicit nulls as absent", () => {
+    expect(decodeNip46Response('{"id":"a","result":null,"error":null}')).toStrictEqual({
+      id: "a",
+    });
+    expect(decodeNip46Response('{"id":"a","result":"ack","error":null}')).toStrictEqual({
+      id: "a",
+      result: "ack",
+    });
+    expect(decodeNip46Response('{"id":"a","result":null,"error":"boom"}')).toStrictEqual({
+      id: "a",
+      error: "boom",
+    });
+  });
 });
 
 describe("Nip46Signer", () => {
@@ -141,6 +161,48 @@ describe("Nip46Signer", () => {
       expect(verifyEvent(signed)).toBe(true);
       expect(signed.content).toBe("remote sign");
       expect(signed.pubkey).toBe(getPublicKey(USER_SK));
+
+      await signer.close();
+    } finally {
+      remote.close();
+    }
+  });
+
+  test("explicit null result/error fields on the wire behave as absent", async () => {
+    const bunkerPk = getPublicKey(BUNKER_SK);
+    const clientPk = getPublicKey(CLIENT_SK);
+    const url = toBunkerURL({
+      pubkey: bunkerPk,
+      relays: ["wss://bunker.example"],
+      secret: "tok",
+    });
+    const remote = createFakeNip46Signer({
+      network: net,
+      relayUrl: "wss://bunker.example",
+      bunkerSk: BUNKER_SK,
+      userSk: USER_SK,
+      clientPubkey: clientPk,
+      encodeResponse: nullsEncoder,
+      emptyMethods: ["nip44_decrypt"],
+    });
+
+    try {
+      const signer = await Nip46Signer.connect(url, {
+        clientSecretKey: CLIENT_SK,
+        createPool: testPool,
+        timeoutMs: 3000,
+      });
+
+      // {"result":"pong","error":null} resolves.
+      await expect(signer.ping()).resolves.toBeUndefined();
+      // {"result":null,"error":"…"} rejects with the error.
+      await expect(signer.nip04Decrypt(getPublicKey(USER_SK), "ciphertext")).rejects.toThrow(
+        /unsupported method nip04_decrypt/,
+      );
+      // {"result":null} alone rejects like a missing result.
+      await expect(signer.nip44Decrypt(getPublicKey(USER_SK), "ciphertext")).rejects.toThrow(
+        /empty NIP-46 response/,
+      );
 
       await signer.close();
     } finally {

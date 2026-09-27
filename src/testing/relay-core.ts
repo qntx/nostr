@@ -4,7 +4,7 @@ import { matchFilter } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
 import { verifyEvent } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
-import { bytesToHex, normalizeURL } from "../core/util.ts";
+import { bytesToHex, isRecord, normalizeURL } from "../core/util.ts";
 import { Negentropy, PROTOCOL_VERSION, storageFromEvents } from "../nips/nip77.ts";
 import { MemoryEventStore } from "../storage/memory.ts";
 import type { PutResult } from "../storage/types.ts";
@@ -51,10 +51,6 @@ export type FakeRelaySession = {
   authed: boolean;
   queue: Promise<void>;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** Wire filters are trusted as NIP-01 filters once they are records. */
 function isFilter(value: unknown): value is Filter {

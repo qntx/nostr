@@ -5,7 +5,7 @@ import { NostrError } from "../core/error.ts";
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/46.md
  */
-import { assertHex32, isHex32 } from "../core/util.ts";
+import { assertHex32, isHex32, isRecord } from "../core/util.ts";
 
 // oxlint-disable-next-line no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
 export const BUNKER_REGEX: RegExp = /^bunker:\/\/([0-9a-fA-F]{64})\??([?/\w:.=&%-]*)$/;
@@ -211,7 +211,9 @@ export function decodeNip46Response(json: string): Nip46Response {
   if (!isRecord(data) || typeof data["id"] !== "string") {
     throw new Nip46Error("invalid NIP-46 response shape");
   }
-  const { result, error } = data;
+  // Some remote signers send explicit nulls for absent fields.
+  const result = data["result"] === null ? undefined : data["result"];
+  const error = data["error"] === null ? undefined : data["error"];
   if (result !== undefined && typeof result !== "string") {
     throw new Nip46Error("invalid NIP-46 response result");
   }
@@ -226,8 +228,4 @@ export function decodeNip46Response(json: string): Nip46Response {
     response.error = error;
   }
   return response;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

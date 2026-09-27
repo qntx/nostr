@@ -57,6 +57,11 @@ export function assertSecretKeyBytes(bytes: Uint8Array): void {
   assertByteLength(bytes, SECRET_KEY_BYTES, "secret key");
 }
 
+/** Structural guard: a plain record (not `null`, not an array). */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Normalize a relay URL to a stable form: `http:`/`https:` are rewritten to `ws:`/`wss:` (a bare
  * host gets `wss://`), any other scheme throws UrlError. The result has a lowercased host, the

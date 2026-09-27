@@ -7,9 +7,9 @@ import type { UserConfig } from "vite-plus";
 import { fmt } from "@qntx/oxfmt";
 import { config as lintConfig, merge } from "@qntx/oxlint";
 
-const packWasm = process.env.WASM_PACK === "1";
-const wasmTest = process.env.WASM_TEST === "1";
-const storeBench = process.env.STORE_BENCH === "1";
+const packWasm = process.env["WASM_PACK"] === "1";
+const wasmTest = process.env["WASM_TEST"] === "1";
+const storeBench = process.env["STORE_BENCH"] === "1";
 
 /** Always declare ./wasm so `vp pack` without WASM_PACK does not strip the export. */
 export function applyPackExports(pkgExports: Record<string, unknown>): Record<string, unknown> {
@@ -75,6 +75,7 @@ const config: UserConfig = defineConfig({
     "*": "vp check --fix",
   },
   pack: {
+    deps: { resolveDepSubpath: true },
     plugins: packWasm ? [wasmUrlAsset()] : [],
     entry: {
       index: "src/index.ts",
@@ -112,7 +113,7 @@ const config: UserConfig = defineConfig({
       ...(packWasm ? { wasm: "src/wasm/index.ts" } : {}),
     },
     dts: {
-      tsgo: true,
+      generator: "tsgo",
     },
     sourcemap: true,
     exports: {
@@ -128,21 +129,8 @@ const config: UserConfig = defineConfig({
     exclude: ["3rdparty/**", "node_modules/**", "dist/**"],
   },
   lint: merge(lintConfig, {
-    rules: {
-      // oxfmt normalizes hex literals to lowercase, so the linter's
-      // uppercase-only rule can never be satisfied together with `vp fmt`.
-      "unicorn/number-literal-case": "off",
-      // oxfmt strips "unnecessary" parentheses, including the ones this rule
-      // requires around nested ternaries — the two can never both pass.
-      "unicorn/no-nested-ternary": "off",
-    },
-    ignorePatterns: [
-      ...lintConfig.ignorePatterns,
-      "3rdparty/**",
-      "target/**",
-      "src/wasm/generated/**",
-      ".hermes-smoke.iife.js",
-    ],
+    // merge() concatenates arrays onto the preset's own ignorePatterns.
+    ignorePatterns: ["3rdparty/**", "target/**", "src/wasm/generated/**", ".hermes-smoke.iife.js"],
     overrides: [
       {
         files: ["src/nips/nip77.ts", "src/wasm/abi.ts", "tests/hermes/globals.ts", "wasm-tests/**"],

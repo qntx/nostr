@@ -4,6 +4,7 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/11.md
  */
 import { NostrError } from "../core/error.ts";
+import { isRecord } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 
@@ -98,10 +99,6 @@ export function relayInfoHttpUrl(wsUrl: string): string {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseRelayInformation(json: unknown): RelayInformation {

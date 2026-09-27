@@ -10,6 +10,7 @@ import {
   Kind,
   Pool,
   ReactiveEventStore,
+  bareNostrUser,
   createLoaders,
   relayListEventBuilder,
   useWebSocketImplementation,
@@ -302,6 +303,78 @@ describe("Loaders", () => {
     const fl2 = await loaders.follows(keys.publicKey);
     expect(fl2.fresh).toBe(false);
     expect(fl2.items).toStrictEqual(fl.items);
+
+    pool.close();
+  });
+
+  test("profile falls back to name for an empty display_name", async () => {
+    const keys = Keys.fromSecretKey(SK);
+    const meta = EventBuilder.metadata({ display_name: "", name: "alice" })
+      .createdAt(11)
+      .signWithKeys(keys);
+
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    const loaders = createLoaders({
+      pool,
+      relays: ["wss://idx.example"],
+      index: new ReactiveEventStore(),
+    });
+
+    const p = loaders.profile(keys.publicKey);
+    await respondReplaceables([{ kind: Kind.Metadata, event: meta }]);
+    const user = await p;
+    expect(user.shortName).toBe("alice");
+
+    pool.close();
+  });
+
+  test("profile falls back to the npub when display_name and name are empty", async () => {
+    const keys = Keys.fromSecretKey(SK);
+    const meta = EventBuilder.metadata({ display_name: "", name: "" })
+      .createdAt(11)
+      .signWithKeys(keys);
+
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    const loaders = createLoaders({
+      pool,
+      relays: ["wss://idx.example"],
+      index: new ReactiveEventStore(),
+    });
+
+    const p = loaders.profile(keys.publicKey);
+    await respondReplaceables([{ kind: Kind.Metadata, event: meta }]);
+    const user = await p;
+    expect(user.shortName).toBe(bareNostrUser(keys.publicKey).shortName);
+
+    pool.close();
+  });
+
+  test("muteList drops empty t and word values", async () => {
+    const keys = Keys.fromSecretKey(SK);
+    const mute = new EventBuilder(Kind.MuteList, "")
+      .tags([
+        ["t", ""],
+        ["word", ""],
+        ["t", "spam"],
+        ["word", "nsfw"],
+      ])
+      .createdAt(12)
+      .signWithKeys(keys);
+
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    const loaders = createLoaders({
+      pool,
+      relays: ["wss://idx.example"],
+      index: new ReactiveEventStore(),
+    });
+
+    const p = loaders.muteList(keys.publicKey);
+    await respondReplaceables([{ kind: Kind.MuteList, event: mute }]);
+    const result = await p;
+    expect(result.items).toStrictEqual([
+      { label: "hashtag", value: "spam" },
+      { label: "word", value: "nsfw" },
+    ]);
 
     pool.close();
   });

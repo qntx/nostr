@@ -36,6 +36,10 @@ export function bareNostrUser(pubkey: string): NostrUser {
   };
 }
 
+function nonEmpty(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
 function parseMetadata(content: string): ProfileMetadata {
   try {
     const obj: unknown = JSON.parse(content);
@@ -72,7 +76,7 @@ export function createProfileLoader(
       }
 
       const metadata = parseMetadata(event.content);
-      const display = metadata.display_name ?? metadata.name;
+      const display = nonEmpty(metadata.display_name) ?? nonEmpty(metadata.name);
       return {
         ...base,
         shortName: display ?? base.shortName,

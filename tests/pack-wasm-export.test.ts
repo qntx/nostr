@@ -131,7 +131,7 @@ function restoreEnv(name: string, value: string | undefined): void {
 describe("vite pack.entry.wasm gate", () => {
   test("wasm entry stays WASM_PACK-gated", () => {
     const src = readFileSync(join(root, "vite.config.ts"), "utf8");
-    expect(src).toContain('const packWasm = process.env.WASM_PACK === "1"');
+    expect(src).toContain('const packWasm = process.env["WASM_PACK"] === "1"');
     expect(src).toContain('...(packWasm ? { wasm: "src/wasm/index.ts" } : {})');
     expect(src).toContain("customExports: applyPackExports");
     expect(src.match(/wasm: "src\/wasm\/index\.ts"/g)).toStrictEqual(['wasm: "src/wasm/index.ts"']);

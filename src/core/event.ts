@@ -3,7 +3,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { EventValidationError } from "./error.ts";
 import type { Tag } from "./tag.ts";
 import { isTag } from "./tag.ts";
-import { isHex32, isHex64, utf8Encoder, bytesToHex } from "./util.ts";
+import { isHex32, isHex64, isRecord, utf8Encoder, bytesToHex } from "./util.ts";
 
 /** Wire event template before pubkey/id/sig. */
 export type EventTemplate = {
@@ -50,9 +50,6 @@ export function isMarkedVerified(event: Event): boolean {
 export function isMarkedFailed(event: Event): boolean {
   return failedEvents.has(event);
 }
-
-const isRecord = (obj: unknown): obj is Record<string, unknown> =>
-  typeof obj === "object" && obj !== null && !Array.isArray(obj);
 
 /** Structural validation of an unsigned event (no crypto). */
 export function validateEvent(event: unknown): event is UnsignedEvent {

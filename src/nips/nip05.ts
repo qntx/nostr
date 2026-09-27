@@ -4,7 +4,7 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/05.md
  */
 import { NostrError } from "../core/error.ts";
-import { isHex32 } from "../core/util.ts";
+import { isHex32, isRecord } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 import type { ProfilePointer } from "./nip19.ts";
@@ -99,10 +99,6 @@ function stringUrls(list: unknown): string[] | undefined {
  * Parse nostr.json `nip46`: 46.md appendix `{relays, nostrconnect_url}`. Hex-pubkey maps and other
  * keys are ignored.
  */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 export function parseNip05Nip46(raw: unknown): Nip05Nip46 | undefined {
   if (!isRecord(raw)) {
     return undefined;
