@@ -128,21 +128,8 @@ const config: UserConfig = defineConfig({
     exclude: ["3rdparty/**", "node_modules/**", "dist/**"],
   },
   lint: merge(lintConfig, {
-    rules: {
-      // oxfmt normalizes hex literals to lowercase, so the linter's
-      // uppercase-only rule can never be satisfied together with `vp fmt`.
-      "unicorn/number-literal-case": "off",
-      // oxfmt strips "unnecessary" parentheses, including the ones this rule
-      // requires around nested ternaries — the two can never both pass.
-      "unicorn/no-nested-ternary": "off",
-    },
-    ignorePatterns: [
-      ...lintConfig.ignorePatterns,
-      "3rdparty/**",
-      "target/**",
-      "src/wasm/generated/**",
-      ".hermes-smoke.iife.js",
-    ],
+    // merge() concatenates arrays onto the preset's own ignorePatterns.
+    ignorePatterns: ["3rdparty/**", "target/**", "src/wasm/generated/**", ".hermes-smoke.iife.js"],
     overrides: [
       {
         files: ["src/nips/nip77.ts", "src/wasm/abi.ts", "tests/hermes/globals.ts", "wasm-tests/**"],
