@@ -26,7 +26,9 @@ Version is `0.1.0`. `0.0.1` was the local `npm publish`. Tag `v0.1.0` runs `publ
 - `Nip96UploadResult` is a discriminated union — `{ status: "success"; url; tags }` or `{ status: "processing"; processingUrl; tags }`; check `status` before reading `url` (#133).
 - `CountResult.hll` is a 512-char lowercase hex HyperLogLog sketch, not opaque base64.
 - Validation that returned corrupt output in 0.1.0 now throws: NIP-19 encoders reject bad hex/kinds/>255-byte TLV values (`Nip19Error`), `getPow` rejects non-hex input (`Nip13Error`), `relayListToTags` rejects `{ read: false, write: false }` (`EventValidationError`), `dmRelayListEventBuilder`/`blossomServerListEventBuilder` throw when no valid tag would be emitted, and `createAuthTemplate` throws `BlossomError` for an explicitly empty `message` (#131, #133).
-- Optional/absent values are `undefined` instead of `null` across the API — `Relay` callbacks (`onnotice`/`onclose`/`onauth`/`onreconnect`), `PoolOptions.automaticallyAuth`, `ReplaceableLoadResult.event`, `ListResult.event`, `NostrUser.event`, the NIP-46 `secret`, NIP-05/NIP-11/Blossom lookup results, `Nip46Signer.switchRelays()`, and the NIP-19 `{ type: "invalid" }` sentinel's `data`. Compare against `undefined` (`== null` still works; `=== null` and `toBeNull()` do not).
+- Optional/absent values are `undefined` instead of `null` across the API — `Relay` callbacks (`onnotice`/`onclose`/`onauth`/`onreconnect`), `PoolOptions.automaticallyAuth`, `ReplaceableLoadResult.event`, `ListResult.event`, `NostrUser.event`, the NIP-46 `secret`, NIP-05/NIP-11/Blossom lookup results, `Nip46Signer.switchRelays()`, `parseBunkerURL()`, `NegentropyResult.nextMessage`, and the NIP-19 `{ type: "invalid" }` sentinel's `data`. Compare against `undefined` (`== null` still works; `=== null` and `toBeNull()` do not).
+- `parseClientMessage` validates REQ/COUNT filter positions: a non-object filter (string, array, null, …) now throws `MessageError` instead of flowing through as a malformed `Filter`.
+- Every `NostrError` subclass sets a fixed `name` field instead of deriving `new.target.name` at construction. A consumer subclassing a library error class no longer gets its own class name automatically — set `override name` in the subclass.
 - Exported interfaces are now `type` aliases, so declaration merging and `interface extends` no longer apply to them.
 
 ### Added
@@ -76,6 +78,7 @@ Version is `0.1.0`. `0.0.1` was the local `npm publish`. Tag `v0.1.0` runs `publ
 
 ### Fixed
 
+- `decodeNip46Response` (and so `Nip46Signer`) treats explicit JSON `null` in `result`/`error` as absent — some remote signers emit `{"result": null, "error": "…"}`, which 0.1.0 rejected as an invalid response.
 - A throwing `onevent` no longer drops the rest of a relay fetch batch; user-callback errors are isolated via `reportError` across `fetchRouted`/`fanIn`, REQ dispatch, `Subscription.close`, and store watch/`onInsert` listeners (#125).
 - Equivalent relay URL spellings no longer duplicate fan-in attachments or `Client` relay entries: job URLs are normalized and deduped, and `Client` stores normalized `relays` (#125).
 - Event stores canonicalize address coordinates (lowercase pubkey) in `isDeleted`/`getByAddress`, and a replacement newer than the tombstone's `until` clears the deletion (#125).
