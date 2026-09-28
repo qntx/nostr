@@ -10,6 +10,7 @@ import {
   MemoryEventStore,
   StorageError,
 } from "../src/index.ts";
+import { IDB_VERSION } from "../src/storage/idb-schema.ts";
 import { installIdbMock, seedIdbV1, seedIdbV2, seedIdbV3 } from "./helpers/idb-mock.ts";
 import type { IdbMock } from "./helpers/idb-mock.ts";
 
@@ -1206,6 +1207,92 @@ describe("IndexedDbEventStore", () => {
     expect((err as StorageError).message).toBe("IndexedDB transaction failed");
     expect((err as StorageError).cause).toBeUndefined();
     await expect(store.get(note.id)).resolves.toBeUndefined();
+    store.close();
+  });
+});
+
+describe("IndexedDbEventStore version contention", () => {
+  let mock: IdbMock;
+
+  type RawDb = {
+    close: () => void;
+    onversionchange: ((ev: unknown) => void) | null;
+    objectStoreNames: { contains: (name: string) => boolean };
+    createObjectStore: (name: string, options?: { keyPath?: string }) => unknown;
+  };
+
+  async function rawOpen(dbName: string, version: number): Promise<RawDb> {
+    type RawReq = {
+      result: RawDb;
+      error: Error | null;
+      onsuccess: ((ev: unknown) => void) | null;
+      onerror: ((ev: unknown) => void) | null;
+      onblocked: ((ev: unknown) => void) | null;
+      onupgradeneeded: ((ev: unknown) => void) | null;
+    };
+    const factory = (
+      globalThis as unknown as {
+        indexedDB: { open: (name: string, version?: number) => RawReq };
+      }
+    ).indexedDB;
+    return new Promise((resolve, reject) => {
+      const req = factory.open(dbName, version);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains("events")) {
+          db.createObjectStore("events", { keyPath: "id" });
+        }
+      };
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- fake IDBOpenDBRequest mirrors the on* handler API
+      req.onerror = () => reject(req.error ?? new Error("raw open failed"));
+      req.onblocked = () => reject(new Error("raw open blocked"));
+      req.onsuccess = () => resolve(req.result);
+    });
+  }
+
+  beforeEach(() => {
+    mock = installIdbMock();
+  });
+
+  afterEach(() => {
+    mock.uninstall();
+  });
+
+  test("open rejects with StorageError when an older connection stays open", async () => {
+    const raw = await rawOpen("blocked-db", 1);
+    const err = await new IndexedDbEventStore({ dbName: "blocked-db" }).open().then(
+      () => {
+        throw new Error("expected reject");
+      },
+      (error: unknown) => error,
+    );
+    expect(err).toBeInstanceOf(StorageError);
+    expect((err as StorageError).message).toBe("IndexedDB open blocked by another connection");
+    raw.close();
+  });
+
+  test("an open store yields to a newer-version open instead of blocking it", async () => {
+    const store = new IndexedDbEventStore({ dbName: "yield-db" });
+    await store.open();
+    const newer = await rawOpen("yield-db", IDB_VERSION + 1);
+    expect(newer.objectStoreNames.contains("events")).toBe(true);
+    newer.close();
+    store.close();
+  });
+
+  test("operations fail with StorageError after yielding to a newer version", async () => {
+    const store = new IndexedDbEventStore({ dbName: "yield-ops" });
+    await store.open();
+    const newer = await rawOpen("yield-ops", IDB_VERSION + 1);
+    const err = await store.get(EID).then(
+      () => {
+        throw new Error("expected reject");
+      },
+      (error: unknown) => error,
+    );
+    expect(err).toBeInstanceOf(StorageError);
+    expect((err as StorageError).message).toBe("IndexedDB connection closed by a newer version");
+    newer.close();
     store.close();
   });
 });

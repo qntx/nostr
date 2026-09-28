@@ -57,8 +57,27 @@ export async function openDb(dbName: string): Promise<IDBDatabaseLike> {
         db.createObjectStore(OUTBOX_BOUNDS, { keyPath: "key" });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new StorageError("IndexedDB open failed"));
+    let settled = false;
+    req.onsuccess = () => {
+      const db = req.result;
+      if (settled) {
+        // The blocked rejection already fired; do not leak this late connection.
+        db.close();
+        return;
+      }
+      settled = true;
+      // Yield to any newer-version open instead of blocking it forever.
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    req.onerror = () => {
+      settled = true;
+      reject(req.error ?? new StorageError("IndexedDB open failed"));
+    };
+    req.onblocked = () => {
+      settled = true;
+      reject(new StorageError("IndexedDB open blocked by another connection"));
+    };
   });
 }
 

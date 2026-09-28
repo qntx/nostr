@@ -9,6 +9,10 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Fixed
+
+- `IndexedDbEventStore` no longer hangs when another tab holds an older-schema connection: an `onblocked` open now rejects with `StorageError("IndexedDB open blocked by another connection")` instead of never settling, and an opened store closes its connection on `versionchange` so a newer-version open elsewhere is never blocked by it. Operations on a connection that yielded this way reject with `StorageError("IndexedDB connection closed by a newer version")` instead of a raw `InvalidStateError`.
+
 ## [0.3.0] - 2026-09-28
 
 ### Added
