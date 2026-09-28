@@ -9,6 +9,10 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `nip27` `parseContent` is a rewritten single-scan tokenizer that returns a `ContentBlock[]` array instead of a generator, and `parseContentBlocks` is removed. `ContentBlock` references now carry `bare`, URLs keep the original substring (no normalization), media classification honors NIP-92 `imeta` MIME hints before path extensions, and new block types cover Lightning invoices (`invoice`) and opt-in bare bech32 references (`ParseContentOptions.legacyBech32`). Hashtags and URL boundaries now understand Unicode letters, CJK punctuation, and full-width forms.
+
 ## [0.3.1] - 2026-09-29
 
 ### Fixed
