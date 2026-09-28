@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-28
+
 ### Added
 
 - `createEventVerifier` and `SerializedEventVerifier` (`@qntx/nostr/core`, also re-exported from the package root): build an event verifier with `verifyEvent`'s exact semantics — shared verified/failed WeakSet caches, `validateSignedEvent`, canonical serialization — over a pluggable backend that receives the serialized UTF-8 bytes plus the raw `id`/`pubkey`/`sig` and answers whether `sha256(serialized)` equals `id` and `sig` is a valid BIP-340 signature. Backend exceptions propagate without marking the event, so backends can implement sticky-failure semantics (as the WASM adapter does with `WasmVerifyPoisonedError`). Intended for native verifiers such as libsecp256k1 Nitro modules on React Native.
@@ -111,6 +113,7 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/qntx/nostr.js/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/qntx/nostr.js/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/qntx/nostr.js/compare/v0.1.0...v0.2.0
