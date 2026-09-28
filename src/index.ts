@@ -71,6 +71,7 @@ export {
   publicKeyFromHex,
   signEvent,
   type PublicKey,
+  type SigningBackend,
   createEventVerifier,
   verifyEvent,
   type SerializedEventVerifier,

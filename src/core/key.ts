@@ -1,4 +1,5 @@
 import { schnorr } from "@noble/curves/secp256k1.js";
+import { randomBytes } from "@noble/hashes/utils.js";
 
 import { CryptoError } from "./error.ts";
 import { getEventHash, markVerified, validateEvent } from "./event.ts";
@@ -54,6 +55,21 @@ export function publicKeyFromHex(hex: string): PublicKey {
   return assertHex32(hex, "public key");
 }
 
+/**
+ * BIP-340 signing backend. `publicKey` returns the 32-byte x-only public key of a 32-byte secret
+ * key; `sign` returns the 64-byte BIP-340 signature of a 32-byte `id` using 32 bytes of auxiliary
+ * randomness. Both throw on invalid input (for example an out-of-range secret key).
+ */
+export type SigningBackend = {
+  publicKey: (secretKey: Uint8Array) => Uint8Array;
+  sign: (id: Uint8Array, secretKey: Uint8Array, auxRand: Uint8Array) => Uint8Array;
+};
+
+const nobleSigning: SigningBackend = {
+  publicKey: (secretKey) => schnorr.getPublicKey(secretKey),
+  sign: (id, secretKey, auxRand) => schnorr.sign(id, secretKey, auxRand),
+};
+
 /** Derive the public key for a secret key given as SecretKey, bytes, or hex. */
 export function getPublicKey(secretKey: SecretKey | Uint8Array | string): PublicKey {
   const bytes =
@@ -69,46 +85,43 @@ export function getPublicKey(secretKey: SecretKey | Uint8Array | string): Public
 export class Keys {
   readonly secretKey: SecretKey;
   readonly publicKey: PublicKey;
+  /**
+   * BIP-340 backend that derived {@link publicKey} and signs in {@link finalizeEvent}/
+   * {@link signEvent}. Defaults to noble; pass a loaded `NostrWasm` module or a native backend to
+   * delegate signing.
+   */
+  readonly backend: SigningBackend;
 
-  private constructor(secretKey: SecretKey) {
+  private constructor(secretKey: SecretKey, backend: SigningBackend) {
     this.secretKey = secretKey;
-    this.publicKey = getPublicKey(secretKey);
+    this.backend = backend;
+    const pubkey = backend.publicKey(secretKey.bytes);
+    if (pubkey.length !== 32) {
+      throw new CryptoError("signing backend returned an invalid public key");
+    }
+    this.publicKey = bytesToHex(pubkey);
   }
 
-  static generate(): Keys {
-    return new Keys(SecretKey.generate());
+  static generate(backend: SigningBackend = nobleSigning): Keys {
+    return new Keys(SecretKey.generate(), backend);
   }
 
-  static fromSecretKey(secretKey: SecretKey | Uint8Array | string): Keys {
+  static fromSecretKey(
+    secretKey: SecretKey | Uint8Array | string,
+    backend: SigningBackend = nobleSigning,
+  ): Keys {
     const sk =
       secretKey instanceof SecretKey
         ? secretKey
         : typeof secretKey === "string"
           ? SecretKey.fromHex(secretKey)
           : SecretKey.fromBytes(secretKey);
-    return new Keys(sk);
+    return new Keys(sk, backend);
   }
 }
 
-function resolveSecretKeyBytes(secretKey: SecretKey | Uint8Array | string): Uint8Array {
-  if (secretKey instanceof SecretKey) {
-    return secretKey.bytes;
-  }
-  if (typeof secretKey === "string") {
-    return hexToBytes(assertHex32(secretKey, "secret key"));
-  }
-  assertSecretKeyBytes(secretKey);
-  return secretKey;
-}
-
-function resolveSigningKey(secretKey: SecretKey | Uint8Array | string | Keys): {
-  bytes: Uint8Array;
-  publicKey?: PublicKey;
-} {
-  if (secretKey instanceof Keys) {
-    return { bytes: secretKey.secretKey.bytes, publicKey: secretKey.publicKey };
-  }
-  return { bytes: resolveSecretKeyBytes(secretKey) };
+function resolveKeys(secretKey: SecretKey | Uint8Array | string | Keys): Keys {
+  return secretKey instanceof Keys ? secretKey : Keys.fromSecretKey(secretKey);
 }
 
 /** Fill pubkey/id/sig on a template and return a signed event. */
@@ -116,16 +129,15 @@ export function finalizeEvent(
   template: EventTemplate,
   secretKey: SecretKey | Uint8Array | string | Keys,
 ): Event {
-  const { bytes: sk, publicKey } = resolveSigningKey(secretKey);
-  const pubkey = publicKey ?? bytesToHex(schnorr.getPublicKey(sk));
+  const keys = resolveKeys(secretKey);
   const unsigned: UnsignedEvent = {
     kind: template.kind,
     tags: template.tags,
     content: template.content,
     created_at: template.created_at,
-    pubkey,
+    pubkey: keys.publicKey,
   };
-  return signEvent(unsigned, sk);
+  return signEvent(unsigned, keys);
 }
 
 /**
@@ -136,13 +148,12 @@ export function signEvent(
   unsigned: UnsignedEvent,
   secretKey: SecretKey | Uint8Array | string | Keys,
 ): Event {
-  const { bytes: sk, publicKey } = resolveSigningKey(secretKey);
+  const keys = resolveKeys(secretKey);
   if (!validateEvent(unsigned)) {
     throw new CryptoError("cannot sign invalid unsigned event");
   }
 
-  const expected = publicKey ?? bytesToHex(schnorr.getPublicKey(sk));
-  if (unsigned.pubkey !== expected) {
+  if (unsigned.pubkey !== keys.publicKey) {
     throw new CryptoError("unsigned event pubkey does not match secret key");
   }
 
@@ -151,12 +162,15 @@ export function signEvent(
     tags: unsigned.tags,
     content: unsigned.content,
     created_at: unsigned.created_at,
-    pubkey: expected,
+    pubkey: keys.publicKey,
   };
 
   const id = getEventHash(normalized);
-  const sig = bytesToHex(schnorr.sign(hexToBytes(id), sk));
-  const event: Event = { ...normalized, id, sig };
+  const sig = keys.backend.sign(hexToBytes(id), keys.secretKey.bytes, randomBytes(32));
+  if (sig.length !== 64) {
+    throw new CryptoError("signing backend returned an invalid signature");
+  }
+  const event: Event = { ...normalized, id, sig: bytesToHex(sig) };
   markVerified(event);
   return event;
 }

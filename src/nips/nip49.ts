@@ -4,16 +4,39 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/49.md
  */
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
-import { scrypt } from "@noble/hashes/scrypt.js";
+import { scryptAsync } from "@noble/hashes/scrypt.js";
 import { concatBytes, randomBytes } from "@noble/hashes/utils.js";
 import { bech32 } from "@scure/base";
 
 import { NostrError } from "../core/error.ts";
-import { assertSecretKeyBytes } from "../core/util.ts";
+import { assertSecretKeyBytes, utf8Encoder } from "../core/util.ts";
 import { Bech32MaxSize, encodeBytes } from "./nip19.ts";
 
 export type Ncryptsec = `ncryptsec1${string}`;
 export type KeySecurityByte = 0x00 | 0x01 | 0x02;
+
+export type ScryptParams = { N: number; r: number; p: number; dkLen: number };
+
+/** Derive `params.dkLen` bytes from the NFKC-normalized UTF-8 password and salt (RFC 7914). */
+export type Scrypt = (
+  password: Uint8Array,
+  salt: Uint8Array,
+  params: ScryptParams,
+) => Promise<Uint8Array>;
+
+export type Nip49EncryptOptions = {
+  /** Scrypt log2(N) work factor, 1..22. Defaults to 16. */
+  logn?: number;
+  /** Key security byte recorded in the payload. Defaults to 0x02. */
+  ksb?: KeySecurityByte;
+  /** Scrypt implementation. Defaults to noble `scryptAsync`. */
+  scrypt?: Scrypt;
+};
+
+export type Nip49DecryptOptions = {
+  /** Scrypt implementation. Defaults to noble `scryptAsync`. */
+  scrypt?: Scrypt;
+};
 
 const VERSION = 0x02;
 const SALT_LEN = 16;
@@ -34,31 +57,51 @@ function assertLogn(logn: number): void {
   }
 }
 
-function deriveKey(password: string, salt: Uint8Array, logn: number): Uint8Array {
-  assertLogn(logn);
-  const N = 2 ** logn;
-  return scrypt(password.normalize("NFKC"), salt, {
-    N,
-    r: SCRYPT_R,
-    p: SCRYPT_P,
-    dkLen: 32,
-    // noble 2.3: V (N blocks) + p B blocks + one tmp scratch block.
-    maxmem: 128 * SCRYPT_R * (N + SCRYPT_P + 1),
+// noble 2.3: V (N blocks) + p B blocks + one tmp scratch block.
+const nobleScrypt: Scrypt = async (password, salt, params) =>
+  scryptAsync(password, salt, {
+    ...params,
+    maxmem: 128 * params.r * (params.N + params.p + 1),
   });
+
+async function deriveKey(
+  password: string,
+  salt: Uint8Array,
+  logn: number,
+  kdf: Scrypt,
+): Promise<Uint8Array> {
+  assertLogn(logn);
+  let key: Uint8Array;
+  try {
+    key = await kdf(utf8Encoder.encode(password.normalize("NFKC")), salt, {
+      N: 2 ** logn,
+      r: SCRYPT_R,
+      p: SCRYPT_P,
+      dkLen: 32,
+    });
+  } catch (error) {
+    throw new Nip49Error("scrypt failed", {
+      cause: error instanceof Error ? error : undefined,
+    });
+  }
+  if (key.length !== 32) {
+    throw new Nip49Error(`scrypt returned ${key.length} bytes, expected 32`);
+  }
+  return key;
 }
 
 /** Encrypt a 32-byte secret key to an `ncryptsec` bech32 string. */
-export function encrypt(
+export async function encrypt(
   secretKey: Uint8Array,
   password: string,
-  logn = 16,
-  ksb: KeySecurityByte = 0x02,
-): Ncryptsec {
+  opts?: Nip49EncryptOptions,
+): Promise<Ncryptsec> {
   assertSecretKeyBytes(secretKey);
+  const logn = opts?.logn ?? 16;
   const salt = randomBytes(SALT_LEN);
-  const key = deriveKey(password, salt, logn);
+  const key = await deriveKey(password, salt, logn, opts?.scrypt ?? nobleScrypt);
   const nonce = randomBytes(NONCE_LEN);
-  const aad = Uint8Array.from([ksb]);
+  const aad = Uint8Array.from([opts?.ksb ?? 0x02]);
   const ciphertext = xchacha20poly1305(key, nonce, aad).encrypt(secretKey);
   const bytes = concatBytes(
     Uint8Array.from([VERSION]),
@@ -72,7 +115,11 @@ export function encrypt(
 }
 
 /** Decrypt an `ncryptsec` bech32 string to a 32-byte secret key. */
-export function decrypt(ncryptsec: string, password: string): Uint8Array {
+export async function decrypt(
+  ncryptsec: string,
+  password: string,
+  opts?: Nip49DecryptOptions,
+): Promise<Uint8Array> {
   let prefix: string;
   let b: Uint8Array;
   try {
@@ -110,7 +157,7 @@ export function decrypt(ncryptsec: string, password: string): Uint8Array {
   const aad = Uint8Array.from([ksb]);
   const ciphertext = b.subarray(2 + SALT_LEN + NONCE_LEN + 1);
   try {
-    const key = deriveKey(password, salt, logn);
+    const key = await deriveKey(password, salt, logn, opts?.scrypt ?? nobleScrypt);
     return xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
   } catch (error) {
     if (error instanceof Nip49Error) {

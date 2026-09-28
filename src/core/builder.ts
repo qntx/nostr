@@ -1,7 +1,7 @@
 import { EventValidationError } from "./error.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "./event.ts";
-import { Keys, finalizeEvent } from "./key.ts";
-import type { SecretKey } from "./key.ts";
+import { finalizeEvent } from "./key.ts";
+import type { Keys, SecretKey } from "./key.ts";
 import { Kind, isAddressableKind, isReplaceableKind } from "./kind.ts";
 import { Tag, formatEventAddress, getDTag, parseEventAddress } from "./tag.ts";
 import { normalizeURL } from "./util.ts";
@@ -225,9 +225,6 @@ export class EventBuilder {
 
   /** Sign with local Keys (synchronous). */
   signWithKeys(keys: Keys | SecretKeyLike): Event {
-    if (keys instanceof Keys) {
-      return finalizeEvent(this.toTemplate(), keys.secretKey);
-    }
     return finalizeEvent(this.toTemplate(), keys);
   }
 

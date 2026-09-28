@@ -76,6 +76,7 @@ export {
   publicKeyFromHex,
   signEvent,
   type PublicKey,
+  type SigningBackend,
 } from "./key.ts";
 
 export { createEventVerifier, verifyEvent, type SerializedEventVerifier } from "./verifier.ts";

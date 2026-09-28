@@ -4,7 +4,7 @@ import { describe, expect, test } from "vite-plus/test";
 import { CryptoError } from "../src/core/error.ts";
 import { getEventHash } from "../src/core/event.ts";
 import type { Event } from "../src/core/event.ts";
-import { getPublicKey } from "../src/core/key.ts";
+import { finalizeEvent, getPublicKey, Keys } from "../src/core/key.ts";
 import { Kind } from "../src/core/kind.ts";
 import { bytesToHex, hexToBytes } from "../src/core/util.ts";
 import { verifyEvent } from "../src/core/verifier.ts";
@@ -79,6 +79,23 @@ describe("wasm sign/publicKey", () => {
     expect(verifyEvent({ ...event })).toBe(true);
     expect(wasm.verifyEvent({ ...event })).toBe(true);
     expect(wasm.verify(id, pk, sig)).toBe(true);
+  });
+
+  test("NostrWasm works as a SigningBackend for Keys", () => {
+    const sk = hexToBytes(SK_HEX);
+    const keys = Keys.fromSecretKey(sk, wasm);
+    expect(keys.backend).toBe(wasm);
+    expect(keys.publicKey).toBe(getPublicKey(sk));
+    const event = finalizeEvent(
+      {
+        kind: Kind.TextNote,
+        tags: [],
+        content: "wasm backend",
+        created_at: 1617932115,
+      },
+      keys,
+    );
+    expect(verifyEvent({ ...event })).toBe(true);
   });
 });
 
