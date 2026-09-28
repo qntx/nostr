@@ -29,7 +29,7 @@ import {
 } from "../src/index.ts";
 import { DataLoader, LoaderError } from "../src/loaders/dataloader.ts";
 import { subscriptionToAsyncIterable } from "../src/relay/subscription.ts";
-import { makeVerifyEvent } from "../src/wasm/adapter.ts";
+import { createWasmEventVerifier } from "../src/wasm/adapter.ts";
 import { loadNostrWasm, resetNostrWasmForTests } from "../src/wasm/load.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
@@ -347,18 +347,13 @@ describe("IndexedDbEventStore missing IndexedDB", () => {
 });
 
 describe("WasmVerifyPoisonedError", () => {
-  test("makeVerifyEvent RuntimeError poisons as WasmVerifyPoisonedError", () => {
+  test("wasm verifier RuntimeError poisons as WasmVerifyPoisonedError", () => {
     const poison: { error?: Error } = {};
     let calls = 0;
-    const fn = makeVerifyEvent(
-      {
-        verifySerialized: () => {
-          calls += 1;
-          throw new WebAssembly.RuntimeError("trap");
-        },
-      },
-      poison,
-    );
+    const fn = createWasmEventVerifier(() => {
+      calls += 1;
+      throw new WebAssembly.RuntimeError("trap");
+    }, poison);
     const signed = EventBuilder.textNote("hello")
       .createdAt(1617932115)
       .signWithKeys(Keys.fromSecretKey(SK));

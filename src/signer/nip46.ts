@@ -3,11 +3,12 @@ import { randomBytes } from "@noble/hashes/utils.js";
 import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
 import { signedMatchesUnsigned, validateSignedEvent } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
-import { SecretKey, finalizeEvent, getPublicKey, verifyEvent } from "../core/key.ts";
+import { SecretKey, finalizeEvent, getPublicKey } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import { invokeSafely } from "../core/report.ts";
 import { Tag } from "../core/tag.ts";
 import { bytesToHex, isHex32 } from "../core/util.ts";
+import { verifyEvent } from "../core/verifier.ts";
 import { decrypt, encrypt, getConversationKey } from "../nips/nip44.ts";
 import {
   Nip46Error,

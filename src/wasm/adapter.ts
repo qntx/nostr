@@ -1,56 +1,26 @@
 import { WasmVerifyPoisonedError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
-import {
-  isMarkedFailed,
-  isMarkedVerified,
-  markUnverified,
-  markVerified,
-  serializeEvent,
-  validateSignedEvent,
-} from "../core/event.ts";
-import { hexToBytes, utf8Encoder } from "../core/util.ts";
+import { createEventVerifier } from "../core/verifier.ts";
+import type { SerializedEventVerifier } from "../core/verifier.ts";
 
 export { WasmVerifyPoisonedError } from "../core/error.ts";
 
-export type WasmSerializedVerify = {
-  verifySerialized: (
-    serializedUtf8: Uint8Array,
-    id: Uint8Array,
-    pubkey: Uint8Array,
-    sig: Uint8Array,
-  ) => boolean;
-};
-
-export function makeVerifyEvent(
-  wasm: WasmSerializedVerify,
+/**
+ * Build the WASM event verifier on {@link createEventVerifier}. A `WebAssembly.RuntimeError` from
+ * the module means the instance aborted — it poisons every later call with the same
+ * `WasmVerifyPoisonedError`; any other backend error verifies `false` (the event is marked
+ * failed).
+ */
+export function createWasmEventVerifier(
+  verifySerialized: SerializedEventVerifier,
   poison: { error?: Error },
 ): (event: Event) => boolean {
-  return (event: Event): boolean => {
-    if (poison.error) {
+  const backend: SerializedEventVerifier = (serializedUtf8, id, pubkey, sig) => {
+    if (poison.error !== undefined) {
       throw poison.error;
     }
-    if (isMarkedVerified(event)) {
-      return true;
-    }
-    if (isMarkedFailed(event)) {
-      return false;
-    }
-    if (!validateSignedEvent(event)) {
-      markUnverified(event);
-      return false;
-    }
     try {
-      const serialized = utf8Encoder.encode(serializeEvent(event));
-      const id = hexToBytes(event.id);
-      const pubkey = hexToBytes(event.pubkey);
-      const sig = hexToBytes(event.sig);
-      const ok = wasm.verifySerialized(serialized, id, pubkey, sig);
-      if (ok) {
-        markVerified(event);
-      } else {
-        markUnverified(event);
-      }
-      return ok;
+      return verifySerialized(serializedUtf8, id, pubkey, sig);
     } catch (error) {
       if (error instanceof WebAssembly.RuntimeError) {
         poison.error = new WasmVerifyPoisonedError("wasm verify aborted the instance", {
@@ -58,8 +28,8 @@ export function makeVerifyEvent(
         });
         throw poison.error;
       }
-      markUnverified(event);
       return false;
     }
   };
+  return createEventVerifier(backend);
 }

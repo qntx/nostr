@@ -75,9 +75,10 @@ export {
   getPublicKey,
   publicKeyFromHex,
   signEvent,
-  verifyEvent,
   type PublicKey,
 } from "./key.ts";
+
+export { createEventVerifier, verifyEvent, type SerializedEventVerifier } from "./verifier.ts";
 
 export { EventBuilder, type ProfileMetadata } from "./builder.ts";
 

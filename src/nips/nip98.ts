@@ -9,10 +9,10 @@ import { base64 } from "@scure/base";
 import { NostrError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { validateSignedEvent } from "../core/event.ts";
-import { verifyEvent } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { bytesToHex, utf8Decoder, utf8Encoder } from "../core/util.ts";
+import { verifyEvent } from "../core/verifier.ts";
 
 const AUTHORIZATION_SCHEME = "Nostr ";
 const DEFAULT_MAX_SKEW_SEC = 60;
