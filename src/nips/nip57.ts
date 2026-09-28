@@ -11,10 +11,10 @@ import { bech32 } from "@scure/base";
 import { EventValidationError } from "../core/error.ts";
 import { validateSignedEvent } from "../core/event.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
-import { verifyEvent } from "../core/key.ts";
 import { isAddressableKind, Kind } from "../core/kind.ts";
 import { eventAddress, getDTag, parseEventAddress, Tag } from "../core/tag.ts";
 import { hexToBytes, utf8Encoder } from "../core/util.ts";
+import { verifyEvent } from "../core/verifier.ts";
 
 export type ProfileZapRequest = {
   pubkey: string;

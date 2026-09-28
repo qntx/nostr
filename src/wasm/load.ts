@@ -8,7 +8,7 @@ import {
   wasmVerifySerialized,
 } from "./abi.ts";
 import type { CryptoWasmExports } from "./abi.ts";
-import { makeVerifyEvent, WasmVerifyPoisonedError } from "./adapter.ts";
+import { createWasmEventVerifier, WasmVerifyPoisonedError } from "./adapter.ts";
 
 export { WasmVerifyPoisonedError } from "./adapter.ts";
 export type LoadNostrWasmOptions = {
@@ -113,7 +113,7 @@ function bindExports(exports: CryptoWasmExports): NostrWasm {
     verify: (id, pubkey, sig) => wrapPoison(poison, () => wasmVerify(exports, id, pubkey, sig)),
     verifySerialized: (serializedUtf8, id, pubkey, sig) =>
       wrapPoison(poison, () => rawSerialized(serializedUtf8, id, pubkey, sig)),
-    verifyEvent: makeVerifyEvent({ verifySerialized: rawSerialized }, poison),
+    verifyEvent: createWasmEventVerifier(rawSerialized, poison),
     sign: (id, seckey, aux) =>
       wrapPoison(poison, () => {
         requireByteLength(id, 32, "id");

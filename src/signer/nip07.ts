@@ -1,8 +1,8 @@
 import { CryptoError } from "../core/error.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
 import { signedMatchesUnsigned, validateSignedEvent } from "../core/event.ts";
-import { verifyEvent } from "../core/key.ts";
 import { assertHex32 } from "../core/util.ts";
+import { verifyEvent } from "../core/verifier.ts";
 import type { NostrSigner } from "./types.ts";
 
 /**

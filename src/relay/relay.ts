@@ -3,7 +3,6 @@ import { MessageError, WasmVerifyPoisonedError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { canonicalizeFilter, canonicalizeFilters } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
-import { verifyEvent } from "../core/key.ts";
 import {
   assertSubscriptionId,
   createSubscriptionId,
@@ -13,6 +12,7 @@ import {
 import type { ClientMessage, CountResult, SubscriptionId } from "../core/message.ts";
 import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
+import { verifyEvent } from "../core/verifier.ts";
 import { isAuthRequired, makeAuthEvent } from "../nips/nip42.ts";
 import { Nip77Error } from "../nips/nip77.ts";
 import type { NegentropyStorageVector } from "../nips/nip77.ts";

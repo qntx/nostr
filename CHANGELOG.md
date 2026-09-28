@@ -9,6 +9,14 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Added
+
+- `createEventVerifier` and `SerializedEventVerifier` (`@qntx/nostr/core`, also re-exported from the package root): build an event verifier with `verifyEvent`'s exact semantics — shared verified/failed WeakSet caches, `validateSignedEvent`, canonical serialization — over a pluggable backend that receives the serialized UTF-8 bytes plus the raw `id`/`pubkey`/`sig` and answers whether `sha256(serialized)` equals `id` and `sig` is a valid BIP-340 signature. Backend exceptions propagate without marking the event, so backends can implement sticky-failure semantics (as the WASM adapter does with `WasmVerifyPoisonedError`). Intended for native verifiers such as libsecp256k1 Nitro modules on React Native.
+
+### Changed
+
+- The WASM event verifier is now built on `createEventVerifier` instead of the internal `makeVerifyEvent` adapter (removed, along with `WasmSerializedVerify`); no behaviour change. `verifyEvent` is itself `createEventVerifier` over the noble `sha256` + `schnorr.verify` backend — same semantics, single code path.
+
 ## [0.2.1] - 2026-09-28
 
 ### Added

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
 import { CryptoError } from "../src/core/error.ts";
-import { verifyEvent } from "../src/core/key.ts";
+import { verifyEvent } from "../src/core/verifier.ts";
 import { Kind, Keys, KeysSigner, finalizeEvent } from "../src/index.ts";
 import { encryptToPubkey } from "../src/nips/nip44.ts";
 import {

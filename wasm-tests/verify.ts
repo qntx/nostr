@@ -6,7 +6,7 @@ import { hexToBytes, utf8Encoder } from "../src/core/util.ts";
 import { finalizeEvent, serializeEvent, verifyEvent } from "../src/index.ts";
 import type { Event } from "../src/index.ts";
 import { assertAllowedWasmImports, instantiateCryptoWasm } from "../src/wasm/abi.ts";
-import { makeVerifyEvent, WasmVerifyPoisonedError } from "../src/wasm/adapter.ts";
+import { createWasmEventVerifier, WasmVerifyPoisonedError } from "../src/wasm/adapter.ts";
 import { loadNostrWasm, resetNostrWasmForTests } from "../src/wasm/load.ts";
 import type { NostrWasm } from "../src/wasm/load.ts";
 import { readBuiltWasm } from "./read-wasm.ts";
@@ -147,15 +147,10 @@ describe("adapter poison", () => {
   test("RuntimeError becomes sticky WasmVerifyPoisonedError", () => {
     const poison: { error?: Error } = {};
     let calls = 0;
-    const fn = makeVerifyEvent(
-      {
-        verifySerialized: () => {
-          calls += 1;
-          throw new WebAssembly.RuntimeError("trap");
-        },
-      },
-      poison,
-    );
+    const fn = createWasmEventVerifier(() => {
+      calls += 1;
+      throw new WebAssembly.RuntimeError("trap");
+    }, poison);
     const event = copyEvent(helloEvent());
     expect(() => fn(event)).toThrow(WasmVerifyPoisonedError);
     expect(poison.error).toBeInstanceOf(WasmVerifyPoisonedError);
@@ -166,15 +161,10 @@ describe("adapter poison", () => {
   test("non-RuntimeError is false, not poison", () => {
     const poison: { error?: Error } = {};
     let calls = 0;
-    const fn = makeVerifyEvent(
-      {
-        verifySerialized: () => {
-          calls += 1;
-          throw new HexError("bad hex");
-        },
-      },
-      poison,
-    );
+    const fn = createWasmEventVerifier(() => {
+      calls += 1;
+      throw new HexError("bad hex");
+    }, poison);
     expect(fn(copyEvent(helloEvent()))).toBe(false);
     expect(poison.error).toBeUndefined();
     expect(fn(copyEvent(helloEvent()))).toBe(false);
