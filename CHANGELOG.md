@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-28
+
 ### Added
 
 - Per-relay invalid-event policy: `PoolOptions.invalidEventPolicy` (`{ limit, windowMs, cooldownMs }`) and `PoolOptions.onRelaySuspended(url, until)`, also exposed on `ClientOptions`/`ClientBuilder`. A relay whose `limit`-plus-one delivered EVENT fails id/signature verification inside a `windowMs` sliding window is disconnected and suspended for `cooldownMs`. During suspension `ensureRelay` rejects with the new `RelaySuspendedError` (`url`, `until`), so fetch/publish/subscribe treat it as that relay failing without affecting others; pinned relays are suspended too. Once the cooldown lifts, live subscriptions resume through the normal reconnect path. Supporting API: `Relay.oninvalidevent` (fired when a delivered EVENT fails verification) and `Relay.disconnect()` (sever the socket while keeping subscriptions for a later `connect()`).
@@ -101,5 +103,6 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/qntx/nostr.js/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/qntx/nostr.js/compare/v0.1.0...v0.2.0
