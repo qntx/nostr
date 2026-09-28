@@ -13,6 +13,10 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 - `SigningBackend` (`@qntx/nostr/core`, also re-exported from the package root): a `{ publicKey, sign }` BIP-340 backend bound to `Keys` via `Keys.generate(backend)` and `Keys.fromSecretKey(secretKey, backend)`. `finalizeEvent`, `signEvent`, `KeysSigner`, and `EventBuilder.signWithKeys` route through `keys.backend`, so a WASM module or a React Native native signer (for example libsecp256k1 over Nitro) can replace noble signing. `NostrWasm` is now a `SigningBackend`, so `Keys.fromSecretKey(sk, wasm)` works directly.
 
+### Changed
+
+- **Breaking:** `nip49.encrypt` and `nip49.decrypt` are now async and take an options object in place of positional `logn`/`ksb`: `encrypt(secretKey, password, { logn, ksb, scrypt })` and `decrypt(ncryptsec, password, { scrypt })`. The `scrypt` option (`Scrypt` type) receives the NFKC-normalized UTF-8 password bytes, the payload salt, and `{ N, r, p, dkLen }`, letting runtimes delegate the KDF off the JS thread (for example OpenSSL scrypt via a native module); the default remains noble `scryptAsync` with the same parameters (logn 16, ksb 0x02). A throwing/rejecting scrypt surfaces as `Nip49Error("scrypt failed")` and a wrong-length result as `Nip49Error("scrypt returned N bytes, expected 32")`, both distinguishable from the `Nip49Error("failed to decrypt")` raised by a wrong password.
+
 ## [0.2.2] - 2026-09-28
 
 ### Added

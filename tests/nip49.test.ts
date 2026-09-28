@@ -1,50 +1,110 @@
+import { scryptAsync } from "@noble/hashes/scrypt.js";
 import { describe, expect, test } from "vite-plus/test";
 
 import { hexToBytes, nsecEncode } from "../src/index.ts";
 import { decrypt, encrypt, Nip49Error } from "../src/nips/nip49.ts";
-import type { KeySecurityByte } from "../src/nips/nip49.ts";
+import type { KeySecurityByte, Scrypt, ScryptParams } from "../src/nips/nip49.ts";
 
 describe("nip49", () => {
-  test("encrypt and decrypt vectors", () => {
-    for (const [password, secret, logn, ksb, ncryptsec] of vectors) {
-      const sec = hexToBytes(secret);
-      const there = encrypt(sec, password, logn, ksb);
-      const back = decrypt(there, password);
-      const again = decrypt(ncryptsec, password);
-      expect(back).toStrictEqual(again);
-      expect(again).toStrictEqual(sec);
-    }
+  test("encrypt and decrypt vectors", async () => {
+    await Promise.all(
+      vectors.map(async ([password, secret, logn, ksb, ncryptsec]) => {
+        const sec = hexToBytes(secret);
+        const there = await encrypt(sec, password, { logn, ksb });
+        const back = await decrypt(there, password);
+        const again = await decrypt(ncryptsec, password);
+        expect(back).toStrictEqual(again);
+        expect(again).toStrictEqual(sec);
+      }),
+    );
   });
 
-  test("spec vector logn 16", () => {
+  test("spec vector logn 16", async () => {
     const ncryptsec =
       "ncryptsec1qgg9947rlpvqu76pj5ecreduf9jxhselq2nae2kghhvd5g7dgjtcxfqtd67p9m0w57lspw8gsq6yphnm8623nsl8xn9j4jdzz84zm3frztj3z7s35vpzmqf6ksu8r89qk5z2zxfmu5gv8th8wclt0h4p";
     const sec = hexToBytes("3501454135014541350145413501453fefb02227e449e57cf4d3a3ce05378683");
-    expect(decrypt(ncryptsec, "nostr")).toStrictEqual(sec);
+    await expect(decrypt(ncryptsec, "nostr")).resolves.toStrictEqual(sec);
   });
 
-  test("wrong password throws", () => {
+  test("wrong password throws", async () => {
     const [password, secret, logn, ksb, ncryptsec] = vectors[0]!;
     const sec = hexToBytes(secret);
-    expect(() => decrypt(ncryptsec, "wrong-password")).toThrow(Nip49Error);
-    const there = encrypt(sec, password, logn, ksb);
-    expect(() => decrypt(there, "wrong")).toThrow(Nip49Error);
+    await expect(decrypt(ncryptsec, "wrong-password")).rejects.toThrow(Nip49Error);
+    await expect(decrypt(ncryptsec, "wrong-password")).rejects.toThrow("failed to decrypt");
+    const there = await encrypt(sec, password, { logn, ksb });
+    await expect(decrypt(there, "wrong")).rejects.toThrow(Nip49Error);
   });
 
-  test("wrong prefix throws", () => {
+  test("wrong prefix throws", async () => {
     const sec = hexToBytes(vectors[0]![1]);
-    expect(() => decrypt(nsecEncode(sec), "x")).toThrow(Nip49Error);
+    await expect(decrypt(nsecEncode(sec), "x")).rejects.toThrow(Nip49Error);
   });
 
-  test("excess bech32 padding throws Nip49Error", () => {
-    expect(() => decrypt("ncryptsec1pcnlmyt", "x")).toThrow(Nip49Error);
+  test("excess bech32 padding throws Nip49Error", async () => {
+    await expect(decrypt("ncryptsec1pcnlmyt", "x")).rejects.toThrow(Nip49Error);
   });
 
-  test("invalid logn throws Nip49Error", () => {
+  test("invalid logn throws Nip49Error", async () => {
     const sec = hexToBytes(vectors[0]![1]);
-    expect(() => encrypt(sec, "pw", 0)).toThrow(Nip49Error);
-    expect(() => encrypt(sec, "pw", 23)).toThrow(Nip49Error);
-    expect(() => encrypt(sec, "pw", 1.5)).toThrow(Nip49Error);
+    await expect(encrypt(sec, "pw", { logn: 0 })).rejects.toThrow(Nip49Error);
+    await expect(encrypt(sec, "pw", { logn: 23 })).rejects.toThrow(Nip49Error);
+    await expect(encrypt(sec, "pw", { logn: 1.5 })).rejects.toThrow(Nip49Error);
+  });
+
+  test("injected scrypt receives the NFKC password bytes, salt, and params", async () => {
+    const seen: Array<{ password: Uint8Array; salt: Uint8Array; params: ScryptParams }> = [];
+    const recording: Scrypt = async (password, salt, params) => {
+      seen.push({ password, salt, params });
+      return scryptAsync(password, salt, {
+        ...params,
+        maxmem: 128 * params.r * (params.N + params.p + 1),
+      });
+    };
+    const sec = hexToBytes(vectors[0]![1]);
+    // Å decomposed (U+0041 U+030A) normalizes to composed U+00C5 under NFKC.
+    const ncryptsec = await encrypt(sec, "A\u030A", { logn: 4, scrypt: recording });
+    expect(seen).toHaveLength(1);
+    const call = seen[0]!;
+    expect(call.password).toStrictEqual(new TextEncoder().encode("\u00C5"));
+    expect(call.salt).toHaveLength(16);
+    expect(call.params).toStrictEqual({ N: 2 ** 4, r: 8, p: 1, dkLen: 32 });
+
+    await decrypt(ncryptsec, "\u00C5", { scrypt: recording });
+    expect(seen).toHaveLength(2);
+    expect(seen[1]!.password).toStrictEqual(call.password);
+    expect(seen[1]!.salt).toStrictEqual(call.salt);
+    expect(seen[1]!.params).toStrictEqual(call.params);
+  });
+
+  test("an injected scrypt delegating to noble roundtrips with the default", async () => {
+    const sec = hexToBytes(vectors[0]![1]);
+    const delegating: Scrypt = async (password, salt, params) =>
+      scryptAsync(password, salt, {
+        ...params,
+        maxmem: 128 * params.r * (params.N + params.p + 1),
+      });
+    const ncryptsec = await encrypt(sec, "pw", { logn: 4, scrypt: delegating });
+    await expect(decrypt(ncryptsec, "pw")).resolves.toStrictEqual(sec);
+  });
+
+  test("a rejecting scrypt throws scrypt failed with cause", async () => {
+    const cause = new Error("native kdf down");
+    const failing: Scrypt = async () => Promise.reject(cause);
+    const sec = hexToBytes(vectors[0]![1]);
+    const err = await encrypt(sec, "pw", { logn: 4, scrypt: failing }).catch(
+      (error: unknown) => error,
+    );
+    expect(err).toBeInstanceOf(Nip49Error);
+    expect((err as Error).message).toBe("scrypt failed");
+    expect((err as Error).cause).toBe(cause);
+  });
+
+  test("a scrypt returning the wrong length throws", async () => {
+    const short: Scrypt = async () => Promise.resolve(new Uint8Array(31));
+    const sec = hexToBytes(vectors[0]![1]);
+    await expect(encrypt(sec, "pw", { logn: 4, scrypt: short })).rejects.toThrow(
+      "scrypt returned 31 bytes, expected 32",
+    );
   });
 });
 
