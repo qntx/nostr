@@ -3,7 +3,7 @@ import type { Event } from "../core/event.ts";
 import type { Gossip } from "../gossip/gossip.ts";
 import type { ReplyTo } from "../nips/nip17.ts";
 import type { Rumor } from "../nips/nip59.ts";
-import type { PoolPublishResult } from "../relay/pool.ts";
+import type { InvalidEventPolicy, PoolPublishResult } from "../relay/pool.ts";
 import type { WebSocketConstructor } from "../relay/websocket.ts";
 import type { NostrSigner } from "../signer/types.ts";
 import type { StorageError } from "../storage/error.ts";
@@ -77,6 +77,13 @@ export type ClientOptions = {
   maxRelays?: number;
   /** Forwarded to the pool: relays never closed by idle cleanup or `maxRelays`. */
   pinnedUrls?: ReadonlyArray<string>;
+  /**
+   * Forwarded to the pool: a relay exceeding `limit` verification failures inside `windowMs` is
+   * disconnected and suspended for `cooldownMs`.
+   */
+  invalidEventPolicy?: InvalidEventPolicy;
+  /** Forwarded to the pool: fired once when a relay is suspended, with the lift time. */
+  onRelaySuspended?: (url: string, until: number) => void;
   gossip?: Gossip;
   /**
    * Local event store. Defaults to {@link MemoryEventStore}. Browser apps that want persistence must

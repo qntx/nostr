@@ -1,5 +1,6 @@
 import type { Event } from "../core/event.ts";
 import type { Gossip } from "../gossip/gossip.ts";
+import type { InvalidEventPolicy } from "../relay/pool.ts";
 import type { WebSocketConstructor } from "../relay/websocket.ts";
 import type { NostrSigner } from "../signer/types.ts";
 import type { StorageError } from "../storage/error.ts";
@@ -88,6 +89,18 @@ export class ClientBuilder {
   /** Relays never closed by idle cleanup or `maxRelays` eviction. */
   pinnedUrls(urls: ReadonlyArray<string>): this {
     this.#opts = { ...this.#opts, pinnedUrls: urls };
+    return this;
+  }
+
+  /** Forwarded to the pool: suspend a relay delivering too many invalid events. */
+  invalidEventPolicy(policy: InvalidEventPolicy): this {
+    this.#opts = { ...this.#opts, invalidEventPolicy: policy };
+    return this;
+  }
+
+  /** Forwarded to the pool: fired once when a relay is suspended, with the lift time. */
+  onRelaySuspended(cb: (url: string, until: number) => void): this {
+    this.#opts = { ...this.#opts, onRelaySuspended: cb };
     return this;
   }
 

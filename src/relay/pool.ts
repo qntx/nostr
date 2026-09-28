@@ -7,12 +7,21 @@ import { assertSubscriptionId } from "../core/message.ts";
 import type { CountResult } from "../core/message.ts";
 import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
-import { RelayConnectionError, RelayPublishError } from "./error.ts";
+import { RelayConnectionError, RelayPublishError, RelaySuspendedError } from "./error.ts";
 import { fanIn, fetchRouted } from "./fan-in.ts";
 import { Relay, RelayStatus } from "./relay.ts";
 import type { PublishResult, RelayOptions, SubscribeOptions } from "./relay.ts";
 import { isInsecureRelayUrl } from "./url.ts";
 import type { WebSocketConstructor } from "./websocket.ts";
+
+/** Per-relay tolerance for events that fail id/signature verification. */
+export type InvalidEventPolicy = {
+  /** Invalid events tolerated within `windowMs`; exceeding it suspends the relay. */
+  limit: number;
+  windowMs: number;
+  /** How long a suspended relay stays closed before it may reconnect. */
+  cooldownMs: number;
+};
 
 /** Pool-wide options applied to every managed relay. */
 export type PoolOptions = {
@@ -48,6 +57,18 @@ export type PoolOptions = {
   maxRelays?: number | undefined;
   /** Normalized URLs never closed by idle cleanup or `maxRelays` eviction. */
   pinnedUrls?: ReadonlyArray<string> | undefined;
+  /**
+   * When set, a relay whose `limit`-th-plus-one EVENT fails id/signature verification inside a
+   * `windowMs` sliding window is disconnected and suspended for `cooldownMs`. During suspension
+   * `ensureRelay` rejects with {@link RelaySuspendedError}; once it lifts, live subscriptions resume
+   * through the normal reconnect path. Unset = events are dropped without counting, as before.
+   */
+  invalidEventPolicy?: InvalidEventPolicy | undefined;
+  /**
+   * Fired once when a relay is suspended for exceeding `invalidEventPolicy`: `url` is the
+   * normalized relay URL and `until` the epoch-ms time the suspension lifts.
+   */
+  onRelaySuspended?: ((url: string, until: number) => void) | undefined;
 };
 
 /** Per-relay publish outcome: the relay's OK reply or an error string. */
@@ -90,6 +111,11 @@ export class Pool {
   #allowInsecure: boolean;
   #trustedInsecure: Set<string>;
   #pinned: Set<string>;
+  /** Per-relay timestamps of verification failures inside the sliding window. */
+  readonly #invalidEvents = new Map<string, number[]>();
+  /** Normalized URL → epoch ms when its suspension lifts. */
+  readonly #suspendedUntil = new Map<string, number>();
+  readonly #resumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(opts: PoolOptions = {}) {
     this.#opts = opts;
@@ -158,6 +184,49 @@ export class Pool {
     this.#lastActivity.set(url, Date.now());
   }
 
+  /**
+   * Count one verification failure for `norm`; on the `limit + 1`-th inside `windowMs` suspend the
+   * relay: drop its connection (subscriptions kept), record `until`, and fire `onRelaySuspended`.
+   */
+  #noteInvalidEvent(norm: string): void {
+    const policy = this.#opts.invalidEventPolicy;
+    if (policy === undefined) {
+      return;
+    }
+    const now = Date.now();
+    const window = (this.#invalidEvents.get(norm) ?? []).filter((at) => now - at < policy.windowMs);
+    window.push(now);
+    if (window.length <= policy.limit) {
+      this.#invalidEvents.set(norm, window);
+      return;
+    }
+    this.#invalidEvents.delete(norm);
+    if (this.#suspendedUntil.has(norm)) {
+      return;
+    }
+    const until = now + policy.cooldownMs;
+    this.#suspendedUntil.set(norm, until);
+    this.#relays.get(norm)?.disconnect();
+    const resume = setTimeout(() => {
+      this.#resumeTimers.delete(norm);
+      this.#suspendedUntil.delete(norm);
+      const relay = this.#relays.get(norm);
+      if (relay === undefined || relay.connected || relay.subscriptionCount === 0) {
+        return;
+      }
+      void (async (): Promise<void> => {
+        try {
+          await relay.connect();
+        } catch {
+          // With enableReconnect the relay's own backoff retries; otherwise the
+          // next ensureRelay attempt reconnects on demand.
+        }
+      })();
+    }, policy.cooldownMs);
+    this.#resumeTimers.set(norm, resume);
+    invokeSafely(() => this.#opts.onRelaySuspended?.(norm, until));
+  }
+
   #rejectInsecure(url: string, norm: string): void {
     if (this.#allowInsecure) {
       return;
@@ -217,6 +286,13 @@ export class Pool {
   ): Promise<Relay> {
     const norm = normalizeURL(url);
     this.#rejectInsecure(url, norm);
+    const suspendedUntil = this.#suspendedUntil.get(norm);
+    if (suspendedUntil !== undefined) {
+      if (Date.now() < suspendedUntil) {
+        throw new RelaySuspendedError(norm, suspendedUntil);
+      }
+      this.#suspendedUntil.delete(norm);
+    }
     let relay = this.#relays.get(norm);
     if (!relay) {
       this.#enforceMaxRelays(norm);
@@ -238,6 +314,9 @@ export class Pool {
       created.onclose = () => {
         this.#relays.delete(norm);
         this.#lastActivity.delete(norm);
+      };
+      created.oninvalidevent = () => {
+        this.#noteInvalidEvent(norm);
       };
       if (signFn) {
         created.onauth = () => {
@@ -275,6 +354,12 @@ export class Pool {
   close(urls?: string[]): void {
     if (!urls) {
       this.#stopIdleCleanup();
+      for (const timer of this.#resumeTimers.values()) {
+        clearTimeout(timer);
+      }
+      this.#resumeTimers.clear();
+      this.#suspendedUntil.clear();
+      this.#invalidEvents.clear();
       for (const relay of this.#relays.values()) {
         relay.close();
       }
@@ -284,6 +369,11 @@ export class Pool {
     }
     for (const url of urls) {
       const norm = normalizeURL(url);
+      const timer = this.#resumeTimers.get(norm);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        this.#resumeTimers.delete(norm);
+      }
       this.#relays.get(norm)?.close();
       this.#relays.delete(norm);
       this.#lastActivity.delete(norm);

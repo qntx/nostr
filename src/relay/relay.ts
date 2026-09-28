@@ -171,6 +171,11 @@ export class Relay {
   onauth: ((challenge: string) => void) | undefined;
   /** Fired after a successful reconnect (not the initial connect). */
   onreconnect: (() => void) | undefined;
+  /**
+   * Fired when a delivered EVENT fails id/signature verification, just before the event is dropped.
+   * A poisoned verifier dropping events does not fire it.
+   */
+  oninvalidevent: (() => void) | undefined;
 
   constructor(url: string, opts: RelayOptions = {}) {
     this.url = normalizeURL(url);
@@ -507,6 +512,31 @@ export class Relay {
     }
   }
 
+  /**
+   * Sever the socket while keeping every subscription: unlike {@link close}, open REQ state is
+   * preserved and reconnect stays suppressed — the next {@link connect} re-subscribes all of them.
+   * {@link Pool} uses this to suspend a relay without tearing down its live subscriptions.
+   */
+  disconnect(): void {
+    this.#gen += 1;
+    this.#status = RelayStatus.Disconnected;
+    this.#intentionalClose = true;
+    this.#skipReconnect = true;
+    this.#clearReconnectTimer();
+    if (this.#connectTimer !== undefined) {
+      clearTimeout(this.#connectTimer);
+      this.#connectTimer = undefined;
+    }
+    this.#ping.stop();
+    this.#connectFinish?.(new RelayClosedError("relay disconnected", this.url));
+    this.#rejectPublishes(new RelayClosedError("relay disconnected", this.url));
+    this.#rejectCounts(new RelayClosedError("relay disconnected", this.url));
+    this.#rejectNeg(new RelayClosedError("relay disconnected", this.url));
+    this.#detachSocketHandlers();
+    this.#teardownSocket();
+    this.#connected = false;
+  }
+
   #teardownSocket(): void {
     try {
       this.#ws?.close();
@@ -773,7 +803,11 @@ export class Relay {
       return false;
     }
     try {
-      return this.#verify(event);
+      const ok = this.#verify(event);
+      if (!ok) {
+        invokeSafely(() => this.oninvalidevent?.());
+      }
+      return ok;
     } catch (error) {
       if (error instanceof WasmVerifyPoisonedError || error instanceof WebAssembly.RuntimeError) {
         this.#verifyDead = true;

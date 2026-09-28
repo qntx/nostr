@@ -30,7 +30,17 @@ export type FakeRelay = {
   readonly url: string;
   seed: (events: ReadonlyArray<Event>) => void;
   events: () => ReadonlyArray<Event>;
+  /**
+   * Store an event and broadcast it to matching subscriptions. Unlike client EVENT writes the relay
+   * does not verify it here, so forged events (mismatched id/signature) are delivered as-is.
+   */
   inject: (event: Event) => void;
+  /**
+   * Push an event to matching subscriptions without storing it: a resubscription never re-serves
+   * it. Use it for forged events (mismatched id/signature) when exercising client-side verification
+   * failure handling.
+   */
+  deliver: (event: Event) => void;
   disconnect: () => void;
   closeSubscriptions: (reason: string) => void;
   configure: (opts: Partial<FakeRelayOptions>) => void;
@@ -128,6 +138,13 @@ export class FakeRelayCore implements FakeRelay {
       if (isLivePut(result)) {
         this.#deliver(event);
       }
+    })();
+  }
+
+  deliver(event: Event): void {
+    this.#pending = (async (): Promise<void> => {
+      await this.#pending;
+      this.#deliver(event);
     })();
   }
 

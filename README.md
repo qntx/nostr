@@ -6,6 +6,22 @@ Layered TypeScript Nostr library: events, keys, filters, signers, relays, storag
 
 See [docs/](docs/).
 
+## Per-relay invalid-event policy
+
+`Pool`/`Client` can suspend a relay that keeps delivering events failing id/signature
+verification: when more than `limit` delivered EVENTs fail inside a `windowMs` sliding window,
+the connection is closed and `ensureRelay` rejects with `RelaySuspendedError` until `cooldownMs`
+elapses. `onRelaySuspended(url, until)` fires once per suspension, and live subscriptions resume
+automatically once the cooldown lifts.
+
+```ts
+const client = new Client({
+  relays: ["wss://relay.example"],
+  invalidEventPolicy: { limit: 20, windowMs: 60_000, cooldownMs: 5 * 60_000 },
+  onRelaySuspended: (url, until) => console.warn(`${url} suspended until ${new Date(until)}`),
+});
+```
+
 ## License
 
 Licensed under the MIT License ([LICENSE](LICENSE) or <https://opensource.org/licenses/MIT>).
