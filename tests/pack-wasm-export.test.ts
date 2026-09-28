@@ -10,6 +10,7 @@ const root = join(import.meta.dirname, "..");
 const WASM_EXPORT = {
   types: "./dist/wasm.d.mts",
   import: "./dist/wasm.mjs",
+  default: "./dist/wasm.mjs",
 } as const;
 
 type Pkg = {
@@ -72,10 +73,12 @@ describe("applyPackExports", () => {
     expect(out["."]).toStrictEqual({
       types: "./dist/index.d.mts",
       import: "./dist/index.mjs",
+      default: "./dist/index.mjs",
     });
     expect(out["./core"]).toStrictEqual({
       types: "./dist/core.d.mts",
       import: "./dist/core.mjs",
+      default: "./dist/core.mjs",
     });
   });
 
@@ -144,6 +147,7 @@ describe("package.json testing publish", () => {
     expect(testing).toStrictEqual({
       types: "./dist/testing.d.mts",
       import: "./dist/testing.mjs",
+      default: "./dist/testing.mjs",
     });
   });
 
@@ -152,6 +156,7 @@ describe("package.json testing publish", () => {
     expect(out["./testing"]).toStrictEqual({
       types: "./dist/testing.d.mts",
       import: "./dist/testing.mjs",
+      default: "./dist/testing.mjs",
     });
   });
 

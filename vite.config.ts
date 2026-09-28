@@ -20,6 +20,7 @@ export function applyPackExports(pkgExports: Record<string, unknown>): Record<st
     pkgExports[key] = {
       types: value.replace(/\.mjs$/, ".d.mts"),
       import: value,
+      default: value,
     };
   }
   // Re-append after the generated "./package.json" so the export order is
@@ -28,6 +29,7 @@ export function applyPackExports(pkgExports: Record<string, unknown>): Record<st
   pkgExports["./wasm"] = {
     types: "./dist/wasm.d.mts",
     import: "./dist/wasm.mjs",
+    default: "./dist/wasm.mjs",
   };
   return pkgExports;
 }

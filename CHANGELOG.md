@@ -19,6 +19,7 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 ### Fixed
 
 - The `SqlDriver` TSDoc `expo-sqlite` example now runs transaction statements on the `txn` connection passed to `withExclusiveTransactionAsync` — which resolves `void` — and captures the callback result out-of-band, matching the actual API.
+- Every package export gains a `default` condition pointing at `dist/*.mjs`, so `require`-based resolvers (e.g. jest-expo in React Native apps) resolve `@qntx/nostr/*` subpaths without a manual `moduleNameMapper`.
 
 ## [0.2.0] - 2026-09-27
 
