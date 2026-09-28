@@ -27,3 +27,18 @@ export class RelayClosedError extends RelayError {
 export class RelayTimeoutError extends RelayError {
   override name = "RelayTimeoutError";
 }
+/**
+ * A relay was suspended for delivering more events that fail id/signature verification than its
+ * {@link PoolOptions.invalidEventPolicy} allows. Carries `until`, the epoch-ms time when the relay
+ * may connect again.
+ */
+export class RelaySuspendedError extends RelayError {
+  override name = "RelaySuspendedError";
+  /** Epoch milliseconds when the suspension lifts. */
+  readonly until: number;
+
+  constructor(url: string, until: number) {
+    super("relay suspended for delivering invalid events", url);
+    this.until = until;
+  }
+}

@@ -4,6 +4,7 @@ export {
   RelayPublishError,
   RelayClosedError,
   RelayTimeoutError,
+  RelaySuspendedError,
 } from "./error.ts";
 export { useWebSocketImplementation, getWebSocketImplementation } from "./websocket.ts";
 export type { WebSocketConstructor, WebSocketLike } from "./websocket.ts";
@@ -24,6 +25,7 @@ export type {
   PoolPublishResult,
   PoolCountResult,
   PoolSubscribeOptions,
+  InvalidEventPolicy,
 } from "./pool.ts";
 export { fanIn, fetchRouted } from "./fan-in.ts";
 export type { RoutedJob, FanInOptions } from "./fan-in.ts";

@@ -92,6 +92,8 @@ export class Client {
       idleTimeoutMs: opts.idleTimeoutMs,
       maxRelays: opts.maxRelays,
       pinnedUrls: opts.pinnedUrls,
+      invalidEventPolicy: opts.invalidEventPolicy,
+      onRelaySuspended: opts.onRelaySuspended,
       // The sign function resolves the signer at challenge time, so
       // setSigner() takes effect on already-connected relays; challenges
       // without a signer are ignored by the relay (NoSignerError).

@@ -9,6 +9,16 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Added
+
+- Per-relay invalid-event policy: `PoolOptions.invalidEventPolicy` (`{ limit, windowMs, cooldownMs }`) and `PoolOptions.onRelaySuspended(url, until)`, also exposed on `ClientOptions`/`ClientBuilder`. A relay whose `limit`-plus-one delivered EVENT fails id/signature verification inside a `windowMs` sliding window is disconnected and suspended for `cooldownMs`. During suspension `ensureRelay` rejects with the new `RelaySuspendedError` (`url`, `until`), so fetch/publish/subscribe treat it as that relay failing without affecting others; pinned relays are suspended too. Once the cooldown lifts, live subscriptions resume through the normal reconnect path. Supporting API: `Relay.oninvalidevent` (fired when a delivered EVENT fails verification) and `Relay.disconnect()` (sever the socket while keeping subscriptions for a later `connect()`).
+- `FakeRelay.deliver`: push an event to matching subscriptions without storing it, so forged events used in verification-failure tests are never re-served on resubscribe.
+
+### Fixed
+
+- The `SqlDriver` TSDoc `expo-sqlite` example now runs transaction statements on the `txn` connection passed to `withExclusiveTransactionAsync` — which resolves `void` — and captures the callback result out-of-band, matching the actual API.
+- Every package export gains a `default` condition pointing at `dist/*.mjs`, so `require`-based resolvers (e.g. jest-expo in React Native apps) resolve `@qntx/nostr/*` subpaths without a manual `moduleNameMapper`.
+
 ## [0.2.0] - 2026-09-27
 
 ### Breaking changes
