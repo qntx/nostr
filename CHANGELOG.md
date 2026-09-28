@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-29
+
 ### Added
 
 - `nip57`: `parseBolt11` decodes the `d` description (UTF-8; omitted on invalid input), the invoice `timestamp` (unix seconds), and `x` expiry (default 3600) into `Bolt11Fields`.
@@ -143,7 +145,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/qntx/nostr.js/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/qntx/nostr.js/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/qntx/nostr.js/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/qntx/nostr.js/compare/v0.2.2...v0.3.0
