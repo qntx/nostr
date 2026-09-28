@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-28
+
 ### Added
 
 - `SigningBackend` (`@qntx/nostr/core`, also re-exported from the package root): a `{ publicKey, sign }` BIP-340 backend bound to `Keys` via `Keys.generate(backend)` and `Keys.fromSecretKey(secretKey, backend)`. `finalizeEvent`, `signEvent`, `KeysSigner`, and `EventBuilder.signWithKeys` route through `keys.backend`, so a WASM module or a React Native native signer (for example libsecp256k1 over Nitro) can replace noble signing. `NostrWasm` is now a `SigningBackend`, so `Keys.fromSecretKey(sk, wasm)` works directly.
@@ -121,7 +123,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/qntx/nostr.js/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/qntx/nostr.js/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/qntx/nostr.js/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/qntx/nostr.js/compare/v0.1.0...v0.2.0
