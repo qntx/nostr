@@ -181,6 +181,24 @@ const cases: Case[] = [
     want: [{ type: "invoice", bolt11: "lntbs1qqqxyz" }],
   },
   {
+    name: "invoice with an amount hrp is tokenized",
+    content: "zap lnbc10u1p3unwfu done",
+    want: [text("zap "), { type: "invoice", bolt11: "lnbc10u1p3unwfu" }, text(" done")],
+  },
+  {
+    name: "a real invoice with an amount hrp is tokenized",
+    content:
+      "pay lnbc10u1p3unwfusp5t9r3yymhpfqculx78u027lxspgxcr2n2987mx2j55nnfs95nxnzqpp5jmrh92pfld78spqs78v9euf2385t83uvpwk9ldrlvf6ch7tpascqhp5zvkrmemgth3tufcvflmzjzfvjt023nazlhljz2n9hattj4f8jq8qxqyjw5qcqpjrzjqtc4fc44feggv7065fqe5m4ytjarg3repr5j9el35xhmtfexc42yczarjuqqfzqqqqqqqqlgqqqqqqgq9q9qxpqysgq079nkq507a5tw7xgttmj4u990j7wfggtrasah5gd4ywfr2pjcn29383tphp4t48gquelz9z78p4cq7ml3nrrphw5w6eckhjwmhezhnqpy6gyf0",
+    want: [
+      text("pay "),
+      {
+        type: "invoice",
+        bolt11:
+          "lnbc10u1p3unwfusp5t9r3yymhpfqculx78u027lxspgxcr2n2987mx2j55nnfs95nxnzqpp5jmrh92pfld78spqs78v9euf2385t83uvpwk9ldrlvf6ch7tpascqhp5zvkrmemgth3tufcvflmzjzfvjt023nazlhljz2n9hattj4f8jq8qxqyjw5qcqpjrzjqtc4fc44feggv7065fqe5m4ytjarg3repr5j9el35xhmtfexc42yczarjuqqfzqqqqqqqqlgqqqqqqgq9q9qxpqysgq079nkq507a5tw7xgttmj4u990j7wfggtrasah5gd4ywfr2pjcn29383tphp4t48gquelz9z78p4cq7ml3nrrphw5w6eckhjwmhezhnqpy6gyf0",
+      },
+    ],
+  },
+  {
     name: "invoice glued to a letter or digit stays text",
     content: "alnbc1qqq lnbc1qqqb 9lnbc1qqq",
     want: [text("alnbc1qqq lnbc1qqqb 9lnbc1qqq")],

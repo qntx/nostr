@@ -167,6 +167,15 @@ const APPENDIX_E_DESCRIPTION =
   '{"pubkey":"97c70a44366a6535c145b333f973ea86dfdc2d7a99da618c40c64705ad98e322","content":"","id":"d9cc14d50fcb8c27539aacf776882942c1a11ea4472f8cdec1dea82fab66279d","created_at":1674164539,"sig":"77127f636577e9029276be060332ea565deaf89ff215a494ccff16ae3f757065e2bc59b2e8c113dd407917a010b3abd36c8d7ad84c0e3ab7dab3a0b0caa9835d","kind":9734,"tags":[["e","3624762a1274dd9636e0c552b53086d70bc88c165bc4dc0f9e836a1eaf86c3b8"],["p","32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245"],["relays","wss://relay.damus.io","wss://nostr-relay.wlvs.space","wss://nostr.fmt.wiz.biz","wss://relay.nostr.bg","wss://nostr.oxtr.dev","wss://nostr.v0l.io","wss://brb.io","wss://nostr.bitcoiner.social","ws://monad.jb55.com:8080","wss://relay.snort.social"]]}';
 
 const APPENDIX_E_PREIMAGE = "5d006d2cf1e73c7148e7519a4c68adc81642ce0e25a432b2434c99f97344c15f";
+
+// BOLT11 spec examples (lightning/bolts 11-payment-encoding.md): no amount, `d` description,
+// timestamp 1496314658, no `x`.
+const DONATION_INVOICE =
+  "lnbc1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq9qrsgq357wnc5r2ueh7ck6q93dj32dlqnls087fxdwk8qakdyafkq3yap9us6v52vjjsrvywa6rt52cm9r9zqt8r2t7mlcwspyetp5h2tztugp9lfyql";
+
+// BOLT11 spec example: 2500u, `d` = '1 cup coffee', `x` = 60, timestamp 1496314658.
+const COFFEE_INVOICE =
+  "lnbc2500u1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5xysxxatsyp3k7enxv4jsxqzpu9qrsgquk0rl77nj30yxdy8j9vdx85fkpmdla2087ne0xh8nhedh8w27kyke0lp53ut353s06fv3qfegext0eh0ymjpf39tuven09sam30g4vgpfna3rh";
 const LNURL =
   "lnurl1dp68gurn8ghj7um5v93kketj9ehx2amn9uh8wetvdskkkmn0wahz7mrww4excup0dajx2mrv92x9xp";
 
@@ -176,21 +185,49 @@ const hasTagValue = (tags: ReadonlyArray<Tag>, name: string, value: string): boo
 const rewriteTagValue = (tag: Tag, name: string, value: string): Tag =>
   tag[0] === name ? [name, value] : tag;
 
-function taggedField(type: number, data: Uint8Array): number[] {
-  const dataWords = bech32.toWords(data);
+function taggedFieldWords(type: number, dataWords: ReadonlyArray<number>): number[] {
   return [type, Math.trunc(dataWords.length / 32), dataWords.length % 32, ...dataWords];
+}
+
+function taggedField(type: number, data: Uint8Array): number[] {
+  return taggedFieldWords(type, bech32.toWords(data));
+}
+
+function intToWords(value: number): number[] {
+  const words: number[] = [];
+  let remaining = value;
+  do {
+    words.unshift(remaining % 32);
+    remaining = Math.trunc(remaining / 32);
+  } while (remaining > 0);
+  return words;
 }
 
 function encodeBolt11(
   hrp: string,
-  fields: { paymentHash?: Uint8Array; descriptionHash?: Uint8Array },
+  fields: {
+    paymentHash?: Uint8Array;
+    descriptionHash?: Uint8Array;
+    description?: Uint8Array;
+    expiry?: number;
+    timestamp?: number;
+  },
 ): string {
-  const words = [0, 0, 0, 0, 0, 0, 0];
+  const words = intToWords(fields.timestamp ?? 0);
+  while (words.length < 7) {
+    words.unshift(0);
+  }
   if (fields.paymentHash) {
     words.push(...taggedField(1, fields.paymentHash));
   }
+  if (fields.description) {
+    words.push(...taggedField(13, fields.description));
+  }
   if (fields.descriptionHash) {
     words.push(...taggedField(23, fields.descriptionHash));
+  }
+  if (fields.expiry !== undefined) {
+    words.push(...taggedFieldWords(6, intToWords(fields.expiry)));
   }
   // BOLT11 data part ends with 104 5-bit words of secp256k1 signature.
   for (let i = 0; i < 104; i++) {
@@ -270,6 +307,47 @@ describe("parseBolt11", () => {
     expect(fields?.descriptionHash).toStrictEqual(tagHash);
     expect(fields?.amountMsats).toBe(1_000_000);
     expect(fields?.paymentHash).toStrictEqual(paymentHash);
+  });
+
+  test("spec vector: description, timestamp and default expiry", () => {
+    const fields = parseBolt11(DONATION_INVOICE);
+    expect(fields?.description).toBe("Please consider supporting this project");
+    expect(fields?.timestamp).toBe(1_496_314_658);
+    expect(fields?.expiry).toBe(3600);
+    expect(fields?.amountMsats).toBeUndefined();
+    expect(fields?.paymentHash).toStrictEqual(
+      hexToBytes("0001020304050607080900010203040506070809000102030405060708090102"),
+    );
+  });
+
+  test("spec vector: amount, description and explicit expiry", () => {
+    const fields = parseBolt11(COFFEE_INVOICE);
+    expect(fields?.amountMsats).toBe(250_000_000);
+    expect(fields?.description).toBe("1 cup coffee");
+    expect(fields?.timestamp).toBe(1_496_314_658);
+    expect(fields?.expiry).toBe(60);
+  });
+
+  test("h-only invoice has no description but keeps timestamp and expiry", () => {
+    const fields = parseBolt11(APPENDIX_E_INVOICE);
+    expect(fields?.description).toBeUndefined();
+    expect(fields?.descriptionHash?.length).toBe(32);
+    expect(fields?.timestamp).toBe(1_674_164_540);
+    expect(fields?.expiry).toBe(604_800);
+  });
+
+  test("invalid UTF-8 description is omitted, not fatal", () => {
+    const invoice = encodeBolt11("lnbc10u", {
+      paymentHash: hexToBytes(APPENDIX_E_PREIMAGE),
+      description: new Uint8Array([0xff, 0xfe, 0xfd]),
+      timestamp: 1_700_000_000,
+      expiry: 120,
+    });
+    const fields = parseBolt11(invoice);
+    expect(fields?.paymentHash).toStrictEqual(hexToBytes(APPENDIX_E_PREIMAGE));
+    expect(fields?.description).toBeUndefined();
+    expect(fields?.timestamp).toBe(1_700_000_000);
+    expect(fields?.expiry).toBe(120);
   });
 
   test("truncated bech32 returns undefined", () => {

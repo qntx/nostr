@@ -88,8 +88,14 @@ export type ZapReceiptValidation = {
 
 export type Bolt11Fields = {
   amountMsats?: number;
+  /** The `d` tagged field, UTF-8 decoded; omitted on invalid UTF-8. */
+  description?: string;
   descriptionHash?: Uint8Array;
   paymentHash?: Uint8Array;
+  /** Invoice creation time (unix seconds). */
+  timestamp: number;
+  /** `x` tagged field — seconds after `timestamp` until expiry. Defaults to 3600 when absent. */
+  expiry: number;
 };
 
 function firstTagValue(tags: ReadonlyArray<Tag>, name: string): string | undefined {
@@ -209,6 +215,22 @@ const BOLT11_TIMESTAMP_WORDS = 7;
 const BOLT11_SIGNATURE_WORDS = 104;
 const BOLT11_HASH_WORDS = 52;
 const HASH_BYTES = 32;
+const BOLT11_TAG_PAYMENT_HASH = 1;
+const BOLT11_TAG_EXPIRY = 6;
+const BOLT11_TAG_DESCRIPTION = 13;
+const BOLT11_TAG_DESCRIPTION_HASH = 23;
+const DEFAULT_EXPIRY_SECONDS = 3600;
+
+const utf8DecoderFatal = new TextDecoder("utf-8", { fatal: true });
+
+/** Big-endian 5-bit words as a JS number (safe below 2^53). */
+function wordsToInt(words: ReadonlyArray<number>): number {
+  let value = 0;
+  for (const word of words) {
+    value = value * 32 + word;
+  }
+  return value;
+}
 
 /** Decode a BOLT11 invoice. Never throws. Requires a 32-byte payment hash (type 1). */
 export function parseBolt11(pr: string): Bolt11Fields | undefined {
@@ -222,7 +244,11 @@ export function parseBolt11(pr: string): Bolt11Fields | undefined {
     if (words.length < BOLT11_TIMESTAMP_WORDS + BOLT11_SIGNATURE_WORDS) {
       return undefined;
     }
-    const fields: Bolt11Fields = {};
+    const fields: Bolt11Fields = {
+      timestamp: wordsToInt(words.slice(0, BOLT11_TIMESTAMP_WORDS)),
+      expiry: DEFAULT_EXPIRY_SECONDS,
+    };
+    let sawExpiry = false;
     const amountMsats = amountMsatsFromHrp(prefix);
     if (amountMsats !== undefined) {
       fields.amountMsats = amountMsats;
@@ -243,14 +269,35 @@ export function parseBolt11(pr: string): Bolt11Fields | undefined {
       }
       const data = words.slice(i, i + dataLen);
       i += dataLen;
-      if ((type !== 1 && type !== 23) || dataLen !== BOLT11_HASH_WORDS) {
+      if (type === BOLT11_TAG_EXPIRY) {
+        if (!sawExpiry) {
+          sawExpiry = true;
+          fields.expiry = wordsToInt(data);
+        }
+        continue;
+      }
+      if (type === BOLT11_TAG_DESCRIPTION) {
+        const bytes = bech32.fromWordsUnsafe(data);
+        if (bytes !== undefined) {
+          try {
+            fields.description ??= utf8DecoderFatal.decode(bytes);
+          } catch {
+            // Invalid UTF-8 — drop the field, not the invoice.
+          }
+        }
+        continue;
+      }
+      if (
+        (type !== BOLT11_TAG_PAYMENT_HASH && type !== BOLT11_TAG_DESCRIPTION_HASH) ||
+        dataLen !== BOLT11_HASH_WORDS
+      ) {
         continue;
       }
       const bytes = bech32.fromWordsUnsafe(data);
       if (!bytes || bytes.length !== HASH_BYTES) {
         continue;
       }
-      if (type === 1) {
+      if (type === BOLT11_TAG_PAYMENT_HASH) {
         fields.paymentHash ??= bytes;
       } else {
         fields.descriptionHash ??= bytes;

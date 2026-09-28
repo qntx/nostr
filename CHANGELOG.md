@@ -9,6 +9,14 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Added
+
+- `nip57`: `parseBolt11` decodes the `d` description (UTF-8; omitted on invalid input), the invoice `timestamp` (unix seconds), and `x` expiry (default 3600) into `Bolt11Fields`.
+
+### Fixed
+
+- `nip27`: invoices with an amount-bearing HRP (`lnbc10u1…`) were left as text because the tokenizer expected the `1` separator right after the currency code; the amount and multiplier are now part of the recognized prefix.
+
 ## [0.4.0] - 2026-09-29
 
 ### Changed
