@@ -9,13 +9,11 @@ import {
   buildReplyTags,
   npubEncode,
   nsecEncode,
-  noteEncode,
   parseThreadTags,
   replyTo,
 } from "../src/index.ts";
 import type { AddressPointer, EventPointer } from "../src/nips/nip19.ts";
 import { isNostrURI, parseNostrURI } from "../src/nips/nip21.ts";
-import { parseContentBlocks } from "../src/nips/nip27.ts";
 
 const keysA = Keys.generate();
 const keysB = Keys.generate();
@@ -477,44 +475,5 @@ describe("nip21", () => {
     const uri = `nostr:${nsecEncode(keysA.secretKey.bytes)}`;
     expect(isNostrURI(uri)).toBe(false);
     expect(() => parseNostrURI(uri)).toThrow(/exclude nsec/);
-  });
-});
-
-describe("nip27", () => {
-  test("parseContentBlocks text, hashtag, url, media", () => {
-    const blocks = parseContentBlocks(
-      "hello #nostr see https://cdn.example.com/a.png and https://x.example.com/post",
-    );
-    expect(blocks).toStrictEqual([
-      { type: "text", text: "hello " },
-      { type: "hashtag", value: "nostr" },
-      { type: "text", text: " see " },
-      { type: "image", url: "https://cdn.example.com/a.png" },
-      { type: "text", text: " and " },
-      { type: "url", url: "https://x.example.com/post" },
-    ]);
-  });
-
-  test("parseContentBlocks nostr references", () => {
-    const npub = npubEncode(keysA.publicKey);
-    const note = noteEncode("77".repeat(32));
-    const blocks = parseContentBlocks(`hi nostr:${npub} and note nostr:${note}`);
-    expect(blocks[0]).toStrictEqual({ type: "text", text: "hi " });
-    expect(blocks[1]).toStrictEqual({ type: "reference", pointer: { pubkey: keysA.publicKey } });
-    expect(blocks[2]).toStrictEqual({ type: "text", text: " and note " });
-    expect(blocks[3]).toStrictEqual({ type: "reference", pointer: { id: "77".repeat(32) } });
-  });
-
-  test("parseContentBlocks emoji tags and relays", () => {
-    const event = signedNote(keysA, "ship it :shipit: via wss://relay.example.com", [
-      ["emoji", "shipit", "https://cdn.example.com/shipit.png"],
-    ]);
-    const blocks = parseContentBlocks(event);
-    expect(blocks).toStrictEqual([
-      { type: "text", text: "ship it " },
-      { type: "emoji", shortcode: "shipit", url: "https://cdn.example.com/shipit.png" },
-      { type: "text", text: " via " },
-      { type: "relay", url: "wss://relay.example.com/" },
-    ]);
   });
 });

@@ -19,6 +19,7 @@ import {
   verifyEvent,
 } from "../../src/index.ts";
 import type { Event } from "../../src/index.ts";
+import { parseContent } from "../../src/nips/nip27.ts";
 import {
   decrypt as nip44Decrypt,
   decryptFromPubkey,
@@ -127,6 +128,20 @@ export async function main(): Promise<void> {
   eq(nip19Decode(npub), { type: "npub", data: keys.publicKey }, "npub round trip");
   const note = noteEncode(signed.id);
   eq(nip19Decode(note), { type: "note", data: signed.id }, "note round trip");
+
+  // NIP-27 tokenizer: exercises Unicode property escapes in the regex scan.
+  const content = parseContent(`gm #中文 nostr:${npub} https://x.example/a.png`);
+  eq(
+    content.map((b) => b.type),
+    ["text", "hashtag", "text", "reference", "text", "image"],
+    "nip27 block order",
+  );
+  eq(content[1], { type: "hashtag", value: "中文" }, "nip27 unicode hashtag");
+  eq(
+    content[3],
+    { type: "reference", pointer: { pubkey: keys.publicKey }, bare: false },
+    "nip27 nostr reference",
+  );
 
   // matchFilter.
   assert(
