@@ -55,8 +55,9 @@ const SCAN_BODY = [
   // 2./3. http(s) and ws(s) URLs share the same boundary rules.
   `(?<url>https?://${URL_RUN})`,
   `(?<relay>wss?://${URL_RUN})`,
-  // 4. BOLT11 invoices, with an optional lightning: URI prefix.
-  `(?<invoice>(?:lightning:)?(?:lnbc|lntbs|lntb|lnbcrt)1[${BECH32_CHARS}]+)`,
+  // 4. BOLT11 invoices, with an optional lightning: URI prefix. The HRP may carry an amount
+  // (`lnbc10u1…` = ln + currency + amount + multiplier + the `1` separator).
+  `(?<invoice>(?:lightning:)?ln(?:bcrt|tbs|bc|tb)(?:\\d+[munp]?)?1[${BECH32_CHARS}]+)`,
   // 5. Hashtags: Unicode letters/marks/numbers and underscore, at most 42 code points.
   `(?<hashtag>#[\\p{L}\\p{M}\\p{N}_]{1,42})`,
   // 6. Custom emoji shortcodes (validated against the event's emoji tags).
