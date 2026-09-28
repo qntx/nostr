@@ -6,22 +6,6 @@ Layered TypeScript Nostr library: events, keys, filters, signers, relays, storag
 
 See [docs/](docs/).
 
-## Custom verification backends
-
-`verifyEvent` validates an event's id hash and BIP-340 signature in pure JS (noble). Runtimes with a faster verifier — the bundled WASM module, or a React Native native module such as libsecp256k1 over Nitro — can plug in via `createEventVerifier` (`@qntx/nostr/core`), which keeps `verifyEvent`'s exact semantics (shared verified/failed caches, structural validation, canonical serialization) and delegates the hash + signature check to raw bytes:
-
-```ts
-import { createEventVerifier } from "@qntx/nostr/core";
-
-// Backend contract: sha256(serializedUtf8) === id && BIP-340(sig, id, pubkey).
-// Inputs are raw bytes (id/pubkey 32, sig 64); thrown errors propagate.
-const verifyEventNative = createEventVerifier((serializedUtf8, id, pubkey, sig) =>
-  myNativeSecp256k1.verifyEvent(serializedUtf8, id, pubkey, sig),
-);
-```
-
-The WASM backend in `@qntx/nostr/wasm` is built on the same API.
-
 ## License
 
 Licensed under the MIT License ([LICENSE](LICENSE) or <https://opensource.org/licenses/MIT>).
