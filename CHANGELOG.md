@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-29
+
 ### Fixed
 
 - `IndexedDbEventStore` no longer hangs when another tab holds an older-schema connection: an `onblocked` open now rejects with `StorageError("IndexedDB open blocked by another connection")` instead of never settling, and an opened store closes its connection on `versionchange` so a newer-version open elsewhere is never blocked by it. Operations on a connection that yielded this way reject with `StorageError("IndexedDB connection closed by a newer version")` instead of a raw `InvalidStateError`.
@@ -127,7 +129,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/qntx/nostr.js/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/qntx/nostr.js/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/qntx/nostr.js/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/qntx/nostr.js/compare/v0.2.0...v0.2.1
