@@ -1,5 +1,6 @@
 import { CryptoError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
+import type { SigningBackend } from "../core/key.ts";
 import {
   instantiateCryptoWasm,
   wasmPublicKey,
@@ -16,7 +17,7 @@ export type LoadNostrWasmOptions = {
   module?: ArrayBuffer | ArrayBufferView | URL;
 };
 
-export type NostrWasm = {
+export type NostrWasm = SigningBackend & {
   verify: (id: Uint8Array, pubkey: Uint8Array, sig: Uint8Array) => boolean;
   verifySerialized: (
     serializedUtf8: Uint8Array,
@@ -25,8 +26,6 @@ export type NostrWasm = {
     sig: Uint8Array,
   ) => boolean;
   verifyEvent: (event: Event) => boolean;
-  sign: (id: Uint8Array, seckey: Uint8Array, aux: Uint8Array) => Uint8Array;
-  publicKey: (seckey: Uint8Array) => Uint8Array;
 };
 
 let interned: Promise<NostrWasm> | undefined;

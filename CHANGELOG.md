@@ -9,6 +9,10 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Added
+
+- `SigningBackend` (`@qntx/nostr/core`, also re-exported from the package root): a `{ publicKey, sign }` BIP-340 backend bound to `Keys` via `Keys.generate(backend)` and `Keys.fromSecretKey(secretKey, backend)`. `finalizeEvent`, `signEvent`, `KeysSigner`, and `EventBuilder.signWithKeys` route through `keys.backend`, so a WASM module or a React Native native signer (for example libsecp256k1 over Nitro) can replace noble signing. `NostrWasm` is now a `SigningBackend`, so `Keys.fromSecretKey(sk, wasm)` works directly.
+
 ## [0.2.2] - 2026-09-28
 
 ### Added
