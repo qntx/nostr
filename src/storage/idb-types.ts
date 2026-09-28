@@ -61,6 +61,7 @@ export type IDBDatabaseLike = {
     storeNames: string | string[],
     mode?: "readonly" | "readwrite",
   ) => IDBTransactionLike;
+  onversionchange: ((ev: unknown) => void) | null;
   close: () => void;
 };
 
@@ -76,6 +77,7 @@ export type IDBFactoryLike = {
 
 export type IDBOpenRequestLike = IDBRequestLike & {
   onupgradeneeded: ((ev: IDBVersionChangeEventLike) => void) | null;
+  onblocked: ((ev: unknown) => void) | null;
   result: IDBDatabaseLike;
 };
 

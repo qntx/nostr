@@ -37,6 +37,8 @@ type PersistedDb = {
 
 export function installIdbMock(): IdbMock {
   const dbs = new Map<string, PersistedDb>();
+  const openConns = new Map<string, Set<MockDb>>();
+  const pendingOpens = new Map<string, Array<() => void>>();
   const stats = {
     eventsGetAll: 0,
     cursorVisits: 0,
@@ -82,6 +84,7 @@ export function installIdbMock(): IdbMock {
     onsuccess: Nullable<(ev: unknown) => void> = null;
     onerror: Nullable<(ev: unknown) => void> = null;
     onupgradeneeded: Nullable<(ev: unknown) => void> = null;
+    onblocked: Nullable<(ev: unknown) => void> = null;
     complete(value: T) {
       this.result = value;
       queueMicrotask(() => this.onsuccess?.({}));
@@ -355,11 +358,19 @@ export function installIdbMock(): IdbMock {
     objectStoreNames = {
       contains: (name: string) => this.rec.stores.has(name),
     };
+    onversionchange: Nullable<(ev: unknown) => void> = null;
 
     private readonly rec: PersistedDb;
+    private readonly dbName: string;
+    #closed = false;
 
-    constructor(rec: PersistedDb) {
+    constructor(rec: PersistedDb, dbName: string) {
       this.rec = rec;
+      this.dbName = dbName;
+    }
+
+    get closed() {
+      return this.#closed;
     }
 
     getStore(name: string) {
@@ -384,6 +395,9 @@ export function installIdbMock(): IdbMock {
     }
 
     transaction(storeNames: string | string[], mode: "readonly" | "readwrite" = "readonly") {
+      if (this.#closed) {
+        throw new Error("InvalidStateError: connection is closed");
+      }
       const names = Array.isArray(storeNames) ? storeNames : [storeNames];
       if (mode === "readwrite") {
         stats.readwrite.push([...names]);
@@ -392,7 +406,18 @@ export function installIdbMock(): IdbMock {
     }
 
     close() {
-      /* empty */
+      if (this.#closed) {
+        return;
+      }
+      this.#closed = true;
+      openConns.get(this.dbName)?.delete(this);
+      const pending = pendingOpens.get(this.dbName);
+      if (pending !== undefined && pending.length > 0) {
+        pendingOpens.delete(this.dbName);
+        for (const attempt of pending) {
+          attempt();
+        }
+      }
     }
   }
 
@@ -413,10 +438,19 @@ export function installIdbMock(): IdbMock {
         rec = { version: 0, stores: new Map() };
         dbs.set(name, rec);
       }
-      const db = new MockDb(rec);
+      const persisted = rec;
+      const db = new MockDb(persisted, name);
       req.result = db;
-      const oldVersion = rec.version;
-      queueMicrotask(() => {
+      const registerConn = () => {
+        let conns = openConns.get(name);
+        if (conns === undefined) {
+          conns = new Set();
+          openConns.set(name, conns);
+        }
+        conns.add(db);
+      };
+      const finish = () => {
+        const oldVersion = persisted.version;
         if (oldVersion < version) {
           const tx = new MockTx(db, "all");
           tx.hold();
@@ -425,21 +459,63 @@ export function installIdbMock(): IdbMock {
             newVersion: version,
             target: { result: db, transaction: tx },
           });
-          rec.version = version;
-          const finish = () => req.complete(db);
+          persisted.version = version;
+          const done = () => {
+            registerConn();
+            req.complete(db);
+          };
           if (tx.completed) {
-            finish();
+            done();
           } else {
             const prev = tx.oncomplete;
             tx.oncomplete = (e) => {
               prev?.(e);
-              finish();
+              done();
             };
             tx.release();
           }
         } else {
+          registerConn();
           req.complete(db);
         }
+      };
+      const attempt = () => {
+        queueMicrotask(() => {
+          const conns = openConns.get(name);
+          if (conns !== undefined && conns.size > 0) {
+            let pending = pendingOpens.get(name);
+            if (pending === undefined) {
+              pending = [];
+              pendingOpens.set(name, pending);
+            }
+            pending.push(attempt);
+            return;
+          }
+          finish();
+        });
+      };
+      queueMicrotask(() => {
+        const blockers = openConns.get(name);
+        if (version > persisted.version && blockers !== undefined && blockers.size > 0) {
+          for (const conn of blockers) {
+            conn.onversionchange?.({
+              oldVersion: persisted.version,
+              newVersion: version,
+            });
+          }
+          const remaining = openConns.get(name);
+          if (remaining !== undefined && remaining.size > 0) {
+            req.onblocked?.({});
+            let pending = pendingOpens.get(name);
+            if (pending === undefined) {
+              pending = [];
+              pendingOpens.set(name, pending);
+            }
+            pending.push(attempt);
+            return;
+          }
+        }
+        finish();
       });
       return req;
     },
@@ -457,6 +533,8 @@ export function installIdbMock(): IdbMock {
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- uninstalls the mock from the host global
       delete (globalThis as { IDBKeyRange?: unknown }).IDBKeyRange;
       dbs.clear();
+      openConns.clear();
+      pendingOpens.clear();
     },
     eventsGetAllCount: () => stats.eventsGetAll,
     cursorVisitCount: () => stats.cursorVisits,

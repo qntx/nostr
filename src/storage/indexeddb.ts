@@ -54,6 +54,8 @@ export type IndexedDbEventStoreOptions = {
 export class IndexedDbEventStore implements EventStore {
   readonly #dbName: string;
   #db: IDBDatabaseLike | undefined;
+  /** Set when this connection closed to unblock a newer-version open; ops then fail fast. */
+  #yielded = false;
   readonly #deletion = new DeletionState();
   #replaceable = new Map<string, string>();
   /** Serializes writes so abort restore cannot roll back a committed sibling tx. */
@@ -76,11 +78,20 @@ export class IndexedDbEventStore implements EventStore {
       throw new StorageError("IndexedDB is not available in this environment");
     }
     const db = await openDb(this.#dbName);
+    const closeOnUpgrade = db.onversionchange;
+    db.onversionchange = (ev) => {
+      closeOnUpgrade?.(ev);
+      this.#yielded = true;
+    };
+    this.#yielded = false;
     this.#db = db;
     await this.#loadCaches(db);
   }
 
   async #ensure(): Promise<IDBDatabaseLike> {
+    if (this.#yielded) {
+      throw new StorageError("IndexedDB connection closed by a newer version");
+    }
     await this.open();
     const db = this.#db;
     if (db === undefined) {
