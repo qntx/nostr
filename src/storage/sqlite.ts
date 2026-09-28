@@ -27,19 +27,26 @@ export type SqlValue = string | number | null | Uint8Array;
  * start before the previous one settles, inside or outside a transaction — so drivers need not
  * support overlapping statements on one connection.
  *
- * `expo-sqlite` maps onto this interface without changes to query code:
+ * `expo-sqlite` maps onto this interface without changes to query code. Note that
+ * `withExclusiveTransactionAsync` resolves `void` and statements inside the exclusive transaction
+ * must run on the `txn` connection passed to its callback, not on `db` — the result is captured
+ * out-of-band:
  *
  * ```ts
- * const db = await openDatabaseAsync("nostr.db");
- * const driver: SqlDriver = {
+ * const toDriver = (db: SQLiteDatabase): SqlDriver => ({
  *   exec: (sql) => db.execAsync(sql),
- *   run: async (sql, params = []) => {
- *     const r = await db.runAsync(sql, params);
- *     return { changes: r.changes };
+ *   run: async (sql, params = []) => ({
+ *     changes: (await db.runAsync(sql, [...params])).changes,
+ *   }),
+ *   all: (sql, params = []) => db.getAllAsync(sql, [...params]),
+ *   transaction: async (fn) => {
+ *     let result!: Awaited<ReturnType<typeof fn>>;
+ *     await db.withExclusiveTransactionAsync(async (txn) => {
+ *       result = await fn(toDriver(txn));
+ *     });
+ *     return result;
  *   },
- *   all: (sql, params = []) => db.getAllAsync(sql, params),
- *   transaction: (fn) => db.withExclusiveTransactionAsync(() => fn(driver)),
- * };
+ * });
  * ```
  */
 export type SqlDriver = {
