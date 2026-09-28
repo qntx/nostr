@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-29
+
 ### Changed
 
 - **Breaking:** `nip27` `parseContent` is a rewritten single-scan tokenizer that returns a `ContentBlock[]` array instead of a generator, and `parseContentBlocks` is removed. `ContentBlock` references now carry `bare`, URLs keep the original substring (no normalization), media classification honors NIP-92 `imeta` MIME hints before path extensions, and new block types cover Lightning invoices (`invoice`) and opt-in bare bech32 references (`ParseContentOptions.legacyBech32`). Hashtags and URL boundaries now understand Unicode letters, CJK punctuation, and full-width forms.
@@ -133,7 +135,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/qntx/nostr.js/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/qntx/nostr.js/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/qntx/nostr.js/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/qntx/nostr.js/compare/v0.2.1...v0.2.2
