@@ -9,6 +9,16 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `Relay.fetch` resolves to a `RelayFetchResult` (`{ events, end }`) instead of a bare `Event[]`; `end` reports `eose`, `closed` (with the relay's reason), or `timeout`, and events received before a CLOSED or the deadline are kept. `Pool.fetch` keeps its `Event[]` shape and still merges whatever each relay delivered.
+- `fanIn` (`Pool.subscribe`, `Client.subscribe`): a relay's CLOSED or connect failure now removes it from the pending-EOSE set without counting as an EOSE. The aggregate `oneose` fires only once every remaining relay ended and at least one actually EOSE'd; when every relay closed or failed before any EOSE, only `onclose` fires (with the last reason).
+- `Relay.subscribe` no longer merges a new live subscription into a coalesced wire that already EOSE'd — the late subscriber gets its own REQ and a full replay instead of an empty synthesized EOSE.
+
+### Added
+
+- `Pool.fetchEach` and `Client.fetchEach`: one-shot fetch returning one `PoolFetchResult` per relay (`{ url, events, end }`, with `failed` when the connect or REQ itself errored). `Client.fetchEach` ingests events into the index with their relay URL in `seenOn` and persists them like `fetchEvents`.
+
 ## [0.4.1] - 2026-09-29
 
 ### Added

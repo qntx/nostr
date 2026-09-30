@@ -10,7 +10,7 @@ import { normalizeURL } from "../core/util.ts";
 import { RelayConnectionError, RelayPublishError, RelaySuspendedError } from "./error.ts";
 import { fanIn, fetchRouted } from "./fan-in.ts";
 import { Relay, RelayStatus } from "./relay.ts";
-import type { PublishResult, RelayOptions, SubscribeOptions } from "./relay.ts";
+import type { PublishResult, RelayFetchEnd, RelayOptions, SubscribeOptions } from "./relay.ts";
 import { isInsecureRelayUrl } from "./url.ts";
 import type { WebSocketConstructor } from "./websocket.ts";
 
@@ -82,6 +82,13 @@ export type PoolPublishResult = {
 export type PoolSubscribeOptions = Omit<SubscribeOptions, "onevent" | "receivedEvent"> & {
   onevent?: ((event: Event, relayUrl: string) => void) | undefined;
   receivedEvent?: ((id: string, relayUrl: string) => void) | undefined;
+};
+
+/** Per-relay one-shot fetch outcome: collected events plus how its REQ ended. */
+export type PoolFetchResult = {
+  url: string;
+  events: Event[];
+  end: RelayFetchEnd | { readonly type: "failed"; readonly reason: string };
 };
 
 /** Per-relay NIP-45 COUNT result (or its error). */
@@ -407,6 +414,49 @@ export class Pool {
       closeOnEose: opts.closeOnEose,
       connectTimeoutMs: this.#opts.connectTimeoutMs,
     });
+  }
+
+  /**
+   * One-shot fetch per relay: each entry reports its own events and end reason (`eose`, `closed`,
+   * `timeout`), or `failed` when the connect or REQ itself errored. An abort rejects the whole
+   * call. Events are not deduped across relays — use {@link fetch} for that.
+   */
+  async fetchEach(
+    relays: string[],
+    filters: Filter[],
+    opts?: { timeoutMs?: number | undefined; signal?: AbortSignal | undefined },
+  ): Promise<PoolFetchResult[]> {
+    if (filters.length === 0) {
+      throw new MessageError("REQ requires at least one filter");
+    }
+    throwIfAborted(opts?.signal);
+    const canonical = canonicalizeFilters(filters);
+    return Promise.all(
+      relays.map(async (url): Promise<PoolFetchResult> => {
+        try {
+          const relay = await this.ensureRelay(url, {
+            signal: opts?.signal,
+            timeoutMs: this.#opts.connectTimeoutMs,
+          });
+          this.#touch(relay.url);
+          const result = await relay.fetch([...canonical], {
+            timeoutMs: opts?.timeoutMs,
+            signal: opts?.signal,
+          });
+          return { url: relay.url, events: result.events, end: result.end };
+        } catch (error) {
+          // An abort rejects the whole call; per-relay failures are reported.
+          if (opts?.signal?.aborted === true) {
+            throw abortReason(opts.signal);
+          }
+          return {
+            url,
+            events: [],
+            end: { type: "failed", reason: error instanceof Error ? error.message : String(error) },
+          };
+        }
+      }),
+    );
   }
 
   /** Fetch events until each connected relay EOSE or timeout; dedupe by id. */

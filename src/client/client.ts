@@ -13,7 +13,7 @@ import type { Recipient } from "../nips/nip17.ts";
 import { isGiftWrapKind, requireNip59Crypto } from "../nips/nip59.ts";
 import type { Nip59Crypto } from "../nips/nip59.ts";
 import { Pool } from "../relay/pool.ts";
-import type { PoolPublishResult } from "../relay/pool.ts";
+import type { PoolFetchResult, PoolPublishResult } from "../relay/pool.ts";
 import { NoSignerError } from "../signer/error.ts";
 import type { NostrSigner } from "../signer/types.ts";
 import { toStorageError } from "../storage/error.ts";
@@ -37,6 +37,7 @@ import type { SyncDeps } from "./sync.ts";
 import { ClientError } from "./types.ts";
 import type {
   ClientOptions,
+  FetchEachOptions,
   FetchEventsOptions,
   FetchPrivateMessagesOptions,
   PrivateMessageSendResult,
@@ -495,6 +496,38 @@ export class Client {
       }
     }
     return sortedEvents([...tmp.query(filters), ...ephemeral.values()]);
+  }
+
+  /**
+   * One-shot fetch with per-relay results: each entry reports its events and end reason (`eose`,
+   * `closed`, `timeout`, or `failed` when the relay could not be reached). Events are ingested into
+   * the index with each relay's URL in `seenOn` and persisted exactly like {@link fetchEvents}
+   * (`observe` defaults to true). No gossip routing and no local merge.
+   */
+  async fetchEach(filter: Filter | Filter[], opts?: FetchEachOptions): Promise<PoolFetchResult[]> {
+    this.#assertAlive();
+    const filters = canonicalizeFilters(Array.isArray(filter) ? filter : [filter]);
+    const results = await this.pool.fetchEach(this.#defaultRelays(opts?.relays), filters, {
+      timeoutMs: opts?.timeoutMs,
+      signal: opts?.signal,
+    });
+    if (this.#wantObserve(opts?.observe)) {
+      const unique: Event[] = [];
+      const seen = new Set<string>();
+      for (const result of results) {
+        for (const event of result.events) {
+          this.#ingest(event, result.url, { persist: false, meta: false });
+          if (!seen.has(event.id)) {
+            seen.add(event.id);
+            unique.push(event);
+          }
+        }
+      }
+      for (const event of unique) {
+        this.observe(event);
+      }
+    }
+    return results;
   }
 
   /** Query local storage only (no network). */

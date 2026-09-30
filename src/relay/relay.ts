@@ -45,7 +45,7 @@ import {
   streamFilters,
   subscribeLive,
 } from "./subscribe.ts";
-import type { LiveCtx, LiveGroup } from "./subscribe.ts";
+import type { LiveCtx, LiveGroup, RelayFetchResult } from "./subscribe.ts";
 import type { SubscribeOptions, Subscription } from "./subscription.ts";
 import { getWebSocketImplementation } from "./websocket.ts";
 import type { WebSocketConstructor, WebSocketLike } from "./websocket.ts";
@@ -828,7 +828,11 @@ export class Relay {
     return streamFilters((f, o) => this.subscribe(f, o), filters, opts);
   }
 
-  /** One-shot query: collect events until EOSE or timeout, then close. */
+  /**
+   * One-shot query: collect events until the REQ ends, then close. `end` reports how it ended —
+   * relay `EOSE`, relay `CLOSED` (with its reason), or the local timeout; events received before a
+   * CLOSED or the deadline are still returned. Abort rejects; a failed (re)connect rejects.
+   */
   async fetch(
     filters: Filter[],
     opts?: {
@@ -836,7 +840,7 @@ export class Relay {
       signal?: AbortSignal | undefined;
       id?: string | undefined;
     },
-  ): Promise<Event[]> {
+  ): Promise<RelayFetchResult> {
     if (filters.length === 0) {
       throw new MessageError("REQ requires at least one filter");
     }
@@ -848,7 +852,6 @@ export class Relay {
       timeoutMs: opts?.timeoutMs ?? 4400,
       signal: opts?.signal,
       id: opts?.id,
-      url: this.url,
     });
   }
 
@@ -1237,4 +1240,5 @@ export class Relay {
 }
 
 export type { CountResult } from "../core/message.ts";
+export type { RelayFetchEnd, RelayFetchResult } from "./subscribe.ts";
 export type { SubscribeOptions, SubscriptionHandlers } from "./subscription.ts";

@@ -713,8 +713,44 @@ describe("Relay", () => {
     ws.receive(JSON.stringify(["EVENT", req[1], b]));
     ws.receive(JSON.stringify(["EOSE", req[1]]));
 
-    const events = await fetchP;
-    expect(events.map((e) => e.content).toSorted()).toStrictEqual(["a", "b"]);
+    const result = await fetchP;
+    expect(result.end).toStrictEqual({ type: "eose" });
+    expect(result.events.map((e) => e.content).toSorted()).toStrictEqual(["a", "b"]);
+    relay.close();
+  });
+
+  test("fetch returns partial events with a closed end on relay CLOSED", async () => {
+    const relay = await Relay.connect("wss://fetch-closed.example");
+    const keys = Keys.fromSecretKey(SK);
+    const note = EventBuilder.textNote("kept").createdAt(1).signWithKeys(keys);
+
+    const fetchP = relay.fetch([{ kinds: [1] }], { timeoutMs: 2000 });
+    await Promise.resolve();
+    const ws = MockWebSocket.last();
+    const req = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [string, string];
+    ws.receive(JSON.stringify(["EVENT", req[1], note]));
+    ws.receive(JSON.stringify(["CLOSED", req[1], "rate-limited: slow down"]));
+
+    const result = await fetchP;
+    expect(result.end).toStrictEqual({ type: "closed", reason: "rate-limited: slow down" });
+    expect(result.events.map((e) => e.id)).toStrictEqual([note.id]);
+    relay.close();
+  });
+
+  test("fetch returns partial events with a timeout end at the deadline", async () => {
+    const relay = await Relay.connect("wss://fetch-timeout.example");
+    const keys = Keys.fromSecretKey(SK);
+    const note = EventBuilder.textNote("early").createdAt(1).signWithKeys(keys);
+
+    const fetchP = relay.fetch([{ kinds: [1] }], { timeoutMs: 40 });
+    await Promise.resolve();
+    const ws = MockWebSocket.last();
+    const req = ws.sent.map((s) => JSON.parse(s)).find((m) => m[0] === "REQ") as [string, string];
+    ws.receive(JSON.stringify(["EVENT", req[1], note]));
+
+    const result = await fetchP;
+    expect(result.end).toStrictEqual({ type: "timeout" });
+    expect(result.events.map((e) => e.id)).toStrictEqual([note.id]);
     relay.close();
   });
 
@@ -1091,6 +1127,80 @@ describe("Pool", () => {
     const events = await fetchP;
     expect(events).toHaveLength(1);
     expect(events[0]!.id).toBe(note.id);
+    pool.close();
+  });
+
+  test("fetchEach reports per-relay eose, closed and failed ends", async () => {
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    const keys = Keys.fromSecretKey(SK);
+    const note = EventBuilder.textNote("per-relay").createdAt(1).signWithKeys(keys);
+
+    const fetchP = pool.fetchEach(
+      ["wss://a.example", "wss://b.example", "not a url"],
+      [{ kinds: [1] }],
+      { timeoutMs: 2000 },
+    );
+    await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
+
+    const a = socketFor("a.example");
+    a.receive(JSON.stringify(["EVENT", reqId(a), note]));
+    a.receive(JSON.stringify(["EOSE", reqId(a)]));
+    const b = socketFor("b.example");
+    b.receive(JSON.stringify(["CLOSED", reqId(b), "rate-limited: slow down"]));
+
+    const results = await fetchP;
+    expect(results).toHaveLength(3);
+    const aResult = must(
+      results.find((r) => r.url.includes("a.example")),
+      "a.example result",
+    );
+    expect(aResult.end).toStrictEqual({ type: "eose" });
+    expect(aResult.events.map((e) => e.id)).toStrictEqual([note.id]);
+    const bResult = must(
+      results.find((r) => r.url.includes("b.example")),
+      "b.example result",
+    );
+    expect(bResult.end).toStrictEqual({ type: "closed", reason: "rate-limited: slow down" });
+    expect(bResult.events).toStrictEqual([]);
+    const bad = must(
+      results.find((r) => r.url === "not a url"),
+      "invalid url result",
+    );
+    expect(bad.events).toStrictEqual([]);
+    expect(bad.end.type).toBe("failed");
+    pool.close();
+  });
+
+  test("fetchEach reports a timeout end with the partial events", async () => {
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    const keys = Keys.fromSecretKey(SK);
+    const note = EventBuilder.textNote("partial").createdAt(1).signWithKeys(keys);
+
+    const fetchP = pool.fetchEach(["wss://slow.example"], [{ kinds: [1] }], {
+      timeoutMs: 60,
+    });
+    await waitUntil(all(instanceCountIs(1), everyInstanceSent("REQ")));
+    const ws = socketFor("slow.example");
+    ws.receive(JSON.stringify(["EVENT", reqId(ws), note]));
+
+    const results = await fetchP;
+    expect(results).toHaveLength(1);
+    expect(results[0]!.end).toStrictEqual({ type: "timeout" });
+    expect(results[0]!.events.map((e) => e.id)).toStrictEqual([note.id]);
+    pool.close();
+  });
+
+  test("fetchEach rejects the whole call on abort", async () => {
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    const ac = new AbortController();
+    const reason = new Error("user aborted");
+    const fetchP = pool.fetchEach(["wss://pool-abort-each.example"], [{ kinds: [1] }], {
+      timeoutMs: 2000,
+      signal: ac.signal,
+    });
+    await waitUntil(() => MockWebSocket.instances.length === 1);
+    ac.abort(reason);
+    await expect(fetchP).rejects.toBe(reason);
     pool.close();
   });
 
@@ -2017,8 +2127,80 @@ describe("Pool aggregated EOSE", () => {
     });
     await waitUntil(() => closed !== undefined);
     expect(closed).toBe("all relays failed");
-    expect(eose).toBe(1);
+    expect(eose).toBe(0);
     expect(pool.listRelays()).toStrictEqual([]);
+    pool.close();
+  });
+
+  test("a single refused relay fires only onclose, never oneose", async () => {
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    let eose = 0;
+    let closed: string | undefined;
+    pool.subscribe(["wss://refused.example"], [{ kinds: [1] }], {
+      oneose: () => {
+        eose += 1;
+      },
+      onclose: (reason) => {
+        closed = reason;
+      },
+    });
+    await waitUntil(() => MockWebSocket.instances.some(urlSent("refused.example", "REQ")));
+    const ws = socketFor("refused.example");
+    ws.receive(JSON.stringify(["CLOSED", reqId(ws), "rate-limited: slow down"]));
+    await waitUntil(() => closed !== undefined);
+    expect(closed).toBe("rate-limited: slow down");
+    expect(eose).toBe(0);
+    pool.close();
+  });
+
+  test("one refused relay does not block the others' aggregate oneose", async () => {
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    let eose = 0;
+    let closed: string | undefined;
+    const closer = pool.subscribe(
+      ["wss://ok-mixed.example", "wss://refused-mixed.example"],
+      [{ kinds: [1] }],
+      {
+        oneose: () => {
+          eose += 1;
+        },
+        onclose: (reason) => {
+          closed = reason;
+        },
+      },
+    );
+    await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
+    const refused = socketFor("refused-mixed.example");
+    refused.receive(JSON.stringify(["CLOSED", reqId(refused), "rate-limited: slow down"]));
+    expect(eose).toBe(0);
+    expect(closed).toBeUndefined();
+    const ok = socketFor("ok-mixed.example");
+    ok.receive(JSON.stringify(["EOSE", reqId(ok)]));
+    expect(eose).toBe(1);
+    expect(closed).toBeUndefined();
+    closer.close();
+    pool.close();
+  });
+
+  test("all refused relays fire only onclose with the last reason", async () => {
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    let eose = 0;
+    let closed: string | undefined;
+    pool.subscribe(["wss://refused-a.example", "wss://refused-b.example"], [{ kinds: [1] }], {
+      oneose: () => {
+        eose += 1;
+      },
+      onclose: (reason) => {
+        closed = reason;
+      },
+    });
+    await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
+    for (const ws of MockWebSocket.instances) {
+      ws.receive(JSON.stringify(["CLOSED", reqId(ws), "rate-limited: slow down"]));
+    }
+    await waitUntil(() => closed !== undefined);
+    expect(closed).toBe("rate-limited: slow down");
+    expect(eose).toBe(0);
     pool.close();
   });
 
@@ -2285,7 +2467,7 @@ describe("live REQ coalescing", () => {
     ws.receive(JSON.stringify(["EVENT", fetchId, fetchNote]));
     ws.receive(JSON.stringify(["EOSE", fetchId]));
     const fetched = await fetchP;
-    expect(fetched.map((e) => e.id)).toStrictEqual([fetchNote.id]);
+    expect(fetched.events.map((e) => e.id)).toStrictEqual([fetchNote.id]);
     expect(framesOf(ws, "CLOSE").some((m) => m[1] === fetchId)).toBe(true);
     expect(framesOf(ws, "CLOSE").some((m) => m[1] === live.id)).toBe(false);
     expect(live.closed).toBe(false);
@@ -2296,29 +2478,108 @@ describe("live REQ coalescing", () => {
     relay.close();
   });
 
-  test("late attach after EOSE fires that oneose without a second REQ", async () => {
+  test("late attach after EOSE opens a fresh wire that replays stored events", async () => {
     const relay = await Relay.connect("wss://coal-late.example");
+    const keys = Keys.fromSecretKey(SK);
+    const old = EventBuilder.textNote("old").createdAt(1).signWithKeys(keys);
     let eoseA = 0;
     let eoseB = 0;
+    const aEvents: string[] = [];
+    const bEvents: string[] = [];
     const a = relay.subscribe([{ kinds: [1] }], {
+      onevent: (e) => aEvents.push(e.id),
       oneose: () => {
         eoseA += 1;
       },
     });
     const ws = MockWebSocket.last();
+    ws.receive(JSON.stringify(["EVENT", a.id, old]));
     ws.receive(JSON.stringify(["EOSE", a.id]));
     expect(eoseA).toBe(1);
+
     const b = relay.subscribe([{ kinds: [1] }], {
+      onevent: (e) => bEvents.push(e.id),
       oneose: () => {
         eoseB += 1;
       },
     });
-    expect(b.id).toBe(a.id);
-    expect(framesOf(ws, "REQ")).toHaveLength(1);
+    expect(b.id).not.toBe(a.id);
+    const reqs = framesOf(ws, "REQ") as Array<[string, string]>;
+    expect(reqs).toHaveLength(2);
+    expect(reqs[1]![1]).toBe(b.id);
     expect(eoseB).toBe(0);
-    await Promise.resolve();
+
+    // The new wire replays everything the relay still holds for the filter.
+    ws.receive(JSON.stringify(["EVENT", b.id, old]));
+    expect(bEvents).toStrictEqual([old.id]);
+    ws.receive(JSON.stringify(["EOSE", b.id]));
     expect(eoseB).toBe(1);
-    expect(eoseA).toBe(1);
+    relay.close();
+  });
+
+  test("post-EOSE wires detach independently of each other", async () => {
+    const relay = await Relay.connect("wss://coal-detach.example");
+    const a = relay.subscribe([{ kinds: [1] }]);
+    const ws = MockWebSocket.last();
+    ws.receive(JSON.stringify(["EOSE", a.id]));
+    // B opens a fresh wire; C coalesces into it since it has not EOSE'd.
+    const b = relay.subscribe([{ kinds: [1] }]);
+    const c = relay.subscribe([{ kinds: [1] }]);
+    expect(b.id).not.toBe(a.id);
+    expect(c.id).toBe(b.id);
+    expect(framesOf(ws, "REQ")).toHaveLength(2);
+    expect(relay.subscriptionCount).toBe(2);
+
+    // Closing A's whole group sends CLOSE for its wire only; B/C stay live.
+    a.close();
+    expect(framesOf(ws, "CLOSE")).toHaveLength(1);
+    expect((framesOf(ws, "CLOSE")[0] as [string, string])[1]).toBe(a.id);
+    expect(b.closed).toBe(false);
+    expect(c.closed).toBe(false);
+    expect(relay.subscriptionCount).toBe(1);
+
+    // Forgetting the old group must not unlink B's fingerprint slot: a fourth
+    // subscriber still coalesces into the open B wire.
+    const d = relay.subscribe([{ kinds: [1] }]);
+    expect(d.id).toBe(b.id);
+    expect(framesOf(ws, "REQ")).toHaveLength(2);
+
+    c.close();
+    d.close();
+    expect(b.closed).toBe(false);
+    b.close();
+    expect(framesOf(ws, "CLOSE")).toHaveLength(2);
+    expect((framesOf(ws, "CLOSE")[1] as [string, string])[1]).toBe(b.id);
+    expect(relay.subscriptionCount).toBe(0);
+    relay.close();
+  });
+
+  test("reconnect resends one REQ per wire, both pre- and post-EOSE groups", async () => {
+    const relay = new Relay("wss://coal-re2.example", {
+      enableReconnect: true,
+      reconnectBackoffMs: [10, 20],
+      websocketImplementation: MockWebSocketCtor,
+    });
+    await relay.connect();
+    const a = relay.subscribe([{ kinds: [1] }]);
+    const first = MockWebSocket.last();
+    first.receive(JSON.stringify(["EOSE", a.id]));
+    const b = relay.subscribe([{ kinds: [1] }]);
+    expect(b.id).not.toBe(a.id);
+    expect(framesOf(first, "REQ")).toHaveLength(2);
+
+    first.close();
+    await waitUntil(
+      all(
+        () => relay.connected,
+        () => MockWebSocket.instances.length >= 2,
+        () => framesOf(MockWebSocket.last(), "REQ").length === 2,
+      ),
+    );
+    const second = MockWebSocket.last();
+    expect(second).not.toBe(first);
+    const replayed = framesOf(second, "REQ") as Array<[string, string]>;
+    expect(replayed.map((m) => m[1]).toSorted()).toStrictEqual([a.id, b.id].toSorted());
     relay.close();
   });
 
@@ -2575,7 +2836,7 @@ describe("live REQ coalescing", () => {
     pool.close();
   });
 
-  test("Pool late attach after EOSE fires second oneose without a second REQ", async () => {
+  test("Pool late attach after EOSE opens a fresh REQ on a new wire", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     const url = "wss://coal-pool-late.example";
     const relay = await pool.ensureRelay(url);
@@ -2601,8 +2862,12 @@ describe("live REQ coalescing", () => {
         eoseB += 1;
       },
     });
+    // The coalesced wire already ended; the second subscribe gets its own REQ.
+    await waitUntil(() => framesOf(ws, "REQ").length === 2);
+    const [, idB] = framesOf(ws, "REQ")[1] as [string, string];
+    expect(idB).not.toBe(id);
+    ws.receive(JSON.stringify(["EOSE", idB]));
     await waitUntil(() => eoseB === 1);
-    expect(framesOf(ws, "REQ")).toHaveLength(1);
     expect(eoseA).toBe(1);
     a.close();
     b.close();

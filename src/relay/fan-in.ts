@@ -42,6 +42,7 @@ export function fanIn(
   const closers: Array<{ close: (reason?: string) => void }> = [];
   let closed = false;
   let eoseFired = false;
+  let sawEose = false;
   let eoseTimer: ReturnType<typeof setTimeout> | undefined;
   const eoseDone = new Set<string>();
   const eoseAttempted = new Set<string>();
@@ -60,14 +61,22 @@ export function fanIn(
     invokeSafely(() => opts.oneose?.());
   };
 
-  const markEose = (jobIndex: number, url: string) => {
+  /**
+   * Remove one relay from the pending-EOSE set. `eosed` credits a real EOSE; a CLOSED or a connect
+   * failure only drops the wait — the aggregate `oneose` fires once every remaining relay ended AND
+   * at least one actually EOSE'd.
+   */
+  const settleEose = (jobIndex: number, url: string, eosed: boolean) => {
     const key = `${jobIndex}:${url}`;
     if (eoseDone.has(key)) {
       return;
     }
     eoseDone.add(key);
+    if (eosed) {
+      sawEose = true;
+    }
     pendingEose -= 1;
-    if (pendingEose === 0) {
+    if (pendingEose === 0 && sawEose) {
       fireEose();
     }
   };
@@ -100,7 +109,7 @@ export function fanIn(
   opts.signal?.addEventListener("abort", () => closeAll("aborted"), { once: true });
 
   const failUrl = (jobIndex: number, key: string): void => {
-    markEose(jobIndex, key);
+    settleEose(jobIndex, key, false);
     pending -= 1;
     if (pending <= 0 && closers.length === 0 && !closed) {
       settleClose();
@@ -129,9 +138,9 @@ export function fanIn(
         seen.add(event.id);
         invokeSafely(() => opts.onevent?.(event, relay.url));
       },
-      oneose: () => markEose(jobIndex, relay.url),
+      oneose: () => settleEose(jobIndex, relay.url, true),
       onclose: (reason) => {
-        markEose(jobIndex, relay.url);
+        settleEose(jobIndex, relay.url, false);
         pending -= 1;
         if (pending <= 0 && !closed) {
           settleClose();
@@ -253,10 +262,11 @@ export async function fetchRouted(
             timeoutMs: opts.connectTimeoutMs,
           });
           relayUrl = relay.url;
-          batch = await relay.fetch([...job.filters], {
+          const result = await relay.fetch([...job.filters], {
             timeoutMs: opts.timeoutMs,
             signal: opts.signal,
           });
+          batch = result.events;
         } catch {
           // An abort rejects the whole call; per-relay failures are skipped.
           if (opts.signal?.aborted === true) {

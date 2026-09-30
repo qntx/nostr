@@ -152,7 +152,11 @@ describe("FakeRelay NIP-01 + faults", () => {
       websocketImplementation: net.websocketImplementation,
     });
     const found = await relay.fetch([{ kinds: [1], search: "hello" }], { timeoutMs: 2000 });
-    expect(found.map((e) => e.content).toSorted()).toStrictEqual(["Hello Nostr", "heLLO world"]);
+    expect(found.end).toStrictEqual({ type: "eose" });
+    expect(found.events.map((e) => e.content).toSorted()).toStrictEqual([
+      "Hello Nostr",
+      "heLLO world",
+    ]);
     relay.close();
   });
 
@@ -384,7 +388,7 @@ describe("issue #125", () => {
       ],
       { timeoutMs: 2000 },
     );
-    expect(batch).toHaveLength(6);
+    expect(batch.events).toHaveLength(6);
 
     net
       .relay("wss://search-limit.example")
@@ -399,7 +403,7 @@ describe("issue #125", () => {
     const hit = await searchRelay.fetch([{ kinds: [1], search: "hello", limit: 1 }], {
       timeoutMs: 2000,
     });
-    expect(hit.map((e) => e.content)).toStrictEqual(["hello there"]);
+    expect(hit.events.map((e) => e.content)).toStrictEqual(["hello there"]);
     const counted = await searchRelay.count([{ kinds: [1], search: "hello" }], {
       timeoutMs: 2000,
     });
