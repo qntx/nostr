@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-01
+
 ### Changed
 
 - **Breaking:** `Relay.fetch` resolves to a `RelayFetchResult` (`{ events, end }`) instead of a bare `Event[]`; `end` reports `eose`, `closed` (with the relay's reason), or `timeout`, and events received before a CLOSED or the deadline are kept. `Pool.fetch` keeps its `Event[]` shape and still merges whatever each relay delivered.
@@ -155,7 +157,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/qntx/nostr.js/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/qntx/nostr.js/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/qntx/nostr.js/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/qntx/nostr.js/compare/v0.3.0...v0.3.1

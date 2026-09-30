@@ -1,6 +1,6 @@
 {
   "name": "@qntx/nostr",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Nostr protocol implementation and SDK in TypeScript",
   "keywords": [
     "decentralized",
