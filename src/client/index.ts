@@ -4,6 +4,7 @@ export {
   ClientError,
   SyncDirection,
   type ClientOptions,
+  type FetchEachOptions,
   type FetchEventsOptions,
   type SubscribeOptions,
   type PublishOptions,

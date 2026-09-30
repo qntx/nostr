@@ -8,6 +8,7 @@ import {
   KeysSigner,
   MemoryEventStore,
   MessageError,
+  normalizeURL,
   RelayTimeoutError,
   relayListEventBuilder,
   useWebSocketImplementation,
@@ -133,6 +134,13 @@ function findWs(part: string): MockWebSocket | undefined {
   return MockWebSocket.instances.find((ws) => ws.url.includes(part));
 }
 
+function must<T>(value: T | undefined, what: string): T {
+  if (value === undefined) {
+    throw new Error(`expected ${what}`);
+  }
+  return value;
+}
+
 function reqReady(part: string): boolean {
   const ws = findWs(part);
   return Boolean(ws && sentMessages(ws).some((m) => m[0] === "REQ"));
@@ -222,6 +230,72 @@ describe("Client", () => {
 
     await client.shutdown();
     expect(client.isShutdown).toBe(true);
+  });
+
+  test("fetchEach reports per-relay ends and ingests events with seenOn", async () => {
+    const client = Client.builder()
+      .relays(["wss://a.example", "wss://b.example"])
+      .websocketImplementation(MockWebSocketCtor)
+      .build();
+    const keys = Keys.fromSecretKey(SK);
+    const shared = EventBuilder.textNote("shared").createdAt(1).signWithKeys(keys);
+    const onlyA = EventBuilder.textNote("only a").createdAt(2).signWithKeys(keys);
+
+    const fetchP = client.fetchEach({ kinds: [1] }, { timeoutMs: 2000 });
+    await waitUntil(all(socketsExist("a.example", "b.example"), everySocketSentReq));
+    const aWs = must(findWs("a.example"), "socket on a.example");
+    const bWs = must(findWs("b.example"), "socket on b.example");
+    const reqA = lastReqId(aWs);
+    const reqB = lastReqId(bWs);
+    aWs.receive(JSON.stringify(["EVENT", reqA, shared]));
+    aWs.receive(JSON.stringify(["EVENT", reqA, onlyA]));
+    aWs.receive(JSON.stringify(["EOSE", reqA]));
+    bWs.receive(JSON.stringify(["EVENT", reqB, shared]));
+    bWs.receive(JSON.stringify(["CLOSED", reqB, "rate-limited: slow down"]));
+
+    const results = await fetchP;
+    expect(results).toHaveLength(2);
+    const aRes = results.find((r) => r.url.includes("a.example"));
+    const bRes = results.find((r) => r.url.includes("b.example"));
+    expect(aRes?.end).toStrictEqual({ type: "eose" });
+    expect(aRes?.events.map((e) => e.id).toSorted()).toStrictEqual(
+      [shared.id, onlyA.id].toSorted(),
+    );
+    expect(bRes?.end).toStrictEqual({ type: "closed", reason: "rate-limited: slow down" });
+    expect(bRes?.events.map((e) => e.id)).toStrictEqual([shared.id]);
+
+    // Index ingestion carries each relay's URL; storage persistence matches fetchEvents.
+    expect(client.index.get(shared.id)?.id).toBe(shared.id);
+    expect([...client.index.seenOn(shared.id)].toSorted()).toStrictEqual(
+      [normalizeURL("wss://a.example"), normalizeURL("wss://b.example")].toSorted(),
+    );
+    expect(client.index.seenOn(onlyA.id)).toStrictEqual([normalizeURL("wss://a.example")]);
+
+    await client.shutdown();
+    const stored = await client.storage.query([{ kinds: [1] }]);
+    expect(stored.map((e) => e.id).toSorted()).toStrictEqual([shared.id, onlyA.id].toSorted());
+  });
+
+  test("fetchEach skips observe when asked", async () => {
+    const client = Client.builder()
+      .relays(["wss://quiet.example"])
+      .websocketImplementation(MockWebSocketCtor)
+      .build();
+    const keys = Keys.fromSecretKey(SK);
+    const note = EventBuilder.textNote("not stored").createdAt(1).signWithKeys(keys);
+
+    const fetchP = client.fetchEach({ kinds: [1] }, { timeoutMs: 2000, observe: false });
+    await waitUntil(all(socketsExist("quiet.example"), everySocketSentReq));
+    const ws = must(findWs("quiet.example"), "socket on quiet.example");
+    const req = lastReqId(ws);
+    ws.receive(JSON.stringify(["EVENT", req, note]));
+    ws.receive(JSON.stringify(["EOSE", req]));
+
+    const results = await fetchP;
+    expect(results[0]?.events).toHaveLength(1);
+    await client.shutdown();
+    expect(client.index.get(note.id)).toBeUndefined();
+    await expect(client.storage.query([{ kinds: [1] }])).resolves.toStrictEqual([]);
   });
 
   test("publish requires signer when given EventBuilder", async () => {

@@ -14,6 +14,8 @@ export type {
   RelayOptions,
   PublishResult,
   CountResult,
+  RelayFetchEnd,
+  RelayFetchResult,
   SubscribeOptions,
   SubscriptionHandlers,
   RelayStatusName,
@@ -22,6 +24,7 @@ export { Subscription, subscriptionToAsyncIterable } from "./subscription.ts";
 export { Pool } from "./pool.ts";
 export type {
   PoolOptions,
+  PoolFetchResult,
   PoolPublishResult,
   PoolCountResult,
   PoolSubscribeOptions,

@@ -123,6 +123,15 @@ export type FetchEventsOptions = {
   onevent?: (event: Event, relayUrl: string) => void;
 };
 
+/** Options for {@link Client.fetchEach}: one-shot per-relay fetch, no gossip routing. */
+export type FetchEachOptions = {
+  relays?: string[];
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /** When false, skip writing fetched events to storage/observe. Default true. */
+  observe?: boolean;
+};
+
 export type SubscribeOptions = {
   relays?: string[];
   /**
