@@ -11,7 +11,11 @@ description = "libsecp256k1 BIP-340 verify plus SHA-256 event-id check, compiled
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-secp256k1 = { version = "0.31.1", default-features = false, features = ["std", "global-context"] }
+secp256k1 = { version = "0.31.1", default-features = false, features = [
+  "std",
+  "global-context",
+  "lowmemory",
+] }
 sha2 = "0.11"
 wasm-bindgen = "=0.2.122"
 
