@@ -287,6 +287,56 @@ describe("ReactiveEventStore watches", () => {
     store.add(del);
     expect(inserted).toStrictEqual([a.id, m.id, del.id]);
   });
+
+  test("onRemove fires once per physical removal", () => {
+    const store = new ReactiveEventStore();
+    const removed: string[] = [];
+    store.onRemove((e) => removed.push(e.id));
+    const a = note("a", 1);
+    store.add(a);
+    // NIP-09 tombstone: the target leaves the index, the kind-5 itself is inserted.
+    store.add(kind5([a], 2));
+    expect(removed).toStrictEqual([a.id]);
+    // A replaceable superseded by a newer version removes the old event once.
+    const m1 = meta(3);
+    const m2 = meta(4);
+    store.add(m1);
+    removed.length = 0;
+    store.add(m2);
+    expect(removed).toStrictEqual([m1.id]);
+    // remove() by id reports each event actually taken out of the index.
+    removed.length = 0;
+    store.remove([m2.id, "ab".repeat(32)]);
+    expect(removed).toStrictEqual([m2.id]);
+    // Unsubscribing stops delivery.
+    const off = store.onRemove((e) => removed.push(`dead:${e.id}`));
+    off();
+    const gone = note("gone", 5);
+    store.add(gone);
+    removed.length = 0;
+    store.remove([gone.id]);
+    expect(removed).toStrictEqual([gone.id]);
+  });
+
+  test("a throwing onRemove listener is reported without starving the rest", () => {
+    const store = new ReactiveEventStore();
+    const { reported, restore } = stubReportError();
+    const boom = new Error("boom");
+    const seen: string[] = [];
+    store.onRemove(() => {
+      throw boom;
+    });
+    store.onRemove((e) => seen.push(e.id));
+    try {
+      const a = note("a", 1);
+      store.add(a);
+      store.remove([a.id]);
+      expect(seen).toStrictEqual([a.id]);
+      expect(reported).toStrictEqual([boom]);
+    } finally {
+      restore();
+    }
+  });
 });
 
 describe("ReactiveEventStore LRU", () => {

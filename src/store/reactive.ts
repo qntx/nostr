@@ -177,6 +177,7 @@ export class ReactiveEventStore {
   readonly #dirty = new Set<WatchHandle>();
   #flushScheduled = false;
   readonly #insertListeners = new Set<(event: Event) => void>();
+  readonly #removeListeners = new Set<(event: Event) => void>();
 
   constructor(opts?: ReactiveEventStoreOptions) {
     this.#maxEvents = opts?.maxEvents ?? 50_000;
@@ -326,6 +327,14 @@ export class ReactiveEventStore {
     };
   }
 
+  /** Synchronous listener for every physical index remove (after watch invalidation). */
+  onRemove(listener: (event: Event) => void): () => void {
+    this.#removeListeners.add(listener);
+    return () => {
+      this.#removeListeners.delete(listener);
+    };
+  }
+
   _register(watch: WatchHandle): void {
     switch (watch.kind) {
       case "event":
@@ -398,6 +407,9 @@ export class ReactiveEventStore {
     this._version += 1;
     this.#recency.delete(event.id);
     this.#invalidateByEvent(event);
+    for (const listener of this.#removeListeners) {
+      invokeSafely(() => listener(event));
+    }
   }
 
   #invalidateByEvent(event: Event): void {
