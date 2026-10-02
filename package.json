@@ -184,9 +184,15 @@
       "import": "./dist/testing.mjs",
       "default": "./dist/testing.mjs"
     },
+    "./wasm.browser": {
+      "types": "./dist/wasm.browser.d.mts",
+      "import": "./dist/wasm.browser.mjs",
+      "default": "./dist/wasm.browser.mjs"
+    },
     "./package.json": "./package.json",
     "./wasm": {
       "types": "./dist/wasm.d.mts",
+      "browser": "./dist/wasm.browser.mjs",
       "import": "./dist/wasm.mjs",
       "default": "./dist/wasm.mjs"
     }
@@ -199,7 +205,7 @@
     "build:wasm": "bash scripts/build-wasm.sh && WASM_PACK=1 vp pack && ls dist/*.wasm >/dev/null && publint && attw --pack . --profile esm-only",
     "dev": "vp pack --watch",
     "test": "vp test",
-    "test:wasm": "WASM_TEST=1 vp test wasm-tests/verify.ts wasm-tests/node-load.ts wasm-tests/sign.ts",
+    "test:wasm": "WASM_TEST=1 vp test wasm-tests/verify.ts wasm-tests/node-load.ts wasm-tests/sign.ts wasm-tests/browser-entry.ts",
     "bench:wasm": "WASM_TEST=1 vp test wasm-tests/bench.ts",
     "bench:store": "STORE_BENCH=1 vp test bench/reactive-store.bench.ts",
     "bench:store:sqlite": "STORE_BENCH=1 vp test bench/sqlite-store.bench.ts",

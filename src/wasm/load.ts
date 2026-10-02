@@ -1,54 +1,8 @@
-import { CryptoError } from "../core/error.ts";
-import type { Event } from "../core/event.ts";
-import type { SigningBackend } from "../core/key.ts";
-import {
-  instantiateCryptoWasm,
-  wasmPublicKey,
-  wasmSign,
-  wasmVerify,
-  wasmVerifySerialized,
-} from "./abi.ts";
-import type { CryptoWasmExports } from "./abi.ts";
-import { createWasmEventVerifier, WasmVerifyPoisonedError } from "./adapter.ts";
+import { createNostrWasmLoader, fetchWasmUrl, isWasmBytes } from "./instance.ts";
+import type { LoadNostrWasmOptions, NostrWasm } from "./instance.ts";
 
 export { WasmVerifyPoisonedError } from "./adapter.ts";
-export type LoadNostrWasmOptions = {
-  /** Bytes, or a URL whose bytes will be read (Node fs for file:; fetch otherwise). */
-  module?: ArrayBuffer | ArrayBufferView | URL;
-};
-
-export type NostrWasm = SigningBackend & {
-  verify: (id: Uint8Array, pubkey: Uint8Array, sig: Uint8Array) => boolean;
-  verifySerialized: (
-    serializedUtf8: Uint8Array,
-    id: Uint8Array,
-    pubkey: Uint8Array,
-    sig: Uint8Array,
-  ) => boolean;
-  verifyEvent: (event: Event) => boolean;
-};
-
-let interned: Promise<NostrWasm> | undefined;
-
-function isNode(): boolean {
-  if (!("process" in globalThis)) {
-    return false;
-  }
-  const proc: unknown = globalThis.process;
-  return (
-    typeof proc === "object" &&
-    proc !== null &&
-    "versions" in proc &&
-    typeof proc.versions === "object" &&
-    proc.versions !== null &&
-    "node" in proc.versions &&
-    typeof proc.versions.node === "string"
-  );
-}
-
-function isWasmBytes(value: unknown): value is ArrayBuffer | ArrayBufferView {
-  return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
-}
+export type { LoadNostrWasmOptions, NostrWasm } from "./instance.ts";
 
 async function defaultWasmHref(): Promise<string> {
   const mod = await import("./nostr_crypto_wasm_bg.wasm?url");
@@ -56,16 +10,12 @@ async function defaultWasmHref(): Promise<string> {
 }
 
 async function readWasmUrl(url: URL): Promise<Uint8Array> {
-  if (isNode() && url.protocol === "file:") {
+  if (url.protocol === "file:") {
     const { readFile } = await import("node:fs/promises");
     const { fileURLToPath } = await import("node:url");
     return new Uint8Array(await readFile(fileURLToPath(url)));
   }
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new CryptoError(`failed to fetch wasm: ${res.status} ${url.href}`);
-  }
-  return new Uint8Array(await res.arrayBuffer());
+  return fetchWasmUrl(url);
 }
 
 async function wasmBytes(opts?: LoadNostrWasmOptions): Promise<ArrayBuffer | ArrayBufferView> {
@@ -77,89 +27,14 @@ async function wasmBytes(opts?: LoadNostrWasmOptions): Promise<ArrayBuffer | Arr
   return readWasmUrl(href);
 }
 
-function requireByteLength(bytes: Uint8Array, expected: number, label: string): void {
-  if (bytes.length !== expected) {
-    throw new CryptoError(`invalid ${label} length: expected ${expected}, got ${bytes.length}`);
-  }
-}
-
-function wrapPoison<T>(poison: { error?: Error }, fn: () => T): T {
-  if (poison.error) {
-    throw poison.error;
-  }
-  try {
-    return fn();
-  } catch (error) {
-    if (error instanceof WebAssembly.RuntimeError) {
-      poison.error = new WasmVerifyPoisonedError("wasm verify aborted the instance", {
-        cause: error,
-      });
-      throw poison.error;
-    }
-    throw error;
-  }
-}
-
-function bindExports(exports: CryptoWasmExports): NostrWasm {
-  const poison: { error?: Error } = {};
-  const rawSerialized = (
-    serializedUtf8: Uint8Array,
-    id: Uint8Array,
-    pubkey: Uint8Array,
-    sig: Uint8Array,
-  ): boolean => wasmVerifySerialized(exports, serializedUtf8, id, pubkey, sig);
-  return {
-    verify: (id, pubkey, sig) => wrapPoison(poison, () => wasmVerify(exports, id, pubkey, sig)),
-    verifySerialized: (serializedUtf8, id, pubkey, sig) =>
-      wrapPoison(poison, () => rawSerialized(serializedUtf8, id, pubkey, sig)),
-    verifyEvent: createWasmEventVerifier(rawSerialized, poison),
-    sign: (id, seckey, aux) =>
-      wrapPoison(poison, () => {
-        requireByteLength(id, 32, "id");
-        requireByteLength(seckey, 32, "secret key");
-        requireByteLength(aux, 32, "aux");
-        const sig = wasmSign(exports, id, seckey, aux);
-        if (sig.length !== 64) {
-          throw new CryptoError("wasm sign failed");
-        }
-        return sig;
-      }),
-    publicKey: (seckey) =>
-      wrapPoison(poison, () => {
-        requireByteLength(seckey, 32, "secret key");
-        const pk = wasmPublicKey(exports, seckey);
-        if (pk.length !== 32) {
-          throw new CryptoError("wasm publicKey failed");
-        }
-        return pk;
-      }),
-  };
-}
-
-async function instantiateNostrWasm(opts?: LoadNostrWasmOptions): Promise<NostrWasm> {
-  const bytes = await wasmBytes(opts);
-  const exports = await instantiateCryptoWasm(bytes);
-  return bindExports(exports);
-}
+const loader = createNostrWasmLoader(wasmBytes);
 
 /** Instantiate once. Repeats reuse the same module. Failure throws; no noble fallback. */
 export async function loadNostrWasm(opts?: LoadNostrWasmOptions): Promise<NostrWasm> {
-  if (interned) {
-    return interned;
-  }
-  const pending = instantiateNostrWasm(opts);
-  interned = pending;
-  try {
-    return await pending;
-  } catch (error) {
-    if (interned === pending) {
-      interned = undefined;
-    }
-    throw error;
-  }
+  return loader.loadNostrWasm(opts);
 }
 
 /** Clears intern so tests can re-instantiate. Not exported from the wasm subpath. */
 export function resetNostrWasmForTests(): void {
-  interned = undefined;
+  loader.resetNostrWasm();
 }
