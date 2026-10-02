@@ -9,6 +9,22 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-02
+
+### Added
+
+- `ReactiveEventStore.onRemove(listener)`: synchronous listener for every physical index removal (NIP-09 tombstones, superseded replaceables, eviction), called after watch invalidation. Symmetric with `onInsert`; a throwing listener is isolated via `reportError`.
+- `./wasm` gains a `browser` export condition: a fetch-only loader with no `node:` specifiers, so bundlers no longer externalize `node:fs/promises` / `node:url` for the browser. Node keeps the file-reading entry.
+
+### Changed
+
+- `watchEvent(id)` and `watchReplaceable(kind, pubkey, d)` are interned by key (lowercased id, `formatEventAddress`) like `watchQuery`: repeated calls return the same watch until it is unsubscribed and unregistered.
+- The crypto WASM is built with `secp256k1`'s `lowmemory` tables and `wasm-opt -Oz`: 1,288,146 → 230,427 bytes raw, 1,152,812 → 99,814 bytes gzip (`verifyEvent` throughput about 1.3× lower). `build:wasm` enforces a 100 KiB gzip budget and requires `wasm-opt` (binaryen devDependency).
+
+### Fixed
+
+- A kind-5 deletion now invalidates the watches of the ids (`e`) and addresses (`a`) it targets, so a watch on an event absent from the index sees `isDeleted` change.
+
 ## [0.5.0] - 2026-10-01
 
 ### Changed
@@ -157,7 +173,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/qntx/nostr.js/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/qntx/nostr.js/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/qntx/nostr.js/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/qntx/nostr.js/compare/v0.3.1...v0.4.0
