@@ -3,7 +3,7 @@ import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { filterFingerprint, matchFilters } from "../core/filter.ts";
 import { invokeSafely } from "../core/report.ts";
-import { formatEventAddress, eventAddress } from "../core/tag.ts";
+import { formatEventAddress, eventAddress, parseEventAddress } from "../core/tag.ts";
 import { normalizeURL } from "../core/util.ts";
 import { MemoryIndex } from "../storage/memory-index.ts";
 import type { PutResult } from "../storage/types.ts";
@@ -443,6 +443,33 @@ export class ReactiveEventStore {
       if (byAddress) {
         for (const watch of byAddress) {
           this.#markDirty(watch);
+        }
+      }
+    }
+    // A kind-5 deletion marks its targets tombstoned even when they are not in
+    // the index, so nothing else invalidates a watch keyed on the target.
+    if (event.kind === 5) {
+      for (const tag of event.tags) {
+        if (tag[0] === "e" && tag[1] !== undefined) {
+          const watches = this.#idWatches.get(tag[1].toLowerCase());
+          if (watches) {
+            for (const watch of watches) {
+              this.#markDirty(watch);
+            }
+          }
+        } else if (tag[0] === "a" && tag[1] !== undefined) {
+          const coord = parseEventAddress(tag[1]);
+          if (coord === undefined) {
+            continue;
+          }
+          const watches = this.#addressWatches.get(
+            formatEventAddress(coord.kind, coord.pubkey, coord.identifier),
+          );
+          if (watches) {
+            for (const watch of watches) {
+              this.#markDirty(watch);
+            }
+          }
         }
       }
     }

@@ -275,6 +275,35 @@ describe("ReactiveEventStore watches", () => {
     expect(watch.getSnapshot()).toBeUndefined();
   });
 
+  test("kind-5 tombstone notifies watches for targets absent from the index", async () => {
+    const store = new ReactiveEventStore();
+    const missing = note("never stored", 1);
+    const address = `30001:${keys.publicKey}:d`;
+
+    const byId = store.watchEvent(missing.id);
+    const byAddress = store.watchReplaceable(30001, keys.publicKey, "d");
+    const onId = vi.fn();
+    const onAddress = vi.fn();
+    byId.subscribe(onId);
+    byAddress.subscribe(onAddress);
+    byId.getSnapshot();
+    byAddress.getSnapshot();
+
+    const del = EventBuilder.deletion([missing.id, { address }], "gone")
+      .createdAt(2)
+      .signWithKeys(keys);
+    store.add(del);
+    await flush();
+    // Neither target was ever stored, so no physical removal notified these
+    // watches — the kind-5 tag invalidation did. An unseen e-tag target is a
+    // pending tombstone (not yet isDeleted); the address tombstone reports now.
+    expect(onId).toHaveBeenCalledTimes(1);
+    expect(onAddress).toHaveBeenCalledTimes(1);
+    expect(store.isDeleted(address)).toBe(true);
+    expect(byId.getSnapshot()).toBeUndefined();
+    expect(byAddress.getSnapshot()).toBeUndefined();
+  });
+
   test("onInsert fires synchronously for accepted, replaced and deletion events", () => {
     const store = new ReactiveEventStore();
     const inserted: string[] = [];
