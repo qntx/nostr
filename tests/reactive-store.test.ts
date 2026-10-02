@@ -551,6 +551,30 @@ describe("issue #125", () => {
     expect(index.isDeleted(coord)).toBe(false);
   });
 
+  test("watchEvent and watchReplaceable are interned per key", async () => {
+    const store = new ReactiveEventStore();
+    const e = note("a", 1);
+    const byId = store.watchEvent(e.id);
+    expect(store.watchEvent(e.id)).toBe(byId);
+    // The cache key is the lowercase id, so casing does not split it.
+    expect(store.watchEvent(e.id.toUpperCase())).toBe(byId);
+
+    const byAddress = store.watchReplaceable(0, keys.publicKey);
+    expect(store.watchReplaceable(0, keys.publicKey)).toBe(byAddress);
+    expect(store.watchReplaceable(0, keys.publicKey.toUpperCase())).toBe(byAddress);
+    expect(store.watchReplaceable(0, keys.publicKey, "d")).not.toBe(byAddress);
+
+    // After the last unsubscribe settles, the next call builds a fresh watch.
+    const unsubscribe = byId.subscribe(() => {});
+    unsubscribe();
+    const unsubscribeAddress = byAddress.subscribe(() => {});
+    unsubscribeAddress();
+    await flush();
+    await flush();
+    expect(store.watchEvent(e.id)).not.toBe(byId);
+    expect(store.watchReplaceable(0, keys.publicKey)).not.toBe(byAddress);
+  });
+
   test("#13 watchQuery cache entries are released after unsubscribe", async () => {
     const store = new ReactiveEventStore();
     const filterSets = [[{ kinds: [1] }], [{ kinds: [3] }], [{ kinds: [1], limit: 5 }]];
