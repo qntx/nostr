@@ -9,6 +9,7 @@ const root = join(import.meta.dirname, "..");
 
 const WASM_EXPORT = {
   types: "./dist/wasm.d.mts",
+  browser: "./dist/wasm.browser.mjs",
   import: "./dist/wasm.mjs",
   default: "./dist/wasm.mjs",
 } as const;
@@ -135,7 +136,9 @@ describe("vite pack.entry.wasm gate", () => {
   test("wasm entry stays WASM_PACK-gated", () => {
     const src = readFileSync(join(root, "vite.config.ts"), "utf8");
     expect(src).toContain('const packWasm = process.env["WASM_PACK"] === "1"');
-    expect(src).toContain('...(packWasm ? { wasm: "src/wasm/index.ts" } : {})');
+    expect(src).toMatch(
+      /packWasm\s*\?\s*\{\s*wasm: "src\/wasm\/index\.ts", "wasm\.browser": "src\/wasm\/index\.browser\.ts" \}\s*:\s*\{\}/,
+    );
     expect(src).toContain("customExports: applyPackExports");
     expect(src.match(/wasm: "src\/wasm\/index\.ts"/g)).toStrictEqual(['wasm: "src/wasm/index.ts"']);
   });

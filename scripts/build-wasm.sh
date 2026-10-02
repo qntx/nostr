@@ -8,6 +8,8 @@ need() { command -v "$1" >/dev/null || { echo "missing $1" >&2; exit 1; }; }
 need rustc
 need cargo
 need wasm-bindgen
+# binaryen (devDependency) provides wasm-opt on PATH inside bun/npm scripts.
+need wasm-opt
 
 if ! rustup target list --installed | grep -qx "wasm32-unknown-unknown"; then
   echo "rustup target wasm32-unknown-unknown is not installed" >&2
@@ -62,4 +64,15 @@ wasm-bindgen \
 
 wasm_bg="${gen}/nostr_crypto_wasm_bg.wasm"
 test -f "${wasm_bg}" || { echo "wasm-bindgen did not emit ${wasm_bg}" >&2; exit 1; }
+# rustc emits SIMD, bulk-memory and friends; allow every feature the module uses.
+wasm-opt -Oz --all-features "${wasm_bg}" -o "${wasm_bg}"
+
+# Size budget: measured gzip size rounded up to the next 50 KiB. Bump only after
+# re-measuring a legitimate growth (N19).
+WASM_GZIP_BUDGET=102400
+gz_size="$(gzip -cn "${wasm_bg}" | wc -c | tr -d ' ')"
+if [[ "${gz_size}" -gt "${WASM_GZIP_BUDGET}" ]]; then
+  echo "wasm gzip size ${gz_size} exceeds the ${WASM_GZIP_BUDGET} byte budget" >&2
+  exit 1
+fi
 cp "${wasm_bg}" "${root}/src/wasm/nostr_crypto_wasm_bg.wasm"

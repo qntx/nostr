@@ -30,6 +30,7 @@ import {
 import { DataLoader, LoaderError } from "../src/loaders/dataloader.ts";
 import { subscriptionToAsyncIterable } from "../src/relay/subscription.ts";
 import { createWasmEventVerifier } from "../src/wasm/adapter.ts";
+import { loadNostrWasm as loadNostrWasmBrowser } from "../src/wasm/load.browser.ts";
 import { loadNostrWasm, resetNostrWasmForTests } from "../src/wasm/load.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
@@ -200,26 +201,11 @@ describe("wasm HTTP load", () => {
     }
   });
 
-  test("file: URL loads through fetch when globalThis.process is absent", async () => {
-    resetNostrWasmForTests();
+  test("browser loader rejects file: URLs", async () => {
     const href = "file:///wasm-404.qntx.test/nostr_crypto_wasm_bg.wasm";
-    const prevFetch = globalThis.fetch;
-    const prevProcess = globalThis.process;
-    Reflect.set(
-      globalThis,
-      "fetch",
-      notFoundFetch(href, prevFetch, () => {}),
-    );
-    Reflect.deleteProperty(globalThis, "process");
-    try {
-      const err = await captureError(loadNostrWasm({ module: new URL(href) }));
-      expect(err).not.toBeInstanceOf(ReferenceError);
-      expect(err).toBeInstanceOf(CryptoError);
-      expect((err as CryptoError).message).toBe(`failed to fetch wasm: 404 ${href}`);
-    } finally {
-      Reflect.set(globalThis, "process", prevProcess);
-      globalThis.fetch = prevFetch;
-    }
+    const err = await captureError(loadNostrWasmBrowser({ module: new URL(href) }));
+    expect(err).toBeInstanceOf(CryptoError);
+    expect((err as CryptoError).message).toBe(`cannot fetch wasm from ${href}`);
   });
 });
 

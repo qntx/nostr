@@ -275,6 +275,35 @@ describe("ReactiveEventStore watches", () => {
     expect(watch.getSnapshot()).toBeUndefined();
   });
 
+  test("kind-5 tombstone notifies watches for targets absent from the index", async () => {
+    const store = new ReactiveEventStore();
+    const missing = note("never stored", 1);
+    const address = `30001:${keys.publicKey}:d`;
+
+    const byId = store.watchEvent(missing.id);
+    const byAddress = store.watchReplaceable(30001, keys.publicKey, "d");
+    const onId = vi.fn();
+    const onAddress = vi.fn();
+    byId.subscribe(onId);
+    byAddress.subscribe(onAddress);
+    byId.getSnapshot();
+    byAddress.getSnapshot();
+
+    const del = EventBuilder.deletion([missing.id, { address }], "gone")
+      .createdAt(2)
+      .signWithKeys(keys);
+    store.add(del);
+    await flush();
+    // Neither target was ever stored, so no physical removal notified these
+    // watches — the kind-5 tag invalidation did. An unseen e-tag target is a
+    // pending tombstone (not yet isDeleted); the address tombstone reports now.
+    expect(onId).toHaveBeenCalledTimes(1);
+    expect(onAddress).toHaveBeenCalledTimes(1);
+    expect(store.isDeleted(address)).toBe(true);
+    expect(byId.getSnapshot()).toBeUndefined();
+    expect(byAddress.getSnapshot()).toBeUndefined();
+  });
+
   test("onInsert fires synchronously for accepted, replaced and deletion events", () => {
     const store = new ReactiveEventStore();
     const inserted: string[] = [];
@@ -286,6 +315,56 @@ describe("ReactiveEventStore watches", () => {
     store.add(m);
     store.add(del);
     expect(inserted).toStrictEqual([a.id, m.id, del.id]);
+  });
+
+  test("onRemove fires once per physical removal", () => {
+    const store = new ReactiveEventStore();
+    const removed: string[] = [];
+    store.onRemove((e) => removed.push(e.id));
+    const a = note("a", 1);
+    store.add(a);
+    // NIP-09 tombstone: the target leaves the index, the kind-5 itself is inserted.
+    store.add(kind5([a], 2));
+    expect(removed).toStrictEqual([a.id]);
+    // A replaceable superseded by a newer version removes the old event once.
+    const m1 = meta(3);
+    const m2 = meta(4);
+    store.add(m1);
+    removed.length = 0;
+    store.add(m2);
+    expect(removed).toStrictEqual([m1.id]);
+    // remove() by id reports each event actually taken out of the index.
+    removed.length = 0;
+    store.remove([m2.id, "ab".repeat(32)]);
+    expect(removed).toStrictEqual([m2.id]);
+    // Unsubscribing stops delivery.
+    const off = store.onRemove((e) => removed.push(`dead:${e.id}`));
+    off();
+    const gone = note("gone", 5);
+    store.add(gone);
+    removed.length = 0;
+    store.remove([gone.id]);
+    expect(removed).toStrictEqual([gone.id]);
+  });
+
+  test("a throwing onRemove listener is reported without starving the rest", () => {
+    const store = new ReactiveEventStore();
+    const { reported, restore } = stubReportError();
+    const boom = new Error("boom");
+    const seen: string[] = [];
+    store.onRemove(() => {
+      throw boom;
+    });
+    store.onRemove((e) => seen.push(e.id));
+    try {
+      const a = note("a", 1);
+      store.add(a);
+      store.remove([a.id]);
+      expect(seen).toStrictEqual([a.id]);
+      expect(reported).toStrictEqual([boom]);
+    } finally {
+      restore();
+    }
   });
 });
 
@@ -499,6 +578,30 @@ describe("issue #125", () => {
     index.put(v3);
     expect(index.getByAddress(coord)?.content).toBe("after");
     expect(index.isDeleted(coord)).toBe(false);
+  });
+
+  test("watchEvent and watchReplaceable are interned per key", async () => {
+    const store = new ReactiveEventStore();
+    const e = note("a", 1);
+    const byId = store.watchEvent(e.id);
+    expect(store.watchEvent(e.id)).toBe(byId);
+    // The cache key is the lowercase id, so casing does not split it.
+    expect(store.watchEvent(e.id.toUpperCase())).toBe(byId);
+
+    const byAddress = store.watchReplaceable(0, keys.publicKey);
+    expect(store.watchReplaceable(0, keys.publicKey)).toBe(byAddress);
+    expect(store.watchReplaceable(0, keys.publicKey.toUpperCase())).toBe(byAddress);
+    expect(store.watchReplaceable(0, keys.publicKey, "d")).not.toBe(byAddress);
+
+    // After the last unsubscribe settles, the next call builds a fresh watch.
+    const unsubscribe = byId.subscribe(() => {});
+    unsubscribe();
+    const unsubscribeAddress = byAddress.subscribe(() => {});
+    unsubscribeAddress();
+    await flush();
+    await flush();
+    expect(store.watchEvent(e.id)).not.toBe(byId);
+    expect(store.watchReplaceable(0, keys.publicKey)).not.toBe(byAddress);
   });
 
   test("#13 watchQuery cache entries are released after unsubscribe", async () => {

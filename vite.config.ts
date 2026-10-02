@@ -28,6 +28,7 @@ export function applyPackExports(pkgExports: Record<string, unknown>): Record<st
   delete pkgExports["./wasm"];
   pkgExports["./wasm"] = {
     types: "./dist/wasm.d.mts",
+    browser: "./dist/wasm.browser.mjs",
     import: "./dist/wasm.mjs",
     default: "./dist/wasm.mjs",
   };
@@ -112,7 +113,9 @@ const config: UserConfig = defineConfig({
       "nips/nip98": "src/nips/nip98.ts",
       testing: "src/testing/index.ts",
       // bun CI is Rust-free; wasm entry is publish / build:wasm only
-      ...(packWasm ? { wasm: "src/wasm/index.ts" } : {}),
+      ...(packWasm
+        ? { wasm: "src/wasm/index.ts", "wasm.browser": "src/wasm/index.browser.ts" }
+        : {}),
     },
     dts: {
       generator: "tsgo",

@@ -3,7 +3,7 @@ import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { filterFingerprint, matchFilters } from "../core/filter.ts";
 import { invokeSafely } from "../core/report.ts";
-import { formatEventAddress, eventAddress } from "../core/tag.ts";
+import { formatEventAddress, eventAddress, parseEventAddress } from "../core/tag.ts";
 import { normalizeURL } from "../core/util.ts";
 import { MemoryIndex } from "../storage/memory-index.ts";
 import type { PutResult } from "../storage/types.ts";
@@ -171,12 +171,15 @@ export class ReactiveEventStore {
 
   readonly #idWatches = new Map<string, Set<WatchHandle>>();
   readonly #addressWatches = new Map<string, Set<WatchHandle>>();
+  readonly #eventCache = new Map<string, WatchImpl<Event | undefined>>();
+  readonly #addressCache = new Map<string, WatchImpl<Event | undefined>>();
   readonly #queryCache = new Map<string, WatchImpl<ReadonlyArray<Event>>>();
   readonly #queryRegistry = new Set<WatchHandle>();
 
   readonly #dirty = new Set<WatchHandle>();
   #flushScheduled = false;
   readonly #insertListeners = new Set<(event: Event) => void>();
+  readonly #removeListeners = new Set<(event: Event) => void>();
 
   constructor(opts?: ReactiveEventStoreOptions) {
     this.#maxEvents = opts?.maxEvents ?? 50_000;
@@ -292,19 +295,29 @@ export class ReactiveEventStore {
 
   watchEvent(id: string): Watch<Event | undefined> {
     const key = id.toLowerCase();
-    return new WatchImpl(this, "event", key, () => this.get(key), sameRef, EVENT_IDS);
+    let watch = this.#eventCache.get(key);
+    if (!watch) {
+      watch = new WatchImpl(this, "event", key, () => this.get(key), sameRef, EVENT_IDS);
+      this.#eventCache.set(key, watch);
+    }
+    return watch;
   }
 
   watchReplaceable(kind: number, pubkey: string, d?: string): Watch<Event | undefined> {
     const address = formatEventAddress(kind, pubkey, d ?? "");
-    return new WatchImpl(
-      this,
-      "replaceable",
-      address,
-      () => this.getByAddress(address),
-      sameRef,
-      EVENT_IDS,
-    );
+    let watch = this.#addressCache.get(address);
+    if (!watch) {
+      watch = new WatchImpl(
+        this,
+        "replaceable",
+        address,
+        () => this.getByAddress(address),
+        sameRef,
+        EVENT_IDS,
+      );
+      this.#addressCache.set(address, watch);
+    }
+    return watch;
   }
 
   watchQuery(filters: ReadonlyArray<Filter>): Watch<ReadonlyArray<Event>> {
@@ -323,6 +336,14 @@ export class ReactiveEventStore {
     this.#insertListeners.add(listener);
     return () => {
       this.#insertListeners.delete(listener);
+    };
+  }
+
+  /** Synchronous listener for every physical index remove (after watch invalidation). */
+  onRemove(listener: (event: Event) => void): () => void {
+    this.#removeListeners.add(listener);
+    return () => {
+      this.#removeListeners.delete(listener);
     };
   }
 
@@ -346,9 +367,15 @@ export class ReactiveEventStore {
     switch (watch.kind) {
       case "event":
         removeWatch(this.#idWatches, watch.key, watch);
+        if (this.#eventCache.get(watch.key) === watch) {
+          this.#eventCache.delete(watch.key);
+        }
         return;
       case "replaceable":
         removeWatch(this.#addressWatches, watch.key, watch);
+        if (this.#addressCache.get(watch.key) === watch) {
+          this.#addressCache.delete(watch.key);
+        }
         return;
       case "query":
         this.#queryRegistry.delete(watch);
@@ -398,6 +425,9 @@ export class ReactiveEventStore {
     this._version += 1;
     this.#recency.delete(event.id);
     this.#invalidateByEvent(event);
+    for (const listener of this.#removeListeners) {
+      invokeSafely(() => listener(event));
+    }
   }
 
   #invalidateByEvent(event: Event): void {
@@ -413,6 +443,33 @@ export class ReactiveEventStore {
       if (byAddress) {
         for (const watch of byAddress) {
           this.#markDirty(watch);
+        }
+      }
+    }
+    // A kind-5 deletion marks its targets tombstoned even when they are not in
+    // the index, so nothing else invalidates a watch keyed on the target.
+    if (event.kind === 5) {
+      for (const tag of event.tags) {
+        if (tag[0] === "e" && tag[1] !== undefined) {
+          const watches = this.#idWatches.get(tag[1].toLowerCase());
+          if (watches) {
+            for (const watch of watches) {
+              this.#markDirty(watch);
+            }
+          }
+        } else if (tag[0] === "a" && tag[1] !== undefined) {
+          const coord = parseEventAddress(tag[1]);
+          if (coord === undefined) {
+            continue;
+          }
+          const watches = this.#addressWatches.get(
+            formatEventAddress(coord.kind, coord.pubkey, coord.identifier),
+          );
+          if (watches) {
+            for (const watch of watches) {
+              this.#markDirty(watch);
+            }
+          }
         }
       }
     }
