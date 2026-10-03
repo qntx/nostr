@@ -4,7 +4,7 @@
 
 Layered TypeScript Nostr library: events, keys, filters, signers, relays, storage, gossip, and a `Client` facade in one ESM package.
 
-See [docs/](docs/).
+Changes are tracked in [CHANGELOG.md](CHANGELOG.md); layering rules and invariants for contributors live in [AGENTS.md](AGENTS.md).
 
 ## License
 

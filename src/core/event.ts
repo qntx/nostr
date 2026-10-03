@@ -107,6 +107,15 @@ export function serializeEvent(event: UnsignedEvent): string {
   if (!validateEvent(event)) {
     throw new EventValidationError("cannot serialize event with invalid shape");
   }
+  return serializeValidatedEvent(event);
+}
+
+/**
+ * Canonical serialization for an event already known valid (after {@link validateEvent} or
+ * {@link validateSignedEvent}); identical output to {@link serializeEvent} without re-walking the
+ * structural checks.
+ */
+export function serializeValidatedEvent(event: UnsignedEvent): string {
   return JSON.stringify([0, event.pubkey, event.created_at, event.kind, event.tags, event.content]);
 }
 

@@ -27,7 +27,6 @@ import {
   matchFilter,
   EventValidationError,
   matchFilters,
-  mergeFilters,
   parseClientMessage,
   parseEventAddress,
   parseRelayMessage,
@@ -190,13 +189,18 @@ describe("kinds", () => {
     expect(isRegularKind(1111)).toBe(true);
     expect(isRegularKind(45)).toBe(false);
     expect(isRegularKind(999)).toBe(false);
-    expect(classifyKind(45)).toBe("unknown");
+    expect(isRegularKind(44)).toBe(true);
     expect(isReplaceableKind(0)).toBe(true);
     expect(isReplaceableKind(10002)).toBe(true);
     expect(isEphemeralKind(22242)).toBe(true);
     expect(isAddressableKind(30023)).toBe(true);
     expect(classifyKind(1)).toBe("regular");
     expect(classifyKind(30023)).toBe("addressable");
+    // NIP-01 leaves 45–999 and 40000+ undefined; relays store them like regular events.
+    for (const kind of [45, 999, 40000, 65535]) {
+      expect(classifyKind(kind)).toBe("regular");
+    }
+    expect(classifyKind(1000)).toBe("regular");
   });
 
   test("catalog is the 28 production names", () => {
@@ -245,6 +249,15 @@ describe("kinds", () => {
     });
     expect(parseEventAddress(`0:${pk}:`)).toStrictEqual({ kind: 0, pubkey: pk, identifier: "" });
     expect(parseEventAddress("0:short:")).toBeUndefined();
+    // The kind segment is one to five decimal digits only — no other Number() syntax.
+    for (const bad of ["1e4", "0x10", " 1", "+1", "1.0", "123456", ""]) {
+      expect(parseEventAddress(`${bad}:${pk}:d`)).toBeUndefined();
+    }
+    expect(parseEventAddress(`65535:${pk}:d`)).toStrictEqual({
+      kind: 65535,
+      pubkey: pk,
+      identifier: "d",
+    });
     expect(formatEventAddress(0, pk)).toBe(`0:${pk}:`);
     expect(eventAddress({ kind: 1, pubkey: pk, tags: [] })).toBeUndefined();
     expect(eventAddress({ kind: 0, pubkey: pk, tags: [] })).toBe(`0:${pk}:`);
@@ -277,11 +290,6 @@ describe("tags", () => {
     expect(Tag.p(pk.toUpperCase())).toStrictEqual(["p", pk]);
   });
 });
-
-const sortedNums = (values: ReadonlyArray<number> | undefined): number[] =>
-  [...(values ?? [])].toSorted((a, b) => a - b);
-const sortedStrs = (values: ReadonlyArray<string> | undefined): string[] =>
-  [...(values ?? [])].toSorted((a, b) => a.localeCompare(b));
 
 describe("filter", () => {
   const base = finalizeEvent(
@@ -316,12 +324,6 @@ describe("filter", () => {
   test("matchFilters is OR across filters", () => {
     expect(matchFilters([{ kinds: [2] }, { kinds: [1] }], base)).toBe(true);
     expect(matchFilters([{ kinds: [2] }, { kinds: [3] }], base)).toBe(false);
-  });
-
-  test("mergeFilters unions list fields", () => {
-    const merged = mergeFilters({ kinds: [1], authors: ["a"] }, { kinds: [2], authors: ["b"] });
-    expect(sortedNums(merged.kinds)).toStrictEqual([1, 2]);
-    expect(sortedStrs(merged.authors)).toStrictEqual(["a", "b"]);
   });
 
   test("filterFingerprint sorts keys, list items, and filter order", () => {

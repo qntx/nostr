@@ -2,7 +2,8 @@
  * @qntx/nostr — public facade.
  *
  * Prefer layer subpaths for tree-shaking:
- * `@qntx/nostr/core`, `/signer`, `/relay`, `/client`, `/storage`, `/loaders`, `/gossip`, `/nips/*`
+ * `@qntx/nostr/core`, `/signer`, `/relay`, `/client`, `/storage`, `/store`, `/loaders`,
+ * `/gossip`, `/nips/*`, `/testing`, `/wasm` (and `/wasm.browser`).
  *
  * Heavy NIPs are `@qntx/nostr/nips/<id>` only. There is no `@qntx/nostr/nips` barrel.
  *
@@ -85,7 +86,6 @@ export {
   getFilterLimit,
   matchFilter,
   matchFilters,
-  mergeFilters,
   type Filter,
   assertSubscriptionId,
   createSubscriptionId,

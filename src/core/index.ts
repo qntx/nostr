@@ -67,8 +67,9 @@ export {
   type UnsignedEvent,
 } from "./event.ts";
 
-// verification cache helpers — available under @qntx/nostr/core for advanced use
-export { isMarkedFailed, markUnverified, markVerified } from "./event.ts";
+// Read-only verification cache introspection; the write side stays module-internal —
+// marking externally would bypass signature verification.
+export { isMarkedFailed } from "./event.ts";
 
 export {
   Keys,
@@ -99,7 +100,6 @@ export {
   getFilterLimit,
   matchFilter,
   matchFilters,
-  mergeFilters,
   type Filter,
 } from "./filter.ts";
 

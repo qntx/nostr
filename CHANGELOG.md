@@ -9,6 +9,35 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** `mergeFilters` — it narrowed rather than unioned when inputs constrained different fields and had no internal callers (#174).
+- **Breaking:** `markVerified` and `markUnverified` are no longer exported from `@qntx/nostr/core`; marking externally could bypass signature verification (#179).
+
+### Changed
+
+- **Breaking:** `classifyKind` no longer returns `"unknown"`: NIP-01 leaves kinds 45–999 and 40000+ undefined and relays store them like regular events, so they classify `"regular"` (#177).
+- **Breaking:** `ManualFetch`'s init type now declares `redirect: "manual"` — custom fetch adapters must forward it (NIP-05/NIP-11/Blossom must never follow redirects) (#173).
+- **Breaking:** `Client.observe` and `Client.observeAll` throw `EventValidationError` for events that fail signature verification, instead of writing them into the index, gossip routes, and storage. `observeAll` is all-or-nothing.
+- Runtime dependencies (`@noble/*`, `@scure/base`) use caret ranges so consumers can deduplicate them (#180).
+- README no longer points at the intentionally untracked `docs/`; layering invariants and the dependency policy are recorded in `AGENTS.md` (#178).
+
+### Fixed
+
+- `fanIn` fires the aggregate `onclose` when a relay's subscription ends before another relay's connect fails; a subscription's last close reason is reported instead of the misleading "all relays failed", and any attach failure retires the URL instead of escaping as an unhandled rejection (#170).
+- NIP-77: the initiator fails fast with `Nip77Error` on a protocol version mismatch instead of re-sending the version byte until `MAX_NEG_ROUNDS` (#171).
+- A live subscription's reconnect `since` watermark clamps to the current wall clock, so one far-future `created_at` can no longer blank the feed after reconnect; the worst case is re-delivery, never loss (#172). `OutboxFeed.sync` applies the same clamp to its bound-derived `since`.
+- Relays can no longer inject events into a subscription: an EVENT that does not match the subscription's filters is dropped before signature verification (silently — it does not count toward `invalidEventPolicy`).
+- `SqliteEventStore` deletes tag rows explicitly instead of relying on `ON DELETE CASCADE`: expo-sqlite's `withExclusiveTransactionAsync` runs on a new connection where `PRAGMA foreign_keys` is off, so tag rows of replaced and deleted events leaked. A `tags(event_id)` index is added on open.
+- `Nip46Signer.fromNostrConnectURI` rejects immediately on a pre-aborted signal (it previously never settled), ignores duplicate handshake responses, and closes the signer when the post-handshake `get_public_key` fails.
+- `parseEventAddress` accepts only decimal kinds (`1e4`, `0x10`, `+1` were parsed as numbers).
+- `parseRelayMessage` rejects COUNT replies whose `count` is not a non-negative safe integer.
+- A stale relay's delayed `close` no longer evicts a newer relay for the same URL from the `Pool`.
+- `Client.fetchEvents` and `Client.fetchEach` put each event into the reactive index once; additional relay deliveries record `seenOn` via `markSeen` instead of re-running the full put path (#175).
+- Verify, sign, and storage `decidePut` paths no longer repeat structural event validation: an internal `serializeValidatedEvent` is used post-validation, and `decidePut` trusts the verified-event cache (#176).
+- JSDoc drift: `GossipOptions.maxRelaysPerPubkey` documents first-N list order, and the facade header lists all published subpaths (#178).
+- `tests/fan-in.test.ts` covers `fanIn`/`fetchRouted` completion interleavings directly (#181).
+
 ## [0.8.0] - 2026-10-03
 
 ### Changed

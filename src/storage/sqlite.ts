@@ -28,6 +28,9 @@ export type SqlValue = string | number | null | Uint8Array;
  * start before the previous one settles, inside or outside a transaction — so drivers need not
  * support overlapping statements on one connection.
  *
+ * The store does not rely on per-connection PRAGMAs: tag rows are deleted explicitly, so `PRAGMA
+ * foreign_keys` may be off on any connection (including transaction connections).
+ *
  * `expo-sqlite` maps onto this interface without changes to query code. Note that
  * `withExclusiveTransactionAsync` resolves `void` and statements inside the exclusive transaction
  * must run on the `txn` connection passed to its callback, not on `db` — the result is captured
@@ -91,6 +94,7 @@ CREATE TABLE IF NOT EXISTS tags (
 );
 CREATE INDEX IF NOT EXISTS tags_name_value_created
   ON tags(name, value, created_at DESC);
+CREATE INDEX IF NOT EXISTS tags_event_id ON tags(event_id);
 CREATE TABLE IF NOT EXISTS tombstones (
   kind TEXT NOT NULL CHECK(kind IN ('id', 'pending', 'coord')),
   key TEXT NOT NULL,
@@ -283,14 +287,16 @@ export class SqliteEventStore implements EventStore {
 
   async #migrate(): Promise<void> {
     try {
-      await this.#driver.exec("PRAGMA foreign_keys = ON");
       const rows = await this.#driver.all<{ user_version: number }>("PRAGMA user_version");
       const version = rows[0]?.user_version ?? 0;
-      if (version === 0) {
-        await this.#driver.exec(SCHEMA_SQL);
-        await this.#driver.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-      } else if (version !== SCHEMA_VERSION) {
+      if (version !== 0 && version !== SCHEMA_VERSION) {
         throw toStorageError(new Error(`unsupported sqlite event store schema version ${version}`));
+      }
+      // Every statement is IF NOT EXISTS, so this is a no-op on an existing schema and also
+      // picks up objects (indexes) added to SCHEMA_SQL after a database was created.
+      await this.#driver.exec(SCHEMA_SQL);
+      if (version === 0) {
+        await this.#driver.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
     } catch (error) {
       throw toStorageError(error);
@@ -515,6 +521,9 @@ export class SqliteEventStore implements EventStore {
   }
 
   async #deleteEvent(tx: SqlDriver, id: string): Promise<number> {
+    // Explicit: a transaction may run on a connection where foreign_keys is off
+    // (expo-sqlite's withExclusiveTransactionAsync), where ON DELETE CASCADE never fires.
+    await tx.run(`DELETE FROM tags WHERE event_id = ?`, [id]);
     const result = await tx.run(`DELETE FROM events WHERE id = ?`, [id]);
     return result.changes;
   }

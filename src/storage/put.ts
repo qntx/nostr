@@ -1,5 +1,5 @@
 import type { Event } from "../core/event.ts";
-import { isReplaceableWinner, validateSignedEvent } from "../core/event.ts";
+import { isMarkedVerified, isReplaceableWinner, validateSignedEvent } from "../core/event.ts";
 import { isEphemeralKind, Kind } from "../core/kind.ts";
 import { eventAddress } from "../core/tag.ts";
 import { coordinateRemovals, planDeletion } from "./deletion.ts";
@@ -48,8 +48,9 @@ export type PutLookup = {
 };
 
 export function decidePut(raw: Event, lookup: PutLookup): PutDecision {
-  // Canonical-input precondition: non-canonical events are never indexed.
-  if (!validateSignedEvent(raw)) {
+  // Canonical-input precondition: non-canonical events are never indexed. An
+  // already-verified event has necessarily passed validateSignedEvent.
+  if (!isMarkedVerified(raw) && !validateSignedEvent(raw)) {
     return { action: "skip", result: "invalid", event: raw };
   }
   const event = raw;

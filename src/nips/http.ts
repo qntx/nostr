@@ -3,15 +3,22 @@
  * `redirect`; sendManual always sets `"manual"`.
  */
 
+export type ManualFetchInit = {
+  method?: string;
+  headers?: Record<string, string>;
+  // oxlint-disable-next-line no-restricted-types -- mirrors RequestInit.body, which is nullable
+  body?: Blob | FormData | string | null;
+  signal?: AbortSignal | undefined;
+  /**
+   * Always `"manual"`: NIP-05, NIP-11 and Blossom responses must never be followed through
+   * redirects. Adapters must forward this to their underlying fetch implementation.
+   */
+  redirect: "manual";
+};
+
 export type ManualFetch = (
   url: string,
-  init?: {
-    method?: string;
-    headers?: Record<string, string>;
-    // oxlint-disable-next-line no-restricted-types -- mirrors RequestInit.body, which is nullable
-    body?: Blob | FormData | string | null;
-    signal?: AbortSignal | undefined;
-  },
+  init?: ManualFetchInit,
 ) => Promise<{
   ok: boolean;
   status: number;
@@ -21,7 +28,7 @@ export type ManualFetch = (
   arrayBuffer: () => Promise<ArrayBuffer>;
 }>;
 
-type ManualInit = NonNullable<Parameters<ManualFetch>[1]>;
+type ManualInit = Omit<ManualFetchInit, "redirect">;
 
 export function requireGlobalFetch(missing: () => Error): ManualFetch {
   if (typeof globalThis.fetch !== "function") {
@@ -40,7 +47,7 @@ export async function sendManual(
   url: string,
   init: ManualInit,
 ): Promise<Awaited<ReturnType<ManualFetch>>> {
-  return fetchImpl(url, { ...init, redirect: "manual" } as Parameters<ManualFetch>[1]);
+  return fetchImpl(url, { ...init, redirect: "manual" });
 }
 
 export async function fetchManual(

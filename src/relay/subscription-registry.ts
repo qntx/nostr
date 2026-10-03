@@ -1,6 +1,6 @@
 /** REQ subscription runtime: exclusive one-shot, live coalescing, dispatch, reconnect replay. */
 import type { Event } from "../core/event.ts";
-import { filterFingerprint } from "../core/filter.ts";
+import { filterFingerprint, matchFilters } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
 import type { ClientMessage, SubscriptionId } from "../core/message.ts";
 import { invokeSafely } from "../core/report.ts";
@@ -76,6 +76,11 @@ export class SubscriptionRegistry {
       return;
     }
     if (sub.alreadyHas(event.id)) {
+      return;
+    }
+    // Cheap check before schnorr verify; a mismatch is a relay error, not an
+    // invalid event, so it is dropped silently (not counted by invalidEventPolicy).
+    if (!matchFilters(sub.filters, event)) {
       return;
     }
     if (!this.#acceptEvent(event)) {
@@ -323,6 +328,11 @@ export class SubscriptionRegistry {
       }
     }
     if (recipients.length === 0) {
+      return;
+    }
+    // Original wire filters (not replayFilters): a reconnect `since` must never
+    // cause drops. Silent drop, like the exclusive path.
+    if (!matchFilters(sub.filters, event)) {
       return;
     }
     if (!this.#acceptEvent(event)) {

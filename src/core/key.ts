@@ -1,10 +1,11 @@
 import { schnorr } from "@noble/curves/secp256k1.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 
 import { CryptoError, EventValidationError } from "./error.ts";
-import { getEventHash, markVerified, validateEvent } from "./event.ts";
+import { markVerified, serializeValidatedEvent, validateEvent } from "./event.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "./event.ts";
-import { assertHex32, assertSecretKeyBytes, bytesToHex, hexToBytes } from "./util.ts";
+import { assertHex32, assertSecretKeyBytes, bytesToHex, hexToBytes, utf8Encoder } from "./util.ts";
 
 /** 32-byte secret key held as bytes; prefer zeroize when done. */
 export class SecretKey {
@@ -158,7 +159,7 @@ export function signEvent(unsigned: UnsignedEvent, secretKey: SecretKeyInput | K
     pubkey: keys.publicKey,
   };
 
-  const id = getEventHash(normalized);
+  const id = bytesToHex(sha256(utf8Encoder.encode(serializeValidatedEvent(normalized))));
   const sig = keys.backend.sign(hexToBytes(id), keys.secretKey.bytes, randomBytes(32));
   if (sig.length !== 64) {
     throw new CryptoError("signing backend returned an invalid signature");

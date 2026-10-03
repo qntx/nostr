@@ -1,9 +1,27 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
-import { EventBuilder, Nip46Signer, Pool, getPublicKey, verifyEvent } from "../src/index.ts";
+import { nowSeconds } from "../src/core/util.ts";
+import {
+  EventBuilder,
+  Keys,
+  Kind,
+  Nip46Signer,
+  Pool,
+  finalizeEvent,
+  getPublicKey,
+  verifyEvent,
+} from "../src/index.ts";
+import type { Nip46SubscribeOptions, Nip46Transport } from "../src/index.ts";
+import {
+  getConversationKey,
+  decrypt as nip44Decrypt,
+  encrypt as nip44Encrypt,
+} from "../src/nips/nip44.ts";
 import {
   createNostrConnectURI,
+  decodeNip46Request,
   decodeNip46Response,
+  encodeNip46Response,
   parseBunkerURL,
   parseNostrConnectURI,
   toBunkerURL,
@@ -680,5 +698,139 @@ describe("issue #130", () => {
       restore();
       remote.close();
     }
+  });
+});
+
+describe("Nip46Signer.fromNostrConnectURI hardening", () => {
+  type CapturedSub = {
+    opts?: Nip46SubscribeOptions | undefined;
+    closes: string[];
+  };
+
+  /**
+   * Mock NIP-46 transport: captures every subscribe and answers `get_public_key` RPCs by delivering
+   * a response event to the newest subscription; other methods get an error.
+   */
+  function mockNostrConnectTransport(opts?: { getPublicKeyError?: string | undefined }): {
+    transport: Nip46Transport;
+    subs: CapturedSub[];
+    handshakeEvent: (secret: string, nonce: number) => ReturnType<typeof finalizeEvent>;
+  } {
+    const clientPk = getPublicKey(CLIENT_SK);
+    const bunkerKeys = Keys.fromSecretKey(BUNKER_SK);
+    const convKey = getConversationKey(bunkerKeys.secretKey.bytes, clientPk);
+    const subs: CapturedSub[] = [];
+    const respond = (id: string, result?: string, error?: string): void => {
+      const resp = finalizeEvent(
+        {
+          kind: Kind.NostrConnect,
+          tags: [["p", clientPk]],
+          content: nip44Encrypt(encodeNip46Response({ id, result, error }), convKey),
+          created_at: nowSeconds(),
+        },
+        bunkerKeys.secretKey,
+      );
+      // RPCs are sent on the signer's own subscription — the newest one.
+      subs.at(-1)?.opts?.onevent?.(resp);
+    };
+    const transport: Nip46Transport = {
+      subscribe: (_relays, _filters, o) => {
+        const entry: CapturedSub = { opts: o, closes: [] };
+        subs.push(entry);
+        return {
+          close: (reason?: string) => {
+            entry.closes.push(reason ?? "");
+          },
+        };
+      },
+      publish: async (_relays, event) => {
+        await Promise.resolve();
+        const req = decodeNip46Request(nip44Decrypt(event.content, convKey));
+        if (req.method === "get_public_key") {
+          if (opts?.getPublicKeyError === undefined) {
+            respond(req.id, getPublicKey(USER_SK));
+          } else {
+            respond(req.id, undefined, opts.getPublicKeyError);
+          }
+        } else {
+          respond(req.id, undefined, `unsupported method ${req.method}`);
+        }
+        return [{ status: "ok", message: "" }];
+      },
+      close: () => {},
+    };
+    const handshakeEvent = (secret: string, nonce: number): ReturnType<typeof finalizeEvent> =>
+      finalizeEvent(
+        {
+          kind: Kind.NostrConnect,
+          tags: [["p", clientPk]],
+          content: nip44Encrypt(encodeNip46Response({ id: `hs${nonce}`, result: secret }), convKey),
+          created_at: nowSeconds() - nonce,
+        },
+        bunkerKeys.secretKey,
+      );
+    return { transport, subs, handshakeEvent };
+  }
+
+  const connectURI = (): string =>
+    createNostrConnectURI({
+      clientPubkey: getPublicKey(CLIENT_SK),
+      relays: ["wss://nc.example"],
+      secret: "hs-secret",
+    });
+
+  test("pre-aborted signal rejects promptly without creating a pool", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let poolCreated = false;
+    const reason = await Nip46Signer.fromNostrConnectURI(connectURI(), {
+      clientSecretKey: CLIENT_SK,
+      signal: controller.signal,
+      handshakeTimeoutMs: 300,
+      createPool: () => {
+        poolCreated = true;
+        return mockNostrConnectTransport().transport;
+      },
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(reason).toBe(controller.signal.reason);
+    expect(poolCreated).toBe(false);
+  });
+
+  test("duplicate handshake events create exactly one signer", async () => {
+    const { transport, subs, handshakeEvent } = mockNostrConnectTransport();
+    const handshake = Nip46Signer.fromNostrConnectURI(connectURI(), {
+      clientSecretKey: CLIENT_SK,
+      pool: transport,
+      handshakeTimeoutMs: 3000,
+      timeoutMs: 3000,
+    });
+    const hs = subs.at(0)?.opts;
+    hs?.onevent?.(handshakeEvent("hs-secret", 0));
+    hs?.onevent?.(handshakeEvent("hs-secret", 1));
+    const signer = await handshake;
+    expect(signer.clientPublicKey).toBe(getPublicKey(CLIENT_SK));
+    // handshake subscription + one signer RPC subscription — not two signers.
+    expect(subs).toHaveLength(2);
+    await signer.close();
+  });
+
+  test("getPublicKey failure closes the signer's subscription", async () => {
+    const { transport, subs, handshakeEvent } = mockNostrConnectTransport({
+      getPublicKeyError: "boom",
+    });
+    const handshake = Nip46Signer.fromNostrConnectURI(connectURI(), {
+      clientSecretKey: CLIENT_SK,
+      pool: transport,
+      handshakeTimeoutMs: 3000,
+      timeoutMs: 3000,
+    });
+    subs.at(0)?.opts?.onevent?.(handshakeEvent("hs-secret", 0));
+    await expect(handshake).rejects.toThrow(/boom/);
+    expect(subs).toHaveLength(2);
+    expect(subs.at(0)?.closes).toStrictEqual(["failed"]);
+    expect(subs.at(1)?.closes).toStrictEqual(["signer closed"]);
   });
 });

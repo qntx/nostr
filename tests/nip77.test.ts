@@ -338,6 +338,38 @@ describe("Negentropy algorithm", () => {
     }
   });
 
+  test("initiator throws on version mismatch instead of re-sending the version byte", () => {
+    const storage = new NegentropyStorageVector();
+    storage.seal();
+    const neg = new Negentropy(storage);
+    neg.initiate();
+    // The peer only speaks 0x60; the initiator is the client, so nobody downgrades
+    // on its behalf — this is a hard failure, not a reply.
+    expect(() => neg.reconcile("60")).toThrow(Nip77Error);
+    expect(() => neg.reconcile("60")).toThrow(/protocol version 0/);
+  });
+
+  test("runNegSession rejects a version-mismatched peer after one round", async () => {
+    const storage = new NegentropyStorageVector();
+    storage.seal();
+    let nextCalls = 0;
+    const err = await captureError(
+      runNegSession({
+        storage,
+        openingSend: () => {},
+        msgSend: () => {},
+        next: async () => {
+          await Promise.resolve();
+          nextCalls += 1;
+          return "60";
+        },
+      }),
+    );
+    expect(err).toBeInstanceOf(Nip77Error);
+    expect((err as Nip77Error).message).toContain("protocol version");
+    expect(nextCalls).toBe(1);
+  });
+
   test("varint bound timestamps round-trip, including above 2^31", () => {
     const id = "ab".repeat(32);
     // The bound varint carries timestamp + 1; 0 is reserved for the infinity bound.

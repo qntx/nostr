@@ -90,7 +90,8 @@ export type RelayEventMap = {
   reconnect: undefined;
   /**
    * Fired when a delivered EVENT fails id/signature verification, just before the event is dropped.
-   * A poisoned verifier dropping events does not fire it.
+   * A poisoned verifier dropping events does not fire it. EVENTs that do not match the
+   * subscription's filters are dropped silently and are not counted here.
    */
   invalidevent: undefined;
 };

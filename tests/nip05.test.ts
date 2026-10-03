@@ -187,7 +187,7 @@ describe("nip05 query", () => {
   function mockFetch(map: Record<string, { status: number; body: unknown }>): Nip05Fetch {
     return async (url, init) => {
       await Promise.resolve();
-      expect((init as { redirect?: string } | undefined)?.redirect).toBe("manual");
+      expect(init?.redirect).toBe("manual");
       const entry = map[url];
       if (!entry) {
         return jsonResponse(404, {});

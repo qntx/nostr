@@ -2,7 +2,6 @@ import { abortReason, onAbort, throwIfAborted } from "../core/abort.ts";
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { invokeSafely } from "../core/report.ts";
-import { RelayClosedError } from "./error.ts";
 import type { Pool } from "./pool.ts";
 import type { Relay } from "./relay.ts";
 import type { Closer } from "./subscription.ts";
@@ -45,6 +44,8 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
   const eoseAttempted = new Set<string>();
   let pendingEose = 0;
   let pending = 0;
+  /** Close reason of the last attached subscription that ended; drives the aggregate reason. */
+  let lastReason: string | undefined;
 
   const fireEose = () => {
     if (closed || eoseFired) {
@@ -106,13 +107,23 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
 
   const disposeAbort = onAbort(opts.signal, () => closeAll("aborted"));
 
+  /**
+   * Single completion rule for both endings: `pending` reaches zero when every URL entry either
+   * failed to attach or its subscription ended — at that point no attached closer can still be
+   * live. The reason is the last subscription's close reason, or "all relays failed" when no relay
+   * ever attached.
+   */
+  const finish = (): void => {
+    if (pending <= 0 && !closed) {
+      settleClose();
+      invokeSafely(() => opts.onclose?.(lastReason ?? "all relays failed"));
+    }
+  };
+
   const failUrl = (jobIndex: number, key: string): void => {
     settleEose(jobIndex, key, false);
     pending -= 1;
-    if (pending <= 0 && closers.length === 0 && !closed) {
-      settleClose();
-      invokeSafely(() => opts.onclose?.("all relays failed"));
-    }
+    finish();
   };
 
   const attach = (relay: Relay, job: RoutedJob, jobIndex: number): void => {
@@ -139,11 +150,9 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
       oneose: () => settleEose(jobIndex, relay.url, true),
       onclose: (reason) => {
         settleEose(jobIndex, relay.url, false);
+        lastReason = reason;
         pending -= 1;
-        if (pending <= 0 && !closed) {
-          settleClose();
-          invokeSafely(() => opts.onclose?.(reason));
-        }
+        finish();
       },
     });
     closers.push(sub);
@@ -162,12 +171,11 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
       const tryAttach = (relay: Relay): void => {
         try {
           attach(relay, job, jobIndex);
-        } catch (error) {
-          if (error instanceof RelayClosedError) {
-            failUrl(jobIndex, key);
-            return;
-          }
-          throw error;
+        } catch {
+          // Any attach failure retires this URL: RelayClosedError is the expected
+          // dropped-between-connect-and-subscribe race; anything else must not escape the
+          // `void` wrapper as an unhandled rejection, so it fails the URL as well.
+          failUrl(jobIndex, key);
         }
       };
 

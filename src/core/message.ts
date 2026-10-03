@@ -228,15 +228,18 @@ export function parseRelayMessage(raw: string): RelayMessage {
 
     case "COUNT": {
       const payload = items.at(2);
+      const count = isRecord(payload) ? payload["count"] : undefined;
       if (
         items.length !== 3 ||
         typeof items[1] !== "string" ||
         !isRecord(payload) ||
-        typeof payload["count"] !== "number"
+        typeof count !== "number" ||
+        !Number.isSafeInteger(count) ||
+        count < 0
       ) {
         throw new MessageError("invalid COUNT relay message");
       }
-      const result: Mutable<CountResult> = { count: payload["count"] };
+      const result: Mutable<CountResult> = { count };
       if (typeof payload["approximate"] === "boolean") {
         result.approximate = payload["approximate"];
       }
