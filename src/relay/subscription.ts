@@ -22,8 +22,9 @@ export type SubscriptionHandlers = {
 export type SubscribeOptions = SubscriptionHandlers & {
   id?: string | undefined;
   /**
-   * If set, fire `oneose` once after this many ms if EOSE has not arrived. Does not close the REQ.
-   * `Relay.fetch` is the one-shot closer.
+   * If set, fire `oneose` once after this many ms if EOSE has not arrived. The synthesized EOSE
+   * also closes a `closeOnEose` subscription — without it a one-shot REQ would hang until a real
+   * EOSE that is then ignored.
    */
   eoseTimeoutMs?: number | undefined;
   /**
@@ -44,69 +45,175 @@ export type RelaySubscription = {
   close: (reason?: string) => void;
 };
 
+/**
+ * Internal REQ runtime: owns its lifecycle flags, watermark bookkeeping and handler dispatch.
+ * `onLocalClose` is supplied by the registry — it sends CLOSE / detaches from a live group — and is
+ * invoked by {@link close} only, never by {@link end}.
+ */
 export class Subscription {
   readonly id: string;
-  readonly filters: Filter[];
-  readonly handlers: SubscriptionHandlers;
+  readonly filters: ReadonlyArray<Filter>;
   readonly closeOnEose: boolean;
-  eosed = false;
-  closed = false;
+  readonly #handlers: SubscriptionHandlers;
+  readonly #onLocalClose: (sub: Subscription) => void;
+  #abortDispose: (() => void) | undefined;
+  #eoseTimer: ReturnType<typeof setTimeout> | undefined;
+  #closed = false;
+  #eosed = false;
   /** True after one CLOSED `auth-required:` retry. */
-  authRetried = false;
+  #authRetried = false;
   /** Inclusive NIP-01 `since` watermark from verified EVENTs. */
-  lastCreatedAt: number | undefined;
+  #lastCreatedAt: number | undefined;
   /** Event ids at `lastCreatedAt` (same-second reconnect dedup). Not all seen ids. */
-  readonly idsAtWatermark: Set<string> = new Set<string>();
-  readonly #sendClose: (id: string) => void;
-  readonly #abort: (() => void) | undefined;
+  readonly #idsAtWatermark = new Set<string>();
 
-  constructor(filters: Filter[], opts: SubscribeOptions, sendClose: (id: string) => void) {
-    this.#sendClose = sendClose;
+  constructor(
+    filters: ReadonlyArray<Filter>,
+    opts: SubscribeOptions,
+    onLocalClose: (sub: Subscription) => void,
+  ) {
+    this.#onLocalClose = onLocalClose;
     this.id = createSubscriptionId(opts.id);
     this.filters = filters;
     this.closeOnEose = opts.closeOnEose === true;
-    this.handlers = {
+    this.#handlers = {
       onevent: opts.onevent,
       oneose: opts.oneose,
       onclose: opts.onclose,
       alreadyHaveEvent: opts.alreadyHaveEvent,
       receivedEvent: opts.receivedEvent,
     };
-
+    if (opts.eoseTimeoutMs !== undefined) {
+      this.#eoseTimer = setTimeout(() => {
+        this.#eoseTimer = undefined;
+        this.markEose();
+      }, opts.eoseTimeoutMs);
+    }
     if (opts.signal) {
       if (opts.signal.aborted) {
         this.close("aborted");
       } else {
-        this.#abort = onAbort(opts.signal, () => this.close("aborted"));
+        this.#abortDispose = onAbort(opts.signal, () => this.close("aborted"));
       }
     }
   }
 
-  /** Drop the signal listener. Terminal paths that mark `closed` without `close()` run this too. */
-  dispose(): void {
-    this.#abort?.();
+  get closed(): boolean {
+    return this.#closed;
   }
 
+  get eosed(): boolean {
+    return this.#eosed;
+  }
+
+  get lastCreatedAt(): number | undefined {
+    return this.#lastCreatedAt;
+  }
+
+  get idsAtWatermark(): ReadonlySet<string> {
+    return this.#idsAtWatermark;
+  }
+
+  /**
+   * Local close: idempotent; clears the EOSE timer and abort listener, detaches via `onLocalClose`
+   * (sends CLOSE / leaves the live group), then fires `onclose`.
+   */
   close(reason = "closed by client"): void {
-    if (this.closed) {
+    if (this.#closed) {
       return;
     }
-    this.closed = true;
-    this.dispose();
-    this.#sendClose(this.id);
-    invokeSafely(() => this.handlers.onclose?.(reason));
+    this.#closed = true;
+    this.#teardown();
+    this.#onLocalClose(this);
+    invokeSafely(() => this.#handlers.onclose?.(reason));
+  }
+
+  /** Remote/transport termination: like {@link close} but `onLocalClose` is not called. */
+  end(reason: string): void {
+    if (this.#closed) {
+      return;
+    }
+    this.#closed = true;
+    this.#teardown();
+    invokeSafely(() => this.#handlers.onclose?.(reason));
+  }
+
+  #teardown(): void {
+    if (this.#eoseTimer !== undefined) {
+      clearTimeout(this.#eoseTimer);
+      this.#eoseTimer = undefined;
+    }
+    this.#abortDispose?.();
+    this.#abortDispose = undefined;
+  }
+
+  /** Mark EOSE: fires `oneose`, then closes when `closeOnEose`. No-op when closed or EOSE'd. */
+  markEose(): void {
+    if (this.#closed || this.#eosed) {
+      return;
+    }
+    this.#eosed = true;
+    if (this.#eoseTimer !== undefined) {
+      clearTimeout(this.#eoseTimer);
+      this.#eoseTimer = undefined;
+    }
+    invokeSafely(() => this.#handlers.oneose?.());
+    if (this.closeOnEose) {
+      this.close("eose");
+    }
+  }
+
+  /** Clear `eosed` for a replayed REQ (AUTH retry / reconnect). */
+  rearm(): void {
+    this.#eosed = false;
+  }
+
+  /** First `auth-required:` retry wins; later calls report false without side effects. */
+  beginAuthRetry(): boolean {
+    if (this.#authRetried) {
+      return false;
+    }
+    this.#authRetried = true;
+    return true;
+  }
+
+  resetAuthRetry(): void {
+    this.#authRetried = false;
+  }
+
+  /** `receivedEvent` for every EVENT id, before watermark/alreadyHaveEvent/verify. */
+  notifyReceived(id: string): void {
+    invokeSafely(() => this.#handlers.receivedEvent?.(id));
+  }
+
+  alreadyHas(id: string): boolean {
+    let have = false;
+    invokeSafely(() => {
+      have = Boolean(this.#handlers.alreadyHaveEvent?.(id));
+    });
+    return have;
+  }
+
+  isAtWatermark(id: string): boolean {
+    return this.#idsAtWatermark.has(id);
+  }
+
+  /** Verified event: advance the watermark, then fire `onevent`. */
+  deliver(event: Event): void {
+    this.noteVerified(event);
+    invokeSafely(() => this.#handlers.onevent?.(event));
   }
 
   /** Advance the reconnect watermark after a verified EVENT. */
   noteVerified(event: Event): void {
-    if (this.lastCreatedAt === undefined || event.created_at > this.lastCreatedAt) {
-      this.lastCreatedAt = event.created_at;
-      this.idsAtWatermark.clear();
-      this.idsAtWatermark.add(event.id);
+    if (this.#lastCreatedAt === undefined || event.created_at > this.#lastCreatedAt) {
+      this.#lastCreatedAt = event.created_at;
+      this.#idsAtWatermark.clear();
+      this.#idsAtWatermark.add(event.id);
       return;
     }
-    if (event.created_at === this.lastCreatedAt) {
-      this.idsAtWatermark.add(event.id);
+    if (event.created_at === this.#lastCreatedAt) {
+      this.#idsAtWatermark.add(event.id);
     }
   }
 
@@ -115,9 +222,9 @@ export class Subscription {
    * `lastCreatedAt + 1`.
    */
   replayFilters(): Filter[] {
-    const since = this.lastCreatedAt;
+    const since = this.#lastCreatedAt;
     if (since === undefined) {
-      return this.filters;
+      return [...this.filters];
     }
     return this.filters.map((f) => ({
       ...f,
@@ -132,6 +239,7 @@ export function subscriptionToAsyncIterable(
   opts?: { signal?: AbortSignal | undefined; includeEose?: boolean | undefined },
 ): AsyncIterable<Event> & Closer {
   const queue: Event[] = [];
+  let head = 0;
   let done = false;
   let error: Error | undefined;
   let wake: (() => void) | undefined;
@@ -207,8 +315,13 @@ export function subscriptionToAsyncIterable(
       return {
         async next(): Promise<IteratorResult<Event>> {
           while (true) {
-            const value = queue.shift();
+            const value = head < queue.length ? queue[head] : undefined;
             if (value !== undefined) {
+              head += 1;
+              if (head === queue.length) {
+                queue.length = 0;
+                head = 0;
+              }
               return { value, done: false };
             }
             if (error !== undefined) {
@@ -221,7 +334,6 @@ export function subscriptionToAsyncIterable(
             await waitForWake();
           }
         },
-        // oxlint-disable-next-line typescript/require-await -- AsyncIterator.return must be async-shaped though cleanup is synchronous
         async return(): Promise<IteratorResult<Event>> {
           closeLocal("iterator returned");
           return { value: undefined, done: true };

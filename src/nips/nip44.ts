@@ -158,9 +158,7 @@ function decodePayload(
   try {
     data = base64.decode(payload);
   } catch (error) {
-    throw new CryptoError(
-      `invalid base64: ${error instanceof Error ? error.message : "decode failed"}`,
-    );
+    throw new CryptoError("invalid base64", { cause: error });
   }
   if (data.length < 99) {
     throw new CryptoError(`invalid data length: ${data.length}`);

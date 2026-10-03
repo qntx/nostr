@@ -27,7 +27,7 @@ export type FakeNip46SignerOptions = {
   /** Delay in ms before the real response after an `auth_url` reply. */
   authReplyDelayMs?: number | undefined;
   /** Collected RPC requests (mutated as they arrive). */
-  requests?: Array<{ method: string; params: string[] }> | undefined;
+  requests?: Array<{ method: string; params: ReadonlyArray<string> }> | undefined;
   /** `switch_relays` result. Default `"null"`. */
   switchRelays?: string[] | undefined;
   /** Override `connect` RPC result. Default `"ack"`. */

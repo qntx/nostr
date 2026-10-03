@@ -80,8 +80,8 @@ function runUntilDone(
   const need = new Set<string>();
   const opening = init.initiate();
   const respond = (out: {
-    have: string[];
-    need: string[];
+    have: ReadonlyArray<string>;
+    need: ReadonlyArray<string>;
     nextMessage: string | undefined;
   }): typeof out =>
     out.nextMessage === undefined
@@ -834,7 +834,8 @@ describe("Relay.negReconcile + Client.sync", () => {
     );
     expect(summary.remote).toStrictEqual([remote.id]);
     expect(summary.received).toStrictEqual([]);
-    expect(summary.persistFailures[remote.id]).toBe("disk full");
+    expect(summary.persistFailures[remote.id]).toBeInstanceOf(Error);
+    expect(summary.persistFailures[remote.id]?.message).toBe("disk full");
     expect(Object.keys(summary.persistFailures)).toStrictEqual([remote.id]);
     expect(method).toBe("putMany");
     await expect(store.get(remote.id)).resolves.toBeUndefined();
@@ -886,7 +887,8 @@ describe("Relay.negReconcile + Client.sync", () => {
       [...fetchedIds].toSorted(),
     );
     for (const id of fetchedIds) {
-      expect(summary.persistFailures[id]).toBe("disk full");
+      expect(summary.persistFailures[id]).toBeInstanceOf(Error);
+      expect(summary.persistFailures[id]?.message).toBe("disk full");
     }
     const unfetched = summary.remote.filter((id) => !Object.hasOwn(summary.persistFailures, id));
     expect(unfetched).toHaveLength(100);
@@ -913,7 +915,8 @@ describe("Relay.negReconcile + Client.sync", () => {
       { kinds: [1] },
       { direction: SyncDirection.Down, timeoutMs: 2000 },
     );
-    expect(summary.persistFailures[failRemote.id]).toBe("disk full");
+    expect(summary.persistFailures[failRemote.id]).toBeInstanceOf(Error);
+    expect(summary.persistFailures[failRemote.id]?.message).toBe("disk full");
     expect(Object.keys(summary.persistFailures)).toStrictEqual([failRemote.id]);
     expect(summary.received).toStrictEqual([okRemote.id]);
     expect(new Set(summary.remote)).toStrictEqual(new Set([failRemote.id, okRemote.id]));

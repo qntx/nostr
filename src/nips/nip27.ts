@@ -9,22 +9,22 @@ import { decode } from "./nip19.ts";
 import type { AddressPointer, EventPointer, ProfilePointer } from "./nip19.ts";
 
 export type ContentBlock =
-  | { type: "text"; text: string }
+  | { readonly type: "text"; readonly text: string }
   | {
-      type: "reference";
-      pointer: ProfilePointer | EventPointer | AddressPointer;
+      readonly type: "reference";
+      readonly pointer: ProfilePointer | EventPointer | AddressPointer;
       /**
        * `true` when the reference had no `nostr:` prefix (see
        * {@link ParseContentOptions.legacyBech32}).
        */
-      bare: boolean;
+      readonly bare: boolean;
     }
-  | { type: "url"; url: string }
-  | { type: "image" | "video" | "audio"; url: string }
-  | { type: "relay"; url: string }
-  | { type: "hashtag"; value: string }
-  | { type: "emoji"; shortcode: string; url: string }
-  | { type: "invoice"; bolt11: string };
+  | { readonly type: "url"; readonly url: string }
+  | { readonly type: "image" | "video" | "audio"; readonly url: string }
+  | { readonly type: "relay"; readonly url: string }
+  | { readonly type: "hashtag"; readonly value: string }
+  | { readonly type: "emoji"; readonly shortcode: string; readonly url: string }
+  | { readonly type: "invoice"; readonly bolt11: string };
 
 export type ParseContentOptions = {
   /**
@@ -60,8 +60,9 @@ const SCAN_BODY = [
   `(?<invoice>(?:lightning:)?ln(?:bcrt|tbs|bc|tb)(?:\\d+[munp]?)?1[${BECH32_CHARS}]+)`,
   // 5. Hashtags: Unicode letters/marks/numbers and underscore, at most 42 code points.
   `(?<hashtag>#[\\p{L}\\p{M}\\p{N}_]{1,42})`,
-  // 6. Custom emoji shortcodes (validated against the event's emoji tags).
-  `(?<emoji>:[A-Za-z0-9_]+:)`,
+  // 6. Custom emoji shortcodes (validated against the event's emoji tags). NIP-30 allows
+  // alphanumerics, hyphens, and underscores.
+  `(?<emoji>:[A-Za-z0-9_-]+:)`,
 ].join("|");
 
 const SCAN = new RegExp(SCAN_BODY, "giu");
@@ -250,7 +251,9 @@ export function parseContent(
       }
     } else if (g?.["hashtag"] !== undefined) {
       const prev = start === 0 ? undefined : text.codePointAt(start - 1);
-      if (!isChar(prev, TAG_CHAR)) {
+      // A tag char right after the match means the {1,42} cap truncated a longer
+      // run; the whole run is text, not a hashtag plus remainder.
+      if (!isChar(prev, TAG_CHAR) && !isChar(text.codePointAt(end), TAG_CHAR)) {
         block = { type: "hashtag", value: token.slice(1) };
       }
     } else if (g?.["emoji"] !== undefined) {

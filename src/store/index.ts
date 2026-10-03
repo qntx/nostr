@@ -1,1 +1,6 @@
-export { ReactiveEventStore, type ReactiveEventStoreOptions, type Watch } from "./reactive.ts";
+export {
+  ReactiveEventStore,
+  type ReactiveEventStoreEventMap,
+  type ReactiveEventStoreOptions,
+  type Watch,
+} from "./reactive.ts";

@@ -43,6 +43,30 @@ export function failNegErr(session: NegSession, reason: string): void {
   failNegSession(session, new Nip77Error(reason));
 }
 
+/** Route a NEG-MSG/NEG-ERR frame to its session; unknown ids are ignored. */
+export function dispatchNegMessage(
+  sessions: Map<string, NegSession>,
+  msg: readonly [type: string, id: string, payload: string],
+): void {
+  const session = sessions.get(msg[1]);
+  if (session === undefined) {
+    return;
+  }
+  if (msg[0] === "NEG-MSG") {
+    pushNegMsg(session, msg[2]);
+    return;
+  }
+  failNegErr(session, msg[2]);
+}
+
+/** Fail every tracked session (socket teardown). */
+export function failAllNegSessions(sessions: Map<string, NegSession>, err: Error): void {
+  for (const session of sessions.values()) {
+    failNegSession(session, err);
+  }
+  sessions.clear();
+}
+
 /** Wire queue/timeout/abort around `runNegSession`. Not a second session class. */
 export async function runWiredNegSession(opts: {
   session: NegSession;
@@ -111,4 +135,48 @@ export async function runWiredNegSession(opts: {
     },
     next,
   });
+}
+
+/**
+ * Drive a NIP-77 reconcile session against the session map: fail a same-id predecessor, register,
+ * wire queue/timeout/abort, and send NEG-CLOSE on exit.
+ */
+export async function runTrackedNegSession(opts: {
+  sessions: Map<string, NegSession>;
+  id: string;
+  storage: NegentropyStorageVector;
+  filter: Filter;
+  timeoutMs: number;
+  signal?: AbortSignal | undefined;
+  send: (message: ClientMessage) => void;
+  url: string;
+}): Promise<{ have: string[]; need: string[] }> {
+  const { sessions, id, send } = opts;
+  const prev = sessions.get(id);
+  if (prev) {
+    failNegSession(prev, new Nip77Error("closed: replaced by new NEG-OPEN"));
+  }
+  const session = createNegSession();
+  sessions.set(id, session);
+  try {
+    return await runWiredNegSession({
+      session,
+      storage: opts.storage,
+      filter: opts.filter,
+      id,
+      timeoutMs: opts.timeoutMs,
+      signal: opts.signal,
+      send,
+      url: opts.url,
+    });
+  } finally {
+    if (sessions.get(id) === session) {
+      sessions.delete(id);
+      try {
+        send(["NEG-CLOSE", id]);
+      } catch {
+        // connection already gone
+      }
+    }
+  }
 }

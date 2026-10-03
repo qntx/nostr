@@ -1,5 +1,6 @@
 import { randomBytes } from "@noble/hashes/utils.js";
 
+import { errorMessage } from "../core/error.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
 import { signedMatchesUnsigned, validateSignedEvent } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
@@ -45,10 +46,10 @@ export type Nip46Transport = {
     ReadonlyArray<{
       readonly status: "ok" | "rejected" | "failed";
       readonly message?: string;
-      readonly error?: string;
+      readonly error?: Error;
     }>
   >;
-  close: (urls?: string[]) => void;
+  close: () => void;
 };
 
 /** Options for {@link Nip46Signer}: transport, timeouts, and relay hints. */
@@ -538,7 +539,6 @@ export class Nip46Signer implements NostrSigner {
     return this.#sendRequest("nip44_decrypt", [peer, payload]);
   }
 
-  // oxlint-disable-next-line typescript/require-await -- NostrSigner is async; teardown is synchronous
   async close(): Promise<void> {
     this.#open = false;
     for (const [, listener] of this.#listeners) {
@@ -591,7 +591,7 @@ export class Nip46Signer implements NostrSigner {
     if (!replies.some((reply) => reply.status === "ok")) {
       const listener = this.#dropRequest(id);
       const detail = replies
-        .map((reply) => (reply.status === "failed" ? reply.error : reply.message))
+        .map((reply) => (reply.status === "failed" ? errorMessage(reply.error) : reply.message))
         .filter((message): message is string => Boolean(message))
         .join("; ");
       listener?.reject(new Nip46Error(`request not accepted by any relay: ${detail}`));

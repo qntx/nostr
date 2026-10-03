@@ -15,10 +15,10 @@ export type PutResult =
   | "invalid";
 
 /** NIP-77 item: event id + created_at. Sorted created_at asc, then id. */
-export type NegentropyItem = { id: string; created_at: number };
+export type NegentropyItem = { readonly id: string; readonly created_at: number };
 
 /** Inclusive created_at window of stored live events for one author+kind. */
-export type OutboxBound = { oldest: number; newest: number };
+export type OutboxBound = { readonly oldest: number; readonly newest: number };
 
 /**
  * Event store contract (aligned with nula-storage NostrDatabase, narrowed for v0). Implementations

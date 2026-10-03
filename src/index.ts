@@ -14,7 +14,6 @@
  * satisfy these; the library ships no polyfills.
  */
 
-// --- core (public) ---
 export {
   EVENT_ID_BYTES,
   PUBLIC_KEY_BYTES,
@@ -101,7 +100,6 @@ export {
   type SubscriptionId,
 } from "./core/index.ts";
 
-// --- signer ---
 export {
   KeysSigner,
   Nip07Signer,
@@ -116,7 +114,6 @@ export {
   type Nip46Transport,
 } from "./signer/index.ts";
 
-// --- curated NIPs (quick start) ---
 export {
   Bech32MaxSize,
   decode as nip19Decode,
@@ -157,7 +154,6 @@ export {
   type RelayMarker,
 } from "./nips/nip65.ts";
 
-// --- relay ---
 export {
   Pool,
   Relay,
@@ -172,6 +168,7 @@ export {
   useWebSocketImplementation,
   type Closer,
   type InvalidEventPolicy,
+  type PoolEventMap,
   type PoolOptions,
   type PoolCountResult,
   type PoolFetchResult,
@@ -187,7 +184,6 @@ export {
   type SubscribeOptions,
 } from "./relay/index.ts";
 
-// --- client / storage / loaders / gossip ---
 export {
   Client,
   ClientError,
@@ -216,7 +212,12 @@ export {
   type SqlDriver,
   type SqlValue,
 } from "./storage/index.ts";
-export { ReactiveEventStore, type ReactiveEventStoreOptions, type Watch } from "./store/index.ts";
+export {
+  ReactiveEventStore,
+  type ReactiveEventStoreEventMap,
+  type ReactiveEventStoreOptions,
+  type Watch,
+} from "./store/index.ts";
 export {
   createLoaders,
   OutboxError,

@@ -434,4 +434,70 @@ describe("nip59", () => {
     expect(rumor.kind).toBe(1);
     expect(rumor.pubkey).toBe("611df01bfcf85c26ae65453b772d8f1dfd25c264621c0277e1fc1518686faef9");
   });
+
+  test("expiration sets the tag on seal and gift wrap and still unwraps", async () => {
+    const { alice, bob, aliceKeys, bobKeys } = pair();
+    const rumor = createRumor(aliceKeys.publicKey, {
+      kind: Kind.PrivateDirectMessage,
+      content: "burn after reading",
+      created_at: 1_700_000_000,
+    });
+    const gift = await wrap(alice, bobKeys.publicKey, rumor, { expiration: 1_800_000_000 });
+    expect(gift.tags).toStrictEqual([
+      ["p", bobKeys.publicKey],
+      ["expiration", "1800000000"],
+    ]);
+
+    const sealJson = await bob.nip44Decrypt(gift.pubkey, gift.content);
+    const seal = JSON.parse(sealJson) as { tags: unknown };
+    expect(seal.tags).toStrictEqual([["expiration", "1800000000"]]);
+
+    const inner = await unwrap(bob, gift);
+    expect(inner.content).toBe("burn after reading");
+  });
+
+  test("expiration lands after the p tag and before extraTags", async () => {
+    const { alice, aliceKeys, bobKeys } = pair();
+    const rumor = createRumor(aliceKeys.publicKey, { kind: 14, content: "x" });
+    const gift = await wrap(alice, bobKeys.publicKey, rumor, {
+      expiration: 1_800_000_000,
+      extraTags: [["r", "wss://inbox.example"]],
+    });
+    expect(gift.tags).toStrictEqual([
+      ["p", bobKeys.publicKey],
+      ["expiration", "1800000000"],
+      ["r", "wss://inbox.example"],
+    ]);
+  });
+
+  test("ephemeral option produces kind 21059 and still unwraps", async () => {
+    const { alice, bob, aliceKeys, bobKeys } = pair();
+    const rumor = createRumor(aliceKeys.publicKey, {
+      kind: Kind.PrivateDirectMessage,
+      content: "gone",
+    });
+    const gift = await wrap(alice, bobKeys.publicKey, rumor, { ephemeral: true });
+    expect(gift.kind).toBe(Kind.GiftWrapEphemeral);
+    expect(isGiftWrapKind(gift.kind)).toBe(true);
+    expect(verifyEvent(gift)).toBe(true);
+
+    const inner = await unwrap(bob, gift);
+    expect(inner.content).toBe("gone");
+  });
+
+  test.each([
+    { value: -1 },
+    { value: 1.5 },
+    { value: Number.NaN },
+    { value: Number.MAX_SAFE_INTEGER + 1 },
+  ])("invalid expiration $value throws Nip59Error", async ({ value }) => {
+    const { alice, aliceKeys, bobKeys } = pair();
+    const rumor = createRumor(aliceKeys.publicKey, { kind: 14, content: "x" });
+    await expect(wrap(alice, bobKeys.publicKey, rumor, { expiration: value })).rejects.toThrow(
+      Nip59Error,
+    );
+    await expect(
+      createSeal(alice, bobKeys.publicKey, rumor, { expiration: value }),
+    ).rejects.toThrow(Nip59Error);
+  });
 });

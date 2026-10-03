@@ -37,12 +37,14 @@ export type SyncOptions = {
 
 /** Outcome of a {@link Client.sync} run: ids compared, sent, received, and failures. */
 export type SyncSummary = {
-  local: string[];
-  remote: string[];
-  sent: string[];
-  received: string[];
-  sendFailures: Record<string, string>;
-  persistFailures: Record<string, string>;
+  readonly local: ReadonlyArray<string>;
+  readonly remote: ReadonlyArray<string>;
+  readonly sent: ReadonlyArray<string>;
+  readonly received: ReadonlyArray<string>;
+  /** Publish failures by event id: relay messages or thrown-error text. */
+  readonly sendFailures: Readonly<Record<string, string>>;
+  /** PutMany throws by event id. */
+  readonly persistFailures: Readonly<Record<string, Error>>;
 };
 
 /**
@@ -149,24 +151,28 @@ export type SendPrivateMessageOptions = {
   readonly created_at?: number | undefined;
   readonly timeoutMs?: number | undefined;
   readonly observe?: boolean | undefined;
+  /** NIP-17 disappearing-message expiry (unix seconds) on the seal and the gift wrap. */
+  readonly expiration?: number | undefined;
+  /** Wrap in the ephemeral kind 21059 (relays MUST NOT store). */
+  readonly ephemeral?: boolean | undefined;
 };
 
 /** Result of sending a NIP-17 DM: the rumor plus per-recipient wrap publish results. */
 export type PrivateMessageSendResult = {
-  rumor: Rumor;
-  wraps: ReadonlyArray<{
-    recipient: string;
-    wrap: Event;
-    results: PoolPublishResult[];
+  readonly rumor: Rumor;
+  readonly wraps: ReadonlyArray<{
+    readonly recipient: string;
+    readonly wrap: Event;
+    readonly results: ReadonlyArray<PoolPublishResult>;
   }>;
 };
 
 /** An unwrapped NIP-17 private message: the received gift wrap and its inner rumor. */
 export type ReceivedPrivateMessage = {
-  wrap: Event;
-  rumor: Rumor;
+  readonly wrap: Event;
+  readonly rumor: Rumor;
   /** Normalized URL of the relay that delivered the wrap, when known. */
-  relayUrl?: string | undefined;
+  readonly relayUrl?: string | undefined;
 };
 
 /** Options for fetching NIP-17 private-message history. */

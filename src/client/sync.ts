@@ -1,5 +1,5 @@
 import { throwIfAborted } from "../core/abort.ts";
-import { errorMessage } from "../core/error.ts";
+import { errorMessage, toError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { canonicalizeFilter } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
@@ -79,13 +79,17 @@ export async function syncToRelay(
     signal: opts?.signal,
   });
 
+  const sent: string[] = [];
+  const received: string[] = [];
+  const sendFailures: Record<string, string> = {};
+  const persistFailures: Record<string, Error> = {};
   const summary: SyncSummary = {
     local: have,
     remote: need,
-    sent: [],
-    received: [],
-    sendFailures: {},
-    persistFailures: {},
+    sent,
+    received,
+    sendFailures,
+    persistFailures,
   };
 
   if (opts?.dryRun === true) {
@@ -97,7 +101,7 @@ export async function syncToRelay(
     const foundById = new Map(found.map((event) => [event.id, event]));
     for (const id of have) {
       if (!foundById.has(id)) {
-        summary.sendFailures[id] = "event not found in local store";
+        sendFailures[id] = "event not found in local store";
       }
     }
     for (let i = 0; i < found.length; i += SYNC_UPLOAD_CONCURRENCY) {
@@ -112,18 +116,18 @@ export async function syncToRelay(
             });
             const ok = results.some((r) => r.status === "ok");
             if (ok) {
-              summary.sent.push(event.id);
+              sent.push(event.id);
             } else {
               const [first] = results;
-              summary.sendFailures[event.id] =
+              sendFailures[event.id] =
                 first === undefined
                   ? "publish failed"
                   : first.status === "failed"
-                    ? first.error
+                    ? errorMessage(first.error)
                     : first.message;
             }
           } catch (error) {
-            summary.sendFailures[event.id] = errorMessage(error);
+            sendFailures[event.id] = errorMessage(error);
           }
         }),
       );
@@ -155,7 +159,7 @@ export async function syncToRelay(
       });
       if (!shouldObserve) {
         for (const event of events) {
-          summary.received.push(event.id);
+          received.push(event.id);
         }
         continue;
       }
@@ -169,7 +173,7 @@ export async function syncToRelay(
       if (!deps.persistEvents) {
         for (const event of events) {
           ingestAll(event);
-          summary.received.push(event.id);
+          received.push(event.id);
         }
         continue;
       }
@@ -181,9 +185,9 @@ export async function syncToRelay(
         // oxlint-disable-next-line no-await-in-loop
         results = await deps.storage.putMany(events);
       } catch (error) {
-        const message = errorMessage(error);
+        const thrown = toError(error);
         for (const event of events) {
-          summary.persistFailures[event.id] = message;
+          persistFailures[event.id] = thrown;
         }
         break;
       }
@@ -192,7 +196,7 @@ export async function syncToRelay(
           continue;
         }
         ingestAll(event);
-        summary.received.push(event.id);
+        received.push(event.id);
       }
     }
   }

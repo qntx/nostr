@@ -1,9 +1,9 @@
 import { EventBuilder } from "../core/builder.ts";
+import { Emitter } from "../core/emitter.ts";
 import { sortedEvents } from "../core/event.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
 import { canonicalizeFilters, matchFilters } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
-import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
 import { Gossip } from "../gossip/index.ts";
 import { createLoaders, OutboxFeed } from "../loaders/index.ts";
@@ -70,9 +70,9 @@ export class Client {
   readonly #persistEvents: boolean;
   readonly #persistQueue: Event[] = [];
   #flushing: Promise<void> | undefined;
-  readonly #listeners: { [K in keyof ClientEventMap]: Set<(err: ClientEventMap[K]) => void> } = {
-    storageerror: new Set(),
-  };
+  readonly #events = new Emitter<ClientEventMap>();
+  readonly #dmDeps: DmDeps;
+  readonly #syncDeps: SyncDeps;
 
   constructor(opts: ClientOptions = {}) {
     const { signer, relays, automaticAuth, gossip, storage, index, persistEvents, ...poolOptions } =
@@ -113,6 +113,29 @@ export class Client {
       index: this.index,
       ingest: (event, relayUrl) => this.#ingest(event, relayUrl),
     });
+    this.#dmDeps = {
+      pool: this.pool,
+      gossip: this.gossip,
+      hydrateGossip: async (pubkeys) => this.hydrateGossip(pubkeys),
+      ingest: (event, relayUrl) => this.#ingest(event, relayUrl),
+      markSeen: (id, relayUrl) => {
+        this.index.markSeen(id, relayUrl);
+      },
+      assertAlive: () => this.#assertAlive(),
+      requireNip59Crypto: () => this.#requireNip59Crypto(),
+      publish: async (eventOrBuilder, opts) => this.publish(eventOrBuilder, opts),
+    };
+    this.#syncDeps = {
+      pool: this.pool,
+      storage: this.storage,
+      persistEvents: this.#persistEvents,
+      assertAlive: () => this.#assertAlive(),
+      ingest: (event, relayUrl, opts) => this.#ingest(event, relayUrl, opts),
+      markSeen: (id, relayUrl) => {
+        this.index.markSeen(id, relayUrl);
+      },
+      defaultRelays: (urls) => this.#defaultRelays(urls),
+    };
   }
 
   get signer(): NostrSigner | undefined {
@@ -145,7 +168,7 @@ export class Client {
     const normalized = normalizeURL(url);
     this.#relays = this.#relays.filter((r) => r !== normalized);
     this.loaders.removeRelay(normalized);
-    this.pool.close([normalized]);
+    this.pool.closeRelays([normalized]);
   }
 
   /** Connect all configured relays (best-effort; failures are ignored). */
@@ -174,19 +197,7 @@ export class Client {
     type: K,
     listener: (err: ClientEventMap[K]) => void,
   ): () => void {
-    const set = this.#listeners[type];
-    set.add(listener);
-    return () => {
-      set.delete(listener);
-    };
-  }
-
-  #emit<K extends keyof ClientEventMap>(type: K, err: ClientEventMap[K]): void {
-    // snapshot: listeners may unsubscribe or register during dispatch
-    // oxlint-disable-next-line no-useless-spread -- intentional snapshot copy
-    for (const listener of [...this.#listeners[type]]) {
-      invokeSafely(() => listener(err));
-    }
+    return this.#events.on(type, listener);
   }
 
   #assertAlive(): void {
@@ -256,7 +267,7 @@ export class Client {
           // oxlint-disable-next-line no-await-in-loop -- queued batches are persisted in order
           await this.storage.putMany(batch);
         } catch (error) {
-          this.#emit("storageerror", toStorageError(error));
+          this.#events.emit("storageerror", toStorageError(error));
         }
       }
     } finally {
@@ -455,7 +466,7 @@ export class Client {
           }
         }
       } catch (error) {
-        this.#emit("storageerror", toStorageError(error));
+        this.#events.emit("storageerror", toStorageError(error));
       }
     }
 
@@ -589,41 +600,12 @@ export class Client {
     return requireNip59Crypto(this.#requireSigner());
   }
 
-  #dmDeps(): DmDeps {
-    return {
-      pool: this.pool,
-      gossip: this.gossip,
-      hydrateGossip: async (pubkeys) => this.hydrateGossip(pubkeys),
-      ingest: (event, relayUrl) => this.#ingest(event, relayUrl),
-      markSeen: (id, relayUrl) => {
-        this.index.markSeen(id, relayUrl);
-      },
-      assertAlive: () => this.#assertAlive(),
-      requireNip59Crypto: () => this.#requireNip59Crypto(),
-      publish: async (eventOrBuilder, opts) => this.publish(eventOrBuilder, opts),
-    };
-  }
-
-  #syncDeps(): SyncDeps {
-    return {
-      pool: this.pool,
-      storage: this.storage,
-      persistEvents: this.#persistEvents,
-      assertAlive: () => this.#assertAlive(),
-      ingest: (event, relayUrl, opts) => this.#ingest(event, relayUrl, opts),
-      markSeen: (id, relayUrl) => {
-        this.index.markSeen(id, relayUrl);
-      },
-      defaultRelays: (urls) => this.#defaultRelays(urls),
-    };
-  }
-
   /** Publish a kind:10050 NIP-17 DM relay list (`relay` tags). Not kind 10002. */
   async setDmRelays(
     relays: ReadonlyArray<string>,
     opts?: PublishOptions,
   ): Promise<PoolPublishResult[]> {
-    return setDmRelays(this.#dmDeps(), relays, opts);
+    return setDmRelays(this.#dmDeps, relays, opts);
   }
 
   async sendPrivateMessage(
@@ -631,17 +613,17 @@ export class Client {
     content: string,
     opts?: SendPrivateMessageOptions,
   ): Promise<PrivateMessageSendResult> {
-    return sendPrivateMessage(this.#dmDeps(), recipients, content, opts);
+    return sendPrivateMessage(this.#dmDeps, recipients, content, opts);
   }
 
   async fetchPrivateMessages(
     opts?: FetchPrivateMessagesOptions,
   ): Promise<ReceivedPrivateMessage[]> {
-    return fetchPrivateMessages(this.#dmDeps(), opts);
+    return fetchPrivateMessages(this.#dmDeps, opts);
   }
 
   async subscribePrivateMessages(opts?: SubscribePrivateMessagesOptions): Promise<Closer> {
-    return subscribePrivateMessages(this.#dmDeps(), opts);
+    return subscribePrivateMessages(this.#dmDeps, opts);
   }
 
   /**
@@ -654,7 +636,7 @@ export class Client {
     filter: Filter,
     opts?: Omit<SyncOptions, "relays">,
   ): Promise<SyncSummary> {
-    return syncToRelay(this.#syncDeps(), url, filter, opts);
+    return syncToRelay(this.#syncDeps, url, filter, opts);
   }
 
   /**
@@ -663,6 +645,6 @@ export class Client {
    * URL order.
    */
   async sync(filter: Filter, opts?: SyncOptions): Promise<SyncSummary> {
-    return sync(this.#syncDeps(), filter, opts);
+    return sync(this.#syncDeps, filter, opts);
   }
 }

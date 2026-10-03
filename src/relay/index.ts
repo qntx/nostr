@@ -25,6 +25,7 @@ export { subscriptionToAsyncIterable } from "./subscription.ts";
 export type { Closer, RelaySubscription } from "./subscription.ts";
 export { Pool } from "./pool.ts";
 export type {
+  PoolEventMap,
   PoolOptions,
   PoolFetchResult,
   PoolPublishResult,

@@ -1,4 +1,5 @@
-import { abortReason, onAbort, raceSignal, throwIfAborted } from "../core/abort.ts";
+import { raceSignal, throwIfAborted } from "../core/abort.ts";
+import { Emitter } from "../core/emitter.ts";
 import { MessageError, WasmPoisonedError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { canonicalizeFilter, canonicalizeFilters } from "../core/filter.ts";
@@ -10,14 +11,13 @@ import {
   parseRelayMessage,
 } from "../core/message.ts";
 import type { ClientMessage, CountResult, SubscriptionId } from "../core/message.ts";
-import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
 import type { EventVerifier } from "../core/verifier.ts";
-import { isAuthRequired, makeAuthEvent } from "../nips/nip42.ts";
-import { Nip77Error } from "../nips/nip77.ts";
+import { isAuthRequired } from "../nips/nip42.ts";
 import type { NegentropyStorageVector } from "../nips/nip77.ts";
-import { NoSignerError } from "../signer/error.ts";
+import { RelayAuth } from "./auth.ts";
+import { CountTracker } from "./count-tracker.ts";
 import {
   RelayClosedError,
   RelayConnectionError,
@@ -25,29 +25,15 @@ import {
   RelayPublishError,
   RelayTimeoutError,
 } from "./error.ts";
-import {
-  createNegSession,
-  failNegErr,
-  failNegSession,
-  pushNegMsg,
-  runWiredNegSession,
-} from "./neg-session.ts";
+import { fetchFilters, streamFilters } from "./fetch.ts";
+import type { RelayFetchResult } from "./fetch.ts";
+import { dispatchNegMessage, failAllNegSessions, runTrackedNegSession } from "./neg-session.ts";
 import type { NegSession } from "./neg-session.ts";
+import { OkTracker } from "./ok-tracker.ts";
+import type { PublishResult } from "./ok-tracker.ts";
 import { DEFAULT_PING_INTERVAL_MS, DEFAULT_PING_TIMEOUT_MS, PingLoop } from "./ping.ts";
-import {
-  armEoseTimeout,
-  closeAllSubscriptions,
-  dropSubscription,
-  fetchFilters,
-  onSubEose,
-  onSubEvent,
-  openExclusive,
-  resubscribeAll,
-  streamFilters,
-  subscribeLive,
-} from "./subscribe.ts";
-import type { LiveCtx, LiveGroup, RelayFetchResult } from "./subscribe.ts";
-import type { Closer, RelaySubscription, SubscribeOptions, Subscription } from "./subscription.ts";
+import { SubscriptionRegistry } from "./subscription-registry.ts";
+import type { Closer, RelaySubscription, SubscribeOptions } from "./subscription.ts";
 import { getWebSocketImplementation } from "./websocket.ts";
 import type { WebSocketConstructor, WebSocketLike } from "./websocket.ts";
 
@@ -92,12 +78,6 @@ export type RelayOptions = {
   authSigner?: ((template: EventTemplate) => Promise<Event>) | undefined;
 };
 
-/** A relay's NIP-01 OK reply to a published event. */
-export type PublishResult = {
-  ok: boolean;
-  message: string;
-};
-
 /** Typed event payloads for {@link Relay.on}: lifecycle and protocol notifications. */
 export type RelayEventMap = {
   /** A NIP-01 NOTICE message from the relay. */
@@ -113,26 +93,6 @@ export type RelayEventMap = {
    * A poisoned verifier dropping events does not fire it.
    */
   invalidevent: undefined;
-};
-
-type PublishWaiter = {
-  resolve: (result: PublishResult) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout> | undefined;
-  event?: Event;
-  authRetried?: boolean;
-  timeoutMs: number;
-  /** The owning publish()/auth() promise — joiners on the same event id settle with it. */
-  promise: Promise<PublishResult>;
-};
-
-type CountWaiter = {
-  resolve: (result: CountResult) => void;
-  reject: (err: unknown) => void;
-  timer: ReturnType<typeof setTimeout> | undefined;
-  filters: Filter[];
-  authRetried: boolean;
-  timeoutMs: number;
 };
 
 type SocketHandlers = {
@@ -165,12 +125,11 @@ export class Relay {
   #connectFinish: ((err?: unknown) => void) | undefined;
   #connectTimer: ReturnType<typeof setTimeout> | undefined;
   #socketHandlers: SocketHandlers | undefined;
-  readonly #subs = new Map<SubscriptionId, Subscription>();
-  readonly #liveByFp = new Map<string, LiveGroup>();
-  readonly #liveBySubId = new Map<SubscriptionId, LiveGroup>();
-  readonly #live: LiveCtx;
-  readonly #publishes = new Map<string, PublishWaiter>();
-  readonly #counts = new Map<string, CountWaiter>();
+  readonly #subscriptions: SubscriptionRegistry;
+  readonly #ok = new OkTracker();
+  readonly #countRequests = new CountTracker();
+  readonly #authState: RelayAuth;
+  readonly #ensureAuthed: () => Promise<boolean>;
   readonly #neg = new Map<SubscriptionId, NegSession>();
   readonly #WS: WebSocketConstructor;
   readonly #verify: EventVerifier;
@@ -180,13 +139,6 @@ export class Relay {
   readonly #enableReconnect: boolean;
   readonly #backoff: ReadonlyArray<number>;
   #serial = 0;
-  #challenge: string | undefined;
-  #authedChallenge: string | undefined;
-  /** Challenge value already answered on this connection; duplicates are not re-signed. */
-  #answeredChallenge: string | undefined;
-  /** Settled OK verdict for `#answeredChallenge`; set only once the relay replies. */
-  #answeredResult: PublishResult | undefined;
-  #authPromise: Promise<PublishResult> | undefined;
   readonly #authSigner: ((template: EventTemplate) => Promise<Event>) | undefined;
   /** `close()`/`disconnect()` was called; cleared by the next `connect()`. */
   #manualStop = false;
@@ -194,13 +146,7 @@ export class Relay {
   #reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   readonly #enablePing: boolean;
   readonly #ping: PingLoop;
-  readonly #listeners: { [K in keyof RelayEventMap]: Set<(payload: RelayEventMap[K]) => void> } = {
-    notice: new Set(),
-    close: new Set(),
-    auth: new Set(),
-    reconnect: new Set(),
-    invalidevent: new Set(),
-  };
+  readonly #events = new Emitter<RelayEventMap>();
 
   constructor(url: string, opts: RelayOptions = {}) {
     this.url = normalizeURL(url);
@@ -229,22 +175,32 @@ export class Relay {
       pingIntervalMs: opts.pingIntervalMs ?? DEFAULT_PING_INTERVAL_MS,
       pingTimeoutMs: opts.pingTimeoutMs ?? DEFAULT_PING_TIMEOUT_MS,
     });
-    this.#live = {
-      liveByFp: this.#liveByFp,
-      liveBySubId: this.#liveBySubId,
-      subs: this.#subs,
-      connected: () => this.#isOpen(),
-      enableReconnect: () => this.#enableReconnect,
+    this.#subscriptions = new SubscriptionRegistry({
+      isOpen: () => this.#isOpen(),
+      enableReconnect: this.#enableReconnect,
       send: (message) => this.#send(message),
       scheduleReconnect: () => this.#scheduleReconnect(),
       acceptEvent: (event) => this.#acceptEvent(event),
-      armEoseTimeout,
-    };
+    });
+    this.#authState = new RelayAuth({
+      url: this.url,
+      isOpen: () => this.#isOpen(),
+      // oxlint-disable-next-line typescript/promise-function-async -- returns the tracker promise directly
+      sendAuth: (event, timeoutMs) =>
+        this.#ok.track(event.id, {
+          timeoutMs,
+          timeoutError: () => new RelayTimeoutError("auth timed out", this.url),
+          sendError: () => new RelayPublishError("auth send failed", this.url),
+          send: () => this.#send(["AUTH", event]),
+        }),
+      defaultTimeoutMs: this.#publishTimeoutMs,
+    });
+    this.#ensureAuthed = this.#authState.ensureAuthed.bind(this.#authState, this.#authSigner);
   }
 
   /** Latest NIP-42 challenge, if any. */
   get challenge(): string | undefined {
-    return this.#challenge;
+    return this.#authState.challenge;
   }
 
   get connected(): boolean {
@@ -273,12 +229,12 @@ export class Relay {
 
   /** User subscriptions only; dummy ping REQs are not counted. */
   get subscriptionCount(): number {
-    return this.#subs.size;
+    return this.#subscriptions.size;
   }
 
   /** One-shot requests still awaiting a relay reply (EVENT ACK, COUNT, NEG). */
   get inFlightCount(): number {
-    return this.#publishes.size + this.#counts.size + this.#neg.size;
+    return this.#ok.size + this.#countRequests.size + this.#neg.size;
   }
 
   /**
@@ -290,19 +246,7 @@ export class Relay {
     type: K,
     listener: (payload: RelayEventMap[K]) => void,
   ): () => void {
-    const set = this.#listeners[type];
-    set.add(listener);
-    return () => {
-      set.delete(listener);
-    };
-  }
-
-  #emit<K extends keyof RelayEventMap>(type: K, payload: RelayEventMap[K]): void {
-    // snapshot: listeners may unsubscribe or register during dispatch
-    // oxlint-disable-next-line no-useless-spread -- intentional snapshot copy
-    for (const listener of [...this.#listeners[type]]) {
-      invokeSafely(() => listener(payload));
-    }
+    return this.#events.on(type, listener);
   }
 
   static async connect(
@@ -366,6 +310,18 @@ export class Relay {
       }
     };
 
+    // Stale-generation guard: events from a superseded socket release it before returning;
+    // onMessage is the exception — it only ignores them.
+    const guarded = (fn: () => void): (() => void) => {
+      return () => {
+        if (gen !== this.#gen) {
+          release();
+          return;
+        }
+        fn();
+      };
+    };
+
     const finish = (err?: unknown): void => {
       if (settled) {
         return;
@@ -391,17 +347,16 @@ export class Relay {
     this.#connecting = connecting;
     this.#connectFinish = finish;
 
-    const timer = setTimeout(() => {
-      if (gen !== this.#gen) {
+    const timer = setTimeout(
+      guarded(() => {
         release();
-        return;
-      }
-      release();
-      finish(new RelayTimeoutError("connection timed out", this.url));
-      if (gen === this.#gen) {
-        this.#handleSocketDeath("connection timed out", { fromConnectAttempt: true, gen });
-      }
-    }, timeoutMs);
+        finish(new RelayTimeoutError("connection timed out", this.url));
+        if (gen === this.#gen) {
+          this.#handleSocketDeath("connection timed out", { fromConnectAttempt: true, gen });
+        }
+      }),
+      timeoutMs,
+    );
     this.#connectTimer = timer;
 
     try {
@@ -416,23 +371,15 @@ export class Relay {
     }
     this.#ws = ws;
 
-    const onOpen = (): void => {
-      if (gen !== this.#gen) {
-        release();
-        return;
-      }
+    const onOpen = guarded((): void => {
       this.#setStatus(RelayStatus.Connected);
       const wasReconnect = this.#reconnectAttempts > 0;
-      this.#challenge = undefined;
-      this.#authPromise = undefined;
-      this.#authedChallenge = undefined;
-      this.#answeredChallenge = undefined;
-      this.#answeredResult = undefined;
-      if (!resubscribeAll(this.#live)) {
+      this.#authState.resetConnection();
+      if (!this.#subscriptions.replayAll()) {
         this.#setStatus(RelayStatus.Disconnected);
         release();
         finish(new RelayConnectionError("connection failed", this.url));
-        if (this.#enableReconnect && !this.#manualStop && this.#subs.size > 0) {
+        if (this.#enableReconnect && !this.#manualStop && this.#subscriptions.size > 0) {
           this.#scheduleReconnect();
         }
         return;
@@ -444,27 +391,19 @@ export class Relay {
         this.#ping.stop();
       }
       if (wasReconnect) {
-        this.#emit("reconnect", undefined);
+        this.#events.emit("reconnect", undefined);
       }
       finish();
-    };
-    const onError = (): void => {
-      if (gen !== this.#gen) {
-        release();
-        return;
-      }
+    });
+    const onError = guarded((): void => {
       const fromConnectAttempt = !settled;
       release();
       finish(new RelayConnectionError("connection failed", this.url));
       if (gen === this.#gen) {
         this.#handleSocketDeath("connection failed", { fromConnectAttempt, gen });
       }
-    };
-    const onClose = (): void => {
-      if (gen !== this.#gen) {
-        release();
-        return;
-      }
+    });
+    const onClose = guarded((): void => {
       const fromConnectAttempt = !settled;
       release();
       if (fromConnectAttempt) {
@@ -473,7 +412,7 @@ export class Relay {
       if (gen === this.#gen) {
         this.#handleSocketDeath("websocket closed", { fromConnectAttempt, gen });
       }
-    };
+    });
     const onMessage = (ev: unknown): void => {
       if (gen !== this.#gen) {
         return;
@@ -525,12 +464,12 @@ export class Relay {
     this.#ping.stop();
     this.#connectFinish?.(new RelayClosedError("relay closed", this.url));
     try {
-      closeAllSubscriptions(this.#live, "relay closed");
+      this.#subscriptions.closeAll("relay closed");
     } finally {
       this.#failPending(new RelayClosedError("relay closed", this.url));
       this.#detachSocketHandlers();
       this.#teardownSocket();
-      this.#emit("close", undefined);
+      this.#events.emit("close", undefined);
     }
   }
 
@@ -571,33 +510,10 @@ export class Relay {
     }
   }
 
-  #rejectPublishes(err: Error): void {
-    for (const [, waiter] of this.#publishes) {
-      clearTimeout(waiter.timer);
-      waiter.reject(err);
-    }
-    this.#publishes.clear();
-  }
-
-  #rejectCounts(err: Error): void {
-    for (const [, waiter] of this.#counts) {
-      clearTimeout(waiter.timer);
-      waiter.reject(err);
-    }
-    this.#counts.clear();
-  }
-
-  #rejectNeg(err: Error): void {
-    for (const session of this.#neg.values()) {
-      failNegSession(session, err);
-    }
-    this.#neg.clear();
-  }
-
   #failPending(err: Error): void {
-    this.#rejectPublishes(err);
-    this.#rejectCounts(err);
-    this.#rejectNeg(err);
+    this.#ok.rejectAll(err);
+    this.#countRequests.rejectAll(err);
+    failAllNegSessions(this.#neg, err);
   }
 
   /** Unexpected socket death. Keep subscriptions if reconnecting. */
@@ -612,7 +528,7 @@ export class Relay {
     this.#ws = undefined;
     this.#failPending(new RelayClosedError(reason, this.url));
 
-    const canReconnect = this.#enableReconnect && !this.#manualStop && this.#subs.size > 0;
+    const canReconnect = this.#enableReconnect && !this.#manualStop && this.#subscriptions.size > 0;
 
     if (canReconnect) {
       this.#setStatus(RelayStatus.Disconnected);
@@ -623,10 +539,10 @@ export class Relay {
     // Transitional: subscription close callbacks below observe `disconnected` first.
     this.#setStatus(RelayStatus.Disconnected);
 
-    if (opts.fromConnectAttempt !== true || this.#subs.size > 0) {
-      closeAllSubscriptions(this.#live, reason);
+    if (opts.fromConnectAttempt !== true || this.#subscriptions.size > 0) {
+      this.#subscriptions.closeAll(reason);
       if (!this.#manualStop) {
-        this.#emit("close", undefined);
+        this.#events.emit("close", undefined);
       }
     }
 
@@ -655,7 +571,7 @@ export class Relay {
           if (
             this.#enableReconnect &&
             !this.#manualStop &&
-            this.#subs.size > 0 &&
+            this.#subscriptions.size > 0 &&
             !this.#isOpen()
           ) {
             this.#scheduleReconnect();
@@ -687,7 +603,7 @@ export class Relay {
         if (this.#ping.hasWaiter(subId)) {
           return;
         }
-        onSubEvent(this.#live, subId, event);
+        this.#subscriptions.handleEvent(subId, event);
         break;
       }
       case "EOSE": {
@@ -695,7 +611,7 @@ export class Relay {
         if (this.#ping.finishDummyPing(subId)) {
           return;
         }
-        onSubEose(this.#live, subId);
+        this.#subscriptions.handleEose(subId);
         break;
       }
       case "CLOSED": {
@@ -703,94 +619,78 @@ export class Relay {
         if (this.#ping.finishDummyPing(subId)) {
           return;
         }
-        const countWaiter = this.#counts.get(subId);
+        const countWaiter = this.#countRequests.get(subId);
         if (countWaiter) {
           if (isAuthRequired(reason) && this.#authSigner && !countWaiter.authRetried) {
             countWaiter.authRetried = true;
-            void this.#authThenRecount(subId, countWaiter, reason);
+            void this.#countRequests.authRetry(countWaiter, {
+              ensureAuthed: this.#ensureAuthed,
+              isOpen: () => this.#isOpen(),
+              failError: () => new RelayClosedError(reason || "COUNT closed", this.url),
+              send: () => this.#send(["COUNT", subId, ...countWaiter.filters]),
+            });
             return;
           }
           countWaiter.reject(new RelayClosedError(reason || "COUNT closed", this.url));
           return;
         }
-        const sub = this.#subs.get(subId);
+        const sub = this.#subscriptions.get(subId);
         if (!sub) {
           return;
         }
-        if (isAuthRequired(reason) && this.#authSigner && !sub.authRetried) {
-          sub.authRetried = true;
-          void this.#authThenResubscribe(sub, reason);
+        if (isAuthRequired(reason) && this.#authSigner && sub.beginAuthRetry()) {
+          void this.#subscriptions.authRetry(sub, reason, this.#ensureAuthed);
           return;
         }
-        dropSubscription(this.#live, sub, reason);
+        this.#subscriptions.drop(sub, reason);
         break;
       }
       case "OK": {
         const [, eventId, ok, message] = msg;
-        const waiter = this.#publishes.get(eventId);
+        const waiter = this.#ok.handleOk(
+          eventId,
+          ok,
+          message,
+          (w) =>
+            !ok &&
+            isAuthRequired(message) &&
+            w.event !== undefined &&
+            !w.authRetried &&
+            this.#authSigner !== undefined,
+        );
         if (!waiter) {
           return;
         }
-        if (
-          !ok &&
-          isAuthRequired(message) &&
-          waiter.event !== undefined &&
-          waiter.authRetried !== true &&
-          this.#authSigner
-        ) {
-          waiter.authRetried = true;
-          void this.#authThenRepublish(waiter, eventId, message);
-          return;
-        }
-        clearTimeout(waiter.timer);
-        this.#publishes.delete(eventId);
-        waiter.resolve({ ok, message });
-        break;
+        waiter.authRetried = true;
+        void this.#ok.authRetry(waiter, message, {
+          ensureAuthed: this.#ensureAuthed,
+          isOpen: () => this.#isOpen(),
+          send: (event) => this.#send(["EVENT", event]),
+        });
+        return;
       }
       case "COUNT": {
         const [, countId, payload] = msg;
-        const waiter = this.#counts.get(countId);
+        const waiter = this.#countRequests.get(countId);
         if (!waiter) {
           return;
         }
         waiter.resolve(payload);
         break;
       }
-      case "NEG-MSG": {
-        const [, negId, hex] = msg;
-        const session = this.#neg.get(negId);
-        if (!session) {
-          return;
-        }
-        pushNegMsg(session, hex);
+      case "NEG-MSG":
+      case "NEG-ERR":
+        dispatchNegMessage(this.#neg, msg);
         break;
-      }
-      case "NEG-ERR": {
-        const [, negId, reason] = msg;
-        const session = this.#neg.get(negId);
-        if (!session) {
-          return;
-        }
-        failNegErr(session, reason);
-        break;
-      }
       case "NOTICE": {
         const [, notice] = msg;
-        this.#emit("notice", notice);
+        this.#events.emit("notice", notice);
         break;
       }
       case "AUTH": {
         const [, authChallenge] = msg;
-        // A re-sent identical challenge keeps the in-flight/settled dedupe;
-        // only a new challenge value resets the answer state.
-        if (authChallenge !== this.#challenge) {
-          this.#authPromise = undefined;
-          this.#authedChallenge = undefined;
-          this.#answeredChallenge = undefined;
-          this.#answeredResult = undefined;
-        }
-        this.#challenge = authChallenge;
-        this.#emit("auth", authChallenge);
+        this.#authState.handleChallenge(authChallenge);
+        this.#events.emit("auth", authChallenge);
         break;
       }
     }
@@ -805,10 +705,7 @@ export class Relay {
       throw new RelayClosedError("not connected", this.url);
     }
     const canonical = canonicalizeFilters(filters);
-    if (opts.closeOnEose === true) {
-      return openExclusive(this.#live, canonical, opts);
-    }
-    return subscribeLive(this.#live, canonical, opts);
+    return this.#subscriptions.open(canonical, opts);
   }
 
   #acceptEvent(event: Event): boolean {
@@ -818,13 +715,13 @@ export class Relay {
     try {
       const ok = this.#verify(event);
       if (!ok) {
-        this.#emit("invalidevent", undefined);
+        this.#events.emit("invalidevent", undefined);
       }
       return ok;
     } catch (error) {
       if (error instanceof WasmPoisonedError) {
         this.#verifyDead = true;
-        this.#emit("notice", "wasm-poisoned: instance aborted");
+        this.#events.emit("notice", "wasm-poisoned: instance aborted");
         return false;
       }
       throw error;
@@ -874,40 +771,18 @@ export class Relay {
     if (!this.#isOpen()) {
       throw new RelayClosedError("not connected", this.url);
     }
-    const existing = this.#publishes.get(event.id);
-    if (existing?.event !== undefined) {
-      return existing.promise;
+    const existing = this.#ok.inFlight(event.id);
+    if (existing !== undefined) {
+      return existing;
     }
     const timeoutMs = opts?.timeoutMs ?? this.#publishTimeoutMs;
-
-    const promise = new Promise<PublishResult>((resolve, reject) => {
-      const waiter: PublishWaiter = {
-        resolve,
-        reject,
-        timer: setTimeout(() => {
-          if (this.#publishes.get(event.id) === waiter) {
-            this.#publishes.delete(event.id);
-            reject(new RelayTimeoutError("publish timed out", this.url));
-          }
-        }, timeoutMs),
-        event,
-        timeoutMs,
-        get promise() {
-          return promise;
-        },
-      };
-      this.#publishes.set(event.id, waiter);
-      try {
-        this.#send(["EVENT", event]);
-      } catch (error) {
-        clearTimeout(waiter.timer);
-        if (this.#publishes.get(event.id) === waiter) {
-          this.#publishes.delete(event.id);
-        }
-        reject(error instanceof Error ? error : new RelayPublishError("publish failed", this.url));
-      }
+    return this.#ok.track(event.id, {
+      timeoutMs,
+      timeoutError: () => new RelayTimeoutError("publish timed out", this.url),
+      sendError: () => new RelayPublishError("publish failed", this.url),
+      event,
+      send: () => this.#send(["EVENT", event]),
     });
-    return promise;
   }
 
   /**
@@ -934,49 +809,13 @@ export class Relay {
     const id = opts?.id === undefined ? this.nextSubId("count") : createSubscriptionId(opts.id);
     const timeoutMs = opts?.timeoutMs ?? this.#publishTimeoutMs;
 
-    return new Promise<CountResult>((resolve, reject) => {
-      const waiter: CountWaiter = {
-        resolve: (result) => {
-          if (waiter.timer !== undefined) {
-            clearTimeout(waiter.timer);
-          }
-          waiter.timer = undefined;
-          this.#counts.delete(id);
-          cleanup();
-          resolve(result);
-        },
-        reject: (err) => {
-          if (waiter.timer !== undefined) {
-            clearTimeout(waiter.timer);
-          }
-          waiter.timer = undefined;
-          this.#counts.delete(id);
-          cleanup();
-          // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- forwards abort/signal reasons verbatim
-          reject(err);
-        },
-        timer: undefined,
-        filters: [...canonical],
-        authRetried: false,
-        timeoutMs,
-      };
-      const cleanup = onAbort(opts?.signal, () => {
-        if (opts?.signal) {
-          waiter.reject(abortReason(opts.signal));
-        }
-      });
-      waiter.timer = setTimeout(() => {
-        waiter.reject(new RelayTimeoutError("count timed out", this.url));
-      }, timeoutMs);
-      this.#counts.set(id, waiter);
-
-      try {
-        this.#send(["COUNT", id, ...canonical]);
-      } catch (error) {
-        waiter.reject(
-          error instanceof Error ? error : new RelayPublishError("count failed", this.url),
-        );
-      }
+    return this.#countRequests.track(id, {
+      timeoutMs,
+      timeoutError: () => new RelayTimeoutError("count timed out", this.url),
+      sendError: () => new RelayPublishError("count failed", this.url),
+      filters: [...canonical],
+      signal: opts?.signal,
+      send: () => this.#send(["COUNT", id, ...canonical]),
     });
   }
 
@@ -985,86 +824,7 @@ export class Relay {
     sign: (template: EventTemplate) => Promise<Event>,
     opts?: { timeoutMs?: number | undefined },
   ): Promise<PublishResult> {
-    const challenge = this.#challenge;
-    if (challenge === undefined || challenge === "") {
-      throw new RelayError("no AUTH challenge received from relay", this.url);
-    }
-    if (this.#authPromise) {
-      return this.#authPromise;
-    }
-    if (this.#answeredChallenge === challenge && this.#answeredResult !== undefined) {
-      return this.#answeredResult;
-    }
-
-    const pending = (async () => {
-      const template = makeAuthEvent(this.url, challenge);
-      let event: Event;
-      try {
-        event = await sign(template);
-      } catch (error) {
-        // A lazy signer may legitimately have nothing to sign with; ignore the
-        // challenge quietly — the connection stays open without an AUTH frame.
-        if (error instanceof NoSignerError) {
-          return { ok: false, message: "auth: no signer" };
-        }
-        throw error;
-      }
-      if (!this.#isOpen()) {
-        throw new RelayClosedError("not connected", this.url);
-      }
-      const timeoutMs = opts?.timeoutMs ?? this.#publishTimeoutMs;
-
-      const authPromise = new Promise<PublishResult>((resolve, reject) => {
-        const waiter: PublishWaiter = {
-          resolve: (result) => {
-            // Cache the relay's settled verdict: a repeated challenge replays
-            // it without re-signing. Timeouts and send failures never reach
-            // here, so a later auth() signs again.
-            if (this.#challenge === challenge) {
-              this.#answeredChallenge = challenge;
-              this.#answeredResult = result;
-            }
-            resolve(result);
-          },
-          reject,
-          timer: setTimeout(() => {
-            if (this.#publishes.get(event.id) === waiter) {
-              this.#publishes.delete(event.id);
-              reject(new RelayTimeoutError("auth timed out", this.url));
-            }
-          }, timeoutMs),
-          timeoutMs,
-          get promise() {
-            return authPromise;
-          },
-        };
-        this.#publishes.set(event.id, waiter);
-        try {
-          this.#send(["AUTH", event]);
-        } catch (error) {
-          clearTimeout(waiter.timer);
-          if (this.#publishes.get(event.id) === waiter) {
-            this.#publishes.delete(event.id);
-          }
-          reject(
-            error instanceof Error ? error : new RelayPublishError("auth send failed", this.url),
-          );
-        }
-      });
-      return authPromise;
-    })();
-    this.#authPromise = pending;
-    try {
-      const result = await pending;
-      if (result.ok && this.#challenge === challenge) {
-        this.#authedChallenge = challenge;
-      }
-      return result;
-    } finally {
-      if (this.#authPromise === pending) {
-        this.#authPromise = undefined;
-      }
-    }
+    return this.#authState.auth(sign, opts);
   }
 
   /**
@@ -1073,145 +833,9 @@ export class Relay {
    * `auth` event is re-fired so the pool's automatic auth can run once more.
    */
   resetAuth(): void {
-    if (this.#answeredResult !== undefined && !this.#answeredResult.ok) {
-      this.#answeredChallenge = undefined;
-      this.#answeredResult = undefined;
-    }
-    if (this.#challenge !== undefined && this.#challenge !== this.#authedChallenge) {
-      const challenge = this.#challenge;
-      this.#emit("auth", challenge);
-    }
-  }
-
-  async #ensureAuthed(): Promise<boolean> {
-    const signer = this.#authSigner;
-    if (!signer) {
-      return false;
-    }
-    for (let i = 0; i < 3; i++) {
-      if (this.#challenge === undefined || this.#challenge === "") {
-        return false;
-      }
-      if (this.#authedChallenge === this.#challenge) {
-        return true;
-      }
-      const signed = this.#challenge;
-      // oxlint-disable-next-line no-await-in-loop -- auth retries are sequential: each round waits for the new AUTH challenge
-      const result = await this.auth(signer);
-      if (this.#authedChallenge === this.#challenge) {
-        return true;
-      }
-      if (!result.ok) {
-        if (this.#challenge === undefined || this.#challenge === "" || this.#challenge === signed) {
-          return false;
-        }
-        continue;
-      }
-    }
-    return this.#authedChallenge === this.#challenge;
-  }
-
-  async #authThenResubscribe(sub: Subscription, reason: string): Promise<void> {
-    try {
-      if (!(await this.#ensureAuthed())) {
-        dropSubscription(this.#live, sub, reason);
-        return;
-      }
-      if (sub.closed || !this.#isOpen()) {
-        dropSubscription(this.#live, sub, reason);
-        return;
-      }
-      sub.eosed = false;
-      const group = this.#liveBySubId.get(sub.id);
-      if (group) {
-        for (const att of group.attachments) {
-          att.eosed = false;
-        }
-      }
-      this.#send(["REQ", sub.id, ...sub.replayFilters()]);
-    } catch {
-      dropSubscription(this.#live, sub, reason);
-    }
-  }
-
-  async #authThenRecount(id: string, waiter: CountWaiter, reason: string): Promise<void> {
-    if (waiter.timer !== undefined) {
-      clearTimeout(waiter.timer);
-      waiter.timer = undefined;
-    }
-    const fail = () => {
-      waiter.reject(new RelayClosedError(reason || "COUNT closed", this.url));
-    };
-    try {
-      const ok = await this.#ensureAuthed();
-      if (this.#counts.get(id) !== waiter) {
-        return;
-      }
-      if (!ok) {
-        fail();
-        return;
-      }
-      if (!this.#isOpen()) {
-        fail();
-        return;
-      }
-      waiter.timer = setTimeout(() => {
-        waiter.reject(new RelayTimeoutError("count timed out", this.url));
-      }, waiter.timeoutMs);
-      this.#send(["COUNT", id, ...waiter.filters]);
-    } catch (error) {
-      if (!this.#counts.has(id)) {
-        return;
-      }
-      waiter.reject(
-        error instanceof Error ? error : new RelayClosedError(reason || "COUNT closed", this.url),
-      );
-    }
-  }
-
-  async #authThenRepublish(waiter: PublishWaiter, eventId: string, message: string): Promise<void> {
-    if (waiter.timer !== undefined) {
-      clearTimeout(waiter.timer);
-      waiter.timer = undefined;
-    }
-    const finish = (result: PublishResult) => {
-      if (waiter.timer !== undefined) {
-        clearTimeout(waiter.timer);
-      }
-      if (this.#publishes.get(eventId) === waiter) {
-        this.#publishes.delete(eventId);
-      }
-      waiter.resolve(result);
-    };
-    try {
-      if (!waiter.event) {
-        finish({ ok: false, message });
-        return;
-      }
-      const ok = await this.#ensureAuthed();
-      if (this.#publishes.get(eventId) !== waiter) {
-        return;
-      }
-      if (!ok) {
-        finish({ ok: false, message });
-        return;
-      }
-      if (!this.#isOpen()) {
-        finish({ ok: false, message });
-        return;
-      }
-      waiter.timer = setTimeout(() => {
-        if (this.#publishes.get(eventId) === waiter) {
-          this.#publishes.delete(eventId);
-          waiter.reject(new RelayTimeoutError("publish timed out", this.url));
-        }
-      }, waiter.timeoutMs);
-      this.#send(["EVENT", waiter.event]);
-    } catch {
-      if (!this.#publishes.has(eventId)) {
-        return;
-      }
-      finish({ ok: false, message });
+    const challenge = this.#authState.resetRejection();
+    if (challenge !== undefined) {
+      this.#events.emit("auth", challenge);
     }
   }
 
@@ -1235,38 +859,17 @@ export class Relay {
       throw new RelayClosedError("not connected", this.url);
     }
     throwIfAborted(opts?.signal);
-    const canonical = canonicalizeFilter(filter);
-
     const id = opts?.id === undefined ? this.nextSubId("neg") : assertSubscriptionId(opts.id);
-    const timeoutMs = opts?.timeoutMs ?? this.#publishTimeoutMs;
-    const prev = this.#neg.get(id);
-    if (prev) {
-      failNegSession(prev, new Nip77Error("closed: replaced by new NEG-OPEN"));
-    }
-    const session = createNegSession();
-    this.#neg.set(id, session);
-
-    try {
-      return await runWiredNegSession({
-        session,
-        storage,
-        filter: canonical,
-        id,
-        timeoutMs,
-        signal: opts?.signal,
-        send: (message) => this.#send(message),
-        url: this.url,
-      });
-    } finally {
-      if (this.#neg.get(id) === session) {
-        this.#neg.delete(id);
-        try {
-          this.#send(["NEG-CLOSE", id]);
-        } catch {
-          // connection already gone
-        }
-      }
-    }
+    return runTrackedNegSession({
+      sessions: this.#neg,
+      id,
+      storage,
+      filter: canonicalizeFilter(filter),
+      timeoutMs: opts?.timeoutMs ?? this.#publishTimeoutMs,
+      signal: opts?.signal,
+      send: (message) => this.#send(message),
+      url: this.url,
+    });
   }
 
   /** Generate a unique subscription id for this relay instance. */
@@ -1277,5 +880,6 @@ export class Relay {
 }
 
 export type { CountResult } from "../core/message.ts";
-export type { RelayFetchEnd, RelayFetchResult } from "./subscribe.ts";
+export type { PublishResult } from "./ok-tracker.ts";
+export type { RelayFetchEnd, RelayFetchResult } from "./fetch.ts";
 export type { SubscribeOptions, SubscriptionHandlers } from "./subscription.ts";

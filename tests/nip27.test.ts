@@ -234,9 +234,14 @@ const cases: Case[] = [
     want: [{ type: "hashtag", value: "a".repeat(42) }, text(" ok")],
   },
   {
-    name: "a longer hashtag run truncates at 42",
+    name: "a hashtag run longer than 42 is plain text",
     content: `#${"b".repeat(50)}`,
-    want: [{ type: "hashtag", value: "b".repeat(42) }, text("b".repeat(8))],
+    want: [text(`#${"b".repeat(50)}`)],
+  },
+  {
+    name: "hashtag keeps a trailing dot as text",
+    content: "#tag.",
+    want: [{ type: "hashtag", value: "tag" }, text(".")],
   },
   {
     name: "emoji shortcode resolves against the event's tags",
@@ -248,6 +253,17 @@ const cases: Case[] = [
       text("ship it "),
       { type: "emoji", shortcode: "shipit", url: "https://cdn.example/shipit.png" },
       text(" now"),
+    ],
+  },
+  {
+    name: "emoji shortcode may contain hyphens",
+    content: {
+      content: "go :my-emoji:",
+      tags: [["emoji", "my-emoji", "https://cdn.example/me.png"]],
+    },
+    want: [
+      text("go "),
+      { type: "emoji", shortcode: "my-emoji", url: "https://cdn.example/me.png" },
     ],
   },
   {

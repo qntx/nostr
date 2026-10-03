@@ -4,6 +4,7 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/11.md
  */
 import { NostrError } from "../core/error.ts";
+import type { Mutable } from "../core/util.ts";
 import { isRecord } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
@@ -42,33 +43,35 @@ const LIMITATION_BOOLEANS = ["auth_required", "payment_required", "restricted_wr
 export type Nip11Fetch = ManualFetch;
 
 export type RelayInformation = {
-  name?: string;
-  description?: string;
-  banner?: string;
-  icon?: string;
-  pubkey?: string;
-  self?: string;
-  contact?: string;
-  supported_nips?: number[];
-  software?: string;
-  version?: string;
-  limitation?: {
-    max_message_length?: number;
-    max_subscriptions?: number;
-    max_limit?: number;
-    max_subid_length?: number;
-    max_event_tags?: number;
-    max_content_length?: number;
-    default_limit?: number;
-    auth_required?: boolean;
-    payment_required?: boolean;
-    restricted_writes?: boolean;
-    min_pow_difficulty?: number;
-    created_at_lower_limit?: number;
-    created_at_upper_limit?: number;
-  };
-  payments_url?: string;
-  terms_of_service?: string;
+  readonly name?: string | undefined;
+  readonly description?: string | undefined;
+  readonly banner?: string | undefined;
+  readonly icon?: string | undefined;
+  readonly pubkey?: string | undefined;
+  readonly self?: string | undefined;
+  readonly contact?: string | undefined;
+  readonly supported_nips?: ReadonlyArray<number> | undefined;
+  readonly software?: string | undefined;
+  readonly version?: string | undefined;
+  readonly limitation?:
+    | {
+        readonly max_message_length?: number | undefined;
+        readonly max_subscriptions?: number | undefined;
+        readonly max_limit?: number | undefined;
+        readonly max_subid_length?: number | undefined;
+        readonly max_event_tags?: number | undefined;
+        readonly max_content_length?: number | undefined;
+        readonly default_limit?: number | undefined;
+        readonly auth_required?: boolean | undefined;
+        readonly payment_required?: boolean | undefined;
+        readonly restricted_writes?: boolean | undefined;
+        readonly min_pow_difficulty?: number | undefined;
+        readonly created_at_lower_limit?: number | undefined;
+        readonly created_at_upper_limit?: number | undefined;
+      }
+    | undefined;
+  readonly payments_url?: string | undefined;
+  readonly terms_of_service?: string | undefined;
 };
 
 export class Nip11Error extends NostrError {
@@ -106,7 +109,7 @@ function parseRelayInformation(json: unknown): RelayInformation {
     throw new Nip11Error("relay information document must be a JSON object");
   }
   const raw = json;
-  const info: RelayInformation = {};
+  const info: Mutable<RelayInformation> = {};
 
   for (const key of STRING_FIELDS) {
     const value = raw[key];
@@ -121,7 +124,7 @@ function parseRelayInformation(json: unknown): RelayInformation {
 
   const rawLim = raw["limitation"];
   if (isRecord(rawLim)) {
-    const limitation: NonNullable<RelayInformation["limitation"]> = {};
+    const limitation: Mutable<NonNullable<RelayInformation["limitation"]>> = {};
     for (const key of LIMITATION_NUMBERS) {
       const value = rawLim[key];
       if (isNonNegativeInteger(value)) {

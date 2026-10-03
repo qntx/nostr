@@ -7,14 +7,14 @@ import type { LoadStyle, ReplaceableLoader } from "./replaceable.ts";
 
 /** A profile-card view of a pubkey: identity fields plus the kind:0 event. */
 export type NostrUser = {
-  pubkey: string;
-  npub: string;
-  shortName: string;
-  image?: string;
-  metadata: ProfileMetadata;
-  lastUpdated: number;
-  event: Event | undefined;
-  fresh: boolean;
+  readonly pubkey: string;
+  readonly npub: string;
+  readonly shortName: string;
+  readonly image?: string | undefined;
+  readonly metadata: ProfileMetadata;
+  readonly lastUpdated: number;
+  readonly event: Event | undefined;
+  readonly fresh: boolean;
 };
 
 /** A {@link NostrUser} with no metadata — used when no kind:0 event exists. */

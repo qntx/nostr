@@ -67,6 +67,9 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Mutable view of a readonly exported type, for local construction. */
+export type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
 /**
  * Normalize a relay URL to a stable form: `http:`/`https:` are rewritten to `ws:`/`wss:` (a bare
  * host gets `wss://`), any other scheme throws UrlError. The result has a lowercased host, the

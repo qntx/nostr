@@ -10,7 +10,7 @@ export type EventRef = string | EventPointer | AddressPointer;
 
 type ParsedRef = {
   filter: { ids?: string[]; authors?: string[]; kinds?: number[]; "#d"?: string[] };
-  hints: string[];
+  hints: ReadonlyArray<string>;
   /** Resolve the fetched event from the index after the network round. */
   lookup: (ctx: LoaderContext) => Event | undefined;
   cacheKey: string;

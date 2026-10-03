@@ -185,6 +185,46 @@ describe("ReactiveEventStore watches", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
+  test("kind-indexed watchQuery skips other kinds and matches its own", async () => {
+    const store = new ReactiveEventStore();
+    const watch = store.watchQuery([{ kinds: [1] }]);
+    const onChange = vi.fn();
+    watch.subscribe(onChange);
+    store.add(new EventBuilder(7, "x").createdAt(1).signWithKeys(keys));
+    await flush();
+    expect(onChange).not.toHaveBeenCalled();
+    const e = note("a", 1);
+    store.add(e);
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(watch.getSnapshot().map((x) => x.id)).toStrictEqual([e.id]);
+  });
+
+  test("watchQuery with a kindless filter watches every kind", async () => {
+    const store = new ReactiveEventStore();
+    const watch = store.watchQuery([{ kinds: [1] }, { authors: [keys.publicKey] }]);
+    const onChange = vi.fn();
+    watch.subscribe(onChange);
+    const e = new EventBuilder(7, "x").createdAt(1).signWithKeys(keys);
+    store.add(e);
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(watch.getSnapshot().map((x) => x.id)).toStrictEqual([e.id]);
+  });
+
+  test("unsubscribed watchQuery is removed from the kind index", async () => {
+    const store = new ReactiveEventStore();
+    const watch = store.watchQuery([{ kinds: [1] }]);
+    const onChange = vi.fn();
+    const unsubscribe = watch.subscribe(onChange);
+    unsubscribe();
+    // unregister happens on a queued microtask
+    await flush();
+    store.add(note("a", 1));
+    await flush();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   test("subscribe after unregistered writes reflects them in getSnapshot", async () => {
     const store = new ReactiveEventStore();
     const watch = store.watchQuery([{ kinds: [1] }]);
@@ -304,10 +344,10 @@ describe("ReactiveEventStore watches", () => {
     expect(byAddress.getSnapshot()).toBeUndefined();
   });
 
-  test("onInsert fires synchronously for accepted, replaced and deletion events", () => {
+  test("insert fires synchronously for accepted, replaced and deletion events", () => {
     const store = new ReactiveEventStore();
     const inserted: string[] = [];
-    store.onInsert((e) => inserted.push(e.id));
+    store.on("insert", (e) => inserted.push(e.id));
     const a = note("a", 1);
     const m = meta(2);
     const del = kind5([a], 3);
@@ -317,10 +357,10 @@ describe("ReactiveEventStore watches", () => {
     expect(inserted).toStrictEqual([a.id, m.id, del.id]);
   });
 
-  test("onRemove fires once per physical removal", () => {
+  test("remove fires once per physical removal", () => {
     const store = new ReactiveEventStore();
     const removed: string[] = [];
-    store.onRemove((e) => removed.push(e.id));
+    store.on("remove", (e) => removed.push(e.id));
     const a = note("a", 1);
     store.add(a);
     // NIP-09 tombstone: the target leaves the index, the kind-5 itself is inserted.
@@ -338,7 +378,7 @@ describe("ReactiveEventStore watches", () => {
     store.remove([m2.id, "ab".repeat(32)]);
     expect(removed).toStrictEqual([m2.id]);
     // Unsubscribing stops delivery.
-    const off = store.onRemove((e) => removed.push(`dead:${e.id}`));
+    const off = store.on("remove", (e) => removed.push(`dead:${e.id}`));
     off();
     const gone = note("gone", 5);
     store.add(gone);
@@ -347,15 +387,15 @@ describe("ReactiveEventStore watches", () => {
     expect(removed).toStrictEqual([gone.id]);
   });
 
-  test("a throwing onRemove listener is reported without starving the rest", () => {
+  test("a throwing remove listener is reported without starving the rest", () => {
     const store = new ReactiveEventStore();
     const { reported, restore } = stubReportError();
     const boom = new Error("boom");
     const seen: string[] = [];
-    store.onRemove(() => {
+    store.on("remove", () => {
       throw boom;
     });
-    store.onRemove((e) => seen.push(e.id));
+    store.on("remove", (e) => seen.push(e.id));
     try {
       const a = note("a", 1);
       store.add(a);

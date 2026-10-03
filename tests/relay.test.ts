@@ -1436,7 +1436,7 @@ describe("insecure URL policy", () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor, allowInsecure: true });
     const first = await pool.ensureRelay("ws://open.example");
     expect(first.connected).toBe(true);
-    pool.close(["ws://open.example"]);
+    pool.closeRelays(["ws://open.example"]);
     pool.setAllowInsecure(false);
     await expect(pool.ensureRelay("ws://open.example")).rejects.toThrow(
       /insecure relay connection blocked/,
@@ -1505,8 +1505,8 @@ describe("idle cleanup", () => {
     const pool = new Pool({
       websocketImplementation: MockWebSocketCtor,
       idleTimeoutMs: 30,
-      onIdleRelaysClosed: (urls) => closed.push(...urls),
     });
+    pool.on("idle", (urls) => closed.push(...urls));
     try {
       const relay = await pool.ensureRelay("wss://idle.example");
       const sub = relay.subscribe([{ kinds: [1] }]);
@@ -1892,6 +1892,33 @@ describe("Relay synthetic EOSE", () => {
     const second = must(openInstance(first, "synth-eose.example"), "second socket");
     second.receive(JSON.stringify(["EOSE", sub.id]));
     expect(eose).toBe(2);
+    relay.close();
+  });
+
+  test("closeOnEose + eoseTimeoutMs closes the REQ on the synthesized EOSE", async () => {
+    const relay = await Relay.connect("wss://one-shot-synth.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    let eose = 0;
+    let closeReason: string | undefined;
+    const sub = relay.subscribe([{ kinds: [1] }], {
+      closeOnEose: true,
+      eoseTimeoutMs: 30,
+      oneose: () => {
+        eose += 1;
+      },
+      onclose: (reason) => {
+        closeReason = reason;
+      },
+    });
+    const ws = MockWebSocket.last();
+    await waitUntil(() => eose === 1);
+    expect(sub.closed).toBe(true);
+    expect(closeReason).toBe("eose");
+    expect(framesOf(ws, "CLOSE").some((m) => m[1] === sub.id)).toBe(true);
+    // A late real EOSE does not refire oneose.
+    ws.receive(JSON.stringify(["EOSE", sub.id]));
+    expect(eose).toBe(1);
     relay.close();
   });
 
@@ -2298,11 +2325,17 @@ describe("Pool aggregated EOSE", () => {
       timeoutMs: 50,
     });
     expect(counts).toHaveLength(1);
-    expect(counts[0]).toMatchObject({ status: "failed", error: expect.stringMatching(/\S/) });
+    expect(counts[0]).toMatchObject({
+      status: "failed",
+      error: expect.objectContaining({ message: expect.stringMatching(/\S/) }),
+    });
 
     const pubs = await pool.publish(["wss://pub-fail.example"], note);
     expect(pubs).toHaveLength(1);
-    expect(pubs[0]).toMatchObject({ status: "failed", error: expect.stringMatching(/\S/) });
+    expect(pubs[0]).toMatchObject({
+      status: "failed",
+      error: expect.objectContaining({ message: expect.stringMatching(/\S/) }),
+    });
 
     expect(MockWebSocket.instances).toHaveLength(3);
     await sleep(40);
@@ -3127,6 +3160,30 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
   const keys = Keys.fromSecretKey(SK);
   const note = (content: string, created_at: number) =>
     EventBuilder.textNote(content).createdAt(created_at).signWithKeys(keys);
+
+  test("drains a 10k-event backlog in order", async () => {
+    const { iterable, fire } = makeIterable();
+    const total = 10_000;
+    // Bare event objects — the queue never verifies, so signing 10k would only cost time.
+    const stub = (i: number): Event => ({
+      id: `${i}`,
+      pubkey: "p",
+      sig: "s",
+      kind: 1,
+      created_at: i + 1,
+      content: "",
+      tags: [],
+    });
+    for (let i = 0; i < total; i += 1) {
+      fire().onevent?.(stub(i));
+    }
+    iterable.close();
+    const seen: number[] = [];
+    for await (const e of iterable) {
+      seen.push(e.created_at);
+    }
+    expect(seen).toStrictEqual(Array.from({ length: total }, (_, i) => i + 1));
+  });
 
   test("remote close drains queued events, then throws RelayClosedError", async () => {
     const { iterable, fire } = makeIterable();

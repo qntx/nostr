@@ -8,6 +8,11 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** The Error itself, or a NostrError carrying `String(value)` for non-Error throws. */
+export function toError(value: unknown): Error {
+  return value instanceof Error ? value : new NostrError(errorMessage(value));
+}
+
 /** Invalid hex encoding or length. */
 export class HexError extends NostrError {
   override name = "HexError";

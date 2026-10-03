@@ -18,10 +18,10 @@ export const NOSTR_URI_REGEX: RegExp = /nostr:([a-z0-9]+1[02-9ac-hj-np-z]+)/i;
 
 export type NostrURI = {
   /** Full URI including `nostr:` */
-  uri: `nostr:${string}`;
+  readonly uri: `nostr:${string}`;
   /** Bech32 entity without prefix */
-  value: string;
-  decoded: DecodedResult;
+  readonly value: string;
+  readonly decoded: DecodedResult;
 };
 
 export function isNostrURI(value: unknown): value is `nostr:${string}` {
