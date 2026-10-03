@@ -2,7 +2,7 @@ import { base64, base64urlnopad } from "@scure/base";
 import { describe, expect, test } from "vite-plus/test";
 
 import { utf8Encoder } from "../src/core/util.ts";
-import { EventValidationError, Kind, Keys, finalizeEvent } from "../src/index.ts";
+import { EventValidationError, HexError, Kind, Keys, finalizeEvent } from "../src/index.ts";
 import type { Event } from "../src/index.ts";
 import {
   BlossomError,
@@ -178,6 +178,41 @@ describe("auth", () => {
     expect(event.tags).toContainEqual(["t", "upload"]);
     expect(event.tags).toContainEqual(["x", ABC_SHA256]);
   });
+
+  test("createAuthTemplate scopes auth to unique lowercased server hostnames", () => {
+    const template = createAuthTemplate("upload", {
+      sha256: HASH,
+      servers: [
+        "https://CDN.Example.com:443/path",
+        "media.example",
+        "wss://not-http.example",
+        "not a url",
+        "https://cdn.example.com",
+      ],
+    });
+    expect(template.tags).toStrictEqual([
+      ["t", "upload"],
+      ["expiration", expect.any(String)],
+      ["x", HASH],
+      ["server", "cdn.example.com"],
+      ["server", "media.example"],
+    ]);
+  });
+
+  test("createUploadAuth forwards servers as BUD-11 scope tags", async () => {
+    const file = new Blob(["abc"]);
+    const event = await createUploadAuth(
+      async (t) => {
+        await Promise.resolve();
+        return signAuth(t);
+      },
+      file,
+      { servers: ["https://cdn.example.com", "cdn2.example"] },
+    );
+    expect(event.tags).toContainEqual(["x", ABC_SHA256]);
+    expect(event.tags).toContainEqual(["server", "cdn.example.com"]);
+    expect(event.tags).toContainEqual(["server", "cdn2.example"]);
+  });
 });
 
 describe("http", () => {
@@ -209,6 +244,39 @@ describe("http", () => {
     const headers = seen?.init?.headers;
     expect(headers?.["Authorization"]).toBe(encodeAuthorizationHeader(auth));
     expect(headers?.["X-SHA-256"]).toBe(ABC_SHA256);
+  });
+
+  test("upload/checkUpload accept a precomputed sha256 and never read the blob", async () => {
+    class UnreadableBlob extends Blob {
+      override async arrayBuffer(): Promise<ArrayBuffer> {
+        return Promise.reject(new Error("must not re-hash"));
+      }
+    }
+    const file = new UnreadableBlob(["abc"], { type: "text/plain" });
+    const auth = signAuth(createAuthTemplate("upload", { sha256: ABC_SHA256 }));
+    const seen: Array<string | null> = [];
+    const fetchImpl: BlossomFetch = async (_input, init) => {
+      await Promise.resolve();
+      seen.push(new Headers(init?.headers).get("x-sha-256"));
+      return jsonResponse({
+        url: `https://cdn.example.com/${ABC_SHA256}`,
+        sha256: ABC_SHA256,
+        size: 3,
+      });
+    };
+    const got = await upload("https://cdn.example.com", file, auth, {
+      fetch: fetchImpl,
+      sha256: ABC_SHA256,
+    });
+    expect(got.sha256).toBe(ABC_SHA256);
+    await checkUpload("https://cdn.example.com", file, auth, {
+      fetch: fetchImpl,
+      sha256: ABC_SHA256,
+    });
+    expect(seen).toStrictEqual([ABC_SHA256, ABC_SHA256]);
+    await expect(
+      upload("https://cdn.example.com", file, auth, { fetch: fetchImpl, sha256: "nope" }),
+    ).rejects.toThrow(HexError);
   });
 
   test("upload keeps 10063 path prefix when joining /upload", async () => {

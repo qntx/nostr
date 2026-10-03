@@ -34,14 +34,12 @@ function authFrames(net: ReturnType<typeof createFakeRelayNetwork>, url: string)
 }
 
 function gatedClient(net: ReturnType<typeof createFakeRelayNetwork>, signer?: NostrSigner): Client {
-  const builder = Client.builder()
-    .relays([GATED])
-    .websocketImplementation(net.websocketImplementation)
-    .enableReconnect(false);
-  if (signer) {
-    builder.signer(signer);
-  }
-  return builder.build();
+  return new Client({
+    relays: [GATED],
+    websocketImplementation: net.websocketImplementation,
+    enableReconnect: false,
+    signer,
+  });
 }
 
 describe("lazy NIP-42 AUTH", () => {
@@ -59,7 +57,7 @@ describe("lazy NIP-42 AUTH", () => {
       client.setSigner(new KeysSigner(keys));
       const note = EventBuilder.textNote("late signer").createdAt(5).signWithKeys(keys);
       const results = await client.publish(note);
-      expect(results[0]?.result?.ok).toBe(true);
+      expect(results[0]?.status).toBe("ok");
       expect(authFrames(net, GATED)).toHaveLength(1);
 
       await client.shutdown();
@@ -79,8 +77,10 @@ describe("lazy NIP-42 AUTH", () => {
 
       const note = EventBuilder.textNote("anon").createdAt(6).signWithKeys(keys);
       const results = await client.publish(note);
-      expect(results[0]?.result?.ok).toBe(false);
-      expect(results[0]?.result?.message).toContain("auth-required");
+      expect(results[0]).toMatchObject({
+        status: "rejected",
+        message: expect.stringContaining("auth-required"),
+      });
       expect(client.pool.getRelay(GATED)?.connected).toBe(true);
       expect(authFrames(net, GATED)).toHaveLength(0);
 
@@ -99,7 +99,7 @@ describe("lazy NIP-42 AUTH", () => {
       await client.connect();
       const note = EventBuilder.textNote("authed").createdAt(7).signWithKeys(keys);
       const published = await client.publish(note);
-      expect(published[0]?.result?.ok).toBe(true);
+      expect(published[0]?.status).toBe("ok");
       expect(authFrames(net, GATED)).toHaveLength(1);
 
       client.setSigner(undefined);
@@ -109,8 +109,10 @@ describe("lazy NIP-42 AUTH", () => {
 
       const second = EventBuilder.textNote("after removal").createdAt(8).signWithKeys(keys);
       const results = await client.publish(second);
-      expect(results[0]?.result?.ok).toBe(false);
-      expect(results[0]?.result?.message).toContain("auth-required");
+      expect(results[0]).toMatchObject({
+        status: "rejected",
+        message: expect.stringContaining("auth-required"),
+      });
       expect(authFrames(net, GATED)).toHaveLength(1);
 
       await client.shutdown();
@@ -124,18 +126,18 @@ describe("lazy NIP-42 AUTH", () => {
     try {
       net.relay(GATED, { auth: { challenge: "c1", writes: true } });
       const keys = Keys.fromSecretKey(SK);
-      const manual = Client.builder()
-        .signer(new KeysSigner(keys))
-        .relays([GATED])
-        .websocketImplementation(net.websocketImplementation)
-        .enableReconnect(false)
-        .automaticAuth(false)
-        .build();
+      const manual = new Client({
+        signer: new KeysSigner(keys),
+        relays: [GATED],
+        websocketImplementation: net.websocketImplementation,
+        enableReconnect: false,
+        automaticAuth: false,
+      });
       await manual.connect();
       await sleep(20);
       const note = EventBuilder.textNote("no auth").createdAt(9).signWithKeys(keys);
       const manualResult = await manual.publish(note);
-      expect(manualResult[0]?.result?.ok).toBe(false);
+      expect(manualResult[0]?.status).toBe("rejected");
       expect(authFrames(net, GATED)).toHaveLength(0);
       await manual.shutdown();
     } finally {
@@ -218,12 +220,12 @@ describe("lazy NIP-42 AUTH", () => {
 
       const note = EventBuilder.textNote("gated").createdAt(13).signWithKeys(keys);
       const rejected = await client.publish(note);
-      expect(rejected[0]?.result?.ok).toBe(false);
+      expect(rejected[0]?.status).toBe("rejected");
 
       client.setSigner(new KeysSigner(keys));
       await waitUntil(() => authFrames(net, GATED).length === 2);
       const secondPublished = await client.publish(note);
-      expect(secondPublished[0]?.result?.ok).toBe(true);
+      expect(secondPublished[0]?.status).toBe("ok");
 
       await client.shutdown();
     } finally {
@@ -240,7 +242,7 @@ describe("lazy NIP-42 AUTH", () => {
       await client.connect();
       const note = EventBuilder.textNote("one").createdAt(10).signWithKeys(keys);
       const published = await client.publish(note);
-      expect(published[0]?.result?.ok).toBe(true);
+      expect(published[0]?.status).toBe("ok");
       expect(authFrames(net, GATED)).toHaveLength(1);
 
       relay.configure({ auth: { challenge: "c2", writes: true } });
@@ -249,7 +251,7 @@ describe("lazy NIP-42 AUTH", () => {
       await sleep(20);
       const second = EventBuilder.textNote("two").createdAt(11).signWithKeys(keys);
       const secondResult = await client.publish(second);
-      expect(secondResult[0]?.result?.ok).toBe(true);
+      expect(secondResult[0]?.status).toBe("ok");
       expect(authFrames(net, GATED)).toHaveLength(2);
 
       await client.shutdown();

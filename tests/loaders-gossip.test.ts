@@ -100,9 +100,9 @@ describe("Gossip", () => {
   test("ingest NIP-65 and route by authors", () => {
     const keys = Keys.fromSecretKey(SK);
     const list = relayListEventBuilder([
-      { url: "wss://write.example", read: false, write: true },
-      { url: "wss://read.example", read: true, write: false },
-      { url: "wss://both.example", read: true, write: true },
+      { url: "wss://write.example", marker: "write" },
+      { url: "wss://read.example", marker: "read" },
+      { url: "wss://both.example", marker: "both" },
     ])
       .createdAt(1)
       .signWithKeys(keys);
@@ -134,7 +134,7 @@ describe("Gossip", () => {
     const b = Keys.fromSecretKey(SK2);
     const gossip = new Gossip();
     gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -158,7 +158,7 @@ describe("Gossip", () => {
     const b = Keys.fromSecretKey(SK2);
     const gossip = new Gossip();
     gossip.ingest(
-      relayListEventBuilder([{ url: "wss://in-a.example", read: true, write: false }])
+      relayListEventBuilder([{ url: "wss://in-a.example", marker: "read" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -181,7 +181,7 @@ describe("Gossip", () => {
     const b = Keys.fromSecretKey(SK2);
     const gossip = new Gossip();
     gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -201,7 +201,7 @@ describe("Gossip", () => {
 
   test("ingest kind 10050 DM relays without clobbering NIP-65", () => {
     const keys = Keys.fromSecretKey(SK);
-    const nip65 = relayListEventBuilder([{ url: "wss://out.example", read: false, write: true }])
+    const nip65 = relayListEventBuilder([{ url: "wss://out.example", marker: "write" }])
       .createdAt(10)
       .signWithKeys(keys);
     const dm = dmRelayListEventBuilder(["wss://dm-a.example", "wss://dm-b.example"])
@@ -237,7 +237,7 @@ describe("Gossip", () => {
 
   test("routes are LRU-bounded by maxPubkeys; lookups and writes refresh recency", () => {
     const gossip = new Gossip({ maxPubkeys: 3 });
-    const items = [{ url: "wss://r.example", read: true, write: true }];
+    const items = [{ url: "wss://r.example", marker: "both" as const }];
     const a = "a".repeat(64);
     const b = "b".repeat(64);
     const c = "c".repeat(64);
@@ -328,6 +328,38 @@ describe("Loaders", () => {
     pool.close();
   });
 
+  test("profile metadata keeps only known string fields; arrays yield {}", async () => {
+    const keys = Keys.fromSecretKey(SK);
+    const meta = new EventBuilder(
+      Kind.Metadata,
+      JSON.stringify({ name: 5, picture: ["x"], about: "ok" }),
+    )
+      .createdAt(11)
+      .signWithKeys(keys);
+    const keys2 = Keys.fromSecretKey(SK2);
+    const arrayMeta = new EventBuilder(Kind.Metadata, '["nope"]').createdAt(11).signWithKeys(keys2);
+
+    const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
+    const loaders = createLoaders({
+      pool,
+      relays: ["wss://idx.example"],
+      index: new ReactiveEventStore(),
+    });
+
+    const p = loaders.profile(keys.publicKey);
+    await respondReplaceables([{ kind: Kind.Metadata, event: meta }]);
+    const user = await p;
+    expect(user.metadata).toStrictEqual({ about: "ok" });
+    expect(user.image).toBeUndefined();
+
+    const p2 = loaders.profile(keys2.publicKey);
+    await respondReplaceables([{ kind: Kind.Metadata, event: arrayMeta }]);
+    const user2 = await p2;
+    expect(user2.metadata).toStrictEqual({});
+
+    pool.close();
+  });
+
   test("profile falls back to the npub when display_name and name are empty", async () => {
     const keys = Keys.fromSecretKey(SK);
     const meta = EventBuilder.metadata({ display_name: "", name: "" })
@@ -372,8 +404,8 @@ describe("Loaders", () => {
     await respondReplaceables([{ kind: Kind.MuteList, event: mute }]);
     const result = await p;
     expect(result.items).toStrictEqual([
-      { label: "hashtag", value: "spam" },
-      { label: "word", value: "nsfw" },
+      { type: "hashtag", value: "spam" },
+      { type: "word", value: "nsfw" },
     ]);
 
     pool.close();
@@ -381,19 +413,19 @@ describe("Loaders", () => {
 
   test("relayList loader + client.observe", async () => {
     const keys = Keys.fromSecretKey(SK);
-    const list = relayListEventBuilder([{ url: "wss://out.example", read: true, write: true }])
+    const list = relayListEventBuilder([{ url: "wss://out.example", marker: "both" }])
       .createdAt(5)
       .signWithKeys(keys);
 
-    const client = Client.builder()
-      .relays(["wss://idx.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      relays: ["wss://idx.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
 
     const p = client.loaders.relayList(keys.publicKey);
     await respondReplaceables([{ kind: Kind.RelayList, event: list }]);
     const result = await p;
-    expect(result.items.some((i: { write: boolean }) => i.write)).toBe(true);
+    expect(result.items.some((i) => i.marker !== "read")).toBe(true);
 
     client.observe(list);
     expect(client.gossip.outboxRelays(keys.publicKey).length).toBeGreaterThan(0);
@@ -405,10 +437,10 @@ describe("Loaders", () => {
     const keys = Keys.fromSecretKey(SK);
     const dm = dmRelayListEventBuilder(["wss://dm-a.example"]).createdAt(7).signWithKeys(keys);
 
-    const client = Client.builder()
-      .relays(["wss://idx.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      relays: ["wss://idx.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
 
     const p = client.loaders.dmRelayList(keys.publicKey);
     await respondReplaceables([{ kind: Kind.DirectMessageRelaysList, event: dm }]);
@@ -428,16 +460,16 @@ describe("Loaders", () => {
 
   test("hydrateGossip loads 10002 and 10050", async () => {
     const keys = Keys.fromSecretKey(SK);
-    const list = relayListEventBuilder([{ url: "wss://out.example", read: true, write: true }])
+    const list = relayListEventBuilder([{ url: "wss://out.example", marker: "both" }])
       .createdAt(8)
       .signWithKeys(keys);
     const dm = dmRelayListEventBuilder(["wss://dm.example"]).createdAt(9).signWithKeys(keys);
 
-    const client = Client.builder()
-      .relays(["wss://idx.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://idx.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     const hydrateP = client.hydrateGossip([keys.publicKey]);
     await respondReplaceables([
@@ -459,11 +491,11 @@ describe("loaders on the reactive index (issue #136)", () => {
   test("a profile arriving via subscribe is returned by profile cache-only", async () => {
     const net = createFakeRelayNetwork();
     try {
-      const client = Client.builder()
-        .relays(["wss://idx.example"])
-        .websocketImplementation(net.websocketImplementation)
-        .enableReconnect(false)
-        .build();
+      const client = new Client({
+        relays: ["wss://idx.example"],
+        websocketImplementation: net.websocketImplementation,
+        enableReconnect: false,
+      });
       const keys = Keys.fromSecretKey(SK);
       const meta = EventBuilder.metadata({ name: "alice" }).createdAt(3).signWithKeys(keys);
       net.relay("wss://idx.example").seed([meta]);
@@ -485,11 +517,11 @@ describe("loaders on the reactive index (issue #136)", () => {
   test("a loader network fetch records seenOn on the index", async () => {
     const net = createFakeRelayNetwork();
     try {
-      const client = Client.builder()
-        .relays(["wss://idx.example"])
-        .websocketImplementation(net.websocketImplementation)
-        .enableReconnect(false)
-        .build();
+      const client = new Client({
+        relays: ["wss://idx.example"],
+        websocketImplementation: net.websocketImplementation,
+        enableReconnect: false,
+      });
       const keys = Keys.fromSecretKey(SK);
       const meta = EventBuilder.metadata({ name: "bob" }).createdAt(4).signWithKeys(keys);
       net.relay("wss://idx.example").seed([meta]);
@@ -616,14 +648,14 @@ describe("loaders on the reactive index (issue #136)", () => {
   test("loader fetches flow through client ingest: persisted and feed gossip", async () => {
     const net = createFakeRelayNetwork();
     try {
-      const client = Client.builder()
-        .relays(["wss://idx.example"])
-        .websocketImplementation(net.websocketImplementation)
-        .enableReconnect(false)
-        .build();
+      const client = new Client({
+        relays: ["wss://idx.example"],
+        websocketImplementation: net.websocketImplementation,
+        enableReconnect: false,
+      });
       const keys = Keys.fromSecretKey(SK);
       const meta = EventBuilder.metadata({ name: "alice" }).createdAt(5).signWithKeys(keys);
-      const list = relayListEventBuilder([{ url: "wss://out.example", read: true, write: true }])
+      const list = relayListEventBuilder([{ url: "wss://out.example", marker: "both" }])
         .createdAt(6)
         .signWithKeys(keys);
       net.relay("wss://idx.example").seed([meta, list]);

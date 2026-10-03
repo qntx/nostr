@@ -1,14 +1,11 @@
-import { NostrError } from "../core/error.ts";
 /**
  * NIP-46 (Nostr Connect) protocol helpers: bunker URI, nostrconnect URI, RPC JSON.
  * Transport/signing live in {@link Nip46Signer}.
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/46.md
  */
-import { assertHex32, isHex32, isRecord } from "../core/util.ts";
-
-// oxlint-disable-next-line no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
-export const BUNKER_REGEX: RegExp = /^bunker:\/\/([0-9a-fA-F]{64})\??([?/\w:.=&%-]*)$/;
+import { NostrError } from "../core/error.ts";
+import { isHex32, isRecord } from "../core/util.ts";
 
 export type BunkerPointer = {
   /** Remote signer / bunker public key (hex). */
@@ -44,9 +41,6 @@ export type Nip46Response = {
 
 export class Nip46Error extends NostrError {
   override name = "Nip46Error";
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-  }
 }
 
 /** Encode a bunker pointer as `bunker://…`. */
@@ -66,22 +60,24 @@ export function toBunkerURL(pointer: BunkerPointer): string {
  * (including NIP-05 identifiers).
  */
 export function parseBunkerURL(input: string): BunkerPointer | undefined {
-  const match = BUNKER_REGEX.exec(input.trim());
-  const hex = match?.at(1);
-  if (match === null || hex === undefined) {
-    return undefined;
-  }
+  let url: URL;
   try {
-    const pubkey = assertHex32(hex, "bunker pubkey");
-    const qs = new URLSearchParams(match.at(2) ?? "");
-    return {
-      pubkey,
-      relays: qs.getAll("relay"),
-      secret: qs.get("secret") ?? undefined,
-    };
+    url = new URL(input.trim());
   } catch {
     return undefined;
   }
+  if (url.protocol !== "bunker:") {
+    return undefined;
+  }
+  const pubkey = url.hostname || url.pathname.replace(/^\/*/, "");
+  if (!isHex32(pubkey.toLowerCase())) {
+    return undefined;
+  }
+  return {
+    pubkey: pubkey.toLowerCase(),
+    relays: url.searchParams.getAll("relay"),
+    secret: url.searchParams.get("secret") ?? undefined,
+  };
 }
 
 /** Build a client-initiated `nostrconnect://` URI. */
@@ -124,7 +120,7 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
     url = new URL(uri);
   } catch (error) {
     throw new Nip46Error(`invalid nostrconnect URI: ${uri}`, {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
   if (url.protocol !== "nostrconnect:") {
@@ -176,7 +172,7 @@ export function decodeNip46Request(json: string): Nip46Request {
     data = JSON.parse(json);
   } catch (error) {
     throw new Nip46Error("invalid NIP-46 request JSON", {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
   if (!isRecord(data) || typeof data["id"] !== "string" || typeof data["method"] !== "string") {
@@ -205,7 +201,7 @@ export function decodeNip46Response(json: string): Nip46Response {
     data = JSON.parse(json);
   } catch (error) {
     throw new Nip46Error("invalid NIP-46 response JSON", {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
   if (!isRecord(data) || typeof data["id"] !== "string") {

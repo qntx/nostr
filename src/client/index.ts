@@ -1,8 +1,8 @@
 export { Client } from "./client.ts";
-export { ClientBuilder } from "./builder.ts";
 export {
   ClientError,
   SyncDirection,
+  type ClientEventMap,
   type ClientOptions,
   type FetchEachOptions,
   type FetchEventsOptions,

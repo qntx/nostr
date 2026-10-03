@@ -3,6 +3,11 @@ export class NostrError extends Error {
   override name = "NostrError";
 }
 
+/** `error.message` for Error instances, `String(error)` otherwise. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** Invalid hex encoding or length. */
 export class HexError extends NostrError {
   override name = "HexError";
@@ -28,7 +33,7 @@ export class MessageError extends NostrError {
   override name = "MessageError";
 }
 
-/** Wasm verify instance aborted; later verifies on that instance fail. */
-export class WasmVerifyPoisonedError extends NostrError {
-  override name = "WasmVerifyPoisonedError";
+/** Wasm instance aborted; later calls on that instance fail. */
+export class WasmPoisonedError extends NostrError {
+  override name = "WasmPoisonedError";
 }

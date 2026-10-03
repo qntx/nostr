@@ -4,13 +4,14 @@ import type { Gossip } from "../gossip/gossip.ts";
 import { fanIn, fetchRouted } from "../relay/fan-in.ts";
 import type { FanInOptions, RoutedJob } from "../relay/fan-in.ts";
 import type { Pool } from "../relay/pool.ts";
+import type { Closer } from "../relay/subscription.ts";
 import { ClientError } from "./types.ts";
 
 /** Remainder is one job on defaults; throw before any REQ when defaults are empty. */
 export function jobsForFilters(
   gossip: Gossip,
-  filters: Filter[],
-  defaultRelays: () => string[],
+  filters: ReadonlyArray<Filter>,
+  defaultRelays: () => ReadonlyArray<string>,
 ): RoutedJob[] {
   const routed = filters.map((f) => gossip.route(f));
   const needsDefaults = routed.some((r) => r.remainder !== undefined);
@@ -33,8 +34,8 @@ export function jobsForFilters(
 export async function fetchGossip(
   pool: Pool,
   gossip: Gossip,
-  filters: Filter[],
-  defaultRelays: () => string[],
+  filters: ReadonlyArray<Filter>,
+  defaultRelays: () => ReadonlyArray<string>,
   opts?: {
     timeoutMs?: number | undefined;
     signal?: AbortSignal | undefined;
@@ -51,10 +52,10 @@ export async function fetchGossip(
 export function subscribeGossip(
   pool: Pool,
   gossip: Gossip,
-  filters: Filter[],
-  defaultRelays: () => string[],
+  filters: ReadonlyArray<Filter>,
+  defaultRelays: () => ReadonlyArray<string>,
   opts: FanInOptions,
-): { close: (reason?: string) => void } {
+): Closer {
   const jobs = jobsForFilters(gossip, filters, defaultRelays);
   if (jobs.length === 0) {
     queueMicrotask(() => opts.oneose?.());

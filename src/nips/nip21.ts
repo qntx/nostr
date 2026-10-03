@@ -7,6 +7,11 @@ import { NostrError } from "../core/error.ts";
 import { decode } from "./nip19.ts";
 import type { DecodedResult } from "./nip19.ts";
 
+/** Error thrown by {@link parseNostrURI} on malformed or non-decodable URIs. */
+export class Nip21Error extends NostrError {
+  override name = "Nip21Error";
+}
+
 /** Matches `nostr:<bech32>` (not anchored). */
 // oxlint-disable-next-line no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
 export const NOSTR_URI_REGEX: RegExp = /nostr:([a-z0-9]+1[02-9ac-hj-np-z]+)/i;
@@ -34,14 +39,20 @@ export function parseNostrURI(uri: string): NostrURI {
   const match = /^nostr:([a-z0-9]+1[02-9ac-hj-np-z]+)$/i.exec(uri);
   const entity = match?.at(1);
   if (entity === undefined) {
-    throw new NostrError(`invalid Nostr URI: ${uri}`);
+    throw new Nip21Error(`invalid Nostr URI: ${uri}`);
   }
   if (entity.toLowerCase().startsWith("nsec1")) {
-    throw new NostrError("NIP-21 identifiers exclude nsec");
+    throw new Nip21Error("NIP-21 identifiers exclude nsec");
+  }
+  let decoded: DecodedResult;
+  try {
+    decoded = decode(entity);
+  } catch (error) {
+    throw new Nip21Error(`invalid Nostr URI: ${uri}`, { cause: error });
   }
   return {
     uri: `nostr:${entity}`,
     value: entity,
-    decoded: decode(entity),
+    decoded,
   };
 }

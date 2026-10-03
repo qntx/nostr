@@ -32,7 +32,7 @@ const ALICE_OUT = "wss://alice-out.example";
 let net: FakeRelayNetwork;
 
 function seedLists(net: FakeRelayNetwork, alice: Keys, bob: Keys): void {
-  const aliceOut = relayListEventBuilder([{ url: ALICE_OUT, read: false, write: true }])
+  const aliceOut = relayListEventBuilder([{ url: ALICE_OUT, marker: "write" }])
     .createdAt(1)
     .signWithKeys(alice);
   const aliceDm = dmRelayListEventBuilder([ALICE_DM]).createdAt(2).signWithKeys(alice);
@@ -85,8 +85,8 @@ const sawProgress = (
 ): boolean => received.length > 0 || persisted.includes(id) || decrypts > 0;
 
 const anyResultOk = (w: {
-  results: ReadonlyArray<{ result?: { ok: boolean } | undefined }>;
-}): boolean => w.results.some((r) => r.result?.ok === true);
+  results: ReadonlyArray<{ readonly status: "ok" | "rejected" | "failed" }>;
+}): boolean => w.results.some((r) => r.status === "ok");
 
 const firstCallGate = (count: number, gate: Promise<void>): Promise<void> | undefined =>
   count === 1 ? gate : undefined;
@@ -198,12 +198,12 @@ describe("Client NIP-17", () => {
     const bobKeys = Keys.fromSecretKey(BOB_SK);
     seedLists(net, aliceKeys, bobKeys);
 
-    const alice = Client.builder()
-      .signer(new KeysSigner(aliceKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const alice = new Client({
+      signer: new KeysSigner(aliceKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await alice.connect();
 
     const sent = await alice.sendPrivateMessage(bobKeys.publicKey, "hola");
@@ -243,12 +243,12 @@ describe("Client NIP-17", () => {
     const aliceDm = dmRelayListEventBuilder([ALICE_DM]).createdAt(2).signWithKeys(aliceKeys);
     net.relay(IDX).seed([aliceDm]);
 
-    const alice = Client.builder()
-      .signer(new KeysSigner(aliceKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const alice = new Client({
+      signer: new KeysSigner(aliceKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await alice.connect();
 
     await expect(alice.sendPrivateMessage(bobKeys.publicKey, "hola")).rejects.toThrow(/not ready/);
@@ -274,12 +274,12 @@ describe("Client NIP-17", () => {
     const bobDm = dmRelayListEventBuilder([BOB_DM]).createdAt(3).signWithKeys(bobKeys);
     net.relay(IDX).seed([bobDm]);
 
-    const alice = Client.builder()
-      .signer(new KeysSigner(aliceKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const alice = new Client({
+      signer: new KeysSigner(aliceKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await alice.connect();
 
     await expect(alice.sendPrivateMessage(bobKeys.publicKey, "hola")).rejects.toThrow(/not ready/);
@@ -327,13 +327,13 @@ describe("Client NIP-17", () => {
     net.relay(BOB_DM).seed([gift, junk, forged]);
 
     const { store, persistIds } = trackingStore();
-    const bob = Client.builder()
-      .signer(new KeysSigner(bobKeys))
-      .storage(store)
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const bob = new Client({
+      signer: new KeysSigner(bobKeys),
+      storage: store,
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await bob.connect();
 
     const inbox = await bob.fetchPrivateMessages({ timeoutMs: 2000 });
@@ -376,12 +376,12 @@ describe("Client NIP-17", () => {
     expect(ephemeral.kind).toBe(Kind.GiftWrapEphemeral);
     net.relay(BOB_DM).seed([gift, ephemeral]);
 
-    const bob = Client.builder()
-      .signer(new KeysSigner(bobKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const bob = new Client({
+      signer: new KeysSigner(bobKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await bob.connect();
 
     const inbox = await bob.fetchPrivateMessages({ timeoutMs: 2000 });
@@ -400,18 +400,18 @@ describe("Client NIP-17", () => {
     const bobKeys = Keys.fromSecretKey(BOB_SK);
     seedLists(net, aliceKeys, bobKeys);
 
-    const alice = Client.builder()
-      .signer(new KeysSigner(aliceKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
-    const bob = Client.builder()
-      .signer(new KeysSigner(bobKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const alice = new Client({
+      signer: new KeysSigner(aliceKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    const bob = new Client({
+      signer: new KeysSigner(bobKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await alice.connect();
     await bob.connect();
 
@@ -437,12 +437,12 @@ describe("Client NIP-17", () => {
     const bobKeys = Keys.fromSecretKey(BOB_SK);
     seedLists(net, aliceKeys, bobKeys);
 
-    const bob = Client.builder()
-      .signer(new KeysSigner(bobKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const bob = new Client({
+      signer: new KeysSigner(bobKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await bob.connect();
 
     const sub = await bob.subscribePrivateMessages();
@@ -461,18 +461,18 @@ describe("Client NIP-17", () => {
     const bobKeys = Keys.fromSecretKey(BOB_SK);
     seedLists(net, aliceKeys, bobKeys);
 
-    const alice = Client.builder()
-      .signer(new KeysSigner(aliceKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
-    const bob = Client.builder()
-      .signer(new KeysSigner(bobKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const alice = new Client({
+      signer: new KeysSigner(aliceKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    const bob = new Client({
+      signer: new KeysSigner(bobKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     const junk = finalizeEvent(
       {
         kind: Kind.GiftWrapEphemeral,
@@ -563,13 +563,13 @@ describe("Client NIP-17", () => {
       decrypts += 1;
       return origDecrypt(peer, payload);
     };
-    const bob = Client.builder()
-      .signer(signer)
-      .storage(store)
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const bob = new Client({
+      signer,
+      storage: store,
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await bob.connect();
     const got: string[] = [];
     const sub = await bob.subscribePrivateMessages({
@@ -624,13 +624,13 @@ describe("Client NIP-17", () => {
         decryptFinished += 1;
       }
     };
-    const bob = Client.builder()
-      .signer(signer)
-      .storage(store)
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const bob = new Client({
+      signer,
+      storage: store,
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await bob.connect();
     const got: string[] = [];
     const sub = await bob.subscribePrivateMessages({
@@ -687,13 +687,13 @@ describe("Client NIP-17", () => {
         decryptFinished += 1;
       }
     };
-    const bob = Client.builder()
-      .signer(signer)
-      .storage(store)
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const bob = new Client({
+      signer,
+      storage: store,
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await bob.connect();
     const got: string[] = [];
     const ac = new AbortController();
@@ -731,13 +731,13 @@ describe("Client NIP-17", () => {
       Keys.generate().secretKey,
     );
     const { store, persistIds } = trackingStore();
-    const bob = Client.builder()
-      .signer(new KeysSigner(bobKeys))
-      .storage(store)
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const bob = new Client({
+      signer: new KeysSigner(bobKeys),
+      storage: store,
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await bob.connect();
     const got: string[] = [];
     const sub = await bob.subscribePrivateMessages({
@@ -757,22 +757,22 @@ describe("Client NIP-17", () => {
 
   test("setDmRelays publishes kind 10050 to outbox, not to peer DM relays", async () => {
     const aliceKeys = Keys.fromSecretKey(ALICE_SK);
-    const aliceOut = relayListEventBuilder([{ url: ALICE_OUT, read: false, write: true }])
+    const aliceOut = relayListEventBuilder([{ url: ALICE_OUT, marker: "write" }])
       .createdAt(1)
       .signWithKeys(aliceKeys);
     net.relay(IDX).seed([aliceOut]);
 
-    const alice = Client.builder()
-      .signer(new KeysSigner(aliceKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const alice = new Client({
+      signer: new KeysSigner(aliceKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await alice.connect();
     await alice.hydrateGossip([aliceKeys.publicKey]);
 
     const results = await alice.setDmRelays([ALICE_DM]);
-    expect(results.some((r) => r.result?.ok)).toBe(true);
+    expect(results.some((r) => r.status === "ok")).toBe(true);
     expect(
       net
         .relay(ALICE_OUT)
@@ -797,12 +797,12 @@ describe("Client NIP-17", () => {
     const bobKeys = Keys.fromSecretKey(BOB_SK);
     seedLists(net, aliceKeys, bobKeys);
 
-    const alice = Client.builder()
-      .signer(new KeysSigner(aliceKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const alice = new Client({
+      signer: new KeysSigner(aliceKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await alice.connect();
     await alice.hydrateGossip([bobKeys.publicKey]);
 
@@ -860,12 +860,12 @@ describe("Client NIP-17", () => {
     const bobKeys = Keys.fromSecretKey(BOB_SK);
     seedLists(net, aliceKeys, bobKeys);
 
-    const alice = Client.builder()
-      .signer(new KeysSigner(aliceKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const alice = new Client({
+      signer: new KeysSigner(aliceKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await alice.connect();
     await alice.hydrateGossip([aliceKeys.publicKey, bobKeys.publicKey]);
     await alice.pool.ensureRelay(ALICE_DM);
@@ -895,11 +895,11 @@ describe("issue #125", () => {
     // (a) Client.sync down-sync records the event and its relay in the index
     const syncNote = EventBuilder.textNote("synced").createdAt(40).signWithKeys(aliceKeys);
     net.relay("wss://sync-src.example").seed([syncNote]);
-    const syncClient = Client.builder()
-      .relays(["wss://sync-src.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const syncClient = new Client({
+      relays: ["wss://sync-src.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await syncClient.connect();
     const summary = await syncClient.sync({ kinds: [1] }, { timeoutMs: 2000 });
     expect(summary.remote).toStrictEqual([syncNote.id]);
@@ -910,11 +910,11 @@ describe("issue #125", () => {
     await syncClient.shutdown();
 
     // (b) a Client.outbox live event is indexed with its relay
-    const outClient = Client.builder()
-      .relays(["wss://out.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const outClient = new Client({
+      relays: ["wss://out.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     const feed = outClient.outbox({ authors: [aliceKeys.publicKey], kinds: [Kind.TextNote] });
     feed.startLive({ since: 0 });
     await waitFor(() => clientFrames("wss://out.example").some((msg) => msg[0] === "REQ"));
@@ -942,12 +942,12 @@ describe("issue #125", () => {
     );
     net.relay(BOB_DM).seed([wrap1]);
     net.relay(BOB_DM2).seed([wrap1]);
-    const bob = Client.builder()
-      .signer(new KeysSigner(bobKeys))
-      .relays([IDX])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const bob = new Client({
+      signer: new KeysSigner(bobKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await bob.connect();
     const inbox = await bob.fetchPrivateMessages({ timeoutMs: 2000 });
     expect(inbox).toHaveLength(1);

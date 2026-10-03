@@ -5,6 +5,7 @@ import { itemCompare, sortEvents, validateSignedEvent } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { matchFilter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
+import { SerialQueue } from "../core/serial.ts";
 import { eventAddress, parseEventAddress } from "../core/tag.ts";
 import { DeletionState } from "./deletion.ts";
 import { StorageError, toStorageError } from "./error.ts";
@@ -41,7 +42,7 @@ import type { EventStore, NegentropyItem, OutboxBound, PutResult } from "./types
 /** Options for {@link IndexedDbEventStore}. */
 export type IndexedDbEventStoreOptions = {
   /** IndexedDB database name. */
-  dbName?: string;
+  dbName?: string | undefined;
 };
 
 /**
@@ -59,7 +60,7 @@ export class IndexedDbEventStore implements EventStore {
   readonly #deletion = new DeletionState();
   #replaceable = new Map<string, string>();
   /** Serializes writes so abort restore cannot roll back a committed sibling tx. */
-  #writeTail: Promise<void> = Promise.resolve();
+  readonly #writeQueue = new SerialQueue();
 
   constructor(opts: IndexedDbEventStoreOptions = {}) {
     this.#dbName = opts.dbName ?? "@qntx/nostr";
@@ -117,20 +118,6 @@ export class IndexedDbEventStore implements EventStore {
     await done;
   }
 
-  async #enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
-    const prev = this.#writeTail;
-    let release: (() => void) | undefined;
-    this.#writeTail = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    try {
-      await prev;
-      return await op();
-    } finally {
-      release?.();
-    }
-  }
-
   async put(event: Event): Promise<PutResult> {
     const [result] = await this.putMany([event]);
     if (result === undefined) {
@@ -144,7 +131,7 @@ export class IndexedDbEventStore implements EventStore {
     if (events.length === 0) {
       return [];
     }
-    return this.#enqueueWrite(async () => this.#putManyLocked(events));
+    return this.#writeQueue.run(async () => this.#putManyLocked(events));
   }
 
   async #putManyLocked(events: ReadonlyArray<Event>): Promise<PutResult[]> {
@@ -319,7 +306,7 @@ export class IndexedDbEventStore implements EventStore {
     return event;
   }
 
-  async query(filters: Filter[]): Promise<Event[]> {
+  async query(filters: ReadonlyArray<Filter>): Promise<Event[]> {
     const db = await this.#ensure();
     const tx = db.transaction([EVENTS, TAG_REFS], "readonly");
     const done = txDone(tx);
@@ -340,7 +327,7 @@ export class IndexedDbEventStore implements EventStore {
     return events;
   }
 
-  async count(filters: Filter[]): Promise<number> {
+  async count(filters: ReadonlyArray<Filter>): Promise<number> {
     const db = await this.#ensure();
     const tx = db.transaction([EVENTS, TAG_REFS], "readonly");
     const done = txDone(tx);
@@ -420,7 +407,7 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async setOutboxBound(pubkey: string, kind: number, bound: OutboxBound): Promise<void> {
-    return this.#enqueueWrite(async () => this.#setOutboxBoundLocked(pubkey, kind, bound));
+    return this.#writeQueue.run(async () => this.#setOutboxBoundLocked(pubkey, kind, bound));
   }
 
   async #setOutboxBoundLocked(pubkey: string, kind: number, bound: OutboxBound): Promise<void> {
@@ -439,11 +426,11 @@ export class IndexedDbEventStore implements EventStore {
     }
   }
 
-  async remove(ids: string[]): Promise<number> {
-    return this.#enqueueWrite(async () => this.#removeLocked(ids));
+  async remove(ids: ReadonlyArray<string>): Promise<number> {
+    return this.#writeQueue.run(async () => this.#removeLocked(ids));
   }
 
-  async #removeLocked(ids: string[]): Promise<number> {
+  async #removeLocked(ids: ReadonlyArray<string>): Promise<number> {
     const db = await this.#ensure();
     const tx = db.transaction(WRITE_STORES, "readwrite");
     const tombstones = tx.objectStore(TOMBSTONES);
@@ -464,7 +451,7 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async clear(): Promise<void> {
-    return this.#enqueueWrite(async () => this.#clearLocked());
+    return this.#writeQueue.run(async () => this.#clearLocked());
   }
 
   async #clearLocked(): Promise<void> {

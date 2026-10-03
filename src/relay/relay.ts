@@ -1,5 +1,5 @@
-import { abortReason, raceSignal, throwIfAborted } from "../core/abort.ts";
-import { MessageError, WasmVerifyPoisonedError } from "../core/error.ts";
+import { abortReason, onAbort, raceSignal, throwIfAborted } from "../core/abort.ts";
+import { MessageError, WasmPoisonedError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { canonicalizeFilter, canonicalizeFilters } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
@@ -13,6 +13,7 @@ import type { ClientMessage, CountResult, SubscriptionId } from "../core/message
 import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
+import type { EventVerifier } from "../core/verifier.ts";
 import { isAuthRequired, makeAuthEvent } from "../nips/nip42.ts";
 import { Nip77Error } from "../nips/nip77.ts";
 import type { NegentropyStorageVector } from "../nips/nip77.ts";
@@ -46,11 +47,21 @@ import {
   subscribeLive,
 } from "./subscribe.ts";
 import type { LiveCtx, LiveGroup, RelayFetchResult } from "./subscribe.ts";
-import type { SubscribeOptions, Subscription } from "./subscription.ts";
+import type { Closer, RelaySubscription, SubscribeOptions, Subscription } from "./subscription.ts";
 import { getWebSocketImplementation } from "./websocket.ts";
 import type { WebSocketConstructor, WebSocketLike } from "./websocket.ts";
 
-/** Relay lifecycle states. */
+/**
+ * Relay lifecycle states:
+ *
+ * - `initialized` — constructed; `connect()` not yet attempted.
+ * - `connecting` — a `connect()` attempt is in flight (socket opening / resubscribing).
+ * - `connected` — socket open; REQ/EVENT/COUNT flow.
+ * - `disconnected` — socket down: a reconnect is scheduled when `enableReconnect` has live
+ *   subscriptions to restore, or `disconnect()` severed manually (REQ state kept).
+ * - `closed` — terminal until the next `connect()`: `close()` or a socket death without a scheduled
+ *   reconnect.
+ */
 export const RelayStatus = {
   Initialized: "initialized",
   Connecting: "connecting",
@@ -64,7 +75,7 @@ export type RelayStatusName = (typeof RelayStatus)[keyof typeof RelayStatus];
 /** Per-relay options: socket override, verification, timeouts, reconnect, ping, NIP-42 auth. */
 export type RelayOptions = {
   websocketImplementation?: WebSocketConstructor | undefined;
-  verifyEvent?: ((event: Event) => boolean) | undefined;
+  verifyEvent?: EventVerifier | undefined;
   publishTimeoutMs?: number | undefined;
   connectTimeoutMs?: number | undefined;
   /**
@@ -73,7 +84,7 @@ export type RelayOptions = {
    */
   enableReconnect?: boolean | undefined;
   /** Backoff delays in ms between reconnect attempts. */
-  reconnectBackoffMs?: number[] | undefined;
+  reconnectBackoffMs?: ReadonlyArray<number> | undefined;
   enablePing?: boolean | undefined;
   pingIntervalMs?: number | undefined;
   pingTimeoutMs?: number | undefined;
@@ -87,6 +98,23 @@ export type PublishResult = {
   message: string;
 };
 
+/** Typed event payloads for {@link Relay.on}: lifecycle and protocol notifications. */
+export type RelayEventMap = {
+  /** A NIP-01 NOTICE message from the relay. */
+  notice: string;
+  /** Terminal close of the relay (a transient disconnect with reconnect does not fire it). */
+  close: undefined;
+  /** Fired when the relay sends a NIP-42 AUTH challenge. */
+  auth: string;
+  /** Fired after a successful reconnect (not the initial connect). */
+  reconnect: undefined;
+  /**
+   * Fired when a delivered EVENT fails id/signature verification, just before the event is dropped.
+   * A poisoned verifier dropping events does not fire it.
+   */
+  invalidevent: undefined;
+};
+
 type PublishWaiter = {
   resolve: (result: PublishResult) => void;
   reject: (err: Error) => void;
@@ -94,6 +122,8 @@ type PublishWaiter = {
   event?: Event;
   authRetried?: boolean;
   timeoutMs: number;
+  /** The owning publish()/auth() promise — joiners on the same event id settle with it. */
+  promise: Promise<PublishResult>;
 };
 
 type CountWaiter = {
@@ -113,6 +143,9 @@ type SocketHandlers = {
   ws: WebSocketLike;
 };
 
+export const DEFAULT_REQUEST_TIMEOUT_MS = 4400;
+export const DEFAULT_CONNECT_TIMEOUT_MS = 5000;
+
 const DEFAULT_BACKOFF = [1000, 2000, 5000, 10_000, 20_000, 30_000, 60_000];
 
 const noop = (): void => {
@@ -126,7 +159,6 @@ const noop = (): void => {
 export class Relay {
   readonly url: string;
   #ws: WebSocketLike | undefined;
-  #connected = false;
   #gen = 0;
   #status: RelayStatusName = RelayStatus.Initialized;
   #connecting: Promise<void> | undefined;
@@ -141,12 +173,12 @@ export class Relay {
   readonly #counts = new Map<string, CountWaiter>();
   readonly #neg = new Map<SubscriptionId, NegSession>();
   readonly #WS: WebSocketConstructor;
-  readonly #verify: (event: Event) => boolean;
+  readonly #verify: EventVerifier;
   #verifyDead = false;
   readonly #publishTimeoutMs: number;
   readonly #connectTimeoutMs: number;
   readonly #enableReconnect: boolean;
-  readonly #backoff: number[];
+  readonly #backoff: ReadonlyArray<number>;
   #serial = 0;
   #challenge: string | undefined;
   #authedChallenge: string | undefined;
@@ -156,33 +188,26 @@ export class Relay {
   #answeredResult: PublishResult | undefined;
   #authPromise: Promise<PublishResult> | undefined;
   readonly #authSigner: ((template: EventTemplate) => Promise<Event>) | undefined;
-  #intentionalClose = false;
+  /** `close()`/`disconnect()` was called; cleared by the next `connect()`. */
+  #manualStop = false;
   #reconnectAttempts = 0;
   #reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-  #skipReconnect = false;
-  /** Collapses error+close pairs into a single terminal/reconnect action. */
-  #deathHandled = false;
   readonly #enablePing: boolean;
   readonly #ping: PingLoop;
-
-  onnotice: ((msg: string) => void) | undefined;
-  onclose: (() => void) | undefined;
-  /** Fired when the relay sends a NIP-42 AUTH challenge. */
-  onauth: ((challenge: string) => void) | undefined;
-  /** Fired after a successful reconnect (not the initial connect). */
-  onreconnect: (() => void) | undefined;
-  /**
-   * Fired when a delivered EVENT fails id/signature verification, just before the event is dropped.
-   * A poisoned verifier dropping events does not fire it.
-   */
-  oninvalidevent: (() => void) | undefined;
+  readonly #listeners: { [K in keyof RelayEventMap]: Set<(payload: RelayEventMap[K]) => void> } = {
+    notice: new Set(),
+    close: new Set(),
+    auth: new Set(),
+    reconnect: new Set(),
+    invalidevent: new Set(),
+  };
 
   constructor(url: string, opts: RelayOptions = {}) {
     this.url = normalizeURL(url);
     this.#WS = opts.websocketImplementation ?? getWebSocketImplementation();
     this.#verify = opts.verifyEvent ?? verifyEvent;
-    this.#publishTimeoutMs = opts.publishTimeoutMs ?? 4400;
-    this.#connectTimeoutMs = opts.connectTimeoutMs ?? 5000;
+    this.#publishTimeoutMs = opts.publishTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.#connectTimeoutMs = opts.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
     this.#enableReconnect = opts.enableReconnect ?? false;
     this.#backoff = opts.reconnectBackoffMs ?? DEFAULT_BACKOFF;
     this.#enablePing = opts.enablePing ?? false;
@@ -208,7 +233,7 @@ export class Relay {
       liveByFp: this.#liveByFp,
       liveBySubId: this.#liveBySubId,
       subs: this.#subs,
-      connected: () => this.#connected,
+      connected: () => this.#isOpen(),
       enableReconnect: () => this.#enableReconnect,
       send: (message) => this.#send(message),
       scheduleReconnect: () => this.#scheduleReconnect(),
@@ -223,11 +248,19 @@ export class Relay {
   }
 
   get connected(): boolean {
-    return this.#connected;
+    return this.#isOpen();
   }
 
   get status(): RelayStatusName {
     return this.#status;
+  }
+
+  #isOpen(): boolean {
+    return this.#status === RelayStatus.Connected;
+  }
+
+  #setStatus(next: RelayStatusName): void {
+    this.#status = next;
   }
 
   get generation(): number {
@@ -248,6 +281,30 @@ export class Relay {
     return this.#publishes.size + this.#counts.size + this.#neg.size;
   }
 
+  /**
+   * Listen for a relay event. Multiple listeners per type are allowed and fire in registration
+   * order; a throwing listener is reported and does not break the dispatch. Returns an unsubscribe
+   * function.
+   */
+  on<K extends keyof RelayEventMap>(
+    type: K,
+    listener: (payload: RelayEventMap[K]) => void,
+  ): () => void {
+    const set = this.#listeners[type];
+    set.add(listener);
+    return () => {
+      set.delete(listener);
+    };
+  }
+
+  #emit<K extends keyof RelayEventMap>(type: K, payload: RelayEventMap[K]): void {
+    // snapshot: listeners may unsubscribe or register during dispatch
+    // oxlint-disable-next-line no-useless-spread -- intentional snapshot copy
+    for (const listener of [...this.#listeners[type]]) {
+      invokeSafely(() => listener(payload));
+    }
+  }
+
   static async connect(
     url: string,
     opts?: RelayOptions & { signal?: AbortSignal },
@@ -261,7 +318,7 @@ export class Relay {
     signal?: AbortSignal | undefined;
     timeoutMs?: number | undefined;
   }): Promise<void> {
-    if (this.#connected) {
+    if (this.#isOpen()) {
       return;
     }
     // A connect attempt is never owned by a caller's signal: joiners race
@@ -273,14 +330,11 @@ export class Relay {
     throwIfAborted(opts?.signal);
 
     const gen = ++this.#gen;
-    this.#intentionalClose = false;
-    this.#skipReconnect = false;
-    this.#deathHandled = false;
+    this.#manualStop = false;
     this.#clearReconnectTimer();
-    this.#status = RelayStatus.Connecting;
+    this.#setStatus(RelayStatus.Connecting);
 
     const timeoutMs = opts?.timeoutMs ?? this.#connectTimeoutMs;
-    const isReconnect = this.#reconnectAttempts > 0;
 
     let resolveConnect: () => void = noop;
     let rejectConnect: (err: unknown) => void = noop;
@@ -296,14 +350,7 @@ export class Relay {
       if (ws === undefined) {
         return;
       }
-      try {
-        ws.removeEventListener("open", handlers.onOpen);
-        ws.removeEventListener("error", handlers.onError);
-        ws.removeEventListener("close", handlers.onClose);
-        ws.removeEventListener("message", handlers.onMessage);
-      } catch {
-        // ignore
-      }
+      this.#removeSocketListeners(handlers);
       if (this.#socketHandlers === handlers) {
         this.#socketHandlers = undefined;
       }
@@ -349,9 +396,6 @@ export class Relay {
         release();
         return;
       }
-      if (!isReconnect && !this.#enableReconnect) {
-        this.#skipReconnect = true;
-      }
       release();
       finish(new RelayTimeoutError("connection timed out", this.url));
       if (gen === this.#gen) {
@@ -363,9 +407,6 @@ export class Relay {
     try {
       ws = new this.#WS(this.url);
     } catch (error) {
-      if (!isReconnect && !this.#enableReconnect) {
-        this.#skipReconnect = true;
-      }
       finish(error);
       if (gen === this.#gen) {
         this.#handleSocketDeath("connection failed", { fromConnectAttempt: true, gen });
@@ -380,9 +421,7 @@ export class Relay {
         release();
         return;
       }
-      this.#connected = true;
-      this.#status = RelayStatus.Connected;
-      this.#deathHandled = false;
+      this.#setStatus(RelayStatus.Connected);
       const wasReconnect = this.#reconnectAttempts > 0;
       this.#challenge = undefined;
       this.#authPromise = undefined;
@@ -390,19 +429,10 @@ export class Relay {
       this.#answeredChallenge = undefined;
       this.#answeredResult = undefined;
       if (!resubscribeAll(this.#live)) {
-        this.#connected = false;
-        this.#status = RelayStatus.Disconnected;
-        if (!isReconnect && !this.#enableReconnect) {
-          this.#skipReconnect = true;
-        }
+        this.#setStatus(RelayStatus.Disconnected);
         release();
         finish(new RelayConnectionError("connection failed", this.url));
-        if (
-          this.#enableReconnect &&
-          !this.#intentionalClose &&
-          !this.#skipReconnect &&
-          this.#subs.size > 0
-        ) {
+        if (this.#enableReconnect && !this.#manualStop && this.#subs.size > 0) {
           this.#scheduleReconnect();
         }
         return;
@@ -414,7 +444,7 @@ export class Relay {
         this.#ping.stop();
       }
       if (wasReconnect) {
-        invokeSafely(() => this.onreconnect?.());
+        this.#emit("reconnect", undefined);
       }
       finish();
     };
@@ -423,11 +453,7 @@ export class Relay {
         release();
         return;
       }
-      this.#connected = false;
       const fromConnectAttempt = !settled;
-      if (!settled && !isReconnect && !this.#enableReconnect) {
-        this.#skipReconnect = true;
-      }
       release();
       finish(new RelayConnectionError("connection failed", this.url));
       if (gen === this.#gen) {
@@ -439,11 +465,7 @@ export class Relay {
         release();
         return;
       }
-      this.#connected = false;
       const fromConnectAttempt = !settled;
-      if (!settled && !isReconnect && !this.#enableReconnect) {
-        this.#skipReconnect = true;
-      }
       release();
       if (fromConnectAttempt) {
         finish(new RelayConnectionError("websocket closed", this.url));
@@ -470,11 +492,7 @@ export class Relay {
     await raceSignal(connecting, opts?.signal);
   }
 
-  #detachSocketHandlers(): void {
-    const h = this.#socketHandlers;
-    if (!h) {
-      return;
-    }
+  #removeSocketListeners(h: SocketHandlers): void {
     try {
       h.ws.removeEventListener("open", h.onOpen);
       h.ws.removeEventListener("error", h.onError);
@@ -483,15 +501,22 @@ export class Relay {
     } catch {
       // ignore
     }
+  }
+
+  #detachSocketHandlers(): void {
+    const h = this.#socketHandlers;
+    if (!h) {
+      return;
+    }
+    this.#removeSocketListeners(h);
     this.#socketHandlers = undefined;
   }
 
   /** Graceful shutdown: disables reconnect and closes all subscriptions. */
   close(): void {
     this.#gen += 1;
-    this.#status = RelayStatus.Closed;
-    this.#intentionalClose = true;
-    this.#skipReconnect = true;
+    this.#setStatus(RelayStatus.Closed);
+    this.#manualStop = true;
     this.#clearReconnectTimer();
     if (this.#connectTimer !== undefined) {
       clearTimeout(this.#connectTimer);
@@ -502,13 +527,10 @@ export class Relay {
     try {
       closeAllSubscriptions(this.#live, "relay closed");
     } finally {
-      this.#rejectPublishes(new RelayClosedError("relay closed", this.url));
-      this.#rejectCounts(new RelayClosedError("relay closed", this.url));
-      this.#rejectNeg(new RelayClosedError("relay closed", this.url));
+      this.#failPending(new RelayClosedError("relay closed", this.url));
       this.#detachSocketHandlers();
       this.#teardownSocket();
-      this.#connected = false;
-      invokeSafely(() => this.onclose?.());
+      this.#emit("close", undefined);
     }
   }
 
@@ -519,9 +541,8 @@ export class Relay {
    */
   disconnect(): void {
     this.#gen += 1;
-    this.#status = RelayStatus.Disconnected;
-    this.#intentionalClose = true;
-    this.#skipReconnect = true;
+    this.#setStatus(RelayStatus.Disconnected);
+    this.#manualStop = true;
     this.#clearReconnectTimer();
     if (this.#connectTimer !== undefined) {
       clearTimeout(this.#connectTimer);
@@ -529,12 +550,9 @@ export class Relay {
     }
     this.#ping.stop();
     this.#connectFinish?.(new RelayClosedError("relay disconnected", this.url));
-    this.#rejectPublishes(new RelayClosedError("relay disconnected", this.url));
-    this.#rejectCounts(new RelayClosedError("relay disconnected", this.url));
-    this.#rejectNeg(new RelayClosedError("relay disconnected", this.url));
+    this.#failPending(new RelayClosedError("relay disconnected", this.url));
     this.#detachSocketHandlers();
     this.#teardownSocket();
-    this.#connected = false;
   }
 
   #teardownSocket(): void {
@@ -576,54 +594,50 @@ export class Relay {
     this.#neg.clear();
   }
 
+  #failPending(err: Error): void {
+    this.#rejectPublishes(err);
+    this.#rejectCounts(err);
+    this.#rejectNeg(err);
+  }
+
   /** Unexpected socket death. Keep subscriptions if reconnecting. */
   #handleSocketDeath(reason: string, opts: { fromConnectAttempt?: boolean; gen: number }): void {
     if (opts.gen !== this.#gen) {
       return;
     }
-    if (this.#deathHandled) {
-      return;
-    }
-    this.#deathHandled = true;
+    // Stale-gen guards retire every later event from this socket (error+close pairs collapse).
+    this.#gen += 1;
     this.#ping.stop();
     this.#detachSocketHandlers();
-    this.#connected = false;
     this.#ws = undefined;
-    this.#rejectPublishes(new RelayClosedError(reason, this.url));
-    this.#rejectCounts(new RelayClosedError(reason, this.url));
-    this.#rejectNeg(new RelayClosedError(reason, this.url));
+    this.#failPending(new RelayClosedError(reason, this.url));
 
-    const canReconnect =
-      this.#enableReconnect &&
-      !this.#intentionalClose &&
-      !this.#skipReconnect &&
-      this.#subs.size > 0;
+    const canReconnect = this.#enableReconnect && !this.#manualStop && this.#subs.size > 0;
 
     if (canReconnect) {
-      this.#status = RelayStatus.Disconnected;
+      this.#setStatus(RelayStatus.Disconnected);
       this.#scheduleReconnect();
       return;
     }
 
-    if (!this.#intentionalClose) {
-      this.#status = RelayStatus.Disconnected;
-    }
+    // Transitional: subscription close callbacks below observe `disconnected` first.
+    this.#setStatus(RelayStatus.Disconnected);
 
     if (opts.fromConnectAttempt !== true || this.#subs.size > 0) {
       closeAllSubscriptions(this.#live, reason);
-      if (!this.#intentionalClose) {
-        invokeSafely(() => this.onclose?.());
+      if (!this.#manualStop) {
+        this.#emit("close", undefined);
       }
     }
 
-    this.#status = RelayStatus.Closed;
+    this.#setStatus(RelayStatus.Closed);
   }
 
   #scheduleReconnect(): void {
     if (this.#reconnectTimer !== undefined) {
       return;
     }
-    if (this.#connected) {
+    if (this.#isOpen()) {
       return;
     }
     const delay =
@@ -631,7 +645,7 @@ export class Relay {
     this.#reconnectAttempts += 1;
     this.#reconnectTimer = setTimeout(() => {
       this.#reconnectTimer = undefined;
-      if (this.#intentionalClose || this.#connected) {
+      if (this.#manualStop || this.#isOpen()) {
         return;
       }
       void (async (): Promise<void> => {
@@ -640,10 +654,9 @@ export class Relay {
         } catch {
           if (
             this.#enableReconnect &&
-            !this.#intentionalClose &&
-            !this.#skipReconnect &&
+            !this.#manualStop &&
             this.#subs.size > 0 &&
-            !this.#connected
+            !this.#isOpen()
           ) {
             this.#scheduleReconnect();
           }
@@ -653,7 +666,7 @@ export class Relay {
   }
 
   #send(message: ClientMessage | string): void {
-    if (!this.#ws || !this.#connected) {
+    if (!this.#ws || !this.#isOpen()) {
       throw new RelayClosedError("not connected", this.url);
     }
     const raw = typeof message === "string" ? message : encodeClientMessage(message);
@@ -763,7 +776,7 @@ export class Relay {
       }
       case "NOTICE": {
         const [, notice] = msg;
-        invokeSafely(() => this.onnotice?.(notice));
+        this.#emit("notice", notice);
         break;
       }
       case "AUTH": {
@@ -777,18 +790,18 @@ export class Relay {
           this.#answeredResult = undefined;
         }
         this.#challenge = authChallenge;
-        invokeSafely(() => this.onauth?.(authChallenge));
+        this.#emit("auth", authChallenge);
         break;
       }
     }
   }
 
   /** Low-level REQ with callbacks. Survives reconnect when enableReconnect is on. */
-  subscribe(filters: Filter[], opts: SubscribeOptions = {}): Subscription {
+  subscribe(filters: ReadonlyArray<Filter>, opts: SubscribeOptions = {}): RelaySubscription {
     if (filters.length === 0) {
       throw new MessageError("REQ requires at least one filter");
     }
-    if (!this.#connected && !this.#enableReconnect) {
+    if (!this.#isOpen() && !this.#enableReconnect) {
       throw new RelayClosedError("not connected", this.url);
     }
     const canonical = canonicalizeFilters(filters);
@@ -805,13 +818,13 @@ export class Relay {
     try {
       const ok = this.#verify(event);
       if (!ok) {
-        invokeSafely(() => this.oninvalidevent?.());
+        this.#emit("invalidevent", undefined);
       }
       return ok;
     } catch (error) {
-      if (error instanceof WasmVerifyPoisonedError || error instanceof WebAssembly.RuntimeError) {
+      if (error instanceof WasmPoisonedError) {
         this.#verifyDead = true;
-        invokeSafely(() => this.onnotice?.("verify-poisoned: wasm instance aborted"));
+        this.#emit("notice", "wasm-poisoned: instance aborted");
         return false;
       }
       throw error;
@@ -820,11 +833,9 @@ export class Relay {
 
   /** AsyncIterable of events for filters until the subscription is closed. */
   stream(
-    filters: Filter[],
-    opts?: { signal?: AbortSignal; id?: string },
-  ): AsyncIterable<Event> & {
-    close: (reason?: string) => void;
-  } {
+    filters: ReadonlyArray<Filter>,
+    opts?: { signal?: AbortSignal | undefined; id?: string | undefined },
+  ): AsyncIterable<Event> & Closer {
     return streamFilters((f, o) => this.subscribe(f, o), filters, opts);
   }
 
@@ -834,7 +845,7 @@ export class Relay {
    * CLOSED or the deadline are still returned. Abort rejects; a failed (re)connect rejects.
    */
   async fetch(
-    filters: Filter[],
+    filters: ReadonlyArray<Filter>,
     opts?: {
       timeoutMs?: number | undefined;
       signal?: AbortSignal | undefined;
@@ -845,39 +856,58 @@ export class Relay {
       throw new MessageError("REQ requires at least one filter");
     }
     const canonical = canonicalizeFilters(filters);
-    if (!this.#connected) {
+    if (!this.#isOpen()) {
       await this.connect({ signal: opts?.signal });
     }
     return fetchFilters((f, o) => this.subscribe(f, o), canonical, {
-      timeoutMs: opts?.timeoutMs ?? 4400,
+      timeoutMs: opts?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
       signal: opts?.signal,
       id: opts?.id,
     });
   }
 
-  /** Publish an event and wait for OK. */
+  /**
+   * Publish an event and wait for OK. A concurrent publish of the same event id joins the in-flight
+   * publish instead of racing it — the joiner's `timeoutMs` does not apply.
+   */
   async publish(event: Event, opts?: { timeoutMs?: number | undefined }): Promise<PublishResult> {
-    if (!this.#connected) {
+    if (!this.#isOpen()) {
       throw new RelayClosedError("not connected", this.url);
+    }
+    const existing = this.#publishes.get(event.id);
+    if (existing?.event !== undefined) {
+      return existing.promise;
     }
     const timeoutMs = opts?.timeoutMs ?? this.#publishTimeoutMs;
 
-    const result = await new Promise<PublishResult>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.#publishes.delete(event.id);
-        reject(new RelayTimeoutError("publish timed out", this.url));
-      }, timeoutMs);
-      this.#publishes.set(event.id, { resolve, reject, timer, event, timeoutMs });
+    const promise = new Promise<PublishResult>((resolve, reject) => {
+      const waiter: PublishWaiter = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          if (this.#publishes.get(event.id) === waiter) {
+            this.#publishes.delete(event.id);
+            reject(new RelayTimeoutError("publish timed out", this.url));
+          }
+        }, timeoutMs),
+        event,
+        timeoutMs,
+        get promise() {
+          return promise;
+        },
+      };
+      this.#publishes.set(event.id, waiter);
       try {
         this.#send(["EVENT", event]);
       } catch (error) {
-        clearTimeout(timer);
-        this.#publishes.delete(event.id);
+        clearTimeout(waiter.timer);
+        if (this.#publishes.get(event.id) === waiter) {
+          this.#publishes.delete(event.id);
+        }
         reject(error instanceof Error ? error : new RelayPublishError("publish failed", this.url));
       }
     });
-
-    return result;
+    return promise;
   }
 
   /**
@@ -885,14 +915,14 @@ export class Relay {
    * (count / optional approximate / optional hll).
    */
   async count(
-    filters: Filter[],
+    filters: ReadonlyArray<Filter>,
     opts?: {
       id?: string | undefined;
       timeoutMs?: number | undefined;
       signal?: AbortSignal | undefined;
     },
   ): Promise<CountResult> {
-    if (!this.#connected) {
+    if (!this.#isOpen()) {
       throw new RelayClosedError("not connected", this.url);
     }
     if (filters.length === 0) {
@@ -905,9 +935,6 @@ export class Relay {
     const timeoutMs = opts?.timeoutMs ?? this.#publishTimeoutMs;
 
     return new Promise<CountResult>((resolve, reject) => {
-      const cleanup = () => {
-        opts?.signal?.removeEventListener("abort", onAbort);
-      };
       const waiter: CountWaiter = {
         resolve: (result) => {
           if (waiter.timer !== undefined) {
@@ -933,17 +960,15 @@ export class Relay {
         authRetried: false,
         timeoutMs,
       };
-      const onAbort = () => {
+      const cleanup = onAbort(opts?.signal, () => {
         if (opts?.signal) {
           waiter.reject(abortReason(opts.signal));
         }
-      };
+      });
       waiter.timer = setTimeout(() => {
         waiter.reject(new RelayTimeoutError("count timed out", this.url));
       }, timeoutMs);
       this.#counts.set(id, waiter);
-
-      opts?.signal?.addEventListener("abort", onAbort, { once: true });
 
       try {
         this.#send(["COUNT", id, ...canonical]);
@@ -984,17 +1009,13 @@ export class Relay {
         }
         throw error;
       }
-      if (!this.#connected) {
+      if (!this.#isOpen()) {
         throw new RelayClosedError("not connected", this.url);
       }
       const timeoutMs = opts?.timeoutMs ?? this.#publishTimeoutMs;
 
-      return new Promise<PublishResult>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          this.#publishes.delete(event.id);
-          reject(new RelayTimeoutError("auth timed out", this.url));
-        }, timeoutMs);
-        this.#publishes.set(event.id, {
+      const authPromise = new Promise<PublishResult>((resolve, reject) => {
+        const waiter: PublishWaiter = {
           resolve: (result) => {
             // Cache the relay's settled verdict: a repeated challenge replays
             // it without re-signing. Timeouts and send failures never reach
@@ -1006,19 +1027,31 @@ export class Relay {
             resolve(result);
           },
           reject,
-          timer,
+          timer: setTimeout(() => {
+            if (this.#publishes.get(event.id) === waiter) {
+              this.#publishes.delete(event.id);
+              reject(new RelayTimeoutError("auth timed out", this.url));
+            }
+          }, timeoutMs),
           timeoutMs,
-        });
+          get promise() {
+            return authPromise;
+          },
+        };
+        this.#publishes.set(event.id, waiter);
         try {
           this.#send(["AUTH", event]);
         } catch (error) {
-          clearTimeout(timer);
-          this.#publishes.delete(event.id);
+          clearTimeout(waiter.timer);
+          if (this.#publishes.get(event.id) === waiter) {
+            this.#publishes.delete(event.id);
+          }
           reject(
             error instanceof Error ? error : new RelayPublishError("auth send failed", this.url),
           );
         }
       });
+      return authPromise;
     })();
     this.#authPromise = pending;
     try {
@@ -1036,8 +1069,8 @@ export class Relay {
 
   /**
    * Clear a cached AUTH rejection for the current challenge so a later `auth()` signs again. A
-   * successful auth and in-flight answers are kept. When a challenge is pending and unanswered,
-   * `onauth` is re-fired so the pool's automatic auth can run once more.
+   * successful auth and in-flight answers are kept. When a challenge is pending and unanswered, an
+   * `auth` event is re-fired so the pool's automatic auth can run once more.
    */
   resetAuth(): void {
     if (this.#answeredResult !== undefined && !this.#answeredResult.ok) {
@@ -1046,7 +1079,7 @@ export class Relay {
     }
     if (this.#challenge !== undefined && this.#challenge !== this.#authedChallenge) {
       const challenge = this.#challenge;
-      invokeSafely(() => this.onauth?.(challenge));
+      this.#emit("auth", challenge);
     }
   }
 
@@ -1084,7 +1117,7 @@ export class Relay {
         dropSubscription(this.#live, sub, reason);
         return;
       }
-      if (sub.closed || !this.#connected) {
+      if (sub.closed || !this.#isOpen()) {
         dropSubscription(this.#live, sub, reason);
         return;
       }
@@ -1118,7 +1151,7 @@ export class Relay {
         fail();
         return;
       }
-      if (!this.#connected) {
+      if (!this.#isOpen()) {
         fail();
         return;
       }
@@ -1145,7 +1178,9 @@ export class Relay {
       if (waiter.timer !== undefined) {
         clearTimeout(waiter.timer);
       }
-      this.#publishes.delete(eventId);
+      if (this.#publishes.get(eventId) === waiter) {
+        this.#publishes.delete(eventId);
+      }
       waiter.resolve(result);
     };
     try {
@@ -1161,13 +1196,15 @@ export class Relay {
         finish({ ok: false, message });
         return;
       }
-      if (!this.#connected) {
+      if (!this.#isOpen()) {
         finish({ ok: false, message });
         return;
       }
       waiter.timer = setTimeout(() => {
-        this.#publishes.delete(eventId);
-        waiter.reject(new RelayTimeoutError("publish timed out", this.url));
+        if (this.#publishes.get(eventId) === waiter) {
+          this.#publishes.delete(eventId);
+          waiter.reject(new RelayTimeoutError("publish timed out", this.url));
+        }
       }, waiter.timeoutMs);
       this.#send(["EVENT", waiter.event]);
     } catch {
@@ -1194,7 +1231,7 @@ export class Relay {
       signal?: AbortSignal | undefined;
     },
   ): Promise<{ have: string[]; need: string[] }> {
-    if (!this.#connected) {
+    if (!this.#isOpen()) {
       throw new RelayClosedError("not connected", this.url);
     }
     throwIfAborted(opts?.signal);

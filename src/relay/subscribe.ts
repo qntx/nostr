@@ -1,12 +1,13 @@
-import { abortReason, throwIfAborted } from "../core/abort.ts";
 /** REQ subscription runtime: exclusive one-shot, live coalescing, dispatch, reconnect replay. */
+import { abortReason, onAbort, throwIfAborted } from "../core/abort.ts";
 import type { Event } from "../core/event.ts";
 import { filterFingerprint } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
 import type { ClientMessage, SubscriptionId } from "../core/message.ts";
 import { invokeSafely } from "../core/report.ts";
+import type { EventVerifier } from "../core/verifier.ts";
 import { Subscription, subscriptionToAsyncIterable } from "./subscription.ts";
-import type { SubscribeOptions } from "./subscription.ts";
+import type { Closer, RelaySubscription, SubscribeOptions } from "./subscription.ts";
 
 export type LiveGroup = {
   fp: string;
@@ -34,7 +35,7 @@ export type LiveCtx = {
   enableReconnect: () => boolean;
   send: (message: ClientMessage) => void;
   scheduleReconnect: () => void;
-  acceptEvent: (event: Event) => boolean;
+  acceptEvent: EventVerifier;
   armEoseTimeout: (sub: Subscription, ms: number) => void;
 };
 
@@ -143,6 +144,7 @@ export function forgetLiveGroup(ctx: LiveCtx, group: LiveGroup): void {
   ctx.liveBySubId.delete(group.sub.id);
   ctx.subs.delete(group.sub.id);
   group.sub.closed = true;
+  group.sub.dispose();
 }
 
 export function detachLive(ctx: LiveCtx, group: LiveGroup, handle: Subscription): void {
@@ -246,6 +248,7 @@ export function closeAllSubscriptions(ctx: LiveCtx, reason: string): void {
   for (const sub of ctx.subs.values()) {
     if (!sub.closed) {
       sub.closed = true;
+      sub.dispose();
       invokeSafely(() => {
         sub.handlers.onclose?.(reason);
       });
@@ -264,6 +267,7 @@ export function dropSubscription(ctx: LiveCtx, sub: Subscription, reason: string
   }
   ctx.subs.delete(sub.id);
   sub.closed = true;
+  sub.dispose();
   invokeSafely(() => {
     sub.handlers.onclose?.(reason);
   });
@@ -346,10 +350,10 @@ export function resubscribeAll(ctx: LiveCtx): boolean {
 }
 
 export function streamFilters(
-  subscribe: (filters: Filter[], opts: SubscribeOptions) => Subscription,
-  filters: Filter[],
+  subscribe: (filters: ReadonlyArray<Filter>, opts: SubscribeOptions) => RelaySubscription,
+  filters: ReadonlyArray<Filter>,
   opts?: { signal?: AbortSignal | undefined; id?: string | undefined },
-): AsyncIterable<Event> & { close: (reason?: string) => void } {
+): AsyncIterable<Event> & Closer {
   return subscriptionToAsyncIterable(
     (handlers) => subscribe(filters, { ...handlers, id: opts?.id, signal: opts?.signal }),
     { signal: opts?.signal },
@@ -357,8 +361,8 @@ export function streamFilters(
 }
 
 export async function fetchFilters(
-  subscribe: (filters: Filter[], opts: SubscribeOptions) => Subscription,
-  filters: Filter[],
+  subscribe: (filters: ReadonlyArray<Filter>, opts: SubscribeOptions) => RelaySubscription,
+  filters: ReadonlyArray<Filter>,
   opts: {
     timeoutMs: number;
     signal?: AbortSignal | undefined;
@@ -377,6 +381,7 @@ export async function fetchFilters(
         return;
       }
       settled = true;
+      disposeAbort();
       clearTimeout(timer);
       let reason = "aborted";
       if (err instanceof Error) {
@@ -392,6 +397,12 @@ export async function fetchFilters(
         reject(err);
       }
     };
+
+    const disposeAbort = onAbort(opts.signal, () => {
+      if (opts.signal !== undefined) {
+        done(abortReason(opts.signal));
+      }
+    });
 
     const timer = setTimeout(() => {
       end = { type: "timeout" };
@@ -428,12 +439,6 @@ export async function fetchFilters(
         done();
       },
     });
-
-    opts.signal?.addEventListener(
-      "abort",
-      () => done(opts.signal ? abortReason(opts.signal) : undefined),
-      { once: true },
-    );
   });
 
   return { events, end };

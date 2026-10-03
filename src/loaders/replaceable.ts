@@ -1,6 +1,8 @@
+import { touchKey, trimOldest } from "../core/collections.ts";
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { formatEventAddress } from "../core/tag.ts";
+import { nowSeconds } from "../core/util.ts";
 import type { LoaderContext } from "./context.ts";
 import { DataLoader } from "./dataloader.ts";
 
@@ -40,15 +42,8 @@ export function createReplaceableLoader(ctx: LoaderContext, kind: number): Repla
 
   const fetchedAt: FetchedAt = new Map();
   const markFetched = (addr: string, hit: boolean, now: number): void => {
-    fetchedAt.delete(addr);
-    fetchedAt.set(addr, { at: now, hit });
-    while (fetchedAt.size > MAX_FETCHED_AT) {
-      const oldest = fetchedAt.keys().next().value;
-      if (oldest === undefined) {
-        break;
-      }
-      fetchedAt.delete(oldest);
-    }
+    touchKey(fetchedAt, addr, { at: now, hit });
+    trimOldest(fetchedAt, MAX_FETCHED_AT);
   };
 
   const loader = new DataLoader<Key, ReplaceableLoadResult, string>(
@@ -62,7 +57,7 @@ export function createReplaceableLoader(ctx: LoaderContext, kind: number): Repla
           onevent: (event, relayUrl) => ctx.ingest(event, relayUrl),
         });
       }
-      const now = Math.floor(Date.now() / 1000);
+      const now = nowSeconds();
       return keys.map((k) => {
         const addr = formatEventAddress(kind, k.pubkey, "");
         const event = ctx.index.getByAddress(addr);

@@ -4,6 +4,7 @@ import type { Event } from "../core/event.ts";
 import { matchFilter } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
+import { SerialQueue } from "../core/serial.ts";
 import { eventAddress, formatEventAddress, parseEventAddress } from "../core/tag.ts";
 import { DeletionState } from "./deletion.ts";
 import type { DeletionPlan } from "./deletion.ts";
@@ -267,7 +268,7 @@ function compileFilter(filter: Filter): { plans: FilterPlan[]; deferred: boolean
  */
 export class SqliteEventStore implements EventStore {
   readonly #driver: SqlDriver;
-  #writeTail: Promise<void> = Promise.resolve();
+  readonly #writeQueue = new SerialQueue();
 
   private constructor(driver: SqlDriver) {
     this.#driver = driver;
@@ -296,22 +297,6 @@ export class SqliteEventStore implements EventStore {
     }
   }
 
-  async #enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
-    const tail = this.#writeTail;
-    const result = (async (): Promise<T> => {
-      await tail;
-      return op();
-    })();
-    this.#writeTail = (async (): Promise<void> => {
-      try {
-        await result;
-      } catch {
-        // a failed write must not wedge later writes
-      }
-    })();
-    return result;
-  }
-
   async put(event: Event): Promise<PutResult> {
     const results = await this.putMany([event]);
     const result = results.at(0);
@@ -325,7 +310,7 @@ export class SqliteEventStore implements EventStore {
     if (events.length === 0) {
       return [];
     }
-    return this.#enqueueWrite(async () => {
+    return this.#writeQueue.run(async () => {
       try {
         return await this.#driver.transaction(async (tx) => this.#putAllInTx(tx, events));
       } catch (error) {
@@ -390,7 +375,7 @@ export class SqliteEventStore implements EventStore {
         )),
       );
     }
-    for (const row of addressRows.flat()) {
+    for (const row of addressRows) {
       byAddress.set(row.address, { id: row.id, created_at: row.created_at });
     }
 
@@ -548,7 +533,7 @@ export class SqliteEventStore implements EventStore {
     }
   }
 
-  async query(filters: Filter[]): Promise<Event[]> {
+  async query(filters: ReadonlyArray<Filter>): Promise<Event[]> {
     try {
       const perFilter: Event[][] = [];
       for (const filter of filters) {
@@ -571,7 +556,7 @@ export class SqliteEventStore implements EventStore {
     }
   }
 
-  async count(filters: Filter[]): Promise<number> {
+  async count(filters: ReadonlyArray<Filter>): Promise<number> {
     try {
       const perFilter: NegentropyItem[][] = [];
       for (const filter of filters) {
@@ -698,7 +683,7 @@ export class SqliteEventStore implements EventStore {
 
   async setOutboxBound(pubkey: string, kind: number, bound: OutboxBound): Promise<void> {
     const pk = pubkey.toLowerCase();
-    await this.#enqueueWrite(async () => {
+    await this.#writeQueue.run(async () => {
       try {
         await this.#driver.transaction(async (tx) => {
           await tx.run(
@@ -713,9 +698,9 @@ export class SqliteEventStore implements EventStore {
     });
   }
 
-  async remove(ids: string[]): Promise<number> {
+  async remove(ids: ReadonlyArray<string>): Promise<number> {
     const lowered = ids.map((id) => id.toLowerCase());
-    return this.#enqueueWrite(async () => {
+    return this.#writeQueue.run(async () => {
       try {
         return await this.#driver.transaction(async (tx) => {
           let removed = 0;
@@ -733,7 +718,7 @@ export class SqliteEventStore implements EventStore {
   }
 
   async clear(): Promise<void> {
-    await this.#enqueueWrite(async () => {
+    await this.#writeQueue.run(async () => {
       try {
         await this.#driver.transaction(async (tx) => {
           await tx.run("DELETE FROM tags");

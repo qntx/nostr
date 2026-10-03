@@ -25,12 +25,15 @@ export type SerializedEventVerifier = (
   sig: Uint8Array,
 ) => boolean;
 
+/** Whole-event verifier: return true iff the event's id and BIP-340 signature verify. */
+export type EventVerifier = (event: Event) => boolean;
+
 /**
  * Build an event verifier with exactly the semantics of {@link verifyEvent}, delegating the hash and
  * signature check to `backend`. Verified/failed results share `verifyEvent`'s WeakSet caches, so
  * verifiers built this way and `verifyEvent` agree on (and reuse) each other's results.
  */
-export function createEventVerifier(backend: SerializedEventVerifier): (event: Event) => boolean {
+export function createEventVerifier(backend: SerializedEventVerifier): EventVerifier {
   return (event) => {
     if (isMarkedVerified(event)) {
       return true;
@@ -70,4 +73,4 @@ const nobleSerializedVerify: SerializedEventVerifier = (serializedUtf8, id, pubk
 };
 
 /** Verify event id and BIP-340 signature. Uses WeakSet cache (does not mutate the event). */
-export const verifyEvent: (event: Event) => boolean = createEventVerifier(nobleSerializedVerify);
+export const verifyEvent: EventVerifier = createEventVerifier(nobleSerializedVerify);

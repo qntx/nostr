@@ -1,4 +1,4 @@
-import { abortReason } from "../core/abort.ts";
+import { abortReason, onAbort } from "../core/abort.ts";
 import type { Filter } from "../core/filter.ts";
 import type { ClientMessage } from "../core/message.ts";
 import { Nip77Error, runNegSession } from "../nips/nip77.ts";
@@ -75,28 +75,29 @@ export async function runWiredNegSession(opts: {
     return new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => {
         session.waiter = undefined;
+        disposeAbort();
         reject(timedOut());
       }, remainingMs());
       const fail = (err: unknown): void => {
         clearTimeout(timer);
         session.waiter = undefined;
+        disposeAbort();
         // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- forwards abort/signal reasons verbatim
         reject(err);
-      };
-      const onAbort = (): void => {
-        if (signal) {
-          fail(abortReason(signal));
-        }
       };
       session.waiter = {
         resolve: (hex) => {
           clearTimeout(timer);
-          signal?.removeEventListener("abort", onAbort);
+          disposeAbort();
           resolve(hex);
         },
         reject: (err) => fail(err),
       };
-      signal?.addEventListener("abort", onAbort, { once: true });
+      const disposeAbort = onAbort(signal, () => {
+        if (signal) {
+          fail(abortReason(signal));
+        }
+      });
     });
   };
 

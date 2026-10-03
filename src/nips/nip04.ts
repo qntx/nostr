@@ -5,18 +5,30 @@ import { randomBytes } from "@noble/hashes/utils.js";
 import { base64 } from "@scure/base";
 
 import { CryptoError } from "../core/error.ts";
-import { assertHex32, hexToBytes, utf8Decoder, utf8Encoder } from "../core/util.ts";
+import {
+  assertHex32,
+  assertSecretKeyBytes,
+  hexToBytes,
+  utf8Decoder,
+  utf8Encoder,
+} from "../core/util.ts";
 
 function normalizeSharedSecret(privkey: Uint8Array, pubkey: string): Uint8Array {
   assertHex32(pubkey, "public key");
-  const key = secp256k1.getSharedSecret(privkey, hexToBytes(`02${pubkey.toLowerCase()}`));
-  return key.slice(1, 33);
+  try {
+    const key = secp256k1.getSharedSecret(privkey, hexToBytes(`02${pubkey.toLowerCase()}`));
+    return key.slice(1, 33);
+  } catch (error) {
+    throw new CryptoError("invalid NIP-04 public key", { cause: error });
+  }
 }
 
 function resolveSecret(secretKey: string | Uint8Array): Uint8Array {
-  return typeof secretKey === "string"
-    ? hexToBytes(assertHex32(secretKey, "secret key"))
-    : secretKey;
+  if (typeof secretKey === "string") {
+    return hexToBytes(assertHex32(secretKey, "secret key"));
+  }
+  assertSecretKeyBytes(secretKey);
+  return secretKey;
 }
 
 /** Encrypt plaintext to a peer pubkey (NIP-04). */
@@ -43,8 +55,12 @@ export function decrypt(secretKey: string | Uint8Array, pubkey: string, data: st
     throw new CryptoError("invalid NIP-04 payload: missing iv");
   }
   const normalizedKey = normalizeSharedSecret(privkey, pubkey);
-  const iv = base64.decode(parts[1]);
-  const ciphertext = base64.decode(parts[0]);
-  const plaintext = cbc(normalizedKey, iv).decrypt(ciphertext);
-  return utf8Decoder.decode(plaintext);
+  try {
+    const iv = base64.decode(parts[1]);
+    const ciphertext = base64.decode(parts[0]);
+    const plaintext = cbc(normalizedKey, iv).decrypt(ciphertext);
+    return utf8Decoder.decode(plaintext);
+  } catch (error) {
+    throw new CryptoError("invalid NIP-04 payload", { cause: error });
+  }
 }

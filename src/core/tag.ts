@@ -80,14 +80,19 @@ export const Tag = {
   },
 } as const;
 
-/** First `d` tag value on an event, if any. */
-export function getDTag(tags: ReadonlyArray<Tag>): string | undefined {
+/** First tag value with the given name, or undefined when no such tag has a value. */
+export function firstTagValue(tags: ReadonlyArray<Tag>, name: string): string | undefined {
   for (const tag of tags) {
-    if (tag[0] === "d" && tag[1] !== undefined) {
+    if (tag[0] === name && tag[1] !== undefined) {
       return tag[1];
     }
   }
   return undefined;
+}
+
+/** First `d` tag value on an event, if any. */
+export function getDTag(tags: ReadonlyArray<Tag>): string | undefined {
+  return firstTagValue(tags, "d");
 }
 
 /** NIP-01 `a` tag: `kind:pubkey:identifier` (identifier may be empty and may contain extra colons). */

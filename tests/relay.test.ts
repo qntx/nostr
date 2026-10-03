@@ -12,7 +12,7 @@ import {
   RelayStatus,
   RelayTimeoutError,
   SUBSCRIPTION_ID_MAX_CHARS,
-  WasmVerifyPoisonedError,
+  WasmPoisonedError,
   isInsecureRelayUrl,
   useWebSocketImplementation,
   verifyEvent,
@@ -21,7 +21,10 @@ import type { Event, EventTemplate } from "../src/index.ts";
 import { NegentropyStorageVector, Nip77Error } from "../src/nips/nip77.ts";
 import { subscriptionToAsyncIterable } from "../src/relay/index.ts";
 import type { SubscriptionHandlers } from "../src/relay/index.ts";
+import type { Subscription } from "../src/relay/subscription.ts";
 import type { WebSocketConstructor } from "../src/relay/websocket.ts";
+import { createFakeRelayNetwork } from "../src/testing/index.ts";
+import type { FakeRelayNetwork } from "../src/testing/index.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 import { stubReportError } from "./helpers/report-error.ts";
 
@@ -754,51 +757,51 @@ describe("Relay", () => {
     relay.close();
   });
 
-  test("WasmVerifyPoisonedError poisons verify and drops later EVENTs", async () => {
+  test("WasmPoisonedError poisons verify and drops later EVENTs", async () => {
     let verifies = 0;
     const notices: string[] = [];
     const relay = await Relay.connect("wss://poison-instance.example", {
       verifyEvent: () => {
         verifies += 1;
-        throw new WasmVerifyPoisonedError("wasm verify aborted the instance");
+        throw new WasmPoisonedError("wasm instance aborted");
       },
     });
-    relay.onnotice = (msg) => notices.push(msg);
+    relay.on("notice", (msg) => notices.push(msg));
     const keys = Keys.fromSecretKey(SK);
     const first = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
     const second = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
     const events: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
       onevent: (e) => events.push(e.id),
-    });
+    }) as Subscription;
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["EVENT", sub.id, first]));
     expect(verifies).toBe(1);
     expect(events).toStrictEqual([]);
-    expect(notices).toStrictEqual(["verify-poisoned: wasm instance aborted"]);
+    expect(notices).toStrictEqual(["wasm-poisoned: instance aborted"]);
     expect(sub.lastCreatedAt).toBeUndefined();
     expect(sub.idsAtWatermark.size).toBe(0);
 
     ws.receive(JSON.stringify(["EVENT", sub.id, second]));
     expect(verifies).toBe(1);
     expect(events).toStrictEqual([]);
-    expect(notices).toStrictEqual(["verify-poisoned: wasm instance aborted"]);
+    expect(notices).toStrictEqual(["wasm-poisoned: instance aborted"]);
     expect(sub.idsAtWatermark.size).toBe(0);
     relay.close();
   });
 
-  test("Error named WasmVerifyPoisonedError does not poison verify", async () => {
+  test("Error named WasmPoisonedError does not poison verify", async () => {
     let verifies = 0;
     const notices: string[] = [];
     const relay = await Relay.connect("wss://poison-name.example", {
       verifyEvent: () => {
         verifies += 1;
         const err = new Error("wasm verify aborted");
-        err.name = "WasmVerifyPoisonedError";
+        err.name = "WasmPoisonedError";
         throw err;
       },
     });
-    relay.onnotice = (msg) => notices.push(msg);
+    relay.on("notice", (msg) => notices.push(msg));
     const keys = Keys.fromSecretKey(SK);
     const first = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
     const second = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
@@ -811,8 +814,8 @@ describe("Relay", () => {
       ws.receive(JSON.stringify(["EVENT", sub.id, first]));
     });
     expect(firstErr).toBeInstanceOf(Error);
-    expect(firstErr).not.toBeInstanceOf(WasmVerifyPoisonedError);
-    expect((firstErr as Error).name).toBe("WasmVerifyPoisonedError");
+    expect(firstErr).not.toBeInstanceOf(WasmPoisonedError);
+    expect((firstErr as Error).name).toBe("WasmPoisonedError");
     expect(verifies).toBe(1);
     expect(events).toStrictEqual([]);
     expect(notices).toStrictEqual([]);
@@ -821,23 +824,25 @@ describe("Relay", () => {
       ws.receive(JSON.stringify(["EVENT", sub.id, second]));
     });
     expect(secondErr).toBeInstanceOf(Error);
-    expect(secondErr).not.toBeInstanceOf(WasmVerifyPoisonedError);
+    expect(secondErr).not.toBeInstanceOf(WasmPoisonedError);
     expect(verifies).toBe(2);
     expect(events).toStrictEqual([]);
     expect(notices).toStrictEqual([]);
     relay.close();
   });
 
-  test("wasm RuntimeError poisons verify and does not map to false", async () => {
+  test("WasmPoisonedError from the wasm adapter poisons verify and does not map to false", async () => {
     let verifies = 0;
     const notices: string[] = [];
     const relay = await Relay.connect("wss://poison-runtime.example", {
       verifyEvent: () => {
         verifies += 1;
-        throw new WebAssembly.RuntimeError("unreachable");
+        // The wasm adapter converts WebAssembly.RuntimeError into
+        // WasmPoisonedError before it reaches the relay.
+        throw new WasmPoisonedError("unreachable");
       },
     });
-    relay.onnotice = (msg) => notices.push(msg);
+    relay.on("notice", (msg) => notices.push(msg));
     const keys = Keys.fromSecretKey(SK);
     const first = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
     const second = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
@@ -850,7 +855,7 @@ describe("Relay", () => {
     expect(verifies).toBe(1);
     expect(events).toStrictEqual([]);
     expect(notices).toHaveLength(1);
-    expect(notices[0]).toBe("verify-poisoned: wasm instance aborted");
+    expect(notices[0]).toBe("wasm-poisoned: instance aborted");
 
     ws.receive(JSON.stringify(["EVENT", sub.id, second]));
     expect(verifies).toBe(1);
@@ -889,7 +894,7 @@ describe("Relay", () => {
     const events: string[] = [];
     const sub = relay.subscribe([{ kinds: [1], since: 5 }], {
       onevent: (e) => events.push(e.id),
-    });
+    }) as Subscription;
 
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["EVENT", sub.id, good]));
@@ -1222,7 +1227,7 @@ describe("Pool", () => {
 
     const results = await publishP;
     expect(results).toHaveLength(2);
-    expect(results.every((r) => r.result?.ok)).toBe(true);
+    expect(results.every((r) => r.status === "ok")).toBe(true);
     pool.close();
   });
 
@@ -1337,7 +1342,7 @@ describe("alreadyHaveEvent / receivedEvent", () => {
       alreadyHaveEvent: () => true,
       receivedEvent: (id) => received.push(id),
       onevent: (e) => events.push(e),
-    });
+    }) as Subscription;
 
     MockWebSocket.last().receive(JSON.stringify(["EVENT", sub.id, note]));
     expect(received).toStrictEqual([note.id]);
@@ -2293,15 +2298,11 @@ describe("Pool aggregated EOSE", () => {
       timeoutMs: 50,
     });
     expect(counts).toHaveLength(1);
-    expect(counts[0]!.error).toBeDefined();
-    expect(counts[0]!.error!.length).toBeGreaterThan(0);
-    expect(counts[0]!.count).toBeUndefined();
+    expect(counts[0]).toMatchObject({ status: "failed", error: expect.stringMatching(/\S/) });
 
     const pubs = await pool.publish(["wss://pub-fail.example"], note);
     expect(pubs).toHaveLength(1);
-    expect(pubs[0]!.error).toBeDefined();
-    expect(pubs[0]!.error!.length).toBeGreaterThan(0);
-    expect(pubs[0]!.result).toBeUndefined();
+    expect(pubs[0]).toMatchObject({ status: "failed", error: expect.stringMatching(/\S/) });
 
     expect(MockWebSocket.instances).toHaveLength(3);
     await sleep(40);
@@ -2589,7 +2590,7 @@ describe("live REQ coalescing", () => {
     const pkB = "bb".repeat(32);
     const a = relay.subscribe([
       { authors: [pkA.toUpperCase(), pkB], kinds: [2, 1], "#t": ["z", "a"] },
-    ]);
+    ]) as Subscription;
     const b = relay.subscribe([
       { authors: [pkB.toUpperCase(), pkA.toLowerCase()], kinds: [1, 2], "#t": ["a", "z"] },
     ]);
@@ -2640,12 +2641,12 @@ describe("live REQ coalescing", () => {
       alreadyHaveEvent: () => true,
       receivedEvent: (id) => received.push(`a:${id}`),
       onevent: (e) => aEvents.push(e.id),
-    });
+    }) as Subscription;
     const b = relay.subscribe([{ kinds: [1] }], {
       alreadyHaveEvent: () => false,
       receivedEvent: (id) => received.push(`b:${id}`),
       onevent: (e) => bEvents.push(e.id),
-    });
+    }) as Subscription;
     expect(b.id).toBe(a.id);
     MockWebSocket.last().receive(JSON.stringify(["EVENT", a.id, note]));
     expect(verifies).toBe(1);
@@ -3021,7 +3022,7 @@ describe("issue #130", () => {
     pool.close();
   });
 
-  test("throwing onnotice and onclose are reported without breaking teardown", async () => {
+  test("throwing notice and close listeners are reported without breaking teardown", async () => {
     const { reported, restore } = stubReportError();
     try {
       const relay = await Relay.connect("wss://cb-throw.example", {
@@ -3030,13 +3031,12 @@ describe("issue #130", () => {
       });
       const noticeBoom = new Error("notice boom");
       const closeBoom = new Error("close boom");
-      relay.onnotice = () => {
+      relay.on("notice", () => {
         throw noticeBoom;
-      };
-      // oxlint-disable-next-line prefer-add-event-listener -- Relay.onclose is a callback property of our API, not a DOM EventTarget
-      relay.onclose = () => {
+      });
+      relay.on("close", () => {
         throw closeBoom;
-      };
+      });
       MockWebSocket.last().receive(JSON.stringify(["NOTICE", "heads up"]));
       expect(reported).toStrictEqual([noticeBoom]);
       expect(relay.connected).toBe(true);
@@ -3230,5 +3230,217 @@ describe("relay.stream abort semantics (issue #134)", () => {
     expect(drainB.value?.id).toBe(b.id);
     await expect(it.next()).resolves.toStrictEqual({ value: undefined, done: true });
     relay.close();
+  });
+});
+
+describe("duplicate publish and abort-listener cleanup", () => {
+  let net: FakeRelayNetwork;
+
+  beforeEach(() => {
+    net = createFakeRelayNetwork();
+  });
+
+  afterEach(() => {
+    net.close();
+  });
+
+  const note = (content: string): Event =>
+    EventBuilder.textNote(content).createdAt(1).signWithKeys(Keys.fromSecretKey(SK));
+
+  /** Net "abort" listeners on one signal via an instance-level monkeypatch. */
+  const trackAbortListeners = (signal: AbortSignal): { added: number; removed: number } => {
+    const tracked = { added: 0, removed: 0 };
+    const add = signal.addEventListener.bind(signal);
+    const remove = signal.removeEventListener.bind(signal);
+    signal.addEventListener = (type: string, listener: unknown, opts?: unknown) => {
+      if (type === "abort") {
+        tracked.added += 1;
+      }
+      return add(type, listener as EventListener, opts as AddEventListenerOptions);
+    };
+    signal.removeEventListener = (type: string, listener: unknown, opts?: unknown) => {
+      if (type === "abort") {
+        tracked.removed += 1;
+      }
+      return remove(type, listener as EventListener, opts as EventListenerOptions);
+    };
+    return tracked;
+  };
+
+  const netListeners = (tracked: { added: number; removed: number }): number =>
+    tracked.added - tracked.removed;
+
+  test("two concurrent relay.publish calls of the same event both resolve ok", async () => {
+    const relay = new Relay("wss://dup-publish.example", {
+      websocketImplementation: net.websocketImplementation,
+      publishTimeoutMs: 300,
+      enableReconnect: false,
+    });
+    try {
+      await relay.connect();
+      const ev = note("dup");
+      const [a, b] = await Promise.allSettled([relay.publish(ev), relay.publish(ev)]);
+      expect(a).toStrictEqual({ status: "fulfilled", value: { ok: true, message: "" } });
+      expect(b).toStrictEqual({ status: "fulfilled", value: { ok: true, message: "" } });
+    } finally {
+      relay.close();
+    }
+  });
+
+  test("pool.publish dedupes equivalent URL spellings to a single relay entry", async () => {
+    const pool = new Pool({
+      websocketImplementation: net.websocketImplementation,
+      publishTimeoutMs: 300,
+      enableReconnect: false,
+    });
+    try {
+      const results = await pool.publish(["wss://dup.example", "wss://dup.example/"], note("dup"));
+      expect(results).toStrictEqual([{ url: "wss://dup.example/", status: "ok", message: "" }]);
+    } finally {
+      pool.close();
+    }
+  });
+
+  test("relay.fetch leaves no abort listeners after 5 EOSE-completed fetches", async () => {
+    const relay = new Relay("wss://fetch.example", {
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    try {
+      await relay.connect();
+      const controller = new AbortController();
+      const tracked = trackAbortListeners(controller.signal);
+      for (let i = 0; i < 5; i++) {
+        // oxlint-disable-next-line no-await-in-loop -- sequential fetches must finish before the listener count is read
+        const result = await relay.fetch([{ kinds: [1] }], {
+          signal: controller.signal,
+          timeoutMs: 300,
+        });
+        expect(result.end.type).toBe("eose");
+      }
+      await sleep(10);
+      expect(netListeners(tracked)).toBe(0);
+    } finally {
+      relay.close();
+    }
+  });
+
+  test("pool.fetch leaves no abort listeners after 5 EOSE-completed fetches", async () => {
+    const pool = new Pool({
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    try {
+      const controller = new AbortController();
+      const tracked = trackAbortListeners(controller.signal);
+      for (let i = 0; i < 5; i++) {
+        // oxlint-disable-next-line no-await-in-loop -- sequential fetches must finish before the listener count is read
+        const events = await pool.fetch(["wss://fetch.example"], [{ kinds: [1] }], {
+          signal: controller.signal,
+          timeoutMs: 300,
+        });
+        expect(events).toStrictEqual([]);
+      }
+      await sleep(10);
+      expect(netListeners(tracked)).toBe(0);
+    } finally {
+      pool.close();
+    }
+  });
+
+  test("pool.fetchEach leaves no abort listeners after 5 EOSE-completed fetches", async () => {
+    const pool = new Pool({
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    try {
+      const controller = new AbortController();
+      const tracked = trackAbortListeners(controller.signal);
+      for (let i = 0; i < 5; i++) {
+        // oxlint-disable-next-line no-await-in-loop -- sequential fetches must finish before the listener count is read
+        const results = await pool.fetchEach(["wss://fetch.example"], [{ kinds: [1] }], {
+          signal: controller.signal,
+          timeoutMs: 300,
+        });
+        expect(results).toHaveLength(1);
+        expect(results[0]!.end.type).toBe("eose");
+      }
+      await sleep(10);
+      expect(netListeners(tracked)).toBe(0);
+    } finally {
+      pool.close();
+    }
+  });
+
+  test("pool.subscribe close leaves no abort listeners", async () => {
+    const pool = new Pool({
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    try {
+      const controller = new AbortController();
+      const tracked = trackAbortListeners(controller.signal);
+      for (let i = 0; i < 5; i++) {
+        const sub = pool.subscribe(["wss://sub.example"], [{ kinds: [1] }], {
+          signal: controller.signal,
+        });
+        sub.close("done");
+      }
+      await sleep(10);
+      expect(netListeners(tracked)).toBe(0);
+    } finally {
+      pool.close();
+    }
+  });
+
+  test("relay.stream broken out of the iterator leaves no abort listeners", async () => {
+    const relay = new Relay("wss://stream.example", {
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    try {
+      await relay.connect();
+      const seeded = note("seeded");
+      net.relay("wss://stream.example").seed([seeded]);
+      const controller = new AbortController();
+      const tracked = trackAbortListeners(controller.signal);
+      for (let i = 0; i < 5; i++) {
+        const seen: string[] = [];
+        // oxlint-disable-next-line no-await-in-loop -- sequential streams must finish before the listener count is read
+        for await (const e of relay.stream([{ kinds: [1] }], { signal: controller.signal })) {
+          seen.push(e.id);
+          break;
+        }
+        expect(seen).toStrictEqual([seeded.id]);
+      }
+      await sleep(10);
+      expect(netListeners(tracked)).toBe(0);
+    } finally {
+      relay.close();
+    }
+  });
+
+  test("relay.count leaves no abort listeners after 5 completed counts", async () => {
+    const relay = new Relay("wss://count.example", {
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    try {
+      await relay.connect();
+      const controller = new AbortController();
+      const tracked = trackAbortListeners(controller.signal);
+      for (let i = 0; i < 5; i++) {
+        // oxlint-disable-next-line no-await-in-loop -- sequential counts must finish before the listener count is read
+        const result = await relay.count([{ kinds: [1] }], {
+          signal: controller.signal,
+          timeoutMs: 300,
+        });
+        expect(result.count).toBe(0);
+      }
+      await sleep(10);
+      expect(netListeners(tracked)).toBe(0);
+    } finally {
+      relay.close();
+    }
   });
 });

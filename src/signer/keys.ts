@@ -1,5 +1,5 @@
 import type { Event, UnsignedEvent } from "../core/event.ts";
-import type { SecretKey } from "../core/key.ts";
+import type { SecretKeyInput } from "../core/key.ts";
 import { Keys, signEvent } from "../core/key.ts";
 import * as nip04 from "../nips/nip04.ts";
 import * as nip44 from "../nips/nip44.ts";
@@ -10,7 +10,7 @@ export class KeysSigner implements NostrSigner {
   readonly #keys: Keys;
   readonly #convKeys = new Map<string, Uint8Array>();
 
-  constructor(secretKey: SecretKey | Uint8Array | string | Keys) {
+  constructor(secretKey: SecretKeyInput | Keys) {
     this.#keys = secretKey instanceof Keys ? secretKey : Keys.fromSecretKey(secretKey);
   }
 

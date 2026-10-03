@@ -1,3 +1,4 @@
+import { onAbort } from "../core/abort.ts";
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { createSubscriptionId } from "../core/message.ts";
@@ -33,6 +34,16 @@ export type SubscribeOptions = SubscriptionHandlers & {
   signal?: AbortSignal | undefined;
 };
 
+/** Uniform close handle returned by subscriptions, fan-ins, and feeds. */
+export type Closer = { close: (reason?: string) => void };
+
+/** Public subscription handle returned by {@link Relay.subscribe}. */
+export type RelaySubscription = {
+  readonly id: string;
+  readonly closed: boolean;
+  close: (reason?: string) => void;
+};
+
 export class Subscription {
   readonly id: string;
   readonly filters: Filter[];
@@ -66,11 +77,14 @@ export class Subscription {
       if (opts.signal.aborted) {
         this.close("aborted");
       } else {
-        const onAbort = () => this.close("aborted");
-        opts.signal.addEventListener("abort", onAbort, { once: true });
-        this.#abort = () => opts.signal?.removeEventListener("abort", onAbort);
+        this.#abort = onAbort(opts.signal, () => this.close("aborted"));
       }
     }
+  }
+
+  /** Drop the signal listener. Terminal paths that mark `closed` without `close()` run this too. */
+  dispose(): void {
+    this.#abort?.();
   }
 
   close(reason = "closed by client"): void {
@@ -78,7 +92,7 @@ export class Subscription {
       return;
     }
     this.closed = true;
-    this.#abort?.();
+    this.dispose();
     this.#sendClose(this.id);
     invokeSafely(() => this.handlers.onclose?.(reason));
   }
@@ -114,19 +128,20 @@ export class Subscription {
 
 /** AsyncIterable wrapper over a subscription's events until EOSE or close. */
 export function subscriptionToAsyncIterable(
-  start: (handlers: SubscriptionHandlers) => { close: (reason?: string) => void },
+  start: (handlers: SubscriptionHandlers) => Closer,
   opts?: { signal?: AbortSignal | undefined; includeEose?: boolean | undefined },
-): AsyncIterable<Event> & { close: (reason?: string) => void } {
+): AsyncIterable<Event> & Closer {
   const queue: Event[] = [];
   let done = false;
   let error: Error | undefined;
   let wake: (() => void) | undefined;
   // `let` is required: onclose can fire synchronously while start() is still assigning closer.
   // oxlint-disable-next-line prefer-const
-  let closer: { close: (reason?: string) => void } | undefined;
+  let closer: Closer | undefined;
   // Set before every locally initiated close so onclose can distinguish it
   // from a remote/transport close without comparing reason strings.
   let localClose = false;
+  let disposeAbort: (() => void) | undefined;
 
   const notify = () => {
     wake?.();
@@ -140,6 +155,7 @@ export function subscriptionToAsyncIterable(
 
   const closeLocal = (reason: string): void => {
     localClose = true;
+    disposeAbort?.();
     closer?.close(reason);
     done = true;
     notify();
@@ -174,7 +190,12 @@ export function subscriptionToAsyncIterable(
     if (opts.signal.aborted) {
       closeLocal("aborted");
     } else {
-      opts.signal.addEventListener("abort", () => closeLocal("aborted"), { once: true });
+      disposeAbort = onAbort(opts.signal, () => closeLocal("aborted"));
+      // `start` may have ended the subscription synchronously before the
+      // listener was registered.
+      if (done) {
+        disposeAbort();
+      }
     }
   }
 

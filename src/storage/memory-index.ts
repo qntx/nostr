@@ -1,3 +1,4 @@
+import { addToSetMap, removeFromSetMap, trimOldest } from "../core/collections.ts";
 import type { Event } from "../core/event.ts";
 import { compareEventsDesc, itemCompare, sortEvents } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
@@ -14,7 +15,7 @@ export type MemoryIndexOptions = {
    * e-tag ids, and coordinate tombstones. Default unbounded. Trade-off: once an entry is trimmed, a
    * re-arriving old deleted event or replaceable version can be accepted again.
    */
-  maxTombstones?: number;
+  maxTombstones?: number | undefined;
   /**
    * FIFO cap on replaceable/addressable winner watermarks recorded by {@link evict}. A watermark
    * keeps only `{ id, created_at }` per address so stale versions stay rejected after the winner's
@@ -22,11 +23,11 @@ export type MemoryIndexOptions = {
    * retention); callers that evict should pass a bound. Once a watermark is trimmed, an older
    * evicted version can be accepted again — the same trade-off as deletion tombstones.
    */
-  maxWatermarks?: number;
+  maxWatermarks?: number | undefined;
   /** Fires after every physical index insert (accept, replace, deletion event). */
-  onInsert?: (event: Event) => void;
+  onInsert?: ((event: Event) => void) | undefined;
   /** Fires after every physical index remove (replace, delete, evict, remove, clear). */
-  onRemove?: (event: Event) => void;
+  onRemove?: ((event: Event) => void) | undefined;
 };
 
 /**
@@ -55,8 +56,8 @@ export class MemoryIndex {
   constructor(opts?: MemoryIndexOptions) {
     this.#maxTombstones = opts?.maxTombstones;
     this.#maxWatermarks = opts?.maxWatermarks ?? 0;
-    this.#onInsert = opts?.onInsert === undefined ? undefined : (event) => opts.onInsert?.(event);
-    this.#onRemove = opts?.onRemove === undefined ? undefined : (event) => opts.onRemove?.(event);
+    this.#onInsert = opts?.onInsert;
+    this.#onRemove = opts?.onRemove;
   }
 
   put(raw: Event): PutResult {
@@ -125,11 +126,10 @@ export class MemoryIndex {
     if (id === undefined) {
       return undefined;
     }
-    const key = id.toLowerCase();
-    if (this.#deletion.ids.has(key)) {
+    if (this.#deletion.ids.has(id)) {
       return undefined;
     }
-    return this.#byId.get(key);
+    return this.#byId.get(id);
   }
 
   query(filters: ReadonlyArray<Filter>): Event[] {
@@ -173,7 +173,7 @@ export class MemoryIndex {
       items.push({ id: event.id, created_at: event.created_at });
     });
     if (filter.limit !== undefined) {
-      items.sort(queryItemOrder);
+      items.sort(compareEventsDesc);
       if (items.length > filter.limit) {
         items.length = filter.limit;
       }
@@ -289,14 +289,14 @@ export class MemoryIndex {
   #indexInsert(event: Event): void {
     this.#byId.set(event.id, event);
     const { pubkey } = event;
-    addToSet(this.#byPubkey, pubkey, event.id);
-    addToSet(this.#byKind, event.kind, event.id);
-    addToSet(this.#byKindPubkey, `${event.kind}:${pubkey}`, event.id);
+    addToSetMap(this.#byPubkey, pubkey, event.id);
+    addToSetMap(this.#byKind, event.kind, event.id);
+    addToSetMap(this.#byKindPubkey, `${event.kind}:${pubkey}`, event.id);
     for (const tag of event.tags) {
       if ((tag[0] !== "e" && tag[0] !== "p") || tag[1] === undefined) {
         continue;
       }
-      addToSet(this.#byEpTag, `${tag[0]}:${tag[1].toLowerCase()}`, event.id);
+      addToSetMap(this.#byEpTag, `${tag[0]}:${tag[1].toLowerCase()}`, event.id);
     }
     const addr = eventAddress(event);
     if (addr !== undefined) {
@@ -307,27 +307,26 @@ export class MemoryIndex {
   }
 
   #indexRemove(id: string): boolean {
-    const key = id;
     // A removed/deleted id must not keep a stale watermark alive; eviction
     // re-records its winner watermark right after this call.
-    this.#dropWatermarkId(key);
-    const event = this.#byId.get(key);
+    this.#dropWatermarkId(id);
+    const event = this.#byId.get(id);
     if (!event) {
       return false;
     }
-    this.#byId.delete(key);
+    this.#byId.delete(id);
     const { pubkey } = event;
-    removeFromSet(this.#byPubkey, pubkey, key);
-    removeFromSet(this.#byKind, event.kind, key);
-    removeFromSet(this.#byKindPubkey, `${event.kind}:${pubkey}`, key);
+    removeFromSetMap(this.#byPubkey, pubkey, id);
+    removeFromSetMap(this.#byKind, event.kind, id);
+    removeFromSetMap(this.#byKindPubkey, `${event.kind}:${pubkey}`, id);
     for (const tag of event.tags) {
       if ((tag[0] !== "e" && tag[0] !== "p") || tag[1] === undefined) {
         continue;
       }
-      removeFromSet(this.#byEpTag, `${tag[0]}:${tag[1].toLowerCase()}`, key);
+      removeFromSetMap(this.#byEpTag, `${tag[0]}:${tag[1].toLowerCase()}`, id);
     }
     const addr = eventAddress(event);
-    if (addr !== undefined && this.#replaceable.get(addr) === key) {
+    if (addr !== undefined && this.#replaceable.get(addr) === id) {
       this.#replaceable.delete(addr);
     }
     this.#onRemove?.(event);
@@ -484,13 +483,7 @@ export class MemoryIndex {
     this.#dropWatermark(addr);
     this.#watermarks.set(addr, watermark);
     this.#watermarkIds.set(watermark.id, addr);
-    while (this.#watermarks.size > this.#maxWatermarks) {
-      const oldest = this.#watermarks.keys().next().value;
-      if (oldest === undefined) {
-        break;
-      }
-      this.#dropWatermark(oldest);
-    }
+    trimOldest(this.#watermarks, this.#maxWatermarks, (a) => this.#dropWatermark(a));
   }
 
   #dropWatermark(addr: string): void {
@@ -516,31 +509,11 @@ export class MemoryIndex {
     if (cap === undefined) {
       return;
     }
-    let excess = this.#deletion.ids.size - cap;
-    for (const id of this.#deletion.ids) {
-      if (excess <= 0) {
-        break;
-      }
-      this.#deletion.ids.delete(id);
+    trimOldest(this.#deletion.ids, cap, (id) => {
       this.#deletion.pending.delete(id);
-      excess--;
-    }
-    excess = this.#deletion.pending.size - cap;
-    for (const id of this.#deletion.pending.keys()) {
-      if (excess <= 0) {
-        break;
-      }
-      this.#deletion.pending.delete(id);
-      excess--;
-    }
-    excess = this.#deletion.coordinates.size - cap;
-    for (const key of this.#deletion.coordinates.keys()) {
-      if (excess <= 0) {
-        break;
-      }
-      this.#deletion.coordinates.delete(key);
-      excess--;
-    }
+    });
+    trimOldest(this.#deletion.pending, cap);
+    trimOldest(this.#deletion.coordinates, cap);
   }
 }
 
@@ -571,28 +544,4 @@ function visitEpTagIds(
       }
     }
   }
-}
-
-function addToSet<K>(map: Map<K, Set<string>>, key: K, id: string): void {
-  let set = map.get(key);
-  if (!set) {
-    set = new Set();
-    map.set(key, set);
-  }
-  set.add(id);
-}
-
-function removeFromSet<K>(map: Map<K, Set<string>>, key: K, id: string): void {
-  const set = map.get(key);
-  if (!set) {
-    return;
-  }
-  set.delete(id);
-  if (set.size === 0) {
-    map.delete(key);
-  }
-}
-
-function queryItemOrder(a: NegentropyItem, b: NegentropyItem): number {
-  return compareEventsDesc(a, b);
 }

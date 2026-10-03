@@ -367,9 +367,9 @@ describe("EventBuilder", () => {
   test("relayList markers", () => {
     const keys = Keys.fromSecretKey(SK);
     const event = relayListEventBuilder([
-      { url: "wss://a.example", read: true, write: true },
-      { url: "wss://b.example", read: true, write: false },
-      { url: "wss://c.example", read: false, write: true },
+      { url: "wss://a.example", marker: "both" },
+      { url: "wss://b.example", marker: "read" },
+      { url: "wss://c.example", marker: "write" },
     ]).signWithKeys(keys);
     expect(event.kind).toBe(Kind.RelayList);
     expect(event.tags).toStrictEqual([

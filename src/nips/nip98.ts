@@ -10,8 +10,9 @@ import { NostrError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { validateSignedEvent } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
+import { firstTagValue } from "../core/tag.ts";
 import type { Tag } from "../core/tag.ts";
-import { bytesToHex, utf8Decoder, utf8Encoder } from "../core/util.ts";
+import { bytesToHex, nowSeconds, utf8Decoder, utf8Encoder } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
 
 const AUTHORIZATION_SCHEME = "Nostr ";
@@ -53,10 +54,10 @@ export async function getToken(
   method: string,
   sign: (template: EventTemplate) => Promise<Event> | Event,
   opts?: {
-    includeAuthorizationScheme?: boolean;
-    content?: string;
+    includeAuthorizationScheme?: boolean | undefined;
+    content?: string | undefined;
     payload?: unknown;
-    now?: number;
+    now?: number | undefined;
   },
 ): Promise<string> {
   const tags: Tag[] = [
@@ -69,7 +70,7 @@ export async function getToken(
 
   const signed = await sign({
     kind: Kind.HttpAuth,
-    created_at: opts?.now ?? Math.floor(Date.now() / 1000),
+    created_at: opts?.now ?? nowSeconds(),
     tags,
     content: opts?.content ?? "",
   });
@@ -126,23 +127,23 @@ export function validateAuthEvent(
   }
 
   const maxSkewSec = opts?.maxSkewSec ?? DEFAULT_MAX_SKEW_SEC;
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowSeconds();
   if (Math.abs(now - event.created_at) > maxSkewSec) {
     return false;
   }
 
-  const u = event.tags.find((t) => t[0] === "u")?.[1];
+  const u = firstTagValue(event.tags, "u");
   if (u !== url) {
     return false;
   }
 
-  const m = event.tags.find((t) => t[0] === "method")?.[1];
+  const m = firstTagValue(event.tags, "method");
   if (m === undefined || m.toLowerCase() !== method.toLowerCase()) {
     return false;
   }
 
   if (opts?.payload !== undefined) {
-    const payloadTag = event.tags.find((t) => t[0] === "payload")?.[1];
+    const payloadTag = firstTagValue(event.tags, "payload");
     if (payloadTag !== hashPayload(opts.payload)) {
       return false;
     }

@@ -31,12 +31,12 @@ export type ParseContentOptions = {
    * Recognize bare `npub`, `nprofile`, `note`, `nevent`, `naddr` without the `nostr:` prefix.
    * Default `false`.
    */
-  legacyBech32?: boolean;
+  legacyBech32?: boolean | undefined;
   /**
    * URL → MIME type (the `m` field of NIP-92 `imeta` tags); takes precedence over extension
    * classification.
    */
-  imeta?: ReadonlyMap<string, string>;
+  imeta?: ReadonlyMap<string, string> | undefined;
 };
 
 // Bech32 data charset ([02-9ac-hj-np-z], case-insensitive) and the NIP-19 entity prefixes.

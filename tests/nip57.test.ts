@@ -63,6 +63,14 @@ describe("makeZapRequest", () => {
     expect(relayTags[0]![1]).toBeTypeOf("string");
   });
 
+  test("rejects non-positive and unsafe amounts", () => {
+    for (const amount of [0, -5, 1.5, Number.MAX_SAFE_INTEGER + 1, Number.NaN]) {
+      expect(() => makeZapRequest({ pubkey: keys.publicKey, amount, relays })).toThrow(
+        EventValidationError,
+      );
+    }
+  });
+
   test("empty relays throws", () => {
     expect(() => makeZapRequest({ pubkey: keys.publicKey, amount: 1, relays: [] })).toThrow(
       EventValidationError,
@@ -398,10 +406,11 @@ describe("validateZapReceipt", () => {
     const { request, json } = signedZapRequest({ amount: 1_000_000 });
     const receipt = receiptFor(provider, request, json);
     const result = validateZapReceipt(receipt, { nostrPubkey: provider.publicKey });
-    expect(result.valid).toBe(true);
-    expect(result.request?.kind).toBe(9734);
-    expect(result.request?.id).toBe(request.id);
-    expect(result.amountMsats).toBe(1_000_000);
+    expect(result).toMatchObject({
+      valid: true,
+      request: { kind: 9734, id: request.id },
+      amountMsats: 1_000_000,
+    });
   });
 
   test("wrong nostrPubkey is invalid and does not throw", () => {
@@ -411,7 +420,7 @@ describe("validateZapReceipt", () => {
     expect(() => validateZapReceipt(receipt, { nostrPubkey: keys.publicKey })).not.toThrow();
     const result = validateZapReceipt(receipt, { nostrPubkey: keys.publicKey });
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("pubkey mismatch");
+    expect(result).toMatchObject({ reason: "pubkey mismatch" });
   });
 
   test("amount mismatch", () => {
@@ -420,7 +429,7 @@ describe("validateZapReceipt", () => {
     const receipt = receiptFor(provider, request, json);
     const result = validateZapReceipt(receipt, { nostrPubkey: provider.publicKey });
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("amount mismatch");
+    expect(result).toMatchObject({ reason: "amount mismatch" });
   });
 
   test("request amount with any-amount invoice is amount mismatch", () => {
@@ -437,7 +446,7 @@ describe("validateZapReceipt", () => {
     expect("amountMsats" in parsed!).toBe(false);
     const result = validateZapReceipt(receipt, { nostrPubkey: provider.publicKey });
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("amount mismatch");
+    expect(result).toMatchObject({ reason: "amount mismatch" });
   });
 
   test("unparseable request amount is amount mismatch", () => {
@@ -446,7 +455,7 @@ describe("validateZapReceipt", () => {
     const receipt = receiptFor(provider, request, json);
     const result = validateZapReceipt(receipt, { nostrPubkey: provider.publicKey });
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("amount mismatch");
+    expect(result).toMatchObject({ reason: "amount mismatch" });
   });
 
   test("description hash mismatch uses official Appendix E invoice", () => {
@@ -455,7 +464,7 @@ describe("validateZapReceipt", () => {
     const receipt = receiptFor(provider, request, json, { invoice: APPENDIX_E_INVOICE });
     const result = validateZapReceipt(receipt, { nostrPubkey: provider.publicKey });
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("description hash mismatch");
+    expect(result).toMatchObject({ reason: "description hash mismatch" });
   });
 
   test("bad preimage", () => {
@@ -464,7 +473,7 @@ describe("validateZapReceipt", () => {
     const receipt = receiptFor(provider, request, json, { preimage: "00".repeat(32) });
     const result = validateZapReceipt(receipt, { nostrPubkey: provider.publicKey });
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("preimage mismatch");
+    expect(result).toMatchObject({ reason: "preimage mismatch" });
   });
 
   test("truncated bech32", () => {
@@ -475,7 +484,7 @@ describe("validateZapReceipt", () => {
     });
     const result = validateZapReceipt(receipt, { nostrPubkey: provider.publicKey });
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("invalid bolt11");
+    expect(result).toMatchObject({ reason: "invalid bolt11" });
   });
 
   test("lnurl mismatch", () => {
@@ -487,7 +496,7 @@ describe("validateZapReceipt", () => {
       lnurl: "other",
     });
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("lnurl mismatch");
+    expect(result).toMatchObject({ reason: "lnurl mismatch" });
   });
 
   test("checksum-valid stub without p/h is invalid bolt11", () => {
@@ -497,7 +506,7 @@ describe("validateZapReceipt", () => {
     const receipt = receiptFor(provider, request, json, { invoice: stub });
     const result = validateZapReceipt(receipt, { nostrPubkey: provider.publicKey });
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("invalid bolt11");
+    expect(result).toMatchObject({ reason: "invalid bolt11" });
   });
 
   test("9734 with two p tags or missing relays is invalid", () => {
@@ -510,7 +519,7 @@ describe("validateZapReceipt", () => {
       nostrPubkey: provider.publicKey,
     });
     expect(twoPResult.valid).toBe(false);
-    expect(twoPResult.reason).toBe("invalid p count");
+    expect(twoPResult).toMatchObject({ reason: "invalid p count" });
 
     const twoE = signedZapRequest({
       amount: 1_000_000,
@@ -523,7 +532,7 @@ describe("validateZapReceipt", () => {
       nostrPubkey: provider.publicKey,
     });
     expect(twoEResult.valid).toBe(false);
-    expect(twoEResult.reason).toBe("too many e tags");
+    expect(twoEResult).toMatchObject({ reason: "too many e tags" });
 
     const payer = Keys.generate();
     const noRelays = new EventBuilder(Kind.ZapRequest, "")
@@ -535,7 +544,7 @@ describe("validateZapReceipt", () => {
       nostrPubkey: provider.publicKey,
     });
     expect(noRelaysResult.valid).toBe(false);
-    expect(noRelaysResult.reason).toBe("missing relays");
+    expect(noRelaysResult).toMatchObject({ reason: "missing relays" });
   });
 
   test("never throws on garbage", () => {
@@ -552,9 +561,9 @@ describe("validateZapReceipt", () => {
       validateZapReceipt(garbage as Event, { nostrPubkey: keys.publicKey }),
     ).not.toThrow();
     expect(validateZapReceipt(garbage as Event, { nostrPubkey: keys.publicKey }).valid).toBe(false);
-    expect(validateZapReceipt(garbage as Event, { nostrPubkey: keys.publicKey }).reason).toBe(
-      "invalid receipt",
-    );
+    expect(validateZapReceipt(garbage as Event, { nostrPubkey: keys.publicKey })).toMatchObject({
+      reason: "invalid receipt",
+    });
   });
 
   test("D.7: a must be a valid event coordinate", () => {
@@ -579,7 +588,7 @@ describe("validateZapReceipt", () => {
       { nostrPubkey: provider.publicKey },
     );
     expect(replaceableResult.valid).toBe(false);
-    expect(replaceableResult.reason).toBe("invalid a");
+    expect(replaceableResult).toMatchObject({ reason: "invalid a" });
 
     const kind1xxxx = `10002:${keys.publicKey}:`;
     const kind1xxxxReq = signedZapRequest({
@@ -593,7 +602,7 @@ describe("validateZapReceipt", () => {
       { nostrPubkey: provider.publicKey },
     );
     expect(kind1xxxxResult.valid).toBe(false);
-    expect(kind1xxxxResult.reason).toBe("invalid a");
+    expect(kind1xxxxResult).toMatchObject({ reason: "invalid a" });
 
     const nested = `30023:${keys.publicKey}:hello:world`;
     const nestedReq = signedZapRequest({ amount: 1_000_000, extraTags: [["a", nested]] });
@@ -621,7 +630,7 @@ describe("validateZapReceipt", () => {
       expect(() => validateZapReceipt(receipt, { nostrPubkey: provider.publicKey })).not.toThrow();
       const result = validateZapReceipt(receipt, { nostrPubkey: provider.publicKey });
       expect(result.valid).toBe(false);
-      expect(result.reason).toBe("invalid a");
+      expect(result).toMatchObject({ reason: "invalid a" });
     }
   });
 
@@ -664,21 +673,21 @@ describe("validateZapReceipt", () => {
     ).not.toThrow();
     const wrongResult = validateZapReceipt(wrongReceipt, { nostrPubkey: provider.publicKey });
     expect(wrongResult.valid).toBe(false);
-    expect(wrongResult.reason).toBe("request P mismatch");
+    expect(wrongResult).toMatchObject({ reason: "request P mismatch" });
 
     const emptyValue = signedZapRequest({ amount: 1_000_000, extraTags: [["P", ""]] });
     expect(
       validateZapReceipt(receiptFor(provider, emptyValue.request, emptyValue.json), {
         nostrPubkey: provider.publicKey,
-      }).reason,
-    ).toBe("request P mismatch");
+      }),
+    ).toMatchObject({ reason: "request P mismatch" });
 
     const nameless = signedZapRequest({ amount: 1_000_000, extraTags: [["P"]] });
     expect(
       validateZapReceipt(receiptFor(provider, nameless.request, nameless.json), {
         nostrPubkey: provider.publicKey,
-      }).reason,
-    ).toBe("request P mismatch");
+      }),
+    ).toMatchObject({ reason: "request P mismatch" });
 
     const twoP = signedZapRequest({
       amount: 1_000_000,
@@ -693,7 +702,7 @@ describe("validateZapReceipt", () => {
     ).not.toThrow();
     const twoPResult = validateZapReceipt(twoPReceipt, { nostrPubkey: provider.publicKey });
     expect(twoPResult.valid).toBe(false);
-    expect(twoPResult.reason).toBe("too many P tags");
+    expect(twoPResult).toMatchObject({ reason: "too many P tags" });
   });
 
   test("E: receipt copies request p, e, and a", () => {
@@ -742,7 +751,7 @@ describe("validateZapReceipt", () => {
       nostrPubkey: provider.publicKey,
     });
     expect(missingPResult.valid).toBe(false);
-    expect(missingPResult.reason).toBe("missing p");
+    expect(missingPResult).toMatchObject({ reason: "missing p" });
 
     const wrongP = signedZapRequest({ amount: 1_000_000 });
     const wrongPBase = receiptFor(provider, wrongP.request, wrongP.json);
@@ -750,37 +759,37 @@ describe("validateZapReceipt", () => {
       provider,
       wrongPBase.tags.map((t) => rewriteTagValue(t, "p", provider.publicKey)),
     );
-    expect(validateZapReceipt(wrongPReceipt, { nostrPubkey: provider.publicKey }).reason).toBe(
-      "missing p",
-    );
+    expect(validateZapReceipt(wrongPReceipt, { nostrPubkey: provider.publicKey })).toMatchObject({
+      reason: "missing p",
+    });
 
     const withE = signedZapRequest({ amount: 1_000_000, extraTags: [["e", eventId]] });
     const missingE = receiptFor(provider, withE.request, withE.json);
     expect(() => validateZapReceipt(missingE, { nostrPubkey: provider.publicKey })).not.toThrow();
     const missingEResult = validateZapReceipt(missingE, { nostrPubkey: provider.publicKey });
     expect(missingEResult.valid).toBe(false);
-    expect(missingEResult.reason).toBe("missing e");
+    expect(missingEResult).toMatchObject({ reason: "missing e" });
 
     const wrongE = receiptFor(provider, withE.request, withE.json, {
       extraTags: [["e", "22".repeat(32)]],
     });
-    expect(validateZapReceipt(wrongE, { nostrPubkey: provider.publicKey }).reason).toBe(
-      "missing e",
-    );
+    expect(validateZapReceipt(wrongE, { nostrPubkey: provider.publicKey })).toMatchObject({
+      reason: "missing e",
+    });
 
     const withA = signedZapRequest({ amount: 1_000_000, extraTags: [["a", coord]] });
     const missingA = receiptFor(provider, withA.request, withA.json);
     expect(() => validateZapReceipt(missingA, { nostrPubkey: provider.publicKey })).not.toThrow();
     const missingAResult = validateZapReceipt(missingA, { nostrPubkey: provider.publicKey });
     expect(missingAResult.valid).toBe(false);
-    expect(missingAResult.reason).toBe("missing a");
+    expect(missingAResult).toMatchObject({ reason: "missing a" });
 
     const wrongA = receiptFor(provider, withA.request, withA.json, {
       extraTags: [["a", `30023:${keys.publicKey}:other`]],
     });
-    expect(validateZapReceipt(wrongA, { nostrPubkey: provider.publicKey }).reason).toBe(
-      "missing a",
-    );
+    expect(validateZapReceipt(wrongA, { nostrPubkey: provider.publicKey })).toMatchObject({
+      reason: "missing a",
+    });
 
     const twoA = signedZapRequest({
       amount: 1_000_000,
@@ -792,9 +801,9 @@ describe("validateZapReceipt", () => {
     const twoAPartial = receiptFor(provider, twoA.request, twoA.json, {
       extraTags: [["a", coord]],
     });
-    expect(validateZapReceipt(twoAPartial, { nostrPubkey: provider.publicKey }).reason).toBe(
-      "missing a",
-    );
+    expect(validateZapReceipt(twoAPartial, { nostrPubkey: provider.publicKey })).toMatchObject({
+      reason: "missing a",
+    });
     expect(validateZapReceipt(twoAPartial, { nostrPubkey: provider.publicKey }).valid).toBe(false);
 
     const mixedHex = signedZapRequest({
@@ -814,7 +823,7 @@ describe("validateZapReceipt", () => {
       nostrPubkey: provider.publicKey,
     });
     expect(mixedHexResult.valid).toBe(true);
-    expect(mixedHexResult.reason).toBeUndefined();
+    expect("reason" in mixedHexResult).toBe(false);
   });
 
   test("E: receipt P is the zap sender, not request tag P", () => {
@@ -854,23 +863,23 @@ describe("validateZapReceipt", () => {
     ).not.toThrow();
     const copiedResult = validateZapReceipt(copiedReceipt, { nostrPubkey: provider.publicKey });
     expect(copiedResult.valid).toBe(false);
-    expect(copiedResult.reason).toBe("receipt P mismatch");
+    expect(copiedResult).toMatchObject({ reason: "receipt P mismatch" });
 
     const wrongSender = receiptFor(provider, request, json, {
       extraTags: [["P", keys.publicKey]],
     });
-    expect(validateZapReceipt(wrongSender, { nostrPubkey: provider.publicKey }).reason).toBe(
-      "receipt P mismatch",
-    );
+    expect(validateZapReceipt(wrongSender, { nostrPubkey: provider.publicKey })).toMatchObject({
+      reason: "receipt P mismatch",
+    });
 
     const emptyP = receiptFor(provider, request, json, { extraTags: [["P", ""]] });
-    expect(validateZapReceipt(emptyP, { nostrPubkey: provider.publicKey }).reason).toBe(
-      "receipt P mismatch",
-    );
+    expect(validateZapReceipt(emptyP, { nostrPubkey: provider.publicKey })).toMatchObject({
+      reason: "receipt P mismatch",
+    });
 
     const namelessP = receiptFor(provider, request, json, { extraTags: [["P"]] });
-    expect(validateZapReceipt(namelessP, { nostrPubkey: provider.publicKey }).reason).toBe(
-      "receipt P mismatch",
-    );
+    expect(validateZapReceipt(namelessP, { nostrPubkey: provider.publicKey })).toMatchObject({
+      reason: "receipt P mismatch",
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { abortReason, throwIfAborted } from "../core/abort.ts";
-import { MessageError } from "../core/error.ts";
+import { MessageError, errorMessage } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { canonicalizeFilters } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
@@ -10,9 +10,9 @@ import { normalizeURL } from "../core/util.ts";
 import { RelayConnectionError, RelayPublishError, RelaySuspendedError } from "./error.ts";
 import { fanIn, fetchRouted } from "./fan-in.ts";
 import { Relay, RelayStatus } from "./relay.ts";
-import type { PublishResult, RelayFetchEnd, RelayOptions, SubscribeOptions } from "./relay.ts";
-import { isInsecureRelayUrl } from "./url.ts";
-import type { WebSocketConstructor } from "./websocket.ts";
+import type { RelayFetchEnd, RelayOptions, SubscribeOptions } from "./relay.ts";
+import type { Closer } from "./subscription.ts";
+import { isInsecureRelayUrl, uniqueRelayUrls } from "./url.ts";
 
 /** Per-relay tolerance for events that fail id/signature verification. */
 export type InvalidEventPolicy = {
@@ -24,16 +24,7 @@ export type InvalidEventPolicy = {
 };
 
 /** Pool-wide options applied to every managed relay. */
-export type PoolOptions = {
-  websocketImplementation?: WebSocketConstructor | undefined;
-  verifyEvent?: RelayOptions["verifyEvent"];
-  publishTimeoutMs?: number | undefined;
-  connectTimeoutMs?: number | undefined;
-  enableReconnect?: boolean | undefined;
-  reconnectBackoffMs?: number[] | undefined;
-  enablePing?: boolean | undefined;
-  pingIntervalMs?: number | undefined;
-  pingTimeoutMs?: number | undefined;
+export type PoolOptions = Omit<RelayOptions, "authSigner"> & {
   /**
    * When set, automatically answer NIP-42 AUTH challenges for relays that send them. Return
    * undefined to skip a given relay URL.
@@ -71,12 +62,11 @@ export type PoolOptions = {
   onRelaySuspended?: ((url: string, until: number) => void) | undefined;
 };
 
-/** Per-relay publish outcome: the relay's OK reply or an error string. */
-export type PoolPublishResult = {
-  url: string;
-  result?: PublishResult;
-  error?: string;
-};
+/** Per-relay publish outcome: the relay's OK verdict or a transport-level failure. */
+export type PoolPublishResult =
+  | { readonly url: string; readonly status: "ok"; readonly message: string }
+  | { readonly url: string; readonly status: "rejected"; readonly message: string }
+  | { readonly url: string; readonly status: "failed"; readonly error: string };
 
 /** Multi-relay subscribe options: callbacks also receive the normalized relay URL. */
 export type PoolSubscribeOptions = Omit<SubscribeOptions, "onevent" | "receivedEvent"> & {
@@ -91,14 +81,16 @@ export type PoolFetchResult = {
   end: RelayFetchEnd | { readonly type: "failed"; readonly reason: string };
 };
 
-/** Per-relay NIP-45 COUNT result (or its error). */
-export type PoolCountResult = {
-  url: string;
-  count?: number;
-  approximate?: boolean;
-  hll?: string;
-  error?: string;
-};
+/** Per-relay NIP-45 COUNT result (or a transport-level failure). */
+export type PoolCountResult =
+  | ({ readonly url: string; readonly status: "ok" } & CountResult)
+  | { readonly url: string; readonly status: "failed"; readonly error: string };
+
+const countOk = (url: string, payload: CountResult): PoolCountResult => ({
+  url,
+  status: "ok",
+  ...payload,
+});
 
 function isIdle(relay: Relay): boolean {
   return (
@@ -111,7 +103,12 @@ function isIdle(relay: Relay): boolean {
 /** Multi-relay coordinator: connection reuse, cross-relay event dedup, fan-out publish. */
 export class Pool {
   readonly #relays = new Map<string, Relay>();
-  readonly #opts: PoolOptions;
+  readonly #relayOptions: Omit<RelayOptions, "authSigner">;
+  readonly #automaticallyAuth: PoolOptions["automaticallyAuth"];
+  readonly #onIdleRelaysClosed: ((urls: string[]) => void) | undefined;
+  readonly #maxRelays: number | undefined;
+  readonly #invalidEventPolicy: InvalidEventPolicy | undefined;
+  readonly #onRelaySuspended: ((url: string, until: number) => void) | undefined;
   readonly #lastActivity = new Map<string, number>();
   readonly #idleTimeoutMs: number;
   #idleTimer: ReturnType<typeof setInterval> | undefined;
@@ -125,16 +122,31 @@ export class Pool {
   readonly #resumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(opts: PoolOptions = {}) {
-    this.#opts = opts;
-    this.#allowInsecure = opts.allowInsecure ?? false;
-    this.#trustedInsecure = new Set((opts.trustedInsecureUrls ?? []).map(normalizeURL));
-    this.#pinned = new Set((opts.pinnedUrls ?? []).map(normalizeURL));
-    this.#idleTimeoutMs = opts.idleTimeoutMs ?? 0;
+    const {
+      automaticallyAuth,
+      allowInsecure,
+      trustedInsecureUrls,
+      idleTimeoutMs,
+      idleCleanupIntervalMs,
+      onIdleRelaysClosed,
+      maxRelays,
+      pinnedUrls,
+      invalidEventPolicy,
+      onRelaySuspended,
+      ...relayOptions
+    } = opts;
+    this.#relayOptions = relayOptions;
+    this.#automaticallyAuth = automaticallyAuth;
+    this.#onIdleRelaysClosed = onIdleRelaysClosed;
+    this.#maxRelays = maxRelays;
+    this.#invalidEventPolicy = invalidEventPolicy;
+    this.#onRelaySuspended = onRelaySuspended;
+    this.#allowInsecure = allowInsecure ?? false;
+    this.#trustedInsecure = new Set((trustedInsecureUrls ?? []).map(normalizeURL));
+    this.#pinned = new Set((pinnedUrls ?? []).map(normalizeURL));
+    this.#idleTimeoutMs = idleTimeoutMs ?? 0;
     if (this.#idleTimeoutMs > 0) {
-      this.#idleTimer = setInterval(
-        () => this.cleanIdleRelays(),
-        opts.idleCleanupIntervalMs ?? 30_000,
-      );
+      this.#idleTimer = setInterval(() => this.cleanIdleRelays(), idleCleanupIntervalMs ?? 30_000);
     }
   }
 
@@ -184,7 +196,7 @@ export class Pool {
       return;
     }
     this.close(idle);
-    invokeSafely(() => this.#opts.onIdleRelaysClosed?.(idle));
+    invokeSafely(() => this.#onIdleRelaysClosed?.(idle));
   }
 
   #touch(url: string): void {
@@ -196,7 +208,7 @@ export class Pool {
    * relay: drop its connection (subscriptions kept), record `until`, and fire `onRelaySuspended`.
    */
   #noteInvalidEvent(norm: string): void {
-    const policy = this.#opts.invalidEventPolicy;
+    const policy = this.#invalidEventPolicy;
     if (policy === undefined) {
       return;
     }
@@ -231,7 +243,7 @@ export class Pool {
       })();
     }, policy.cooldownMs);
     this.#resumeTimers.set(norm, resume);
-    invokeSafely(() => this.#opts.onRelaySuspended?.(norm, until));
+    invokeSafely(() => this.#onRelaySuspended?.(norm, until));
   }
 
   #rejectInsecure(url: string, norm: string): void {
@@ -261,7 +273,7 @@ export class Pool {
    * exceeded rather than failing.
    */
   #enforceMaxRelays(incoming: string): void {
-    const cap = this.#opts.maxRelays;
+    const cap = this.#maxRelays;
     if (cap === undefined || this.#pinned.has(incoming)) {
       return;
     }
@@ -303,30 +315,18 @@ export class Pool {
     let relay = this.#relays.get(norm);
     if (!relay) {
       this.#enforceMaxRelays(norm);
-      const signFn = this.#opts.automaticallyAuth?.(norm) ?? undefined;
-      const created = new Relay(norm, {
-        websocketImplementation: this.#opts.websocketImplementation,
-        verifyEvent: this.#opts.verifyEvent,
-        publishTimeoutMs: this.#opts.publishTimeoutMs,
-        connectTimeoutMs: this.#opts.connectTimeoutMs,
-        enableReconnect: this.#opts.enableReconnect,
-        reconnectBackoffMs: this.#opts.reconnectBackoffMs,
-        enablePing: this.#opts.enablePing,
-        pingIntervalMs: this.#opts.pingIntervalMs,
-        pingTimeoutMs: this.#opts.pingTimeoutMs,
-        authSigner: signFn,
-      });
+      const signFn = this.#automaticallyAuth?.(norm) ?? undefined;
+      const created = new Relay(norm, { ...this.#relayOptions, authSigner: signFn });
       // Only drop from the pool on terminal close (reconnect keeps the entry).
-      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- Relay.onclose is a property callback, not an EventTarget
-      created.onclose = () => {
+      created.on("close", () => {
         this.#relays.delete(norm);
         this.#lastActivity.delete(norm);
-      };
-      created.oninvalidevent = () => {
+      });
+      created.on("invalidevent", () => {
         this.#noteInvalidEvent(norm);
-      };
+      });
       if (signFn) {
-        created.onauth = () => {
+        created.on("auth", () => {
           void (async (): Promise<void> => {
             try {
               await created.auth(signFn);
@@ -334,7 +334,7 @@ export class Pool {
               // auth failure surfaces on subsequent CLOSED/OK; avoid unhandled rejection
             }
           })();
-        };
+        });
       }
       this.#relays.set(norm, created);
       relay = created;
@@ -344,11 +344,11 @@ export class Pool {
       try {
         await relay.connect({
           signal: opts?.signal,
-          timeoutMs: opts?.timeoutMs ?? this.#opts.connectTimeoutMs,
+          timeoutMs: opts?.timeoutMs ?? this.#relayOptions.connectTimeoutMs,
         });
       } catch (error) {
         // Keep the entry when reconnect is enabled so open subscriptions can recover.
-        if (this.#opts.enableReconnect !== true) {
+        if (this.#relayOptions.enableReconnect !== true) {
           this.#relays.delete(norm);
           this.#lastActivity.delete(norm);
         }
@@ -392,10 +392,10 @@ export class Pool {
    * new event once.
    */
   subscribe(
-    relays: string[],
-    filters: Filter[],
+    relays: ReadonlyArray<string>,
+    filters: ReadonlyArray<Filter>,
     opts: PoolSubscribeOptions = {},
-  ): { close: (reason?: string) => void } {
+  ): Closer {
     if (filters.length === 0) {
       throw new MessageError("REQ requires at least one filter");
     }
@@ -412,7 +412,7 @@ export class Pool {
       alreadyHaveEvent: opts.alreadyHaveEvent,
       receivedEvent: opts.receivedEvent,
       closeOnEose: opts.closeOnEose,
-      connectTimeoutMs: this.#opts.connectTimeoutMs,
+      connectTimeoutMs: this.#relayOptions.connectTimeoutMs,
     });
   }
 
@@ -422,8 +422,8 @@ export class Pool {
    * call. Events are not deduped across relays — use {@link fetch} for that.
    */
   async fetchEach(
-    relays: string[],
-    filters: Filter[],
+    relays: ReadonlyArray<string>,
+    filters: ReadonlyArray<Filter>,
     opts?: { timeoutMs?: number | undefined; signal?: AbortSignal | undefined },
   ): Promise<PoolFetchResult[]> {
     if (filters.length === 0) {
@@ -432,18 +432,18 @@ export class Pool {
     throwIfAborted(opts?.signal);
     const canonical = canonicalizeFilters(filters);
     return Promise.all(
-      relays.map(async (url): Promise<PoolFetchResult> => {
+      uniqueRelayUrls(relays).map(async (url): Promise<PoolFetchResult> => {
         try {
           const relay = await this.ensureRelay(url, {
             signal: opts?.signal,
-            timeoutMs: this.#opts.connectTimeoutMs,
+            timeoutMs: this.#relayOptions.connectTimeoutMs,
           });
           this.#touch(relay.url);
           const result = await relay.fetch([...canonical], {
             timeoutMs: opts?.timeoutMs,
             signal: opts?.signal,
           });
-          return { url: relay.url, events: result.events, end: result.end };
+          return { url, events: result.events, end: result.end };
         } catch (error) {
           // An abort rejects the whole call; per-relay failures are reported.
           if (opts?.signal?.aborted === true) {
@@ -452,7 +452,7 @@ export class Pool {
           return {
             url,
             events: [],
-            end: { type: "failed", reason: error instanceof Error ? error.message : String(error) },
+            end: { type: "failed", reason: errorMessage(error) },
           };
         }
       }),
@@ -461,8 +461,8 @@ export class Pool {
 
   /** Fetch events until each connected relay EOSE or timeout; dedupe by id. */
   async fetch(
-    relays: string[],
-    filters: Filter[],
+    relays: ReadonlyArray<string>,
+    filters: ReadonlyArray<Filter>,
     opts?: {
       timeoutMs?: number | undefined;
       signal?: AbortSignal | undefined;
@@ -476,51 +476,52 @@ export class Pool {
     return fetchRouted(this, [{ urls: relays, filters: canonicalizeFilters(filters) }], {
       timeoutMs: opts?.timeoutMs,
       signal: opts?.signal,
-      connectTimeoutMs: this.#opts.connectTimeoutMs,
+      connectTimeoutMs: this.#relayOptions.connectTimeoutMs,
       onevent: opts?.onevent,
     });
   }
 
   /** Publish to all listed relays; returns per-relay outcomes. */
   async publish(
-    relays: string[],
+    relays: ReadonlyArray<string>,
     event: Event,
     opts?: { timeoutMs?: number | undefined },
   ): Promise<PoolPublishResult[]> {
-    const results = await Promise.all(
-      relays.map(async (url): Promise<PoolPublishResult> => {
+    return Promise.all(
+      uniqueRelayUrls(relays).map(async (url): Promise<PoolPublishResult> => {
         try {
           const relay = await this.ensureRelay(url, {
-            timeoutMs: this.#opts.connectTimeoutMs,
+            timeoutMs: this.#relayOptions.connectTimeoutMs,
           });
           this.#touch(relay.url);
           const result = await relay.publish(event, { timeoutMs: opts?.timeoutMs });
-          return { url: relay.url, result };
+          return result.ok
+            ? { url, status: "ok", message: result.message }
+            : { url, status: "rejected", message: result.message };
         } catch (error) {
-          return { url, error: error instanceof Error ? error.message : String(error) };
+          return { url, status: "failed", error: errorMessage(error) };
         }
       }),
     );
-    return results;
   }
 
   /** First successful publish (Promise.any semantics). */
   async publishAny(
-    relays: string[],
+    relays: ReadonlyArray<string>,
     event: Event,
     opts?: { timeoutMs?: number | undefined },
-  ): Promise<PoolPublishResult> {
+  ): Promise<Extract<PoolPublishResult, { status: "ok" }>> {
     return Promise.any(
-      relays.map(async (url) => {
+      uniqueRelayUrls(relays).map(async (url) => {
         const relay = await this.ensureRelay(url, {
-          timeoutMs: this.#opts.connectTimeoutMs,
+          timeoutMs: this.#relayOptions.connectTimeoutMs,
         });
         this.#touch(relay.url);
         const result = await relay.publish(event, { timeoutMs: opts?.timeoutMs });
         if (!result.ok) {
           throw new RelayPublishError(result.message || "rejected", relay.url);
         }
-        return { url: relay.url, result };
+        return { url, status: "ok" as const, message: result.message };
       }),
     );
   }
@@ -530,42 +531,34 @@ export class Pool {
    * each relay reports independently (may overlap).
    */
   async count(
-    relays: string[],
-    filters: Filter[],
+    relays: ReadonlyArray<string>,
+    filters: ReadonlyArray<Filter>,
     opts?: { timeoutMs?: number | undefined; signal?: AbortSignal | undefined },
   ): Promise<PoolCountResult[]> {
     throwIfAborted(opts?.signal);
     const canonical = canonicalizeFilters(filters);
-    const results = await Promise.all(
-      relays.map(async (url): Promise<PoolCountResult> => {
+    return Promise.all(
+      uniqueRelayUrls(relays).map(async (url): Promise<PoolCountResult> => {
         try {
           const relay = await this.ensureRelay(url, {
             signal: opts?.signal,
-            timeoutMs: this.#opts.connectTimeoutMs,
+            timeoutMs: this.#relayOptions.connectTimeoutMs,
           });
           this.#touch(relay.url);
           const payload: CountResult = await relay.count(canonical, {
             timeoutMs: opts?.timeoutMs,
             signal: opts?.signal,
           });
-          const out: PoolCountResult = { url: relay.url, count: payload.count };
-          if (payload.approximate !== undefined) {
-            out.approximate = payload.approximate;
-          }
-          if (payload.hll !== undefined) {
-            out.hll = payload.hll;
-          }
-          return out;
+          return countOk(url, payload);
         } catch (error) {
           // An abort rejects the whole call; per-relay failures are reported.
           if (opts?.signal?.aborted === true) {
             throw abortReason(opts.signal);
           }
-          return { url, error: error instanceof Error ? error.message : String(error) };
+          return { url, status: "failed", error: errorMessage(error) };
         }
       }),
     );
-    return results;
   }
 
   listRelays(): string[] {

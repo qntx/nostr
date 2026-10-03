@@ -1,7 +1,7 @@
 import { createNostrWasmLoader, fetchWasmUrl, isWasmBytes } from "./instance.ts";
 import type { LoadNostrWasmOptions, NostrWasm } from "./instance.ts";
 
-export { WasmVerifyPoisonedError } from "./adapter.ts";
+export { WasmPoisonedError } from "./adapter.ts";
 export type { LoadNostrWasmOptions, NostrWasm } from "./instance.ts";
 
 async function defaultWasmHref(): Promise<string> {
@@ -32,9 +32,4 @@ const loader = createNostrWasmLoader(wasmBytes);
 /** Instantiate once. Repeats reuse the same module. Failure throws; no noble fallback. */
 export async function loadNostrWasm(opts?: LoadNostrWasmOptions): Promise<NostrWasm> {
   return loader.loadNostrWasm(opts);
-}
-
-/** Clears intern so tests can re-instantiate. Not exported from the wasm subpath. */
-export function resetNostrWasmForTests(): void {
-  loader.resetNostrWasm();
 }

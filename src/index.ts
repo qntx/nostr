@@ -27,7 +27,7 @@ export {
   MessageError,
   NostrError,
   UrlError,
-  WasmVerifyPoisonedError,
+  WasmPoisonedError,
   bytesToHex,
   hexToBytes,
   isHex32,
@@ -70,10 +70,13 @@ export {
   getPublicKey,
   publicKeyFromHex,
   signEvent,
+  toSecretKey,
   type PublicKey,
+  type SecretKeyInput,
   type SigningBackend,
   createEventVerifier,
   verifyEvent,
+  type EventVerifier,
   type SerializedEventVerifier,
   EventBuilder,
   type ProfileMetadata,
@@ -117,7 +120,6 @@ export {
 export {
   Bech32MaxSize,
   decode as nip19Decode,
-  decodeNostrURI,
   naddrEncode,
   neventEncode,
   noteEncode,
@@ -136,6 +138,7 @@ export {
   type ProfilePointer,
   Nip19Error,
 } from "./nips/nip19.ts";
+export { isNostrURI, Nip21Error, parseNostrURI, type NostrURI } from "./nips/nip21.ts";
 export {
   buildReplyTags,
   parseThreadTags,
@@ -145,7 +148,6 @@ export {
 } from "./nips/nip10.ts";
 export { makeAuthEvent, isAuthRequired } from "./nips/nip42.ts";
 export {
-  markerOf,
   parseRelayList,
   readRelays,
   relayListEventBuilder,
@@ -168,6 +170,7 @@ export {
   RelayTimeoutError,
   isInsecureRelayUrl,
   useWebSocketImplementation,
+  type Closer,
   type InvalidEventPolicy,
   type PoolOptions,
   type PoolCountResult,
@@ -175,18 +178,20 @@ export {
   type PoolPublishResult,
   type PoolSubscribeOptions,
   type PublishResult,
+  type RelayEventMap,
   type RelayFetchEnd,
   type RelayFetchResult,
   type RelayOptions,
   type RelayStatusName,
+  type RelaySubscription,
   type SubscribeOptions,
 } from "./relay/index.ts";
 
 // --- client / storage / loaders / gossip ---
 export {
   Client,
-  ClientBuilder,
   ClientError,
+  type ClientEventMap,
   type ClientOptions,
   type SendPrivateMessageOptions,
   type PrivateMessageSendResult,
@@ -214,7 +219,6 @@ export {
 export { ReactiveEventStore, type ReactiveEventStoreOptions, type Watch } from "./store/index.ts";
 export {
   createLoaders,
-  createOutboxFeed,
   OutboxError,
   OutboxFeed,
   groupAuthorsByOutboxRelay,
@@ -222,7 +226,6 @@ export {
   type Loaders,
   type ListResult,
   type NostrUser,
-  type MutedEntity,
   type LoadStyle,
   type ReplaceableLoader,
   type ReplaceableLoadResult,

@@ -1,11 +1,12 @@
-import { abortReason, throwIfAborted } from "../core/abort.ts";
+import { abortReason, onAbort, throwIfAborted } from "../core/abort.ts";
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { invokeSafely } from "../core/report.ts";
-import { normalizeURL } from "../core/util.ts";
 import { RelayClosedError } from "./error.ts";
 import type { Pool } from "./pool.ts";
 import type { Relay } from "./relay.ts";
+import type { Closer } from "./subscription.ts";
+import { uniqueRelayUrls } from "./url.ts";
 
 export type RoutedJob = {
   urls: ReadonlyArray<string>;
@@ -33,13 +34,9 @@ export type FanInOptions = {
  * Aggregate EOSE/close across routed jobs. One `seen` set. `pending` counts URL list entries
  * (duplicates included). `pendingEose` counts unique `jobIndex:url` keys.
  */
-export function fanIn(
-  pool: Pool,
-  jobs: ReadonlyArray<RoutedJob>,
-  opts: FanInOptions = {},
-): { close: (reason?: string) => void } {
+export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOptions = {}): Closer {
   const seen = new Set<string>();
-  const closers: Array<{ close: (reason?: string) => void }> = [];
+  const closers: Closer[] = [];
   let closed = false;
   let eoseFired = false;
   let sawEose = false;
@@ -83,6 +80,7 @@ export function fanIn(
 
   const settleClose = () => {
     closed = true;
+    disposeAbort();
     if (eoseTimer !== undefined) {
       clearTimeout(eoseTimer);
       eoseTimer = undefined;
@@ -106,7 +104,7 @@ export function fanIn(
     return { close: closeAll };
   }
 
-  opts.signal?.addEventListener("abort", () => closeAll("aborted"), { once: true });
+  const disposeAbort = onAbort(opts.signal, () => closeAll("aborted"));
 
   const failUrl = (jobIndex: number, key: string): void => {
     settleEose(jobIndex, key, false);
@@ -153,18 +151,7 @@ export function fanIn(
 
   for (const [jobIndex, job] of jobs.entries()) {
     // Equivalent spellings of one relay URL attach exactly once per job.
-    const jobUrls = new Set<string>();
-    for (const url of job.urls) {
-      let key: string;
-      try {
-        key = normalizeURL(url);
-      } catch {
-        key = url; // invalid URL: ensureRelay fails it like a dead relay
-      }
-      if (jobUrls.has(key)) {
-        continue;
-      }
-      jobUrls.add(key);
+    for (const key of uniqueRelayUrls(job.urls)) {
       pending += 1;
       const eoseKey = `${jobIndex}:${key}`;
       if (!eoseAttempted.has(eoseKey)) {
@@ -241,19 +228,7 @@ export async function fetchRouted(
   const byId = new Map<string, Event>();
   await Promise.all(
     jobs.flatMap((job) => {
-      const urls: string[] = [];
-      for (const raw of job.urls) {
-        let key: string;
-        try {
-          key = normalizeURL(raw);
-        } catch {
-          key = raw; // invalid URL: ensureRelay fails it like a dead relay
-        }
-        if (!urls.includes(key)) {
-          urls.push(key);
-        }
-      }
-      return urls.map(async (url) => {
+      return uniqueRelayUrls(job.urls).map(async (url) => {
         let batch: Event[];
         let relayUrl: string;
         try {

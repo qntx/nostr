@@ -113,12 +113,12 @@ afterEach(() => {
 
 describe("Client storage + observe", () => {
   test("default MemoryEventStore; publish success observes into storage", async () => {
-    const client = Client.builder()
-      .signer(new KeysSigner(SK))
-      .relays(["wss://a.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      signer: new KeysSigner(SK),
+      relays: ["wss://a.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     expect(client.storage).toBeInstanceOf(MemoryEventStore);
 
@@ -146,13 +146,13 @@ describe("Client storage + observe", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("from net").createdAt(5).signWithKeys(keys);
 
-    const client = Client.builder()
-      .signer(new KeysSigner(SK))
-      .storage(store)
-      .relays(["wss://a.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      signer: new KeysSigner(SK),
+      storage: store,
+      relays: ["wss://a.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     await client.connect();
 
@@ -209,15 +209,15 @@ describe("Client storage + observe", () => {
       getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
       setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     });
-    const client = Client.builder()
-      .storage(store)
-      .onstorageerror((err) => {
-        seen.push(err);
-      })
-      .relays(["wss://a.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://a.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
+    client.on("storageerror", (err) => {
+      seen.push(err);
+    });
 
     await client.connect();
     const fetchP = client.fetchEvents(
@@ -245,12 +245,12 @@ describe("Client storage + observe", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("live").createdAt(1).signWithKeys(keys);
 
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://a.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://a.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     await client.connect();
     const got: string[] = [];
@@ -271,17 +271,17 @@ describe("Client storage + observe", () => {
 
   test("hydrateGossip ingests relay list into gossip", async () => {
     const keys = Keys.fromSecretKey(SK);
-    const list = relayListEventBuilder([{ url: "wss://out.example", read: true, write: true }])
+    const list = relayListEventBuilder([{ url: "wss://out.example", marker: "both" }])
       .createdAt(3)
       .signWithKeys(keys);
 
     const gossip = new Gossip();
-    const client = Client.builder()
-      .gossip(gossip)
-      .relays(["wss://idx.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      gossip,
+      relays: ["wss://idx.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     // kick hydrate (will fetch); respond with list
     const hydrateP = client.hydrateGossip([keys.publicKey]);
@@ -298,13 +298,13 @@ describe("Client storage + observe", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("no store").createdAt(1).signWithKeys(keys);
 
-    const client = Client.builder()
-      .storage(store)
-      .persistEvents(false)
-      .relays(["wss://a.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      persistEvents: false,
+      relays: ["wss://a.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     client.observe(note);
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -331,7 +331,10 @@ describe("Client storage + observe", () => {
         return out;
       },
     });
-    const client = Client.builder().storage(store).enableReconnect(false).build();
+    const client = new Client({
+      storage: store,
+      enableReconnect: false,
+    });
     client.observe(a);
     client.observe(b);
     await client.shutdown();
@@ -354,7 +357,10 @@ describe("Client storage + observe", () => {
         return out;
       },
     });
-    const client = Client.builder().storage(store).enableReconnect(false).build();
+    const client = new Client({
+      storage: store,
+      enableReconnect: false,
+    });
     client.observeAll([a, b, a]);
     await client.shutdown();
     expect(batches).toStrictEqual([[a.id, b.id]]);
@@ -382,7 +388,10 @@ describe("Client storage + observe", () => {
         return events.map(() => "accepted");
       },
     });
-    const client = Client.builder().storage(store).enableReconnect(false).build();
+    const client = new Client({
+      storage: store,
+      enableReconnect: false,
+    });
     client.observe(a);
     await Promise.resolve();
     await Promise.resolve();
@@ -411,7 +420,10 @@ describe("Client storage + observe", () => {
         return events.map(() => "accepted");
       },
     });
-    const client = Client.builder().storage(store).enableReconnect(false).build();
+    const client = new Client({
+      storage: store,
+      enableReconnect: false,
+    });
     client.observe(note);
     const done = client.shutdown();
     let shutdownDone = false;
@@ -431,7 +443,7 @@ describe("Client storage + observe", () => {
 
   test("ingestMeta runs before persist completes", async () => {
     const keys = Keys.fromSecretKey(SK);
-    const list = relayListEventBuilder([{ url: "wss://out.example", read: true, write: true }])
+    const list = relayListEventBuilder([{ url: "wss://out.example", marker: "both" }])
       .createdAt(3)
       .signWithKeys(keys);
     const gossip = new Gossip();
@@ -445,14 +457,18 @@ describe("Client storage + observe", () => {
         return events.map(() => "accepted");
       },
     });
-    const client = Client.builder().storage(store).gossip(gossip).enableReconnect(false).build();
+    const client = new Client({
+      storage: store,
+      gossip,
+      enableReconnect: false,
+    });
     client.observe(list);
     expect(gossip.outboxRelays(keys.publicKey).length).toBeGreaterThan(0);
     finish();
     await client.shutdown();
   });
 
-  test("builder onstorageerror is the instance callback and is invoked", async () => {
+  test("storageerror listener is invoked", async () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("fail").createdAt(1).signWithKeys(keys);
     const seen: StorageError[] = [];
@@ -467,12 +483,11 @@ describe("Client storage + observe", () => {
         throw new Error("disk full");
       },
     });
-    const client = Client.builder()
-      .storage(store)
-      .onstorageerror(fn)
-      .enableReconnect(false)
-      .build();
-    expect(client.onstorageerror).toBe(fn);
+    const client = new Client({
+      storage: store,
+      enableReconnect: false,
+    });
+    client.on("storageerror", fn);
     client.observe(note);
     await client.shutdown();
     expect(seen).toHaveLength(1);
@@ -494,15 +509,15 @@ describe("Client storage + observe", () => {
         throw new Error("disk full");
       },
     });
-    const client = Client.builder()
-      .storage(store)
-      .onstorageerror((err) => {
-        seen.push(err);
-      })
-      .relays(["wss://a.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://a.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
+    client.on("storageerror", (err) => {
+      seen.push(err);
+    });
     await client.connect();
     const got: string[] = [];
     const sub = client.subscribe([{ kinds: [1] }], {
@@ -530,18 +545,18 @@ describe("Client storage + observe", () => {
         return events.map(() => "accepted");
       },
     });
-    const client = Client.builder()
-      .storage(store)
-      .persistEvents(false)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      persistEvents: false,
+      enableReconnect: false,
+    });
     client.observe(note);
     client.observeAll([note]);
     await client.shutdown();
     expect(putManyCalls).toBe(0);
   });
 
-  test("onstorageerror omitted does not throw when putMany fails", async () => {
+  test("no storageerror listener does not throw when putMany fails", async () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("x").createdAt(1).signWithKeys(keys);
     const store: EventStore = stubStore({
@@ -552,9 +567,11 @@ describe("Client storage + observe", () => {
         throw new Error("disk full");
       },
     });
-    const client = Client.builder().storage(store).enableReconnect(false).build();
-    expect(client.onstorageerror).toBeUndefined();
-    client.observe(note);
-    await client.shutdown();
+    const client = new Client({
+      storage: store,
+      enableReconnect: false,
+    });
+    expect(() => client.observe(note)).not.toThrow();
+    await expect(client.shutdown()).resolves.toBeUndefined();
   });
 });

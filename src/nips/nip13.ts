@@ -7,21 +7,17 @@ import { sha256 } from "@noble/hashes/sha2.js";
 
 import { abortReason } from "../core/abort.ts";
 import { NostrError } from "../core/error.ts";
-import { serializeEvent } from "../core/event.ts";
 import type { UnsignedEvent } from "../core/event.ts";
-import { bytesToHex, isHex32, utf8Encoder } from "../core/util.ts";
+import { bytesToHex, isHex32, nowSeconds, utf8Encoder } from "../core/util.ts";
 
 export class Nip13Error extends NostrError {
   override name = "Nip13Error";
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-  }
 }
 
 export type MinePowOptions = {
   /** Yield to the event loop after this many hashes. Default 1000. */
-  yieldEvery?: number;
-  signal?: AbortSignal;
+  yieldEvery?: number | undefined;
+  signal?: AbortSignal | undefined;
 };
 
 /** Leading zero bits of a hex event id or raw sha256 bytes. */
@@ -56,8 +52,9 @@ export function getPow(idOrHash: string | Uint8Array): number {
 }
 
 /**
- * Returns a new unsigned event with nonce tag and computed id. Does not mutate input. Yields every
- * `yieldEvery` hashes.
+ * Returns a new unsigned event with nonce tag and computed id. Does not mutate input. `created_at`
+ * is advanced to the current second whenever it elapses while mining. Yields every `yieldEvery`
+ * hashes.
  */
 export async function minePow(
   unsigned: UnsignedEvent,
@@ -76,6 +73,29 @@ export async function minePow(
     pubkey: unsigned.pubkey,
   };
 
+  // Serialize once per created_at second: the reused buffer holds
+  //   [0, pubkey, created_at, kind, [...tags, ["nonce","<digits>","<difficulty>"]], content]
+  // where `head` ends at the opening quote of the nonce value and `tail` completes the tag, the
+  // tags array, and the trailing content element.
+  let head = new Uint8Array(0);
+  let tail = new Uint8Array(0);
+  let buf = new Uint8Array(0);
+
+  const rebuild = (): void => {
+    const headText = JSON.stringify([
+      0,
+      mined.pubkey,
+      mined.created_at,
+      mined.kind,
+      [...unsigned.tags, ["nonce", ""]],
+    ]).slice(0, -4);
+    head = utf8Encoder.encode(headText);
+    tail = utf8Encoder.encode(`","${difficulty}"]],${JSON.stringify(mined.content)}]`);
+    buf = new Uint8Array(head.length + 24 + tail.length);
+    buf.set(head, 0);
+  };
+  rebuild();
+
   let count = 0;
   let iterations = 0;
 
@@ -84,14 +104,22 @@ export async function minePow(
       throw abortReason(signal);
     }
 
-    const now = Math.floor(Date.now() / 1000);
+    const now = nowSeconds();
     if (now !== mined.created_at) {
       count = 0;
       mined.created_at = now;
+      rebuild();
     }
 
     nonce[1] = String(++count);
-    const hash = sha256(utf8Encoder.encode(serializeEvent(mined)));
+    let pos = head.length;
+    for (let i = 0; i < nonce[1].length; i++) {
+      buf[pos] = nonce[1].codePointAt(i) ?? 0;
+      pos += 1;
+    }
+    buf.set(tail, pos);
+    pos += tail.length;
+    const hash = sha256(buf.subarray(0, pos));
     if (getPow(hash) >= difficulty) {
       return { ...mined, id: bytesToHex(hash) };
     }

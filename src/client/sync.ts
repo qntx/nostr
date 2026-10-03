@@ -1,3 +1,5 @@
+import { throwIfAborted } from "../core/abort.ts";
+import { errorMessage } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { canonicalizeFilter } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
@@ -13,8 +15,6 @@ export type SyncDeps = {
   storage: EventStore;
   persistEvents: boolean;
   assertAlive: () => void;
-  throwIfAborted: (signal?: AbortSignal) => void;
-  wantObserve: (flag?: boolean) => boolean;
   /**
    * The client's single ingest path: index (with relay URL) → meta → persistence. `persist: false`
    * when this function already wrote storage via an awaited `putMany`.
@@ -22,7 +22,7 @@ export type SyncDeps = {
   ingest: (event: Event, relayUrl?: string, opts?: { persist?: boolean }) => void;
   /** Record a relay sighting for an id already in the index. */
   markSeen: (id: string, relayUrl: string) => void;
-  defaultRelays: (urls?: string[]) => string[];
+  defaultRelays: (urls?: ReadonlyArray<string>) => ReadonlyArray<string>;
 };
 
 const SYNC_ID_BATCH = 100;
@@ -68,7 +68,7 @@ export async function syncToRelay(
   opts?: Omit<SyncOptions, "relays">,
 ): Promise<SyncSummary> {
   deps.assertAlive();
-  deps.throwIfAborted(opts?.signal);
+  throwIfAborted(opts?.signal);
   const direction = opts?.direction ?? SyncDirection.Down;
   const canon = canonicalizeFilter(filter);
   const items = await deps.storage.negentropyItems(canon);
@@ -110,15 +110,20 @@ export async function syncToRelay(
             const results = await deps.pool.publish([url], event, {
               timeoutMs: opts?.timeoutMs,
             });
-            const ok = results.some((r) => r.result?.ok === true);
+            const ok = results.some((r) => r.status === "ok");
             if (ok) {
               summary.sent.push(event.id);
             } else {
+              const [first] = results;
               summary.sendFailures[event.id] =
-                results[0]?.error ?? results[0]?.result?.message ?? "publish failed";
+                first === undefined
+                  ? "publish failed"
+                  : first.status === "failed"
+                    ? first.error
+                    : first.message;
             }
           } catch (error) {
-            summary.sendFailures[event.id] = error instanceof Error ? error.message : String(error);
+            summary.sendFailures[event.id] = errorMessage(error);
           }
         }),
       );
@@ -126,10 +131,10 @@ export async function syncToRelay(
   }
 
   if ((direction === SyncDirection.Down || direction === SyncDirection.Both) && need.length > 0) {
-    const shouldObserve = deps.wantObserve(opts?.observe);
+    const shouldObserve = opts?.observe !== false;
     for (let i = 0; i < need.length; i += SYNC_ID_BATCH) {
       const batch = need.slice(i, i + SYNC_ID_BATCH);
-      deps.throwIfAborted(opts?.signal);
+      throwIfAborted(opts?.signal);
       // Every relay that delivered an event is recorded once it is ingested.
       const urlsById = new Map<string, string[]>();
       // Id batches are fetched serially so backpressure stays bounded.
@@ -176,7 +181,7 @@ export async function syncToRelay(
         // oxlint-disable-next-line no-await-in-loop
         results = await deps.storage.putMany(events);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         for (const event of events) {
           summary.persistFailures[event.id] = message;
         }
@@ -206,7 +211,7 @@ export async function sync(
   opts?: SyncOptions,
 ): Promise<SyncSummary> {
   deps.assertAlive();
-  const urls = deps.defaultRelays(opts?.relays ? [...opts.relays] : undefined);
+  const urls = deps.defaultRelays(opts?.relays);
   const results = await Promise.allSettled(
     urls.map(async (url) => syncToRelay(deps, url, filter, opts)),
   );

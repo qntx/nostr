@@ -14,6 +14,12 @@ const WASM_EXPORT = {
   default: "./dist/wasm.mjs",
 } as const;
 
+const WASM_BROWSER_EXPORT = {
+  types: "./dist/wasm.browser.d.mts",
+  import: "./dist/wasm.browser.mjs",
+  default: "./dist/wasm.browser.mjs",
+} as const;
+
 type Pkg = {
   version: string;
   scripts: Record<string, string>;
@@ -25,6 +31,10 @@ function readPkg(): Pkg {
 }
 
 describe("package.json wasm publish", () => {
+  test("exports ./wasm.browser with types and import paths", () => {
+    expect(readPkg().exports["./wasm.browser"]).toStrictEqual(WASM_BROWSER_EXPORT);
+  });
+
   test("exports ./wasm with types and import paths", () => {
     const wasm = readPkg().exports["./wasm"];
     expect(wasm).toStrictEqual(WASM_EXPORT);
@@ -85,6 +95,18 @@ describe("applyPackExports", () => {
 
   test("writes ./wasm for an empty pack map", () => {
     expect(applyPackExports({})["./wasm"]).toStrictEqual(WASM_EXPORT);
+  });
+
+  test("writes ./wasm.browser for an empty pack map", () => {
+    expect(applyPackExports({})["./wasm.browser"]).toStrictEqual(WASM_BROWSER_EXPORT);
+  });
+
+  test("appends ./wasm.browser then ./wasm after the generated entries", () => {
+    const out = applyPackExports({
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json",
+    });
+    expect(Object.keys(out).slice(-2)).toStrictEqual(["./wasm.browser", "./wasm"]);
   });
 
   test("overwrites a string ./wasm export", () => {

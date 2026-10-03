@@ -1,7 +1,17 @@
+import { base64 } from "@scure/base";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
-import { EventBuilder, Keys, KeysSigner, Relay, useWebSocketImplementation } from "../src/index.ts";
+import {
+  CryptoError,
+  EventBuilder,
+  HexError,
+  Keys,
+  KeysSigner,
+  Relay,
+  useWebSocketImplementation,
+} from "../src/index.ts";
 import { decrypt as nip04Decrypt, encrypt as nip04Encrypt } from "../src/nips/nip04.ts";
+import type { Subscription } from "../src/relay/subscription.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -90,9 +100,9 @@ describe("Relay reconnect", () => {
 
     const events: Array<typeof note> = [];
     let reconnected = false;
-    relay.onreconnect = () => {
+    relay.on("reconnect", () => {
       reconnected = true;
-    };
+    });
 
     const sub = relay.subscribe([{ kinds: [1] }], {
       onevent: (e) => events.push(e),
@@ -286,7 +296,7 @@ describe("Relay reconnect", () => {
     const events: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
       onevent: (e) => events.push(e.id),
-    });
+    }) as Subscription;
 
     const first = MockWebSocket.last();
     first.receive(JSON.stringify(["EVENT", sub.id, note]));
@@ -329,7 +339,7 @@ describe("Relay reconnect", () => {
     const sub = relay.subscribe([{ kinds: [1] }], {
       onevent: (e) => events.push(e.id),
       receivedEvent: (id) => received.push(id),
-    });
+    }) as Subscription;
 
     const first = MockWebSocket.last();
     first.receive(JSON.stringify(["EVENT", sub.id, a]));
@@ -431,7 +441,7 @@ describe("Relay reconnect", () => {
     });
     await relay.connect();
     const note = EventBuilder.textNote("wm").createdAt(42).signWithKeys(keys);
-    const sub = relay.subscribe([{ kinds: [1] }], {});
+    const sub = relay.subscribe([{ kinds: [1] }], {}) as Subscription;
     MockWebSocket.last().receive(JSON.stringify(["EVENT", sub.id, note]));
     expect(sub.lastCreatedAt).toBe(42);
 
@@ -466,9 +476,9 @@ describe("Relay reconnect", () => {
       websocketImplementation: FailReqCtor,
     });
     let reconnects = 0;
-    relay.onreconnect = () => {
+    relay.on("reconnect", () => {
       reconnects += 1;
-    };
+    });
     await relay.connect();
     const sub = relay.subscribe([{ kinds: [1] }]);
     const first = MockWebSocket.last();
@@ -523,5 +533,38 @@ describe("nip04", () => {
     const pkA = await a.getPublicKey();
     const cipher = await a.nip04Encrypt(pkB, "via signer");
     await expect(b.nip04Decrypt(pkA, cipher)).resolves.toBe("via signer");
+  });
+
+  test("malformed base64 payload throws CryptoError", () => {
+    const a = Keys.fromSecretKey(SK);
+    const b = Keys.fromSecretKey(SK2);
+    expect(() =>
+      nip04Decrypt(a.secretKey.bytes, b.publicKey, "!!!not-base64!!!?iv=also!!!"),
+    ).toThrow(CryptoError);
+    expect(() =>
+      nip04Decrypt(a.secretKey.bytes, b.publicKey, "!!!not-base64!!!?iv=also!!!"),
+    ).toThrow("invalid NIP-04 payload");
+  });
+
+  test("corrupted ciphertext throws CryptoError", () => {
+    const a = Keys.fromSecretKey(SK);
+    const b = Keys.fromSecretKey(SK2);
+    const cipher = nip04Encrypt(a.secretKey.bytes, b.publicKey, "secret");
+    const [ct, iv] = cipher.split("?iv=");
+    // Drop one byte so the decoded length is not a multiple of the AES block size.
+    const corrupted = `${base64.encode(base64.decode(ct!).slice(0, -1))}?iv=${iv}`;
+    expect(() => nip04Decrypt(b.secretKey.bytes, a.publicKey, corrupted)).toThrow(CryptoError);
+    expect(() => nip04Decrypt(b.secretKey.bytes, a.publicKey, corrupted)).toThrow(
+      "invalid NIP-04 payload",
+    );
+  });
+
+  test("31-byte Uint8Array secret key throws HexError", () => {
+    const b = Keys.fromSecretKey(SK2);
+    expect(() => nip04Encrypt(new Uint8Array(31), b.publicKey, "x")).toThrow(HexError);
+    const cipher = nip04Encrypt(Keys.fromSecretKey(SK).secretKey.bytes, b.publicKey, "x");
+    expect(() =>
+      nip04Decrypt(new Uint8Array(31), Keys.fromSecretKey(SK).publicKey, cipher),
+    ).toThrow(HexError);
   });
 });

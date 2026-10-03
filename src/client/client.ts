@@ -1,4 +1,3 @@
-import { throwIfAborted } from "../core/abort.ts";
 import { EventBuilder } from "../core/builder.ts";
 import { sortedEvents } from "../core/event.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
@@ -7,22 +6,21 @@ import type { Filter } from "../core/filter.ts";
 import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
 import { Gossip } from "../gossip/index.ts";
-import { createLoaders, createOutboxFeed } from "../loaders/index.ts";
-import type { Loaders, OutboxFeed } from "../loaders/index.ts";
+import { createLoaders, OutboxFeed } from "../loaders/index.ts";
+import type { Loaders } from "../loaders/index.ts";
 import type { Recipient } from "../nips/nip17.ts";
 import { isGiftWrapKind, requireNip59Crypto } from "../nips/nip59.ts";
 import type { Nip59Crypto } from "../nips/nip59.ts";
 import { Pool } from "../relay/pool.ts";
 import type { PoolFetchResult, PoolPublishResult } from "../relay/pool.ts";
+import type { Closer } from "../relay/subscription.ts";
 import { NoSignerError } from "../signer/error.ts";
 import type { NostrSigner } from "../signer/types.ts";
 import { toStorageError } from "../storage/error.ts";
-import type { StorageError } from "../storage/error.ts";
 import { MemoryIndex } from "../storage/memory-index.ts";
 import { MemoryEventStore } from "../storage/memory.ts";
 import type { EventStore } from "../storage/types.ts";
 import { ReactiveEventStore } from "../store/reactive.ts";
-import { ClientBuilder } from "./builder.ts";
 import {
   fetchPrivateMessages,
   giftWrapRelays,
@@ -36,6 +34,7 @@ import { sync, syncToRelay } from "./sync.ts";
 import type { SyncDeps } from "./sync.ts";
 import { ClientError } from "./types.ts";
 import type {
+  ClientEventMap,
   ClientOptions,
   FetchEachOptions,
   FetchEventsOptions,
@@ -50,6 +49,14 @@ import type {
   SyncSummary,
 } from "./types.ts";
 
+function isFilterList(filter: Filter | ReadonlyArray<Filter>): filter is ReadonlyArray<Filter> {
+  return Array.isArray(filter);
+}
+
+function toFilterList(filter: Filter | ReadonlyArray<Filter>): Filter[] {
+  return canonicalizeFilters(isFilterList(filter) ? filter : [filter]);
+}
+
 /** Layer-5 facade: signer + default relays + pool + loaders + gossip + event store. */
 export class Client {
   readonly pool: Pool;
@@ -57,49 +64,39 @@ export class Client {
   readonly gossip: Gossip;
   readonly storage: EventStore;
   readonly index: ReactiveEventStore;
-  onstorageerror: ((err: StorageError) => void) | undefined;
   #signer: NostrSigner | undefined;
   #relays: string[];
   #shutdown = false;
   readonly #persistEvents: boolean;
   readonly #persistQueue: Event[] = [];
   #flushing: Promise<void> | undefined;
+  readonly #listeners: { [K in keyof ClientEventMap]: Set<(err: ClientEventMap[K]) => void> } = {
+    storageerror: new Set(),
+  };
 
   constructor(opts: ClientOptions = {}) {
-    this.#signer = opts.signer;
+    const { signer, relays, automaticAuth, gossip, storage, index, persistEvents, ...poolOptions } =
+      opts;
+    this.#signer = signer;
     this.#relays = [];
-    for (const raw of opts.relays ?? []) {
+    for (const raw of relays ?? []) {
       const url = normalizeURL(raw);
       if (!this.#relays.includes(url)) {
         this.#relays.push(url);
       }
     }
-    this.gossip = opts.gossip ?? new Gossip();
-    this.storage = opts.storage ?? new MemoryEventStore();
-    this.index = opts.index ?? new ReactiveEventStore();
-    this.#persistEvents = opts.persistEvents ?? true;
-    this.onstorageerror = opts.onstorageerror;
+    this.gossip = gossip ?? new Gossip();
+    this.storage = storage ?? new MemoryEventStore();
+    this.index = index ?? new ReactiveEventStore();
+    this.#persistEvents = persistEvents ?? true;
     this.pool = new Pool({
-      websocketImplementation: opts.websocketImplementation,
-      verifyEvent: opts.verifyEvent,
-      enablePing: opts.enablePing,
-      pingIntervalMs: opts.pingIntervalMs,
-      pingTimeoutMs: opts.pingTimeoutMs,
-      connectTimeoutMs: opts.connectTimeoutMs,
-      publishTimeoutMs: opts.publishTimeoutMs,
-      enableReconnect: opts.enableReconnect ?? true,
-      allowInsecure: opts.allowInsecure,
-      trustedInsecureUrls: opts.trustedInsecureUrls,
-      idleTimeoutMs: opts.idleTimeoutMs,
-      maxRelays: opts.maxRelays,
-      pinnedUrls: opts.pinnedUrls,
-      invalidEventPolicy: opts.invalidEventPolicy,
-      onRelaySuspended: opts.onRelaySuspended,
+      ...poolOptions,
+      enableReconnect: poolOptions.enableReconnect ?? true,
       // The sign function resolves the signer at challenge time, so
       // setSigner() takes effect on already-connected relays; challenges
       // without a signer are ignored by the relay (NoSignerError).
       automaticallyAuth:
-        (opts.automaticAuth ?? true)
+        (automaticAuth ?? true)
           ? () => async (template) => {
               const signer = this.#signer;
               if (!signer) {
@@ -116,10 +113,6 @@ export class Client {
       index: this.index,
       ingest: (event, relayUrl) => this.#ingest(event, relayUrl),
     });
-  }
-
-  static builder(): ClientBuilder {
-    return new ClientBuilder((opts) => new Client(opts));
   }
 
   get signer(): NostrSigner | undefined {
@@ -156,7 +149,7 @@ export class Client {
   }
 
   /** Connect all configured relays (best-effort; failures are ignored). */
-  async connect(opts?: { signal?: AbortSignal }): Promise<void> {
+  async connect(opts?: { signal?: AbortSignal | undefined }): Promise<void> {
     this.#assertAlive();
     await Promise.allSettled(
       this.#relays.map(async (url) => this.pool.ensureRelay(url, { signal: opts?.signal })),
@@ -172,22 +165,42 @@ export class Client {
     this.pool.close();
   }
 
+  /**
+   * Listen for a client event. Multiple listeners per type are allowed and fire in registration
+   * order; a throwing listener is reported and does not break the dispatch. Returns an unsubscribe
+   * function.
+   */
+  on<K extends keyof ClientEventMap>(
+    type: K,
+    listener: (err: ClientEventMap[K]) => void,
+  ): () => void {
+    const set = this.#listeners[type];
+    set.add(listener);
+    return () => {
+      set.delete(listener);
+    };
+  }
+
+  #emit<K extends keyof ClientEventMap>(type: K, err: ClientEventMap[K]): void {
+    // snapshot: listeners may unsubscribe or register during dispatch
+    // oxlint-disable-next-line no-useless-spread -- intentional snapshot copy
+    for (const listener of [...this.#listeners[type]]) {
+      invokeSafely(() => listener(err));
+    }
+  }
+
   #assertAlive(): void {
     if (this.#shutdown) {
       throw new ClientError("client is shut down");
     }
   }
 
-  #defaultRelays(urls?: string[]): string[] {
+  #defaultRelays(urls?: ReadonlyArray<string>): ReadonlyArray<string> {
     const list = urls ?? this.#relays;
     if (list.length === 0) {
       throw new ClientError("no relays configured");
     }
     return list;
-  }
-
-  #wantObserve(flag?: boolean): boolean {
-    return flag !== false;
   }
 
   /** Ingest one inbound event: index (with relay URL) → meta → persistence. */
@@ -216,22 +229,13 @@ export class Client {
   #ingest(event: Event, relayUrl?: string, opts?: { persist?: boolean; meta?: boolean }): void {
     this.index.add(event, relayUrl);
     if (opts?.meta !== false) {
-      this.#ingestMeta(event);
+      this.gossip.ingest(event);
     }
     if (opts?.persist === false || !this.#persistEvents) {
       return;
     }
     this.#persistQueue.push(event);
     this.#armFlush();
-  }
-
-  /** Record a relay sighting for an id already in the index. */
-  #markSeen(id: string, relayUrl: string): void {
-    this.index.markSeen(id, relayUrl);
-  }
-
-  #ingestMeta(event: Event): void {
-    this.gossip.ingest(event);
   }
 
   #armFlush(): void {
@@ -252,7 +256,7 @@ export class Client {
           // oxlint-disable-next-line no-await-in-loop -- queued batches are persisted in order
           await this.storage.putMany(batch);
         } catch (error) {
-          invokeSafely(() => this.onstorageerror?.(toStorageError(error)));
+          this.#emit("storageerror", toStorageError(error));
         }
       }
     } finally {
@@ -300,7 +304,7 @@ export class Client {
     maxRelaysPerAuthor?: number;
   }): OutboxFeed {
     this.#assertAlive();
-    return createOutboxFeed({
+    return new OutboxFeed({
       pool: this.pool,
       gossip: this.gossip,
       storage: this.storage,
@@ -334,33 +338,30 @@ export class Client {
     });
   }
 
-  async getPublicKey(): Promise<string> {
-    if (!this.#signer) {
+  #requireSigner(): NostrSigner {
+    const signer = this.#signer;
+    if (!signer) {
       throw new ClientError("no signer configured");
     }
-    return this.#signer.getPublicKey();
+    return signer;
+  }
+
+  async getPublicKey(): Promise<string> {
+    return this.#requireSigner().getPublicKey();
   }
 
   async signEvent(unsigned: UnsignedEvent): Promise<Event> {
-    if (!this.#signer) {
-      throw new ClientError("no signer configured");
-    }
-    return this.#signer.signEvent(unsigned);
+    return this.#requireSigner().signEvent(unsigned);
   }
 
   async signEventBuilder(builder: EventBuilder): Promise<Event> {
-    if (!this.#signer) {
-      throw new ClientError("no signer configured");
-    }
-    return builder.sign(this.#signer);
+    return builder.sign(this.#requireSigner());
   }
 
   async signTemplate(template: EventTemplate): Promise<Event> {
-    if (!this.#signer) {
-      throw new ClientError("no signer configured");
-    }
-    const pubkey = await this.#signer.getPublicKey();
-    return this.#signer.signEvent({ ...template, pubkey });
+    const signer = this.#requireSigner();
+    const pubkey = await signer.getPublicKey();
+    return signer.signEvent({ ...template, pubkey });
   }
 
   /**
@@ -422,8 +423,8 @@ export class Client {
       timeoutMs: opts?.timeoutMs,
     });
 
-    const anyOk = results.some((r) => r.result?.ok === true);
-    if (anyOk && this.#wantObserve(opts?.observe)) {
+    const anyOk = results.some((r) => r.status === "ok");
+    if (anyOk && opts?.observe !== false) {
       this.observe(event);
     }
     return results;
@@ -433,10 +434,13 @@ export class Client {
    * Fetch events. With `gossip: true`, routes filters by NIP-65 when possible. With `localFirst:
    * true`, merges storage hits with network results.
    */
-  async fetchEvents(filter: Filter | Filter[], opts?: FetchEventsOptions): Promise<Event[]> {
+  async fetchEvents(
+    filter: Filter | ReadonlyArray<Filter>,
+    opts?: FetchEventsOptions,
+  ): Promise<Event[]> {
     this.#assertAlive();
-    const filters = canonicalizeFilters(Array.isArray(filter) ? filter : [filter]);
-    const shouldObserve = this.#wantObserve(opts?.observe);
+    const filters = toFilterList(filter);
+    const shouldObserve = opts?.observe !== false;
     const candidates: Event[] = [];
 
     if (opts?.localFirst === true) {
@@ -451,7 +455,7 @@ export class Client {
           }
         }
       } catch (error) {
-        invokeSafely(() => this.onstorageerror?.(toStorageError(error)));
+        this.#emit("storageerror", toStorageError(error));
       }
     }
 
@@ -504,14 +508,17 @@ export class Client {
    * the index with each relay's URL in `seenOn` and persisted exactly like {@link fetchEvents}
    * (`observe` defaults to true). No gossip routing and no local merge.
    */
-  async fetchEach(filter: Filter | Filter[], opts?: FetchEachOptions): Promise<PoolFetchResult[]> {
+  async fetchEach(
+    filter: Filter | ReadonlyArray<Filter>,
+    opts?: FetchEachOptions,
+  ): Promise<PoolFetchResult[]> {
     this.#assertAlive();
-    const filters = canonicalizeFilters(Array.isArray(filter) ? filter : [filter]);
+    const filters = toFilterList(filter);
     const results = await this.pool.fetchEach(this.#defaultRelays(opts?.relays), filters, {
       timeoutMs: opts?.timeoutMs,
       signal: opts?.signal,
     });
-    if (this.#wantObserve(opts?.observe)) {
+    if (opts?.observe !== false) {
       const unique: Event[] = [];
       const seen = new Set<string>();
       for (const result of results) {
@@ -531,19 +538,16 @@ export class Client {
   }
 
   /** Query local storage only (no network). */
-  async queryLocal(filter: Filter | Filter[]): Promise<Event[]> {
+  async queryLocal(filter: Filter | ReadonlyArray<Filter>): Promise<Event[]> {
     this.#assertAlive();
-    const filters = canonicalizeFilters(Array.isArray(filter) ? filter : [filter]);
+    const filters = toFilterList(filter);
     return this.storage.query(filters);
   }
 
-  subscribe(
-    filter: Filter | Filter[],
-    opts?: SubscribeOptions,
-  ): { close: (reason?: string) => void } {
+  subscribe(filter: Filter | ReadonlyArray<Filter>, opts?: SubscribeOptions): Closer {
     this.#assertAlive();
-    const filters = canonicalizeFilters(Array.isArray(filter) ? filter : [filter]);
-    const shouldObserve = this.#wantObserve(opts?.observe);
+    const filters = toFilterList(filter);
+    const shouldObserve = opts?.observe !== false;
 
     const wrapEvent = (event: Event, relayUrl: string) => {
       if (shouldObserve) {
@@ -554,7 +558,7 @@ export class Client {
 
     const wrapReceived = (id: string, relayUrl: string) => {
       if (shouldObserve) {
-        this.#markSeen(id, relayUrl);
+        this.index.markSeen(id, relayUrl);
       }
       opts?.receivedEvent?.(id, relayUrl);
     };
@@ -582,14 +586,7 @@ export class Client {
   }
 
   #requireNip59Crypto(): Nip59Crypto {
-    if (!this.#signer) {
-      throw new ClientError("no signer configured");
-    }
-    return requireNip59Crypto(this.#signer);
-  }
-
-  #throwIfAborted(signal?: AbortSignal): void {
-    throwIfAborted(signal);
+    return requireNip59Crypto(this.#requireSigner());
   }
 
   #dmDeps(): DmDeps {
@@ -598,11 +595,11 @@ export class Client {
       gossip: this.gossip,
       hydrateGossip: async (pubkeys) => this.hydrateGossip(pubkeys),
       ingest: (event, relayUrl) => this.#ingest(event, relayUrl),
-      markSeen: (id, relayUrl) => this.#markSeen(id, relayUrl),
+      markSeen: (id, relayUrl) => {
+        this.index.markSeen(id, relayUrl);
+      },
       assertAlive: () => this.#assertAlive(),
       requireNip59Crypto: () => this.#requireNip59Crypto(),
-      throwIfAborted: (signal) => this.#throwIfAborted(signal),
-      wantObserve: (flag) => this.#wantObserve(flag),
       publish: async (eventOrBuilder, opts) => this.publish(eventOrBuilder, opts),
     };
   }
@@ -613,10 +610,10 @@ export class Client {
       storage: this.storage,
       persistEvents: this.#persistEvents,
       assertAlive: () => this.#assertAlive(),
-      throwIfAborted: (signal) => this.#throwIfAborted(signal),
-      wantObserve: (flag) => this.#wantObserve(flag),
       ingest: (event, relayUrl, opts) => this.#ingest(event, relayUrl, opts),
-      markSeen: (id, relayUrl) => this.#markSeen(id, relayUrl),
+      markSeen: (id, relayUrl) => {
+        this.index.markSeen(id, relayUrl);
+      },
       defaultRelays: (urls) => this.#defaultRelays(urls),
     };
   }
@@ -643,9 +640,7 @@ export class Client {
     return fetchPrivateMessages(this.#dmDeps(), opts);
   }
 
-  async subscribePrivateMessages(
-    opts?: SubscribePrivateMessagesOptions,
-  ): Promise<{ close: (reason?: string) => void }> {
+  async subscribePrivateMessages(opts?: SubscribePrivateMessagesOptions): Promise<Closer> {
     return subscribePrivateMessages(this.#dmDeps(), opts);
   }
 

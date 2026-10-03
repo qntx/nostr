@@ -3,11 +3,12 @@ import { randomBytes } from "@noble/hashes/utils.js";
 import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
 import { signedMatchesUnsigned, validateSignedEvent } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
-import { SecretKey, finalizeEvent, getPublicKey } from "../core/key.ts";
+import { SecretKey, finalizeEvent, getPublicKey, toSecretKey } from "../core/key.ts";
+import type { SecretKeyInput } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import { invokeSafely } from "../core/report.ts";
 import { Tag } from "../core/tag.ts";
-import { bytesToHex, isHex32 } from "../core/util.ts";
+import { bytesToHex, isHex32, nowSeconds } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
 import { decrypt, encrypt, getConversationKey } from "../nips/nip44.ts";
 import {
@@ -33,61 +34,61 @@ export type Nip46SubscribeOptions = {
  */
 export type Nip46Transport = {
   subscribe: (
-    relays: string[],
-    filters: Filter[],
+    relays: ReadonlyArray<string>,
+    filters: ReadonlyArray<Filter>,
     opts?: Nip46SubscribeOptions,
   ) => { close: (reason?: string) => void };
   publish: (
-    relays: string[],
+    relays: ReadonlyArray<string>,
     event: Event,
-  ) => Promise<ReadonlyArray<{ result?: { ok: boolean; message: string }; error?: string }>>;
+  ) => Promise<
+    ReadonlyArray<{
+      readonly status: "ok" | "rejected" | "failed";
+      readonly message?: string;
+      readonly error?: string;
+    }>
+  >;
   close: (urls?: string[]) => void;
 };
 
 /** Options for {@link Nip46Signer}: transport, timeouts, and relay hints. */
 export type Nip46SignerOptions = {
   /** Shared transport. When set, the signer does not close it on {@link Nip46Signer.close}. */
-  pool?: Nip46Transport;
+  pool?: Nip46Transport | undefined;
   /**
    * Factory for a private transport when `pool` is omitted. Typical: `() => new Pool({
    * websocketImplementation, enableReconnect: true })`.
    */
-  createPool?: () => Nip46Transport;
+  createPool?: (() => Nip46Transport) | undefined;
   /**
    * Relays used when the bunker pointer has none, and merged uniquely onto a nonempty pointer
    * (pointer first).
    */
-  relays?: string[];
+  relays?: ReadonlyArray<string> | undefined;
   /** Bunker connection secret when the pointer or bunker:// URL has none. */
   secret?: string | undefined;
   /** Local client key used to encrypt RPC (not the remote user key). */
-  clientSecretKey?: SecretKey | Uint8Array | string;
+  clientSecretKey?: SecretKeyInput | undefined;
   /** Called when bunker returns `auth_url` for a pending request. */
-  onAuthUrl?: (url: string) => void;
+  onAuthUrl?: ((url: string) => void) | undefined;
   /** Per-request timeout in ms. Default 30s. */
-  timeoutMs?: number;
+  timeoutMs?: number | undefined;
   /**
    * Timeout in ms applied after the bunker replies `auth_url`: the request keeps waiting for the
    * real response until this elapses. Default 300s.
    */
-  authTimeoutMs?: number;
+  authTimeoutMs?: number | undefined;
   /** Requested permissions sent with `connect` (`method[:kind]` list). */
-  perms?: string[];
+  perms?: ReadonlyArray<string> | undefined;
   /** Client metadata sent with bunker-initiated `connect`. */
-  metadata?: ClientMetadata;
+  metadata?: ClientMetadata | undefined;
 };
 
-function resolveClientSecret(key?: SecretKey | Uint8Array | string): SecretKey {
+function resolveClientSecret(key?: SecretKeyInput): SecretKey {
   if (key === undefined) {
     return SecretKey.generate();
   }
-  if (key instanceof SecretKey) {
-    return key;
-  }
-  if (typeof key === "string") {
-    return SecretKey.fromHex(key);
-  }
-  return SecretKey.fromBytes(key);
+  return toSecretKey(key);
 }
 
 function resolveTransport(opts: Nip46SignerOptions): { pool: Nip46Transport; ownsPool: boolean } {
@@ -166,7 +167,7 @@ export class Nip46Signer implements NostrSigner {
   readonly #onAuthUrl: ((url: string) => void) | undefined;
   readonly #timeoutMs: number;
   readonly #authTimeoutMs: number;
-  readonly #perms: string[] | undefined;
+  readonly #perms: ReadonlyArray<string> | undefined;
   readonly #metadata: ClientMetadata | undefined;
   #relays: string[];
   readonly #listeners = new Map<string, PendingRequest>();
@@ -221,7 +222,7 @@ export class Nip46Signer implements NostrSigner {
    */
   static fromBunker(
     pointer: BunkerPointer,
-    opts: Nip46SignerOptions & { clientSecretKey: SecretKey | Uint8Array | string },
+    opts: Nip46SignerOptions & { clientSecretKey: SecretKeyInput },
   ): Nip46Signer {
     if (opts.clientSecretKey === undefined) {
       throw new Nip46Error("fromBunker requires clientSecretKey");
@@ -271,7 +272,7 @@ export class Nip46Signer implements NostrSigner {
   static async fromNostrConnectURI(
     connectionURI: string,
     opts: Nip46SignerOptions & {
-      clientSecretKey: SecretKey | Uint8Array | string;
+      clientSecretKey: SecretKeyInput;
       signal?: AbortSignal;
       handshakeTimeoutMs?: number;
     },
@@ -412,7 +413,10 @@ export class Nip46Signer implements NostrSigner {
     this.#open = true;
   }
 
-  async connectRemote(overrides?: { metadata?: ClientMetadata; perms?: string[] }): Promise<void> {
+  async connectRemote(overrides?: {
+    metadata?: ClientMetadata | undefined;
+    perms?: ReadonlyArray<string> | undefined;
+  }): Promise<void> {
     const metadata = overrides?.metadata ?? this.#metadata;
     const perms = overrides?.perms ?? this.#perms;
     const params = [this.#pointer.pubkey, this.#pointer.secret ?? ""];
@@ -448,7 +452,7 @@ export class Nip46Signer implements NostrSigner {
       parsed = JSON.parse(resp);
     } catch (error) {
       throw new Nip46Error("invalid switch_relays JSON", {
-        cause: error instanceof Error ? error : undefined,
+        cause: error,
       });
     }
     if (
@@ -506,7 +510,7 @@ export class Nip46Signer implements NostrSigner {
       signed = JSON.parse(resp);
     } catch (error) {
       throw new Nip46Error("bunker returned invalid sign_event JSON", {
-        cause: error instanceof Error ? error : undefined,
+        cause: error,
       });
     }
     if (!validateSignedEvent(signed) || !verifyEvent(signed)) {
@@ -566,7 +570,7 @@ export class Nip46Signer implements NostrSigner {
         kind: Kind.NostrConnect,
         tags: [Tag.p(this.#pointer.pubkey)],
         content: encrypted,
-        created_at: Math.floor(Date.now() / 1000),
+        created_at: nowSeconds(),
       },
       this.#clientSecret,
     );
@@ -584,10 +588,10 @@ export class Nip46Signer implements NostrSigner {
       this.#dropRequest(id);
       throw error;
     }
-    if (!replies.some((reply) => reply.result?.ok === true)) {
+    if (!replies.some((reply) => reply.status === "ok")) {
       const listener = this.#dropRequest(id);
       const detail = replies
-        .map((reply) => reply.error ?? reply.result?.message)
+        .map((reply) => (reply.status === "failed" ? reply.error : reply.message))
         .filter((message): message is string => Boolean(message))
         .join("; ");
       listener?.reject(new Nip46Error(`request not accepted by any relay: ${detail}`));
