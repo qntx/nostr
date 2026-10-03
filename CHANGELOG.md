@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-03
+
 ### Changed
 
 - **Breaking:** one event model for long-lived objects: `Pool` and `ReactiveEventStore` gain `on(type, listener)` like `Relay` and `Client`. `PoolOptions.onIdleRelaysClosed` / `onRelaySuspended` become `pool.on("idle", urls)` / `pool.on("suspend", { url, until })` (typed by `PoolEventMap`), and `ReactiveEventStore.onInsert` / `onRemove` become `store.on("insert" | "remove", listener)` (typed by `ReactiveEventStoreEventMap`). Per-operation callbacks (`subscribe`'s `onevent` / `oneose` / `onclose`, `fetch`'s `onevent`) are unchanged.
@@ -231,7 +233,8 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/qntx/nostr.js/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/qntx/nostr.js/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/qntx/nostr.js/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/qntx/nostr.js/compare/v0.4.1...v0.5.0
