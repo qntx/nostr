@@ -56,13 +56,23 @@ export type WrapOptions = {
   /** Appended after the required wrap `p` tag. Never applied to the seal. */
   readonly extraTags?: ReadonlyArray<Tag> | undefined;
   /**
+   * NIP-17 disappearing-message expiry (unix seconds): sets `["expiration", ts]` on the seal and on
+   * the gift wrap, signalling relays to discard the wrap after that time.
+   */
+  readonly expiration?: number | undefined;
+  /** Use ephemeral gift wrap kind 21059 instead of 1059 (NIP-59; relays MUST NOT store). */
+  readonly ephemeral?: boolean | undefined;
+  /**
    * Default `"seal+wrap"` (NIP-59). `"wrap"` = only wrap timestamp is randomized; seal uses
    * rumor.created_at.
    */
   readonly randomize?: TimestampRandomize | undefined;
 };
 
-export type SealOptions = Pick<WrapOptions, "now" | "randomInt" | "timestamps" | "randomize">;
+export type SealOptions = Pick<
+  WrapOptions,
+  "now" | "randomInt" | "timestamps" | "expiration" | "randomize"
+>;
 
 export class Nip59Error extends NostrError {
   override name = "Nip59Error";
@@ -131,6 +141,13 @@ export function eventToJson(event: Event): string {
   });
 }
 
+function assertExpiration(ts: number): number {
+  if (!Number.isSafeInteger(ts) || ts < 0) {
+    throw new Nip59Error("expiration must be a non-negative safe integer");
+  }
+  return ts;
+}
+
 function defaultRandomInt(maxExclusive: number): number {
   if (!Number.isSafeInteger(maxExclusive) || maxExclusive <= 0 || maxExclusive > 0x100000000) {
     throw new Nip59Error("randomInt bound must be a positive integer within uint32 range");
@@ -190,12 +207,16 @@ export async function createSeal(
   const created_at =
     opts?.timestamps?.seal ??
     (opts?.randomize === "wrap" ? rumor.created_at : randomPastTimestamp(opts));
+  const tags: Tag[] = [];
+  if (opts?.expiration !== undefined) {
+    tags.push(["expiration", String(assertExpiration(opts.expiration))]);
+  }
   const pubkey = await crypto.getPublicKey();
   return crypto.signEvent({
     kind: Kind.Seal,
     content,
     created_at,
-    tags: [],
+    tags,
     pubkey,
   });
 }
@@ -205,10 +226,14 @@ export function createGiftWrap(seal: Event, recipient: string, opts?: WrapOption
   const ephemeral = Keys.generate();
   const content = encryptToPubkey(eventToJson(seal), ephemeral.secretKey.bytes, recipientPk);
   const created_at = opts?.timestamps?.wrap ?? randomPastTimestamp(opts);
-  const tags: Tag[] = [TagBuilder.p(recipientPk, opts?.relayHint), ...(opts?.extraTags ?? [])];
+  const tags: Tag[] = [TagBuilder.p(recipientPk, opts?.relayHint)];
+  if (opts?.expiration !== undefined) {
+    tags.push(["expiration", String(assertExpiration(opts.expiration))]);
+  }
+  tags.push(...(opts?.extraTags ?? []));
   return finalizeEvent(
     {
-      kind: Kind.GiftWrap,
+      kind: opts?.ephemeral === true ? Kind.GiftWrapEphemeral : Kind.GiftWrap,
       content,
       created_at,
       tags,

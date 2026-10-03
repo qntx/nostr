@@ -10,9 +10,9 @@ import type { LoadStyle, ReplaceableLoader } from "./replaceable.ts";
 
 /** Result of a list loader: the source event, its decoded items, and freshness. */
 export type ListResult<T> = {
-  event: Event | undefined;
-  items: T[];
-  fresh: boolean;
+  readonly event: Event | undefined;
+  readonly items: ReadonlyArray<T>;
+  readonly fresh: boolean;
 };
 
 function fromTags<T>(

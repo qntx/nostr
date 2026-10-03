@@ -5,11 +5,11 @@ import { isHex32 } from "../core/util.ts";
 
 export type DeletionPlan = {
   /** Stored events validated as same-pubkey (not kind 5) and to be removed now. */
-  removeIds: string[];
+  readonly removeIds: ReadonlyArray<string>;
   /** Referenced ids not in the store; remember deletion pubkey until the event arrives. */
-  pendingIds: Array<{ id: string; pubkey: string }>;
+  readonly pendingIds: ReadonlyArray<{ readonly id: string; readonly pubkey: string }>;
   /** Replaceable/addressable coordinates tombstoned up to `until` (deletion created_at). */
-  coordinates: Array<{ key: string; until: number }>;
+  readonly coordinates: ReadonlyArray<{ readonly key: string; readonly until: number }>;
 };
 
 /**

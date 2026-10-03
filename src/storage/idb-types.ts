@@ -82,22 +82,26 @@ export type IDBOpenRequestLike = IDBRequestLike & {
 };
 
 export type TagRef = {
-  key: string;
-  name: string;
-  value: string;
-  id: string;
-  created_at: number;
+  readonly key: string;
+  readonly name: string;
+  readonly value: string;
+  readonly id: string;
+  readonly created_at: number;
 };
 
 export type AddressRow = {
-  address: string;
-  id: string;
-  created_at: number;
+  readonly address: string;
+  readonly id: string;
+  readonly created_at: number;
 };
 
 export type Tombstone =
-  | { key: `id:${string}`; type: "id" }
-  | { key: `pending:${string}`; type: "pending"; pubkey: string }
-  | { key: `coord:${string}`; type: "coord"; until: number };
+  | { readonly key: `id:${string}`; readonly type: "id" }
+  | { readonly key: `pending:${string}`; readonly type: "pending"; readonly pubkey: string }
+  | { readonly key: `coord:${string}`; readonly type: "coord"; readonly until: number };
 
-export type OutboxBoundRow = { key: string; oldest: number; newest: number };
+export type OutboxBoundRow = {
+  readonly key: string;
+  readonly oldest: number;
+  readonly newest: number;
+};

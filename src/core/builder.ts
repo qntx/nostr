@@ -16,15 +16,15 @@ function requireRelayUrl(relayHint: string | undefined): string {
 
 /** Profile metadata JSON (kind 0 content). NIP-05 is not verified here. */
 export type ProfileMetadata = {
-  name?: string;
-  display_name?: string;
-  about?: string;
-  picture?: string;
-  banner?: string;
-  website?: string;
-  nip05?: string;
-  lud06?: string;
-  lud16?: string;
+  readonly name?: string | undefined;
+  readonly display_name?: string | undefined;
+  readonly about?: string | undefined;
+  readonly picture?: string | undefined;
+  readonly banner?: string | undefined;
+  readonly website?: string | undefined;
+  readonly nip05?: string | undefined;
+  readonly lud06?: string | undefined;
+  readonly lud16?: string | undefined;
 };
 
 /**

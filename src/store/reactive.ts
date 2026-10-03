@@ -1,4 +1,5 @@
 import { addToSetMap, removeFromSetMap, trimOldest } from "../core/collections.ts";
+import { Emitter } from "../core/emitter.ts";
 import { itemCompare } from "../core/event.ts";
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
@@ -24,6 +25,14 @@ export type ReactiveEventStoreOptions = {
   maxSeenOnEntries?: number | undefined;
   /** FIFO cap on tombstoned deletion ids. Default 100_000. */
   maxTombstones?: number | undefined;
+};
+
+/** Typed event payloads for {@link ReactiveEventStore.on}. */
+export type ReactiveEventStoreEventMap = {
+  /** Every physical index insert, fired synchronously after the update. */
+  insert: Event;
+  /** Every physical index remove, fired synchronously after watch invalidation. */
+  remove: Event;
 };
 
 const SEEN_ON_PER_ID = 16;
@@ -186,7 +195,9 @@ export class ReactiveEventStore {
   readonly #eventCache = new Map<string, WatchImpl<Event | undefined>>();
   readonly #addressCache = new Map<string, WatchImpl<Event | undefined>>();
   readonly #queryCache = new Map<string, WatchImpl<ReadonlyArray<Event>>>();
-  readonly #queryRegistry = new Set<WatchHandle>();
+  // Query watches indexed by filter kinds; a filter without kinds matches any kind.
+  readonly #queryByKind = new Map<number, Set<WatchHandle>>();
+  readonly #queryAnyKind = new Set<WatchHandle>();
 
   // Event-id → pin refcount across registered watch snapshots; eviction skips pinned ids.
   readonly #pinned = new Map<string, number>();
@@ -195,8 +206,7 @@ export class ReactiveEventStore {
 
   readonly #dirty = new Set<WatchHandle>();
   #flushScheduled = false;
-  readonly #insertListeners = new Set<(event: Event) => void>();
-  readonly #removeListeners = new Set<(event: Event) => void>();
+  readonly #events = new Emitter<ReactiveEventStoreEventMap>();
 
   readonly #watchHost: WatchHost = {
     version: () => this.#version,
@@ -389,20 +399,16 @@ export class ReactiveEventStore {
     return watch;
   }
 
-  /** Synchronous listener for every physical index insert (after update). */
-  onInsert(listener: (event: Event) => void): () => void {
-    this.#insertListeners.add(listener);
-    return () => {
-      this.#insertListeners.delete(listener);
-    };
-  }
-
-  /** Synchronous listener for every physical index remove (after watch invalidation). */
-  onRemove(listener: (event: Event) => void): () => void {
-    this.#removeListeners.add(listener);
-    return () => {
-      this.#removeListeners.delete(listener);
-    };
+  /**
+   * Listen for a store event. Multiple listeners per type are allowed and fire in registration
+   * order; a throwing listener is reported and does not break the dispatch. Returns an unsubscribe
+   * function.
+   */
+  on<K extends keyof ReactiveEventStoreEventMap>(
+    type: K,
+    listener: (payload: ReactiveEventStoreEventMap[K]) => void,
+  ): () => void {
+    return this.#events.on(type, listener);
   }
 
   #registerWatch(watch: WatchHandle): void {
@@ -413,8 +419,16 @@ export class ReactiveEventStore {
       case "replaceable":
         addToSetMap(this.#addressWatches, watch.key, watch);
         return;
-      case "query":
-        this.#queryRegistry.add(watch);
+      case "query": {
+        const kinds = this.#queryKinds(watch);
+        if (kinds === undefined) {
+          this.#queryAnyKind.add(watch);
+          return;
+        }
+        for (const kind of kinds) {
+          addToSetMap(this.#queryByKind, kind, watch);
+        }
+      }
     }
   }
 
@@ -432,12 +446,37 @@ export class ReactiveEventStore {
           this.#addressCache.delete(watch.key);
         }
         return;
-      case "query":
-        this.#queryRegistry.delete(watch);
+      case "query": {
+        const kinds = this.#queryKinds(watch);
+        if (kinds === undefined) {
+          this.#queryAnyKind.delete(watch);
+        } else {
+          for (const kind of kinds) {
+            removeFromSetMap(this.#queryByKind, kind, watch);
+          }
+        }
         if (this.#queryCache.get(watch.key) === watch) {
           this.#queryCache.delete(watch.key);
         }
+      }
     }
+  }
+
+  /**
+   * Kind buckets a query watch belongs to (deduped across filters), or undefined when any filter
+   * lacks a non-empty `kinds` and so can match every kind.
+   */
+  #queryKinds(watch: WatchHandle): Set<number> | undefined {
+    const kinds = new Set<number>();
+    for (const filter of watch.filters ?? []) {
+      if (filter.kinds === undefined || filter.kinds.length === 0) {
+        return undefined;
+      }
+      for (const kind of filter.kinds) {
+        kinds.add(kind);
+      }
+    }
+    return kinds;
   }
 
   #touch(id: string): void {
@@ -462,18 +501,14 @@ export class ReactiveEventStore {
     this.#version += 1;
     this.#touch(event.id);
     this.#invalidateByEvent(event);
-    for (const listener of this.#insertListeners) {
-      invokeSafely(() => listener(event));
-    }
+    this.#events.emit("insert", event);
   }
 
   #onRemove(event: Event): void {
     this.#version += 1;
     this.#recency.delete(event.id);
     this.#invalidateByEvent(event);
-    for (const listener of this.#removeListeners) {
-      invokeSafely(() => listener(event));
-    }
+    this.#events.emit("remove", event);
   }
 
   #invalidateByEvent(event: Event): void {
@@ -519,7 +554,17 @@ export class ReactiveEventStore {
         }
       }
     }
-    for (const watch of this.#queryRegistry) {
+    // Candidates are the event's kind bucket plus any-kind watches — a watch sits
+    // in at most one bucket per kind, so it is checked at most once per event.
+    const byKind = this.#queryByKind.get(event.kind);
+    if (byKind) {
+      for (const watch of byKind) {
+        if (watch.filters !== undefined && matchFilters(watch.filters, event)) {
+          this.#markDirty(watch);
+        }
+      }
+    }
+    for (const watch of this.#queryAnyKind) {
       if (watch.filters !== undefined && matchFilters(watch.filters, event)) {
         this.#markDirty(watch);
       }
@@ -537,7 +582,12 @@ export class ReactiveEventStore {
         this.#markDirty(watch);
       }
     }
-    for (const watch of this.#queryRegistry) {
+    for (const watches of this.#queryByKind.values()) {
+      for (const watch of watches) {
+        this.#markDirty(watch);
+      }
+    }
+    for (const watch of this.#queryAnyKind) {
       this.#markDirty(watch);
     }
     this.#scheduleFlush();

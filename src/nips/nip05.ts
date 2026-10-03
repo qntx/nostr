@@ -4,6 +4,7 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/05.md
  */
 import { NostrError } from "../core/error.ts";
+import type { Mutable } from "../core/util.ts";
 import { isHex32, isRecord } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
@@ -24,22 +25,22 @@ export type Nip05 = string;
 
 export type Nip05Address = {
   /** Local part (lowercased). `_` for domain-only identifiers. */
-  local: string;
+  readonly local: string;
   /** Domain (lowercased). */
-  domain: string;
+  readonly domain: string;
 };
 
 /** 46.md appendix discovery metadata (`{relays, nostrconnect_url}`). Not a bunker pointer. */
 export type Nip05Nip46 = {
-  relays?: string[];
-  nostrconnectUrl?: string;
+  readonly relays?: ReadonlyArray<string> | undefined;
+  readonly nostrconnectUrl?: string | undefined;
 };
 
 export type Nip05Document = {
-  names: Record<string, string>;
+  readonly names: Readonly<Record<string, string>>;
   /** NIP-05 profile relay hints */
-  relays?: Record<string, string[]>;
-  nip46?: Nip05Nip46;
+  readonly relays?: Readonly<Record<string, ReadonlyArray<string>>> | undefined;
+  readonly nip46?: Nip05Nip46 | undefined;
 };
 
 export type Nip05Fetch = ManualFetch;
@@ -101,7 +102,7 @@ export function parseNip05Nip46(raw: unknown): Nip05Nip46 | undefined {
     return undefined;
   }
   const obj = raw;
-  const result: Nip05Nip46 = {};
+  const result: Mutable<Nip05Nip46> = {};
 
   if (Array.isArray(obj["relays"])) {
     result.relays = stringUrls(obj["relays"]) ?? [];
@@ -150,7 +151,7 @@ export function parseNip05Document(json: unknown): Nip05Document {
     }
   }
 
-  const doc: Nip05Document = { names };
+  const doc: Mutable<Nip05Document> = { names };
   if (relays !== undefined) {
     doc.relays = relays;
   }

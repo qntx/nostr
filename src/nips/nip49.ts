@@ -15,7 +15,12 @@ import { Bech32MaxSize, encodeBytes } from "./nip19.ts";
 export type Ncryptsec = `ncryptsec1${string}`;
 export type KeySecurityByte = 0x00 | 0x01 | 0x02;
 
-export type ScryptParams = { N: number; r: number; p: number; dkLen: number };
+export type ScryptParams = {
+  readonly N: number;
+  readonly r: number;
+  readonly p: number;
+  readonly dkLen: number;
+};
 
 /** Derive `params.dkLen` bytes from the NFKC-normalized UTF-8 password and salt (RFC 7914). */
 export type Scrypt = (

@@ -8,8 +8,8 @@ import { DataLoader } from "./dataloader.ts";
 
 /** Result of a replaceable load: the winning event (or none) and freshness. */
 export type ReplaceableLoadResult = {
-  event: Event | undefined;
-  fresh: boolean;
+  readonly event: Event | undefined;
+  readonly fresh: boolean;
 };
 
 /** `default`: fetch when stale or unfetched; `force`: always fetch; `cache-only`: index only. */

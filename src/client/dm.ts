@@ -95,7 +95,10 @@ export async function sendPrivateMessage(
     subject: opts?.subject,
     replyTo: opts?.replyTo,
   });
-  const wraps = await wrapDirectMessage(crypto, list, rumor);
+  const wraps = await wrapDirectMessage(crypto, list, rumor, {
+    expiration: opts?.expiration,
+    ephemeral: opts?.ephemeral,
+  });
   const sent = await Promise.all(
     wraps.map(async ({ recipient, wrap }) => {
       const relays = requireDmRelays(recipient, deps.gossip.dmRelays(recipient));

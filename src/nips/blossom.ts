@@ -13,16 +13,17 @@ import { EventValidationError, NostrError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
+import type { Mutable } from "../core/util.ts";
 import { assertHex32, bytesToHex, isRecord, nowSeconds, utf8Encoder } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch, sendManual } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 
 export type BlobDescriptor = {
-  url: string;
-  sha256: string;
-  size: number;
-  type?: string;
-  uploaded?: number;
+  readonly url: string;
+  readonly sha256: string;
+  readonly size: number;
+  readonly type?: string | undefined;
+  readonly uploaded?: number | undefined;
 };
 
 export type BlossomFetch = ManualFetch;
@@ -574,7 +575,7 @@ function parseBlobDescriptor(json: unknown): BlobDescriptor {
   if (typeof raw["size"] !== "number" || !Number.isInteger(raw["size"]) || raw["size"] < 0) {
     throw new BlossomError("blob descriptor missing size");
   }
-  const desc: BlobDescriptor = { url: raw["url"], sha256: hash, size: raw["size"] };
+  const desc: Mutable<BlobDescriptor> = { url: raw["url"], sha256: hash, size: raw["size"] };
   if (typeof raw["type"] === "string") {
     desc.type = raw["type"];
   }

@@ -133,14 +133,16 @@ export function persistPlanTombstones(
 }
 
 export function tombstonesToPlan(rows: unknown[]): DeletionPlan {
-  const plan: DeletionPlan = { removeIds: [], pendingIds: [], coordinates: [] };
+  const removeIds: string[] = [];
+  const pendingIds: Array<{ id: string; pubkey: string }> = [];
+  const coordinates: Array<{ key: string; until: number }> = [];
   for (const row of rows) {
     if (!isRecord(row)) {
       continue;
     }
     const r = row;
     if (r["type"] === "id" && typeof r["key"] === "string" && r["key"].startsWith("id:")) {
-      plan.removeIds.push(r["key"].slice(3));
+      removeIds.push(r["key"].slice(3));
       continue;
     }
     if (
@@ -149,7 +151,7 @@ export function tombstonesToPlan(rows: unknown[]): DeletionPlan {
       r["key"].startsWith("pending:") &&
       typeof r["pubkey"] === "string"
     ) {
-      plan.pendingIds.push({ id: r["key"].slice(8), pubkey: r["pubkey"] });
+      pendingIds.push({ id: r["key"].slice(8), pubkey: r["pubkey"] });
       continue;
     }
     if (
@@ -158,10 +160,10 @@ export function tombstonesToPlan(rows: unknown[]): DeletionPlan {
       r["key"].startsWith("coord:") &&
       typeof r["until"] === "number"
     ) {
-      plan.coordinates.push({ key: r["key"].slice(6), until: r["until"] });
+      coordinates.push({ key: r["key"].slice(6), until: r["until"] });
     }
   }
-  return plan;
+  return { removeIds, pendingIds, coordinates };
 }
 
 export function applyPutIndexedDb(

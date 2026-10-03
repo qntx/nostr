@@ -8,21 +8,22 @@ import { EventValidationError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import { formatEventAddress, parseEventAddress, Tag } from "../core/tag.ts";
+import type { Mutable } from "../core/util.ts";
 import { isHex32 } from "../core/util.ts";
 import type { AddressPointer, EventPointer, ProfilePointer } from "./nip19.ts";
 
 /** Parsed NIP-10 thread references from an event's `e`/`q`/`p` tags. */
 export type ThreadReferences = {
   /** Pointer to the root of the thread. */
-  root: EventPointer | undefined;
+  readonly root: EventPointer | undefined;
   /** Pointer to the parent event this note replies to. */
-  reply: EventPointer | undefined;
+  readonly reply: EventPointer | undefined;
   /** Other e-tagged events (not root/reply). */
-  mentions: EventPointer[];
+  readonly mentions: ReadonlyArray<EventPointer>;
   /** Quoted events (`q` tags): event ids or addresses. Discriminate with `"id" in q`. */
-  quotes: Array<EventPointer | AddressPointer>;
+  readonly quotes: ReadonlyArray<EventPointer | AddressPointer>;
   /** P-tagged profiles involved in the thread. */
-  profiles: ProfilePointer[];
+  readonly profiles: ReadonlyArray<ProfilePointer>;
 };
 
 type ReplyParent = Pick<Event, "id" | "pubkey" | "tags" | "kind">;
@@ -43,7 +44,7 @@ function eventPointerFromETag(tag: ReadonlyArray<string>): EventPointer | undefi
   if (tag[0] !== "e" || id === undefined || !isHex32(id.toLowerCase())) {
     return undefined;
   }
-  const pointer: EventPointer = {
+  const pointer: Mutable<EventPointer> = {
     id: id.toLowerCase(),
     relays: tag[2] !== undefined && tag[2] !== "" ? [tag[2]] : [],
   };
@@ -61,7 +62,7 @@ function quoteFromQTag(tag: ReadonlyArray<string>): EventPointer | AddressPointe
   }
   const relays = tag[2] !== undefined && tag[2] !== "" ? [tag[2]] : [];
   if (isHex32(value.toLowerCase())) {
-    const pointer: EventPointer = { id: value.toLowerCase(), relays };
+    const pointer: Mutable<EventPointer> = { id: value.toLowerCase(), relays };
     const author = tag.at(3);
     if (author !== undefined && isHex32(author.toLowerCase())) {
       pointer.author = author.toLowerCase();
@@ -124,13 +125,11 @@ function assertKind1Parent(parent: ReplyParent): void {
 
 /** Parse NIP-10 thread markers and legacy positional e-tags from an event. */
 export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
-  const result: ThreadReferences = {
-    root: undefined,
-    reply: undefined,
-    mentions: [],
-    quotes: [],
-    profiles: [],
-  };
+  const mentions: EventPointer[] = [];
+  const quotes: Array<EventPointer | AddressPointer> = [];
+  const profiles: ProfilePointer[] = [];
+  let root: EventPointer | undefined;
+  let reply: EventPointer | undefined;
 
   let maybeParent: EventPointer | undefined;
   let maybeRoot: EventPointer | undefined;
@@ -150,16 +149,16 @@ export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
       const marker = tag.at(3);
 
       if (marker === "root") {
-        result.root = pointer;
+        root = pointer;
         continue;
       }
       if (marker === "reply") {
-        result.reply = pointer;
+        reply = pointer;
         continue;
       }
       // Preferred markers are root/reply only. A hex32 at index 3 is NIP-01 pubkey, not a marker.
       if (marker !== undefined && marker !== "" && !isHex32(marker.toLowerCase())) {
-        result.mentions.push(pointer);
+        mentions.push(pointer);
         continue;
       }
 
@@ -169,49 +168,43 @@ export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
       } else {
         maybeParent = pointer;
       }
-      result.mentions.push(pointer);
+      mentions.push(pointer);
       continue;
     }
 
     if (tag[0] === "q") {
       const quote = quoteFromQTag(tag);
       if (quote) {
-        result.quotes.push(quote);
+        quotes.push(quote);
       }
       continue;
     }
 
     const pValue = tag.at(1);
     if (tag[0] === "p" && pValue !== undefined && isHex32(pValue.toLowerCase())) {
-      result.profiles.push({
+      profiles.push({
         pubkey: pValue.toLowerCase(),
         relays: tag[2] !== undefined && tag[2] !== "" ? [tag[2]] : [],
       });
     }
   }
 
-  result.root ??= maybeRoot ?? maybeParent ?? result.reply;
-  result.reply ??= maybeParent ?? result.root;
+  root ??= maybeRoot ?? maybeParent ?? reply;
+  reply ??= maybeParent ?? root;
 
   // Drop root/reply from mentions (by id).
-  const drop = new Set(
-    [result.root?.id, result.reply?.id].filter((id): id is string => Boolean(id)),
-  );
-  result.mentions = result.mentions.filter((m) => !drop.has(m.id));
+  const drop = new Set([root?.id, reply?.id].filter((id): id is string => Boolean(id)));
+  const keptMentions = mentions.filter((m) => !drop.has(m.id));
 
   // Inherit relay hints from matching p-tags.
-  for (const ref of [result.reply, result.root, ...result.mentions]) {
-    if (ref === undefined) {
-      continue;
-    }
+  const inheritHints = (ref: EventPointer): EventPointer => {
     const refAuthor = ref.author;
     if (refAuthor === undefined || refAuthor === "") {
-      continue;
+      return ref;
     }
-    const profile = result.profiles.find((p) => p.pubkey === refAuthor);
-    const profileRelays = profile?.relays;
+    const profileRelays = profiles.find((p) => p.pubkey === refAuthor)?.relays;
     if (profileRelays === undefined || profileRelays.length === 0) {
-      continue;
+      return ref;
     }
     const relays = [...(ref.relays ?? [])];
     for (const url of profileRelays) {
@@ -219,10 +212,16 @@ export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
         relays.push(url);
       }
     }
-    ref.relays = relays;
-  }
+    return { ...ref, relays };
+  };
 
-  return result;
+  return {
+    root: root === undefined ? undefined : inheritHints(root),
+    reply: reply === undefined ? undefined : inheritHints(reply),
+    mentions: keptMentions.map(inheritHints),
+    quotes,
+    profiles,
+  };
 }
 
 /** Options for {@link buildReplyTags}. */

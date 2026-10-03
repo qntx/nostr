@@ -30,17 +30,17 @@ export class Nip77Error extends NostrError {
 }
 
 export type NegItem = {
-  timestamp: number;
-  id: Uint8Array;
+  readonly timestamp: number;
+  readonly id: Uint8Array;
 };
 
 export type ReconcileOutcome = {
   /** Event ids the local side holds that the peer does not. */
-  have: string[];
+  readonly have: ReadonlyArray<string>;
   /** Event ids the peer holds that the local side does not. */
-  need: string[];
+  readonly need: ReadonlyArray<string>;
   /** Next NEG-MSG hex, or undefined when the session converged. */
-  nextMessage: string | undefined;
+  readonly nextMessage: string | undefined;
 };
 
 /**

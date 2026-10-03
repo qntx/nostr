@@ -1,6 +1,7 @@
 import { bech32 } from "@scure/base";
 
 import { NostrError, errorMessage } from "../core/error.ts";
+import type { Mutable } from "../core/util.ts";
 import {
   assertByteLength,
   assertHex32,
@@ -28,34 +29,34 @@ export const Bech32MaxSize = 5000;
 
 /** Decoded `nprofile` payload: a pubkey plus optional relay hints. */
 export type ProfilePointer = {
-  pubkey: string;
-  relays?: string[];
+  readonly pubkey: string;
+  readonly relays?: ReadonlyArray<string> | undefined;
 };
 
 /** Decoded `nevent` payload: an event id plus optional relay/author/kind hints. */
 export type EventPointer = {
-  id: string;
-  relays?: string[];
-  author?: string;
-  kind?: number;
+  readonly id: string;
+  readonly relays?: ReadonlyArray<string> | undefined;
+  readonly author?: string | undefined;
+  readonly kind?: number | undefined;
 };
 
 /** Decoded `naddr` payload: a replaceable-event coordinate plus optional relay hints. */
 export type AddressPointer = {
-  identifier: string;
-  pubkey: string;
-  kind: number;
-  relays?: string[];
+  readonly identifier: string;
+  readonly pubkey: string;
+  readonly kind: number;
+  readonly relays?: ReadonlyArray<string> | undefined;
 };
 
 /** Result of {@link decode}: the bech32 prefix and its decoded payload. */
 export type DecodedResult =
-  | { type: "nprofile"; data: ProfilePointer }
-  | { type: "nevent"; data: EventPointer }
-  | { type: "naddr"; data: AddressPointer }
-  | { type: "nsec"; data: Uint8Array }
-  | { type: "npub"; data: string }
-  | { type: "note"; data: string };
+  | { readonly type: "nprofile"; readonly data: ProfilePointer }
+  | { readonly type: "nevent"; readonly data: EventPointer }
+  | { readonly type: "naddr"; readonly data: AddressPointer }
+  | { readonly type: "nsec"; readonly data: Uint8Array }
+  | { readonly type: "npub"; readonly data: string }
+  | { readonly type: "note"; readonly data: string };
 
 /** Error thrown by NIP-19 encoding/decoding failures. */
 export class Nip19Error extends NostrError {
@@ -245,7 +246,7 @@ export function decode(code: string): DecodedResult {
       if (tlv[3]?.[0] && tlv[3][0].length !== 4) {
         throw new Nip19Error("TLV 3 should be 4 bytes");
       }
-      const pointer: EventPointer = {
+      const pointer: Mutable<EventPointer> = {
         id: bytesToHex(tlv[0][0]),
         relays: tlv[1] ? tlv[1].map((d) => utf8Decoder.decode(d)) : [],
       };

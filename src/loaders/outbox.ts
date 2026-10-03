@@ -5,6 +5,7 @@ import { sortedEvents } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
 import { invokeSafely } from "../core/report.ts";
+import type { Mutable } from "../core/util.ts";
 import { normalizeRelayUrls, nowSeconds } from "../core/util.ts";
 import type { Gossip } from "../gossip/gossip.ts";
 import type { Pool } from "../relay/pool.ts";
@@ -118,7 +119,7 @@ export class OutboxFeed {
     | ((events: ReadonlyArray<Event>) => Promise<ReadonlyArray<Event>>)
     | undefined;
   readonly #hydrate: ((pubkeys: ReadonlyArray<string>) => Promise<void>) | undefined;
-  readonly #bounds = new Map<string, OutboxBound>();
+  readonly #bounds = new Map<string, Mutable<OutboxBound>>();
   /** Bound keys dirtied by live events since the last flush. */
   readonly #dirtyBounds = new Set<string>();
   #boundTimer: ReturnType<typeof setTimeout> | undefined;

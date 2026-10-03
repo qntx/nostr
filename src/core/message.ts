@@ -3,6 +3,7 @@ import type { Event } from "./event.ts";
 import { validateSignedEvent } from "./event.ts";
 import type { Filter } from "./filter.ts";
 import { SUBSCRIPTION_ID_MAX_CHARS } from "./limits.ts";
+import type { Mutable } from "./util.ts";
 import { bytesToHex, hexToBytes, isRecord } from "./util.ts";
 
 /** NIP-01 subscription id: 1..64 chars. */
@@ -51,13 +52,13 @@ export type RelayMessage =
 
 /** NIP-45 COUNT reply payload. */
 export type CountResult = {
-  count: number;
-  approximate?: boolean;
+  readonly count: number;
+  readonly approximate?: boolean | undefined;
   /**
    * Optional 512-char hex HyperLogLog sketch (256 registers). Merge sketches with `mergeCountHll`.
    * Estimation is unspecified by NIP-45 and not provided.
    */
-  hll?: string;
+  readonly hll?: string | undefined;
 };
 
 const HLL_BYTES = 256; // 512 hex chars (NIP-45; hex only, not base64)
@@ -235,7 +236,7 @@ export function parseRelayMessage(raw: string): RelayMessage {
       ) {
         throw new MessageError("invalid COUNT relay message");
       }
-      const result: CountResult = { count: payload["count"] };
+      const result: Mutable<CountResult> = { count: payload["count"] };
       if (typeof payload["approximate"] === "boolean") {
         result.approximate = payload["approximate"];
       }

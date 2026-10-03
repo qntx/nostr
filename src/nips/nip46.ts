@@ -5,38 +5,39 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/46.md
  */
 import { NostrError } from "../core/error.ts";
+import type { Mutable } from "../core/util.ts";
 import { isHex32, isRecord } from "../core/util.ts";
 
 export type BunkerPointer = {
   /** Remote signer / bunker public key (hex). */
-  pubkey: string;
-  relays: string[];
-  secret: string | undefined;
+  readonly pubkey: string;
+  readonly relays: ReadonlyArray<string>;
+  readonly secret?: string | undefined;
 };
 
 export type ClientMetadata = {
-  name?: string | undefined;
-  url?: string | undefined;
-  image?: string | undefined;
+  readonly name?: string | undefined;
+  readonly url?: string | undefined;
+  readonly image?: string | undefined;
 };
 
 export type NostrConnectParams = {
-  clientPubkey: string;
-  relays: string[];
-  secret: string;
-  perms?: string[] | undefined;
+  readonly clientPubkey: string;
+  readonly relays: ReadonlyArray<string>;
+  readonly secret: string;
+  readonly perms?: ReadonlyArray<string> | undefined;
 } & ClientMetadata;
 
 export type Nip46Request = {
-  id: string;
-  method: string;
-  params: string[];
+  readonly id: string;
+  readonly method: string;
+  readonly params: ReadonlyArray<string>;
 };
 
 export type Nip46Response = {
-  id: string;
-  result?: string | undefined;
-  error?: string | undefined;
+  readonly id: string;
+  readonly result?: string | undefined;
+  readonly error?: string | undefined;
 };
 
 export class Nip46Error extends NostrError {
@@ -138,7 +139,7 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
   if (relays.length === 0) {
     throw new Nip46Error("missing relays in nostrconnect URI");
   }
-  const params: NostrConnectParams = {
+  const params: Mutable<NostrConnectParams> = {
     clientPubkey: clientPubkey.toLowerCase(),
     relays,
     secret,
@@ -216,7 +217,7 @@ export function decodeNip46Response(json: string): Nip46Response {
   if (error !== undefined && typeof error !== "string") {
     throw new Nip46Error("invalid NIP-46 response error");
   }
-  const response: Nip46Response = { id: data["id"] };
+  const response: Mutable<Nip46Response> = { id: data["id"] };
   if (result !== undefined) {
     response.result = result;
   }

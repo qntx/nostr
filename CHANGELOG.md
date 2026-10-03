@@ -9,6 +9,27 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** one event model for long-lived objects: `Pool` and `ReactiveEventStore` gain `on(type, listener)` like `Relay` and `Client`. `PoolOptions.onIdleRelaysClosed` / `onRelaySuspended` become `pool.on("idle", urls)` / `pool.on("suspend", { url, until })` (typed by `PoolEventMap`), and `ReactiveEventStore.onInsert` / `onRemove` become `store.on("insert" | "remove", listener)` (typed by `ReactiveEventStoreEventMap`). Per-operation callbacks (`subscribe`'s `onevent` / `oneose` / `onclose`, `fetch`'s `onevent`) are unchanged.
+- **Breaking:** failure results carry the thrown `Error` instead of its message: `PoolPublishResult` / `PoolCountResult` `failed` variants have `error: Error`, `PoolFetchResult.end` `failed` is `{ type: "failed", error }`, `SyncSummary.persistFailures` maps ids to `Error`.
+- **Breaking:** exported data and result types (NIP pointers and documents, relay/pool results, client, loader, gossip and storage results) are `readonly` with `ReadonlyArray` fields and `?: T | undefined` optionals. `BunkerPointer.secret` is optional.
+- **Breaking:** `Pool.close(urls)` is split into `Pool.close()` (everything) and `Pool.closeRelays(urls)`.
+- **Breaking:** a hashtag longer than 42 code points is now plain text instead of a hashtag block holding its first 42 code points.
+- `Relay` is decomposed into cohesive internal units (subscription registry, OK/COUNT trackers, NIP-42 auth state); public behaviour is unchanged.
+- `ReactiveEventStore` indexes query watches by kind, so an insert or removal only re-matches the watches that can contain its kind instead of every query watch.
+- Async iteration over a subscription dequeues in O(1).
+
+### Added
+
+- NIP-17/59 disappearing messages: `WrapOptions.expiration` (and `SendPrivateMessageOptions.expiration`) adds an `expiration` tag to both the seal and the gift wrap, as NIP-17 recommends.
+- NIP-59 ephemeral gift wraps: `WrapOptions.ephemeral` (and `SendPrivateMessageOptions.ephemeral`) produces `kind:21059`.
+
+### Fixed
+
+- A one-shot subscription with `closeOnEose` and `eoseTimeoutMs` now closes when the timeout synthesizes EOSE instead of hanging until a real EOSE.
+- NIP-27 recognizes custom emoji shortcodes containing hyphens (`:my-emoji:`), which NIP-30 allows.
+
 ## [0.7.0] - 2026-10-03
 
 ### Removed

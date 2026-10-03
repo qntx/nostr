@@ -628,7 +628,7 @@ describe("issue #130", () => {
           publish: async () => {
             await Promise.resolve();
             return [
-              { status: "failed", error: "blocked: spam" },
+              { status: "failed", error: new Error("blocked: spam") },
               { status: "rejected", message: "restricted: no" },
             ];
           },

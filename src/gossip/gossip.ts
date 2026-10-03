@@ -29,7 +29,7 @@ export type PubkeyRoutes = {
 /** A filter split by gossip routes: per-relay narrowed filters plus the unrouted remainder. */
 export type RoutedFilter = {
   /** Url → already-narrowed filter. Empty when nothing routed. */
-  perRelay: Map<string, Filter>;
+  readonly perRelay: ReadonlyMap<string, Filter>;
   /**
    * Unrouted work for the caller:
    *
@@ -38,7 +38,7 @@ export type RoutedFilter = {
    * - Mixed: narrowed leftover ("fallback")
    * - All routed: undefined
    */
-  remainder?: Filter;
+  readonly remainder?: Filter | undefined;
 };
 
 export type GossipOptions = {

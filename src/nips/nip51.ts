@@ -23,10 +23,10 @@ export type Nip51Crypto = {
 };
 
 export type MuteItem =
-  | { type: "pubkey"; value: string }
-  | { type: "event"; value: string }
-  | { type: "hashtag"; value: string }
-  | { type: "word"; value: string };
+  | { readonly type: "pubkey"; readonly value: string }
+  | { readonly type: "event"; readonly value: string }
+  | { readonly type: "hashtag"; readonly value: string }
+  | { readonly type: "word"; readonly value: string };
 
 function requireKind(event: Pick<Event, "kind">, kind: number): void {
   if (event.kind !== kind) {

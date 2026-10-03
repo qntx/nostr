@@ -237,6 +237,33 @@ describe("Client NIP-17", () => {
     await alice.shutdown();
   });
 
+  test("sendPrivateMessage expiration and ephemeral options reach the wrap", async () => {
+    const aliceKeys = Keys.fromSecretKey(ALICE_SK);
+    const bobKeys = Keys.fromSecretKey(BOB_SK);
+    seedLists(net, aliceKeys, bobKeys);
+
+    const alice = new Client({
+      signer: new KeysSigner(aliceKeys),
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    await alice.connect();
+
+    const expiration = 1_800_000_000;
+    const sent = await alice.sendPrivateMessage(bobKeys.publicKey, "hola", {
+      expiration,
+      ephemeral: true,
+    });
+    expect(sent.wraps).toHaveLength(2);
+    for (const { wrap } of sent.wraps) {
+      expect(wrap.kind).toBe(Kind.GiftWrapEphemeral);
+      expect(wrap.tags).toContainEqual(["expiration", String(expiration)]);
+    }
+
+    await alice.shutdown();
+  });
+
   test("missing recipient 10050 throws before any EVENT", async () => {
     const aliceKeys = Keys.fromSecretKey(ALICE_SK);
     const bobKeys = Keys.fromSecretKey(BOB_SK);

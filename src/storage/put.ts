@@ -11,15 +11,25 @@ export function outboxBoundKey(pubkey: string, kind: number): string {
 }
 
 export type PutDecision =
-  | { action: "skip"; result: "duplicate" | "ephemeral" | "rejected" | "invalid"; event: Event }
-  | { action: "tombstone"; result: "duplicate"; event: Event }
-  | { action: "delete"; result: "deleted"; event: Event; plan: DeletionPlan; coordIds: string[] }
   | {
-      action: "insert";
-      result: "accepted" | "replaced";
-      event: Event;
-      address?: string;
-      replaceId?: string;
+      readonly action: "skip";
+      readonly result: "duplicate" | "ephemeral" | "rejected" | "invalid";
+      readonly event: Event;
+    }
+  | { readonly action: "tombstone"; readonly result: "duplicate"; readonly event: Event }
+  | {
+      readonly action: "delete";
+      readonly result: "deleted";
+      readonly event: Event;
+      readonly plan: DeletionPlan;
+      readonly coordIds: ReadonlyArray<string>;
+    }
+  | {
+      readonly action: "insert";
+      readonly result: "accepted" | "replaced";
+      readonly event: Event;
+      readonly address?: string | undefined;
+      readonly replaceId?: string | undefined;
     };
 
 export type PutLookup = {

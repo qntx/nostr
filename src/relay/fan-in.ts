@@ -229,7 +229,7 @@ export async function fetchRouted(
   await Promise.all(
     jobs.flatMap((job) => {
       return uniqueRelayUrls(job.urls).map(async (url) => {
-        let batch: Event[];
+        let batch: ReadonlyArray<Event>;
         let relayUrl: string;
         try {
           const relay = await pool.ensureRelay(url, {

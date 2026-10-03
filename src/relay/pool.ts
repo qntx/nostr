@@ -1,11 +1,11 @@
 import { abortReason, throwIfAborted } from "../core/abort.ts";
-import { MessageError, errorMessage } from "../core/error.ts";
+import { Emitter } from "../core/emitter.ts";
+import { MessageError, toError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { canonicalizeFilters } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
 import { assertSubscriptionId } from "../core/message.ts";
 import type { CountResult } from "../core/message.ts";
-import { invokeSafely } from "../core/report.ts";
 import { normalizeURL } from "../core/util.ts";
 import { RelayConnectionError, RelayPublishError, RelaySuspendedError } from "./error.ts";
 import { fanIn, fetchRouted } from "./fan-in.ts";
@@ -38,7 +38,6 @@ export type PoolOptions = Omit<RelayOptions, "authSigner"> & {
   /** Close unused relays. Unset/0 = disabled. */
   idleTimeoutMs?: number | undefined;
   idleCleanupIntervalMs?: number | undefined;
-  onIdleRelaysClosed?: ((urls: string[]) => void) | undefined;
   /**
    * Soft cap on connected non-pinned relays. When `ensureRelay` would create a new non-pinned relay
    * at the cap, the least-recently-used idle one is closed first (idle = no subscriptions and no
@@ -55,18 +54,24 @@ export type PoolOptions = Omit<RelayOptions, "authSigner"> & {
    * through the normal reconnect path. Unset = events are dropped without counting, as before.
    */
   invalidEventPolicy?: InvalidEventPolicy | undefined;
+};
+
+/** Typed event payloads for {@link Pool.on}. */
+export type PoolEventMap = {
+  /** Normalized URLs closed by an idle-cleanup pass. */
+  idle: ReadonlyArray<string>;
   /**
-   * Fired once when a relay is suspended for exceeding `invalidEventPolicy`: `url` is the
-   * normalized relay URL and `until` the epoch-ms time the suspension lifts.
+   * A relay suspended for exceeding `invalidEventPolicy`: `url` is the normalized relay URL and
+   * `until` the epoch-ms time the suspension lifts.
    */
-  onRelaySuspended?: ((url: string, until: number) => void) | undefined;
+  suspend: { readonly url: string; readonly until: number };
 };
 
 /** Per-relay publish outcome: the relay's OK verdict or a transport-level failure. */
 export type PoolPublishResult =
   | { readonly url: string; readonly status: "ok"; readonly message: string }
   | { readonly url: string; readonly status: "rejected"; readonly message: string }
-  | { readonly url: string; readonly status: "failed"; readonly error: string };
+  | { readonly url: string; readonly status: "failed"; readonly error: Error };
 
 /** Multi-relay subscribe options: callbacks also receive the normalized relay URL. */
 export type PoolSubscribeOptions = Omit<SubscribeOptions, "onevent" | "receivedEvent"> & {
@@ -76,15 +81,15 @@ export type PoolSubscribeOptions = Omit<SubscribeOptions, "onevent" | "receivedE
 
 /** Per-relay one-shot fetch outcome: collected events plus how its REQ ended. */
 export type PoolFetchResult = {
-  url: string;
-  events: Event[];
-  end: RelayFetchEnd | { readonly type: "failed"; readonly reason: string };
+  readonly url: string;
+  readonly events: ReadonlyArray<Event>;
+  readonly end: RelayFetchEnd | { readonly type: "failed"; readonly error: Error };
 };
 
 /** Per-relay NIP-45 COUNT result (or a transport-level failure). */
 export type PoolCountResult =
   | ({ readonly url: string; readonly status: "ok" } & CountResult)
-  | { readonly url: string; readonly status: "failed"; readonly error: string };
+  | { readonly url: string; readonly status: "failed"; readonly error: Error };
 
 const countOk = (url: string, payload: CountResult): PoolCountResult => ({
   url,
@@ -105,10 +110,9 @@ export class Pool {
   readonly #relays = new Map<string, Relay>();
   readonly #relayOptions: Omit<RelayOptions, "authSigner">;
   readonly #automaticallyAuth: PoolOptions["automaticallyAuth"];
-  readonly #onIdleRelaysClosed: ((urls: string[]) => void) | undefined;
   readonly #maxRelays: number | undefined;
   readonly #invalidEventPolicy: InvalidEventPolicy | undefined;
-  readonly #onRelaySuspended: ((url: string, until: number) => void) | undefined;
+  readonly #events = new Emitter<PoolEventMap>();
   readonly #lastActivity = new Map<string, number>();
   readonly #idleTimeoutMs: number;
   #idleTimer: ReturnType<typeof setInterval> | undefined;
@@ -128,19 +132,15 @@ export class Pool {
       trustedInsecureUrls,
       idleTimeoutMs,
       idleCleanupIntervalMs,
-      onIdleRelaysClosed,
       maxRelays,
       pinnedUrls,
       invalidEventPolicy,
-      onRelaySuspended,
       ...relayOptions
     } = opts;
     this.#relayOptions = relayOptions;
     this.#automaticallyAuth = automaticallyAuth;
-    this.#onIdleRelaysClosed = onIdleRelaysClosed;
     this.#maxRelays = maxRelays;
     this.#invalidEventPolicy = invalidEventPolicy;
-    this.#onRelaySuspended = onRelaySuspended;
     this.#allowInsecure = allowInsecure ?? false;
     this.#trustedInsecure = new Set((trustedInsecureUrls ?? []).map(normalizeURL));
     this.#pinned = new Set((pinnedUrls ?? []).map(normalizeURL));
@@ -148,6 +148,18 @@ export class Pool {
     if (this.#idleTimeoutMs > 0) {
       this.#idleTimer = setInterval(() => this.cleanIdleRelays(), idleCleanupIntervalMs ?? 30_000);
     }
+  }
+
+  /**
+   * Listen for a pool event. Multiple listeners per type are allowed and fire in registration
+   * order; a throwing listener is reported and does not break the dispatch. Returns an unsubscribe
+   * function.
+   */
+  on<K extends keyof PoolEventMap>(
+    type: K,
+    listener: (payload: PoolEventMap[K]) => void,
+  ): () => void {
+    return this.#events.on(type, listener);
   }
 
   setAllowInsecure(allow: boolean): void {
@@ -195,8 +207,8 @@ export class Pool {
     if (idle.length === 0) {
       return;
     }
-    this.close(idle);
-    invokeSafely(() => this.#onIdleRelaysClosed?.(idle));
+    this.closeRelays(idle);
+    this.#events.emit("idle", idle);
   }
 
   #touch(url: string): void {
@@ -205,7 +217,7 @@ export class Pool {
 
   /**
    * Count one verification failure for `norm`; on the `limit + 1`-th inside `windowMs` suspend the
-   * relay: drop its connection (subscriptions kept), record `until`, and fire `onRelaySuspended`.
+   * relay: drop its connection (subscriptions kept), record `until`, and emit `suspend`.
    */
   #noteInvalidEvent(norm: string): void {
     const policy = this.#invalidEventPolicy;
@@ -243,7 +255,7 @@ export class Pool {
       })();
     }, policy.cooldownMs);
     this.#resumeTimers.set(norm, resume);
-    invokeSafely(() => this.#onRelaySuspended?.(norm, until));
+    this.#events.emit("suspend", { url: norm, until });
   }
 
   #rejectInsecure(url: string, norm: string): void {
@@ -295,7 +307,7 @@ export class Pool {
       }
     }
     if (count >= cap && oldestUrl !== undefined) {
-      this.close([oldestUrl]);
+      this.closeRelays([oldestUrl]);
     }
   }
 
@@ -358,22 +370,24 @@ export class Pool {
     return relay;
   }
 
-  close(urls?: string[]): void {
-    if (!urls) {
-      this.#stopIdleCleanup();
-      for (const timer of this.#resumeTimers.values()) {
-        clearTimeout(timer);
-      }
-      this.#resumeTimers.clear();
-      this.#suspendedUntil.clear();
-      this.#invalidEvents.clear();
-      for (const relay of this.#relays.values()) {
-        relay.close();
-      }
-      this.#relays.clear();
-      this.#lastActivity.clear();
-      return;
+  /** Close every pooled relay and clear all pool state. */
+  close(): void {
+    this.#stopIdleCleanup();
+    for (const timer of this.#resumeTimers.values()) {
+      clearTimeout(timer);
     }
+    this.#resumeTimers.clear();
+    this.#suspendedUntil.clear();
+    this.#invalidEvents.clear();
+    for (const relay of this.#relays.values()) {
+      relay.close();
+    }
+    this.#relays.clear();
+    this.#lastActivity.clear();
+  }
+
+  /** Close and forget the listed relays; other pooled relays are untouched. */
+  closeRelays(urls: ReadonlyArray<string>): void {
     for (const url of urls) {
       const norm = normalizeURL(url);
       const timer = this.#resumeTimers.get(norm);
@@ -452,7 +466,7 @@ export class Pool {
           return {
             url,
             events: [],
-            end: { type: "failed", reason: errorMessage(error) },
+            end: { type: "failed", error: toError(error) },
           };
         }
       }),
@@ -499,7 +513,7 @@ export class Pool {
             ? { url, status: "ok", message: result.message }
             : { url, status: "rejected", message: result.message };
         } catch (error) {
-          return { url, status: "failed", error: errorMessage(error) };
+          return { url, status: "failed", error: toError(error) };
         }
       }),
     );
@@ -555,7 +569,7 @@ export class Pool {
           if (opts?.signal?.aborted === true) {
             throw abortReason(opts.signal);
           }
-          return { url, status: "failed", error: errorMessage(error) };
+          return { url, status: "failed", error: toError(error) };
         }
       }),
     );

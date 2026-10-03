@@ -13,25 +13,26 @@ import { validateSignedEvent } from "../core/event.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { isAddressableKind, Kind } from "../core/kind.ts";
 import { eventAddress, firstTagValue, getDTag, parseEventAddress, Tag } from "../core/tag.ts";
+import type { Mutable } from "../core/util.ts";
 import { hexToBytes, nowSeconds, utf8Encoder } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
 
 export type ProfileZapRequest = {
-  pubkey: string;
+  readonly pubkey: string;
   /** Amount in millisats. */
-  amount: number;
-  relays: ReadonlyArray<string>;
-  comment?: string;
-  lnurl?: string;
+  readonly amount: number;
+  readonly relays: ReadonlyArray<string>;
+  readonly comment?: string | undefined;
+  readonly lnurl?: string | undefined;
 };
 
 export type EventZapRequest = {
-  event: Event;
+  readonly event: Event;
   /** Amount in millisats. */
-  amount: number;
-  relays: ReadonlyArray<string>;
-  comment?: string;
-  lnurl?: string;
+  readonly amount: number;
+  readonly relays: ReadonlyArray<string>;
+  readonly comment?: string | undefined;
+  readonly lnurl?: string | undefined;
 };
 
 export function makeZapRequest(params: ProfileZapRequest | EventZapRequest): EventTemplate {
@@ -78,8 +79,8 @@ export function makeZapRequest(params: ProfileZapRequest | EventZapRequest): Eve
 }
 
 export type ZapReceiptContext = {
-  nostrPubkey: string;
-  lnurl?: string;
+  readonly nostrPubkey: string;
+  readonly lnurl?: string | undefined;
 };
 
 export type ZapReceiptValidation =
@@ -91,15 +92,15 @@ export type ZapReceiptValidation =
   | { readonly valid: false; readonly reason: string };
 
 export type Bolt11Fields = {
-  amountMsats?: number;
+  readonly amountMsats?: number | undefined;
   /** The `d` tagged field, UTF-8 decoded; omitted on invalid UTF-8. */
-  description?: string;
-  descriptionHash?: Uint8Array;
-  paymentHash?: Uint8Array;
+  readonly description?: string | undefined;
+  readonly descriptionHash?: Uint8Array | undefined;
+  readonly paymentHash?: Uint8Array | undefined;
   /** Invoice creation time (unix seconds). */
-  timestamp: number;
+  readonly timestamp: number;
   /** `x` tagged field — seconds after `timestamp` until expiry. Defaults to 3600 when absent. */
-  expiry: number;
+  readonly expiry: number;
 };
 
 function fail(reason: string): ZapReceiptValidation {
@@ -241,7 +242,7 @@ export function parseBolt11(pr: string): Bolt11Fields | undefined {
     if (words.length < BOLT11_TIMESTAMP_WORDS + BOLT11_SIGNATURE_WORDS) {
       return undefined;
     }
-    const fields: Bolt11Fields = {
+    const fields: Mutable<Bolt11Fields> = {
       timestamp: wordsToInt(words.slice(0, BOLT11_TIMESTAMP_WORDS)),
       expiry: DEFAULT_EXPIRY_SECONDS,
     };
