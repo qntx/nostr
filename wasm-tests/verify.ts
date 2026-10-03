@@ -6,8 +6,8 @@ import { hexToBytes, utf8Encoder } from "../src/core/util.ts";
 import { finalizeEvent, serializeEvent, verifyEvent } from "../src/index.ts";
 import type { Event } from "../src/index.ts";
 import { assertAllowedWasmImports, instantiateCryptoWasm } from "../src/wasm/abi.ts";
-import { createWasmEventVerifier, WasmVerifyPoisonedError } from "../src/wasm/adapter.ts";
-import { loadNostrWasm, resetNostrWasmForTests } from "../src/wasm/load.ts";
+import { createWasmEventVerifier, WasmPoisonedError } from "../src/wasm/adapter.ts";
+import { createNostrWasmLoader, isWasmBytes } from "../src/wasm/instance.ts";
 import type { NostrWasm } from "../src/wasm/load.ts";
 import { readBuiltWasm } from "./read-wasm.ts";
 
@@ -44,13 +44,23 @@ function copyEvent(event: Event): Event {
   return { ...event };
 }
 
+const wasmLoader = createNostrWasmLoader(async (opts) => {
+  await Promise.resolve();
+  const source = opts?.module;
+  if (source !== undefined && isWasmBytes(source)) {
+    return source;
+  }
+  throw new HexError("wasm-tests pass in-memory module bytes");
+});
+const { loadNostrWasm } = wasmLoader;
+
 const bytes = await readBuiltWasm();
 const invalidWasm = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
 let wasm: NostrWasm;
 
 describe("loadNostrWasm intern", () => {
   test("invalid bytes throw and are not interned as success", async () => {
-    resetNostrWasmForTests();
+    wasmLoader.resetNostrWasm();
     await expect(loadNostrWasm({ module: invalidWasm })).rejects.toThrow();
     await expect(instantiateCryptoWasm(invalidWasm)).rejects.toThrow();
     wasm = await loadNostrWasm({ module: bytes });
@@ -144,7 +154,7 @@ describe("wasm verify edge cases", () => {
 });
 
 describe("adapter poison", () => {
-  test("RuntimeError becomes sticky WasmVerifyPoisonedError", () => {
+  test("RuntimeError becomes sticky WasmPoisonedError", () => {
     const poison: { error?: Error } = {};
     let calls = 0;
     const fn = createWasmEventVerifier(() => {
@@ -152,9 +162,9 @@ describe("adapter poison", () => {
       throw new WebAssembly.RuntimeError("trap");
     }, poison);
     const event = copyEvent(helloEvent());
-    expect(() => fn(event)).toThrow(WasmVerifyPoisonedError);
-    expect(poison.error).toBeInstanceOf(WasmVerifyPoisonedError);
-    expect(() => fn(copyEvent(event))).toThrow(WasmVerifyPoisonedError);
+    expect(() => fn(event)).toThrow(WasmPoisonedError);
+    expect(poison.error).toBeInstanceOf(WasmPoisonedError);
+    expect(() => fn(copyEvent(event))).toThrow(WasmPoisonedError);
     expect(calls).toBe(1);
   });
 

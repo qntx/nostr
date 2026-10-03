@@ -167,9 +167,9 @@ describe("FakeRelay NIP-01 + faults", () => {
       enableReconnect: true,
       reconnectBackoffMs: [10],
     });
-    relay.onreconnect = () => {
+    relay.on("reconnect", () => {
       reconnects += 1;
-    };
+    });
     const got: Event[] = [];
     relay.subscribe([{ kinds: [1] }], { onevent: (e) => got.push(e) });
 
@@ -296,16 +296,16 @@ describe("serveFakeRelay over real ws", () => {
     const served = await serveFakeRelay({ port: 0 });
     try {
       const keys = Keys.fromSecretKey(SK);
-      const client = Client.builder()
-        .signer(new KeysSigner(keys))
-        .relays([served.url])
-        .websocketImplementation(globalThis.WebSocket)
-        .trustedInsecureUrls([served.url])
-        .enableReconnect(false)
-        .build();
+      const client = new Client({
+        signer: new KeysSigner(keys),
+        relays: [served.url],
+        websocketImplementation: globalThis.WebSocket,
+        trustedInsecureUrls: [served.url],
+        enableReconnect: false,
+      });
       await client.connect();
       const results = await client.publish(EventBuilder.textNote("real ws hello").createdAt(9));
-      expect(results.every((r) => r.result?.ok)).toBe(true);
+      expect(results.every((r) => r.status === "ok")).toBe(true);
       const fetched = await client.fetchEvents(
         { kinds: [1], authors: [keys.publicKey] },
         { timeoutMs: 3000 },

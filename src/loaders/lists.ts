@@ -1,7 +1,9 @@
 import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
-import { isHex32, normalizeURL } from "../core/util.ts";
+import { isHex32 } from "../core/util.ts";
 import { parseDmRelayList } from "../nips/nip17.ts";
+import { parseMuteList } from "../nips/nip51.ts";
+import type { MuteItem } from "../nips/nip51.ts";
 import type { RelayListItem } from "../nips/nip65.ts";
 import { parseRelayList } from "../nips/nip65.ts";
 import type { LoadStyle, ReplaceableLoader } from "./replaceable.ts";
@@ -12,13 +14,6 @@ export type ListResult<T> = {
   items: T[];
   fresh: boolean;
 };
-
-/** One muted entity decoded from a kind:10000 mute list. */
-export type MutedEntity =
-  | { label: "pubkey"; value: string }
-  | { label: "thread"; value: string }
-  | { label: "hashtag"; value: string }
-  | { label: "word"; value: string };
 
 function fromTags<T>(
   event: Event | undefined,
@@ -41,7 +36,7 @@ type ListLoaderOpts = { hints?: string[] | undefined; style?: LoadStyle | undefi
 
 export type ListLoaders = {
   follows: (pubkey: string, opts?: ListLoaderOpts) => Promise<ListResult<string>>;
-  muteList: (pubkey: string, opts?: ListLoaderOpts) => Promise<ListResult<MutedEntity>>;
+  muteList: (pubkey: string, opts?: ListLoaderOpts) => Promise<ListResult<MuteItem>>;
   relayList: (pubkey: string, opts?: ListLoaderOpts) => Promise<ListResult<RelayListItem>>;
   dmRelayList: (pubkey: string, opts?: ListLoaderOpts) => Promise<ListResult<string>>;
 };
@@ -66,33 +61,17 @@ export function createListLoaders(replaceable: (kind: number) => ReplaceableLoad
       };
     },
 
-    async muteList(pubkey: string, opts?: ListLoaderOpts): Promise<ListResult<MutedEntity>> {
+    async muteList(pubkey: string, opts?: ListLoaderOpts): Promise<ListResult<MuteItem>> {
       const { event, fresh } = await muteLoader(pubkey, opts);
-      return {
-        event,
-        fresh,
-        items: fromTags(event, (tag) => {
-          if (tag[1] === undefined || tag[1] === "") {
-            return undefined;
-          }
-          switch (tag[0]) {
-            case "p":
-              return isHex32(tag[1].toLowerCase())
-                ? { label: "pubkey", value: tag[1].toLowerCase() }
-                : undefined;
-            case "e":
-              return isHex32(tag[1].toLowerCase())
-                ? { label: "thread", value: tag[1].toLowerCase() }
-                : undefined;
-            case "t":
-              return { label: "hashtag", value: tag[1] };
-            case "word":
-              return { label: "word", value: tag[1] };
-            default:
-              return undefined;
-          }
-        }),
-      };
+      let items: MuteItem[] = [];
+      if (event) {
+        try {
+          items = parseMuteList(event);
+        } catch {
+          items = [];
+        }
+      }
+      return { event, fresh, items };
     },
 
     async relayList(pubkey: string, opts?: ListLoaderOpts): Promise<ListResult<RelayListItem>> {
@@ -105,14 +84,6 @@ export function createListLoaders(replaceable: (kind: number) => ReplaceableLoad
           items = [];
         }
       }
-      // ensure normalized urls even if parse skipped
-      items = items.map((i) => {
-        try {
-          return { ...i, url: normalizeURL(i.url) };
-        } catch {
-          return i;
-        }
-      });
       return { event, fresh, items };
     },
 

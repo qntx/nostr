@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import { itemCompare, sortedEvents } from "../src/core/index.ts";
 import {
   EventBuilder,
-  EventValidationError,
   Keys,
   Kind,
   MemoryEventStore,
@@ -43,9 +42,9 @@ describe("nip42", () => {
     const keys = Keys.fromSecretKey(SK);
 
     let challengeSeen: string | undefined;
-    relay.onauth = (c) => {
+    relay.on("auth", (c) => {
       challengeSeen = c;
-    };
+    });
 
     MockWebSocket.last().receive(JSON.stringify(["AUTH", "abc-challenge"]));
     expect(challengeSeen).toBe("abc-challenge");
@@ -128,24 +127,24 @@ describe("nip65", () => {
   test("parse and encode relay list", () => {
     const keys = Keys.fromSecretKey(SK);
     const event = relayListEventBuilder([
-      { url: "wss://a.example", read: true, write: true },
-      { url: "wss://b.example", read: true, write: false },
-      { url: "wss://c.example", read: false, write: true },
+      { url: "wss://a.example", marker: "both" },
+      { url: "wss://b.example", marker: "read" },
+      { url: "wss://c.example", marker: "write" },
     ]).signWithKeys(keys);
 
     const items = parseRelayList(event);
     expect(items).toStrictEqual([
-      { url: "wss://a.example/", read: true, write: true },
-      { url: "wss://b.example/", read: true, write: false },
-      { url: "wss://c.example/", read: false, write: true },
+      { url: "wss://a.example/", marker: "both" },
+      { url: "wss://b.example/", marker: "read" },
+      { url: "wss://c.example/", marker: "write" },
     ]);
     // normalizeURL may add trailing slash depending on URL parser — accept both
     expect(readRelays(items)).toHaveLength(2);
     expect(writeRelays(items)).toHaveLength(2);
 
     const tags = relayListToTags([
-      { url: "wss://x.example", read: true, write: true },
-      { url: "wss://y.example", read: true, write: false },
+      { url: "wss://x.example", marker: "both" },
+      { url: "wss://y.example", marker: "read" },
     ]);
     expect(tags).toStrictEqual([
       ["r", "wss://x.example"],
@@ -153,21 +152,16 @@ describe("nip65", () => {
     ]);
   });
 
-  test("relayListToTags both-false throws", () => {
-    expect(() => relayListToTags([{ url: "wss://z.example", read: false, write: false }])).toThrow(
-      EventValidationError,
-    );
-    expect(relayListToTags([{ url: "wss://z.example", read: true, write: true }])).toStrictEqual([
+  test("relayListToTags encodes both unmarked", () => {
+    expect(relayListToTags([{ url: "wss://z.example", marker: "both" }])).toStrictEqual([
       ["r", "wss://z.example"],
     ]);
     const keys = Keys.fromSecretKey(SK);
-    const event = relayListEventBuilder([
-      { url: "wss://z.example", read: true, write: true },
-    ]).signWithKeys(keys);
+    const event = relayListEventBuilder([{ url: "wss://z.example", marker: "both" }]).signWithKeys(
+      keys,
+    );
     expect(event.tags).toStrictEqual([["r", "wss://z.example"]]);
-    expect(parseRelayList(event)).toStrictEqual([
-      { url: "wss://z.example/", read: true, write: true },
-    ]);
+    expect(parseRelayList(event)).toStrictEqual([{ url: "wss://z.example/", marker: "both" }]);
   });
 });
 
@@ -273,10 +267,10 @@ describe("MemoryEventStore", () => {
     await expect(store.put(meta1)).resolves.toBe("accepted");
     await expect(store.put(meta2)).resolves.toBe("replaced");
 
-    const list1 = relayListEventBuilder([{ url: "wss://a.example", read: true, write: true }])
+    const list1 = relayListEventBuilder([{ url: "wss://a.example", marker: "both" }])
       .createdAt(10)
       .signWithKeys(keys);
-    const list2 = relayListEventBuilder([{ url: "wss://b.example", read: true, write: true }])
+    const list2 = relayListEventBuilder([{ url: "wss://b.example", marker: "both" }])
       .createdAt(20)
       .signWithKeys(keys);
     await expect(store.put(list1)).resolves.toBe("accepted");

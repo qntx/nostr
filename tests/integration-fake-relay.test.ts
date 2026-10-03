@@ -30,18 +30,18 @@ describe("integration via createFakeRelayNetwork", () => {
   test("Client publish + fetch + local storage observe", async () => {
     const keys = Keys.fromSecretKey(SK);
     const store = new MemoryEventStore();
-    const client = Client.builder()
-      .signer(new KeysSigner(keys))
-      .storage(store)
-      .relays(["wss://a.example", "wss://b.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      signer: new KeysSigner(keys),
+      storage: store,
+      relays: ["wss://a.example", "wss://b.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
 
     await client.connect();
 
     const results = await client.publish(EventBuilder.textNote("bus hello").createdAt(42));
-    expect(results.every((r) => r.result?.ok)).toBe(true);
+    expect(results.every((r) => r.status === "ok")).toBe(true);
 
     await new Promise((resolve) => setTimeout(resolve, 10));
     const local = await client.queryLocal({ kinds: [Kind.TextNote] });
@@ -76,7 +76,7 @@ describe("integration via createFakeRelayNetwork", () => {
 
     const other = EventBuilder.textNote("fan").createdAt(2).signWithKeys(keys);
     const pub = await pool.publish(["wss://a.example", "wss://b.example"], other);
-    expect(pub.every((r) => r.result?.ok)).toBe(true);
+    expect(pub.every((r) => r.status === "ok")).toBe(true);
     expect(
       net
         .relay("wss://a.example")
@@ -124,7 +124,7 @@ describe("integration via createFakeRelayNetwork", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     const results = await pool.publish(["wss://auth.example"], note);
-    expect(results[0]?.result?.ok).toBe(true);
+    expect(results[0]?.status).toBe("ok");
     expect(
       net
         .relay("wss://auth.example")
@@ -140,19 +140,19 @@ describe("integration via createFakeRelayNetwork", () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK_B);
     const note = EventBuilder.textNote("from outbox").createdAt(99).signWithKeys(a);
-    const list = relayListEventBuilder([{ url: "wss://out.example", read: false, write: true }])
+    const list = relayListEventBuilder([{ url: "wss://out.example", marker: "write" }])
       .createdAt(1)
       .signWithKeys(a);
 
     net.relay("wss://out.example").seed([note]);
 
     const store = new MemoryEventStore();
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://discovery.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://discovery.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
 
     client.gossip.ingest(list);
     await client.connect();

@@ -1,24 +1,21 @@
-import { EventBuilder } from "../core/builder.ts";
-import { EventValidationError, NostrError } from "../core/error.ts";
 /**
  * NIP-17: Private Direct Messages. Kind 10050 advertises where gift-wraps should be delivered. Kind
  * 14 rumor construction and per-recipient wrap live here. Envelope primitives live in nip59.ts.
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/17.md
  */
+import { EventBuilder } from "../core/builder.ts";
+import { EventValidationError, NostrError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
-import { assertHex32, normalizeURL } from "../core/util.ts";
+import { assertHex32, normalizeRelayUrls } from "../core/util.ts";
 import { createGiftWrap, createRumor, createSeal } from "./nip59.ts";
 import type { Nip59Crypto, Rumor, WrapOptions } from "./nip59.ts";
 
 export class Nip17Error extends NostrError {
   override name = "Nip17Error";
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-  }
 }
 
 export type Recipient = {
@@ -44,46 +41,19 @@ export function parseDmRelayList(event: Pick<Event, "kind" | "tags">): string[] 
       `expected kind ${Kind.DirectMessageRelaysList}, got ${event.kind}`,
     );
   }
-  const out: string[] = [];
-  const seen = new Set<string>();
+  const urls: string[] = [];
   for (const tag of event.tags) {
     const value = tag.at(1);
-    if (tag[0] !== "relay" || value === undefined || value === "") {
-      continue;
+    if (tag[0] === "relay" && value !== undefined) {
+      urls.push(value);
     }
-    let url: string;
-    try {
-      url = normalizeURL(value);
-    } catch {
-      continue;
-    }
-    if (seen.has(url)) {
-      continue;
-    }
-    seen.add(url);
-    out.push(url);
   }
-  return out;
+  return normalizeRelayUrls(urls);
 }
 
 /** Encode DM relay URLs as NIP-17 `relay` tags. */
 export function dmRelayListToTags(relays: ReadonlyArray<string>): Tag[] {
-  const tags: Tag[] = [];
-  const seen = new Set<string>();
-  for (const raw of relays) {
-    let url: string;
-    try {
-      url = normalizeURL(raw);
-    } catch {
-      continue;
-    }
-    if (seen.has(url)) {
-      continue;
-    }
-    seen.add(url);
-    tags.push(["relay", url]);
-  }
-  return tags;
+  return normalizeRelayUrls(relays).map((url) => ["relay", url]);
 }
 
 /** Build an unsigned kind:10050 EventBuilder. NIP-17 requires ≥1 relay tag. */

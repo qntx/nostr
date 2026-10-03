@@ -23,7 +23,7 @@ export function hexToBytes(hex: string): Uint8Array {
     return nobleHexToBytes(hex);
   } catch (error) {
     throw new HexError(`invalid hex string of length ${hex.length}`, {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
 }
@@ -55,6 +55,11 @@ export function assertByteLength(bytes: Uint8Array, expected: number, label: str
 
 export function assertSecretKeyBytes(bytes: Uint8Array): void {
   assertByteLength(bytes, SECRET_KEY_BYTES, "secret key");
+}
+
+/** Current unix time in whole seconds (NIP-01 `created_at`). */
+export function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
 }
 
 /** Structural guard: a plain record (not `null`, not an array). */
@@ -98,7 +103,26 @@ export function normalizeURL(url: string): string {
       throw error;
     }
     throw new UrlError(`invalid URL: ${url}`, {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
+}
+
+/**
+ * Normalize each entry like {@link normalizeURL}; empty or invalid entries are skipped and the
+ * results are deduplicated in first-seen order.
+ */
+export function normalizeRelayUrls(urls: Iterable<string>): string[] {
+  const seen = new Set<string>();
+  for (const url of urls) {
+    if (url === "") {
+      continue;
+    }
+    try {
+      seen.add(normalizeURL(url));
+    } catch {
+      // invalid relay urls are skipped
+    }
+  }
+  return [...seen];
 }

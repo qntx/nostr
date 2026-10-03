@@ -13,7 +13,7 @@ import { EventValidationError, NostrError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
-import { assertHex32, bytesToHex, isRecord, utf8Encoder } from "../core/util.ts";
+import { assertHex32, bytesToHex, isRecord, nowSeconds, utf8Encoder } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch, sendManual } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 
@@ -99,9 +99,31 @@ const AUTH_VERB_MESSAGES: Record<BlossomAuthVerb, string> = {
   media: "Upload Media",
 };
 
+/**
+ * Hostname for a BUD-11 `server` tag: accepts a full URL or a bare domain; lowercased, undefined
+ * when unparseable.
+ */
+function serverHostname(raw: string): string | undefined {
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return undefined;
+    }
+    const hostname = url.hostname.toLowerCase();
+    return hostname === "" ? undefined : hostname;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createAuthTemplate(
   verb: BlossomAuthVerb,
-  opts?: { sha256?: string; expiration?: number; message?: string },
+  opts?: {
+    sha256?: string | undefined;
+    expiration?: number | undefined;
+    message?: string | undefined;
+    servers?: ReadonlyArray<string> | undefined;
+  },
 ): EventTemplate {
   if (!AUTH_VERBS.has(verb)) {
     throw new BlossomError(`invalid blossom auth verb: ${verb}`);
@@ -109,7 +131,7 @@ export function createAuthTemplate(
   if (opts?.message !== undefined && opts.message.trim() === "") {
     throw new BlossomError("blossom auth message must not be empty");
   }
-  const expiration = opts?.expiration ?? Math.floor(Date.now() / 1000) + AUTH_EXPIRATION_SECS;
+  const expiration = opts?.expiration ?? nowSeconds() + AUTH_EXPIRATION_SECS;
   const tags: Tag[] = [
     ["t", verb],
     ["expiration", String(expiration)],
@@ -117,9 +139,18 @@ export function createAuthTemplate(
   if (opts?.sha256 !== undefined) {
     tags.push(["x", assertHex32(opts.sha256, "blob sha256")]);
   }
+  const seenServers = new Set<string>();
+  for (const server of opts?.servers ?? []) {
+    const hostname = serverHostname(server);
+    if (hostname === undefined || seenServers.has(hostname)) {
+      continue;
+    }
+    seenServers.add(hostname);
+    tags.push(["server", hostname]);
+  }
   return {
     kind: Kind.BlobsAuth,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: nowSeconds(),
     tags,
     content: opts?.message ?? AUTH_VERB_MESSAGES[verb],
   };
@@ -128,7 +159,11 @@ export function createAuthTemplate(
 export async function createUploadAuth(
   sign: BlossomSign,
   file: Blob,
-  opts?: { message?: string; expiration?: number },
+  opts?: {
+    message?: string | undefined;
+    expiration?: number | undefined;
+    servers?: ReadonlyArray<string> | undefined;
+  },
 ): Promise<Event> {
   const hash = await sha256Blob(file);
   return sign(createAuthTemplate("upload", { sha256: hash, ...opts }));
@@ -138,9 +173,10 @@ export async function upload(
   server: string,
   file: Blob,
   auth: Event,
-  opts?: { fetch?: BlossomFetch; signal?: AbortSignal },
+  opts?: { fetch?: BlossomFetch; signal?: AbortSignal; sha256?: string | undefined },
 ): Promise<BlobDescriptor> {
-  const hash = await sha256Blob(file);
+  const hash =
+    opts?.sha256 === undefined ? await sha256Blob(file) : assertHex32(opts.sha256, "blob sha256");
   const headers: Record<string, string> = {
     Authorization: encodeAuthorizationHeader(auth),
     "X-SHA-256": hash,
@@ -223,9 +259,10 @@ export async function checkUpload(
   server: string,
   file: Blob,
   auth: Event,
-  opts?: { fetch?: BlossomFetch; signal?: AbortSignal },
+  opts?: { fetch?: BlossomFetch; signal?: AbortSignal; sha256?: string | undefined },
 ): Promise<void> {
-  const hash = await sha256Blob(file);
+  const hash =
+    opts?.sha256 === undefined ? await sha256Blob(file) : assertHex32(opts.sha256, "blob sha256");
   const headers: Record<string, string> = {
     Authorization: encodeAuthorizationHeader(auth),
     "X-SHA-256": hash,
@@ -343,7 +380,7 @@ export async function uploadToServers(
         error instanceof BlossomError
           ? error
           : new BlossomError("blossom upload failed", {
-              cause: error instanceof Error ? error : undefined,
+              cause: error,
             });
     }
   }
@@ -469,7 +506,7 @@ async function blossomFetch(
     init,
     (err) =>
       new BlossomError(`blossom ${init.method} ${url} failed`, {
-        cause: err instanceof Error ? err : undefined,
+        cause: err,
       }),
   );
 }
@@ -516,7 +553,7 @@ async function readJson(res: ManualResponse): Promise<unknown> {
     return await res.json();
   } catch (error) {
     throw new BlossomError("invalid blossom JSON response", {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
       status: res.status,
     });
   }

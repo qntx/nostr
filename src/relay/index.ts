@@ -12,6 +12,7 @@ export { isInsecureRelayUrl } from "./url.ts";
 export { Relay, RelayStatus } from "./relay.ts";
 export type {
   RelayOptions,
+  RelayEventMap,
   PublishResult,
   CountResult,
   RelayFetchEnd,
@@ -20,7 +21,8 @@ export type {
   SubscriptionHandlers,
   RelayStatusName,
 } from "./relay.ts";
-export { Subscription, subscriptionToAsyncIterable } from "./subscription.ts";
+export { subscriptionToAsyncIterable } from "./subscription.ts";
+export type { Closer, RelaySubscription } from "./subscription.ts";
 export { Pool } from "./pool.ts";
 export type {
   PoolOptions,

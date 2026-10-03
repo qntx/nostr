@@ -46,11 +46,11 @@ describe("Client + ReactiveEventStore", () => {
   });
 
   function makeClient() {
-    return Client.builder()
-      .relays(["wss://a.example", "wss://b.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    return new Client({
+      relays: ["wss://a.example", "wss://b.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
   }
 
   test("default client has an index; observe() records seenOn", async () => {
@@ -139,7 +139,7 @@ describe("Client + ReactiveEventStore", () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("mine").createdAt(1).signWithKeys(keys);
     const results = await client.publish(note);
-    expect(results.some((r) => r.result?.ok)).toBe(true);
+    expect(results.some((r) => r.status === "ok")).toBe(true);
     expect(client.index.get(note.id)?.id).toBe(note.id);
     await client.shutdown();
   });
@@ -157,11 +157,11 @@ describe("issue #125", () => {
   });
 
   test("#9 localFirst prefers the newer index event over stale storage", async () => {
-    const client = Client.builder()
-      .relays(["wss://empty.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://empty.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     const keys = Keys.fromSecretKey(SK);
     const fresh = EventBuilder.metadata({ name: "fresh" }).createdAt(5).signWithKeys(keys);
     const stale = EventBuilder.metadata({ name: "stale" }).createdAt(1).signWithKeys(keys);
@@ -181,11 +181,11 @@ describe("issue #125", () => {
     const t3 = EventBuilder.textNote("three").createdAt(3).signWithKeys(keys);
     net.relay("wss://a.example").seed([t3, t2]);
     net.relay("wss://b.example").seed([t2, t1]);
-    const client = Client.builder()
-      .relays(["wss://a.example", "wss://b.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://a.example", "wss://b.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     const events = await client.fetchEvents({ kinds: [1], limit: 2 });
     expect(events.map((e) => e.id)).toStrictEqual([t3.id, t2.id]);
     await client.shutdown();
@@ -193,11 +193,11 @@ describe("issue #125", () => {
 
   test("#9 fetchEvents returns ephemeral events a relay sends before EOSE", async () => {
     MockWebSocket.reset();
-    const client = Client.builder()
-      .relays(["wss://ephemeral.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://ephemeral.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     const keys = Keys.fromSecretKey(SK);
     const eph = EventBuilder.textNote("live-only").kind(20001).createdAt(1).signWithKeys(keys);
 

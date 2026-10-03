@@ -9,8 +9,8 @@ import { EventBuilder } from "../core/builder.ts";
 import { EventValidationError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
-import { getDTag, isTag, Tag } from "../core/tag.ts";
-import { assertHex32, isHex32, normalizeURL } from "../core/util.ts";
+import { firstTagValue, getDTag, isTag, Tag } from "../core/tag.ts";
+import { assertHex32, isHex32, normalizeRelayUrls } from "../core/util.ts";
 
 /**
  * Structural crypto used by NIP-51 private tags. Satisfied by NostrSigner when
@@ -35,26 +35,14 @@ function requireKind(event: Pick<Event, "kind">, kind: number): void {
 }
 
 function collectRelays(tags: Event["tags"]): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
+  const urls: string[] = [];
   for (const tag of tags) {
     const value = tag.at(1);
-    if (tag[0] !== "relay" || value === undefined || value === "") {
-      continue;
+    if (tag[0] === "relay" && value !== undefined) {
+      urls.push(value);
     }
-    let url: string;
-    try {
-      url = normalizeURL(value);
-    } catch {
-      continue;
-    }
-    if (seen.has(url)) {
-      continue;
-    }
-    seen.add(url);
-    out.push(url);
   }
-  return out;
+  return normalizeRelayUrls(urls);
 }
 
 function collectEmoji(tags: Event["tags"]): Array<{ shortcode: string; url: string }> {
@@ -71,16 +59,6 @@ function collectEmoji(tags: Event["tags"]): Array<{ shortcode: string; url: stri
     out.push({ shortcode, url });
   }
   return out;
-}
-
-function firstTagValue(tags: Event["tags"], name: string): string | undefined {
-  for (const tag of tags) {
-    const value = tag.at(1);
-    if (tag[0] === name && value !== undefined && value !== "") {
-      return value;
-    }
-  }
-  return undefined;
 }
 
 function identifier(tags: Event["tags"]): string {
@@ -336,7 +314,8 @@ export function parseEmojiSet(event: Pick<Event, "kind" | "tags">): {
     emoji: Array<{ shortcode: string; url: string }>;
   } = { d: identifier(event.tags), emoji: collectEmoji(event.tags) };
   const title = firstTagValue(event.tags, "title");
-  if (title !== undefined) {
+  // empty title is treated as absent
+  if (title !== undefined && title !== "") {
     result.title = title;
   }
   return result;

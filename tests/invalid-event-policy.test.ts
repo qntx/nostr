@@ -124,10 +124,13 @@ describe("invalid-event policy", () => {
 
     const event = EventBuilder.textNote("publish").createdAt(10).signWithKeys(keys);
     const results = await pool.publish([A, B], event, { timeoutMs: 1000 });
-    const resultA = results.find((r) => r.url === A);
+    const resultA = results.find((r) => r.url === normalizeURL(A));
     const resultB = results.find((r) => r.url === normalizeURL(B));
-    expect(resultA?.error).toContain("suspended");
-    expect(resultB?.result?.ok).toBe(true);
+    expect(resultA).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("suspended"),
+    });
+    expect(resultB?.status).toBe("ok");
 
     const fetched = await pool.fetch([A, B], [{ ids: [note.id] }], { timeoutMs: 1000 });
     expect(fetched.map((e) => e.id)).toStrictEqual([note.id]);

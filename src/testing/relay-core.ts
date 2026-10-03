@@ -1,3 +1,4 @@
+import { errorMessage } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { compareEventsDesc, validateSignedEvent } from "../core/event.ts";
 import { matchFilter } from "../core/filter.ts";
@@ -11,19 +12,21 @@ import type { PutResult } from "../storage/types.ts";
 
 export type FakeRelayOptions = {
   /** Delay before every relay→client message. */
-  latencyMs?: number;
-  auth?: {
-    /** Sent as `["AUTH", challenge]` right after the socket opens. */
-    challenge: string;
-    /** REQ whose filters can match these kinds is CLOSED `auth-required:` until AUTH succeeds. */
-    readKinds?: ReadonlyArray<number>;
-    /** EVENT → `["OK", id, false, "auth-required: ..."]` until AUTH succeeds. */
-    writes?: boolean;
-  };
+  latencyMs?: number | undefined;
+  auth?:
+    | {
+        /** Sent as `["AUTH", challenge]` right after the socket opens. */
+        challenge: string;
+        /** REQ whose filters can match these kinds is CLOSED `auth-required:` until AUTH succeeds. */
+        readKinds?: ReadonlyArray<number> | undefined;
+        /** EVENT → `["OK", id, false, "auth-required: ..."]` until AUTH succeeds. */
+        writes?: boolean | undefined;
+      }
+    | undefined;
   /** EVENT → `["OK", id, false, "rate-limited: ..."]`; nothing is stored. */
-  rateLimited?: boolean;
+  rateLimited?: boolean | undefined;
   /** Out-of-order reply: send EOSE first, then the stored events. */
-  eoseBeforeEvents?: boolean;
+  eoseBeforeEvents?: boolean | undefined;
 };
 
 export type FakeRelay = {
@@ -198,7 +201,7 @@ export class FakeRelayCore implements FakeRelay {
         await session.queue;
         await this.#handle(session, raw);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         try {
           this.#send(session, ["NOTICE", `error: ${message}`]);
         } catch {

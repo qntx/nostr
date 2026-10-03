@@ -1,7 +1,9 @@
+import { onAbort, throwIfAborted } from "../core/abort.ts";
 import type { EventBuilder } from "../core/builder.ts";
 import type { Event } from "../core/event.ts";
 import { itemCompare } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
+import { SerialQueue } from "../core/serial.ts";
 import type { Gossip } from "../gossip/gossip.ts";
 import {
   Nip17Error,
@@ -15,6 +17,7 @@ import type { Recipient } from "../nips/nip17.ts";
 import { unwrap } from "../nips/nip59.ts";
 import type { Nip59Crypto } from "../nips/nip59.ts";
 import type { Pool, PoolPublishResult } from "../relay/pool.ts";
+import type { Closer } from "../relay/subscription.ts";
 import type {
   FetchPrivateMessagesOptions,
   PrivateMessageSendResult,
@@ -32,15 +35,13 @@ export type DmDeps = {
   markSeen: (id: string, relayUrl: string) => void;
   assertAlive: () => void;
   requireNip59Crypto: () => Nip59Crypto;
-  throwIfAborted: (signal?: AbortSignal) => void;
-  wantObserve: (flag?: boolean) => boolean;
   publish: (
     eventOrBuilder: Event | EventBuilder,
     opts?: PublishOptions,
   ) => Promise<PoolPublishResult[]>;
 };
 
-export function giftWrapRelays(gossip: Gossip, event: Event): string[] {
+export function giftWrapRelays(gossip: Gossip, event: Event): ReadonlyArray<string> {
   const targets: string[] = [];
   for (const tag of event.tags) {
     if (tag[0] === "p" && tag[1] !== undefined && tag[1] !== "") {
@@ -99,7 +100,7 @@ export async function sendPrivateMessage(
     wraps.map(async ({ recipient, wrap }) => {
       const relays = requireDmRelays(recipient, deps.gossip.dmRelays(recipient));
       const results = await deps.pool.publish(relays, wrap, { timeoutMs: opts?.timeoutMs });
-      if (results.some((r) => r.result?.ok === true) && deps.wantObserve(opts?.observe)) {
+      if (results.some((r) => r.status === "ok") && opts?.observe !== false) {
         deps.ingest(wrap);
       }
       return { recipient, wrap, results };
@@ -115,9 +116,9 @@ export async function fetchPrivateMessages(
   deps.assertAlive();
   const crypto = deps.requireNip59Crypto();
   const self = await crypto.getPublicKey();
-  deps.throwIfAborted(opts?.signal);
+  throwIfAborted(opts?.signal);
   await deps.hydrateGossip([self]);
-  deps.throwIfAborted(opts?.signal);
+  throwIfAborted(opts?.signal);
   const relays = requireDmRelays(self, deps.gossip.dmRelays(self));
   const urls = new Map<string, Set<string>>();
   const events = await deps.pool.fetch(
@@ -150,7 +151,7 @@ export async function fetchPrivateMessages(
       const rumor = await unwrap(crypto, wrap);
       const wrapUrls = urls.get(wrap.id);
       const firstUrl = wrapUrls?.values().next().value;
-      if (deps.wantObserve(opts?.observe)) {
+      if (opts?.observe !== false) {
         deps.ingest(wrap, firstUrl);
         // Every other relay that delivered the same wrap is recorded too.
         if (wrapUrls) {
@@ -177,13 +178,13 @@ export async function fetchPrivateMessages(
 export async function subscribePrivateMessages(
   deps: DmDeps,
   opts?: SubscribePrivateMessagesOptions,
-): Promise<{ close: (reason?: string) => void }> {
+): Promise<Closer> {
   deps.assertAlive();
   const crypto = deps.requireNip59Crypto();
   const self = await crypto.getPublicKey();
-  deps.throwIfAborted(opts?.signal);
+  throwIfAborted(opts?.signal);
   await deps.hydrateGossip([self]);
-  deps.throwIfAborted(opts?.signal);
+  throwIfAborted(opts?.signal);
   const relays = requireDmRelays(self, deps.gossip.dmRelays(self));
 
   const seen = new Set<string>();
@@ -202,15 +203,17 @@ export async function subscribePrivateMessages(
       deps.markSeen(wrapId, url);
     }
   };
-  let tail = Promise.resolve();
+  const queue = new SerialQueue();
   let closed = false;
+  let disposeAbort: (() => void) | undefined;
   const markClosed = (): void => {
     closed = true;
+    disposeAbort?.();
   };
   if (opts?.signal?.aborted === true) {
     markClosed();
   } else {
-    opts?.signal?.addEventListener("abort", markClosed, { once: true });
+    disposeAbort = onAbort(opts?.signal, markClosed);
   }
 
   const inner = deps.pool.subscribe(
@@ -244,13 +247,7 @@ export async function subscribePrivateMessages(
         if (closed) {
           return;
         }
-        const prev = tail;
-        let release: (() => void) | undefined;
-        tail = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        void (async () => {
-          await prev;
+        void queue.run(async () => {
           try {
             if (closed) {
               return;
@@ -264,17 +261,15 @@ export async function subscribePrivateMessages(
               return;
             }
             seen.add(rumor.id);
-            if (deps.wantObserve(opts?.observe)) {
+            if (opts?.observe !== false) {
               deps.ingest(wrap, relayUrl);
             }
             flushSeen(wrap.id);
             opts?.onevent?.({ wrap, rumor, relayUrl });
           } catch {
             // junk / forgery — not stored; keep the queue alive if a handler throws
-          } finally {
-            release?.();
           }
-        })();
+        });
       },
     },
   );

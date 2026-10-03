@@ -26,16 +26,16 @@ export type Scrypt = (
 
 export type Nip49EncryptOptions = {
   /** Scrypt log2(N) work factor, 1..22. Defaults to 16. */
-  logn?: number;
+  logn?: number | undefined;
   /** Key security byte recorded in the payload. Defaults to 0x02. */
-  ksb?: KeySecurityByte;
+  ksb?: KeySecurityByte | undefined;
   /** Scrypt implementation. Defaults to noble `scryptAsync`. */
-  scrypt?: Scrypt;
+  scrypt?: Scrypt | undefined;
 };
 
 export type Nip49DecryptOptions = {
   /** Scrypt implementation. Defaults to noble `scryptAsync`. */
-  scrypt?: Scrypt;
+  scrypt?: Scrypt | undefined;
 };
 
 const VERSION = 0x02;
@@ -81,7 +81,7 @@ async function deriveKey(
     });
   } catch (error) {
     throw new Nip49Error("scrypt failed", {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
   if (key.length !== 32) {
@@ -128,7 +128,7 @@ export async function decrypt(
     b = new Uint8Array(bech32.fromWords(decoded.words));
   } catch (error) {
     throw new Nip49Error("invalid ncryptsec", {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
   if (prefix !== "ncryptsec") {
@@ -164,7 +164,7 @@ export async function decrypt(
       throw error;
     }
     throw new Nip49Error("failed to decrypt", {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
 }

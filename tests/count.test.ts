@@ -523,9 +523,8 @@ describe("Pool.count + createFakeRelayNetwork", () => {
     // normalizeURL may add trailing slash
     const aRes = [...byUrl.values()].find((r) => r.url.includes("a.example"));
     const bRes = [...byUrl.values()].find((r) => r.url.includes("b.example"));
-    expect(aRes?.count).toBe(2);
-    expect(bRes?.count).toBe(1);
-    expect(aRes?.error).toBeUndefined();
+    expect(aRes).toMatchObject({ status: "ok", count: 2 });
+    expect(bRes).toMatchObject({ status: "ok", count: 1 });
 
     pool.close();
   });

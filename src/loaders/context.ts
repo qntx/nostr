@@ -1,5 +1,7 @@
 import type { Event } from "../core/event.ts";
+import { nowSeconds } from "../core/util.ts";
 import type { Pool } from "../relay/pool.ts";
+import { DEFAULT_REQUEST_TIMEOUT_MS } from "../relay/relay.ts";
 import type { ReactiveEventStore } from "../store/reactive.ts";
 
 export type LoaderContextOptions = {
@@ -12,10 +14,10 @@ export type LoaderContextOptions = {
    * Inbound-event sink for fetched events. Defaults to `index.add`; Client supplies its single
    * ingest path so loader fetches get gossip meta and persistence like every other inbound event.
    */
-  ingest?: (event: Event, relayUrl: string) => void;
+  ingest?: ((event: Event, relayUrl: string) => void) | undefined;
   /** Max age (seconds) before a fetched replaceable is considered stale. Default 2 days. */
-  staleAfterSec?: number;
-  fetchTimeoutMs?: number;
+  staleAfterSec?: number | undefined;
+  fetchTimeoutMs?: number | undefined;
 };
 
 /** Internal dependency bag for loaders — never a module-level singleton. */
@@ -33,7 +35,7 @@ export class LoaderContext {
     this.index = opts.index;
     this.ingest = opts.ingest ?? ((event, relayUrl) => this.index.add(event, relayUrl));
     this.staleAfterSec = opts.staleAfterSec ?? 60 * 60 * 24 * 2;
-    this.fetchTimeoutMs = opts.fetchTimeoutMs ?? 4400;
+    this.fetchTimeoutMs = opts.fetchTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   /** Snapshot of discovery/fallback relays. */
@@ -55,7 +57,7 @@ export class LoaderContext {
     this.#relays = [...urls];
   }
 
-  isFresh(fetchedAt: number, now: number = Math.floor(Date.now() / 1000)): boolean {
+  isFresh(fetchedAt: number, now: number = nowSeconds()): boolean {
     return now - fetchedAt < this.staleAfterSec;
   }
 }

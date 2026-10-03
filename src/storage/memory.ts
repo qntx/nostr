@@ -28,12 +28,12 @@ export class MemoryEventStore implements EventStore {
   }
 
   // oxlint-disable-next-line typescript/require-await -- EventStore is async; MemoryIndex is synchronous
-  async query(filters: Filter[]): Promise<Event[]> {
+  async query(filters: ReadonlyArray<Filter>): Promise<Event[]> {
     return this.#index.query(filters);
   }
 
   // oxlint-disable-next-line typescript/require-await -- EventStore is async; MemoryIndex is synchronous
-  async count(filters: Filter[]): Promise<number> {
+  async count(filters: ReadonlyArray<Filter>): Promise<number> {
     return this.#index.count(filters);
   }
 
@@ -43,7 +43,7 @@ export class MemoryEventStore implements EventStore {
   }
 
   // oxlint-disable-next-line typescript/require-await -- EventStore is async; MemoryIndex is synchronous
-  async remove(ids: string[]): Promise<number> {
+  async remove(ids: ReadonlyArray<string>): Promise<number> {
     return this.#index.remove(ids);
   }
 

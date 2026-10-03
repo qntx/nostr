@@ -181,11 +181,11 @@ afterEach(() => {
 
 describe("Client", () => {
   test("builder publish + fetchEvents end to end on mock relays", async () => {
-    const client = Client.builder()
-      .signer(new KeysSigner(SK))
-      .relays(["wss://a.example", "wss://b.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      signer: new KeysSigner(SK),
+      relays: ["wss://a.example", "wss://b.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
 
     await client.connect();
     expect(MockWebSocket.instances).toHaveLength(2);
@@ -204,7 +204,7 @@ describe("Client", () => {
     }
 
     const published = await publishP;
-    expect(published.every((r) => r.result?.ok)).toBe(true);
+    expect(published.every((r) => r.status === "ok")).toBe(true);
 
     const [, note] = eventFrameOf(MockWebSocket.instances[0]!);
 
@@ -233,10 +233,10 @@ describe("Client", () => {
   });
 
   test("fetchEach reports per-relay ends and ingests events with seenOn", async () => {
-    const client = Client.builder()
-      .relays(["wss://a.example", "wss://b.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      relays: ["wss://a.example", "wss://b.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
     const keys = Keys.fromSecretKey(SK);
     const shared = EventBuilder.textNote("shared").createdAt(1).signWithKeys(keys);
     const onlyA = EventBuilder.textNote("only a").createdAt(2).signWithKeys(keys);
@@ -277,10 +277,10 @@ describe("Client", () => {
   });
 
   test("fetchEach skips observe when asked", async () => {
-    const client = Client.builder()
-      .relays(["wss://quiet.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      relays: ["wss://quiet.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("not stored").createdAt(1).signWithKeys(keys);
 
@@ -299,7 +299,9 @@ describe("Client", () => {
   });
 
   test("publish requires signer when given EventBuilder", async () => {
-    const client = Client.builder().relays(["wss://a.example"]).build();
+    const client = new Client({
+      relays: ["wss://a.example"],
+    });
     await expect(client.publish(EventBuilder.textNote("x"))).rejects.toThrow(/signer/);
   });
 
@@ -332,20 +334,20 @@ describe("Client", () => {
     const tagged = Keys.fromSecretKey(
       "0000000000000000000000000000000000000000000000000000000000000001",
     );
-    const client = Client.builder()
-      .signer(author)
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      signer: author,
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
     await client.connect();
 
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://author-write.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://author-write.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(Keys.fromSecretKey(SK)),
     );
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://tagged-read.example", read: true, write: false }])
+      relayListEventBuilder([{ url: "wss://tagged-read.example", marker: "read" }])
         .createdAt(1)
         .signWithKeys(tagged),
     );
@@ -364,15 +366,15 @@ describe("Client", () => {
       replyOkToEvent(ws);
     }
     const results = await publishP;
-    expect(results.some((r) => r.result?.ok)).toBe(true);
+    expect(results.some((r) => r.status === "ok")).toBe(true);
     await client.shutdown();
   });
 
   test("subscribe two relays with eoseTimeoutMs fires oneose once", async () => {
-    const client = Client.builder()
-      .relays(["wss://a.example", "wss://b.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      relays: ["wss://a.example", "wss://b.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
     let eose = 0;
     const closer = client.subscribe(
       { kinds: [1] },
@@ -399,17 +401,17 @@ describe("Client", () => {
   test("gossip subscribe with eoseTimeoutMs fires oneose once", async () => {
     const author = Keys.fromSecretKey(SK);
     const tagged = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(author),
     );
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-b.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-b.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(tagged),
     );
@@ -441,13 +443,13 @@ describe("Client", () => {
   test("gossip subscribe leftover authors REQ default relays", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -469,13 +471,13 @@ describe("Client", () => {
   test("gossip fetchEvents leftover authors read notes from default relays", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -507,14 +509,14 @@ describe("Client", () => {
     MockWebSocket.autoConnect = false;
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .connectTimeoutMs(40)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+      connectTimeoutMs: 40,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -541,12 +543,12 @@ describe("Client", () => {
   test("gossip leftover with empty Client.relays throws before attach", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -570,12 +572,12 @@ describe("Client", () => {
 
   test("gossip all-routed authors skip empty Client.relays", async () => {
     const a = Keys.fromSecretKey(SK);
-    const client = Client.builder()
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -590,12 +592,12 @@ describe("Client", () => {
 
   test("gossip fetchEvents all-routed authors skip empty Client.relays", async () => {
     const a = Keys.fromSecretKey(SK);
-    const client = Client.builder()
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -620,13 +622,13 @@ describe("Client", () => {
   test("gossip subscribe leftover #p REQ default relays", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://in-a.example", read: true, write: false }])
+      relayListEventBuilder([{ url: "wss://in-a.example", marker: "read" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -645,13 +647,13 @@ describe("Client", () => {
   test("gossip subscribe leftover authors+#p REQ original filter on defaults", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -676,18 +678,18 @@ describe("Client", () => {
   test("gossip subscribe close fires onclose once across two outboxes", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-b.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-b.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(b),
     );
@@ -715,18 +717,18 @@ describe("Client", () => {
   test("gossip subscribe CLOSED waits for every outbox before onclose", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-b.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-b.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(b),
     );
@@ -757,18 +759,18 @@ describe("Client", () => {
     const c = Keys.fromSecretKey(
       "0000000000000000000000000000000000000000000000000000000000000002",
     );
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-b.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-b.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(b),
     );
@@ -798,13 +800,13 @@ describe("Client", () => {
   test("gossip leftover CLOSED waits for fallback pool before onclose", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -832,13 +834,13 @@ describe("Client", () => {
   test("gossip leftover two default relays stay one fallback pool", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default-a.example", "wss://default-b.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default-a.example", "wss://default-b.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -871,11 +873,11 @@ describe("Client", () => {
   });
 
   test("gossip empty filters fire oneose without opening sockets", async () => {
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     let eose = 0;
     let closed: string | undefined;
     client.subscribe([], {
@@ -895,11 +897,11 @@ describe("Client", () => {
   });
 
   test("subscribe empty filters without gossip throws via Pool", async () => {
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     expect(() => client.subscribe([])).toThrow(MessageError);
     expect(() => client.subscribe([])).toThrow("REQ requires at least one filter");
     expect(MockWebSocket.instances).toHaveLength(0);
@@ -909,11 +911,11 @@ describe("Client", () => {
   });
 
   test("fetchEvents empty filters without gossip throws via Pool.fetch", async () => {
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     await expect(client.fetchEvents([])).rejects.toThrow(MessageError);
     await expect(client.fetchEvents([])).rejects.toThrow("REQ requires at least one filter");
     expect(MockWebSocket.instances).toHaveLength(0);
@@ -921,11 +923,11 @@ describe("Client", () => {
   });
 
   test("fetchEvents empty filters with gossip stays []", async () => {
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     await expect(client.fetchEvents([], { gossip: true })).resolves.toStrictEqual([]);
     expect(MockWebSocket.instances).toHaveLength(0);
     await client.shutdown();
@@ -934,13 +936,13 @@ describe("Client", () => {
   test("gossip leftover and two generic filters do not forward caller id", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
@@ -961,11 +963,11 @@ describe("Client", () => {
     await client.shutdown();
     MockWebSocket.reset();
 
-    const genericClient = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const genericClient = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     const generics = genericClient.subscribe([{ kinds: [1] }, { kinds: [0] }], {
       gossip: true,
       id: "caller-id",
@@ -987,18 +989,18 @@ describe("Client", () => {
     const c = Keys.fromSecretKey(
       "0000000000000000000000000000000000000000000000000000000000000002",
     );
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-a.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-a.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(a),
     );
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://out-b.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://out-b.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(b),
     );
@@ -1033,15 +1035,15 @@ describe("Client", () => {
 
   test("custom verifyEvent returning false drops events on subscribe", async () => {
     let verifies = 0;
-    const client = Client.builder()
-      .relays(["wss://verify-drop.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .verifyEvent(() => {
+    const client = new Client({
+      relays: ["wss://verify-drop.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+      verifyEvent: () => {
         verifies += 1;
         return false;
-      })
-      .build();
+      },
+    });
 
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("rejected").createdAt(1).signWithKeys(keys);
@@ -1065,15 +1067,15 @@ describe("Client", () => {
 
   test("custom verifyEvent returning true still delivers events on subscribe", async () => {
     let verifies = 0;
-    const client = Client.builder()
-      .relays(["wss://verify-pass.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .verifyEvent(() => {
+    const client = new Client({
+      relays: ["wss://verify-pass.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+      verifyEvent: () => {
         verifies += 1;
         return true;
-      })
-      .build();
+      },
+    });
 
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("accepted").createdAt(1).signWithKeys(keys);
@@ -1117,14 +1119,14 @@ describe("Client", () => {
   });
 
   test("enablePing forwards interval so relays send dummy ping REQ", async () => {
-    const client = Client.builder()
-      .relays(["wss://ping.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .enablePing(true)
-      .pingIntervalMs(30)
-      .pingTimeoutMs(400)
-      .build();
+    const client = new Client({
+      relays: ["wss://ping.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+      enablePing: true,
+      pingIntervalMs: 30,
+      pingTimeoutMs: 400,
+    });
 
     await client.connect();
     const ws = MockWebSocket.last();
@@ -1134,12 +1136,12 @@ describe("Client", () => {
   });
 
   test("enablePing stays off by default", async () => {
-    const client = Client.builder()
-      .relays(["wss://no-ping.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .pingIntervalMs(10)
-      .build();
+    const client = new Client({
+      relays: ["wss://no-ping.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+      pingIntervalMs: 10,
+    });
 
     await client.connect();
     const ws = MockWebSocket.last();
@@ -1149,14 +1151,14 @@ describe("Client", () => {
   });
 
   test("unanswered dummy ping closes the socket using forwarded pingTimeoutMs", async () => {
-    const client = Client.builder()
-      .relays(["wss://ping-timeout.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .enablePing(true)
-      .pingIntervalMs(20)
-      .pingTimeoutMs(40)
-      .build();
+    const client = new Client({
+      relays: ["wss://ping-timeout.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+      enablePing: true,
+      pingIntervalMs: 20,
+      pingTimeoutMs: 40,
+    });
 
     await client.connect();
     const ws = MockWebSocket.last();
@@ -1168,15 +1170,15 @@ describe("Client", () => {
 
   test("gossip publish includes e/a relay hints and skips invalid ones", async () => {
     const author = new KeysSigner(SK);
-    const client = Client.builder()
-      .signer(author)
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      signer: author,
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
     await client.connect();
 
     client.gossip.ingest(
-      relayListEventBuilder([{ url: "wss://author-write.example", read: false, write: true }])
+      relayListEventBuilder([{ url: "wss://author-write.example", marker: "write" }])
         .createdAt(1)
         .signWithKeys(Keys.fromSecretKey(SK)),
     );
@@ -1206,17 +1208,17 @@ describe("Client", () => {
       replyOkToEventChecked(ws);
     }
     const results = await publishP;
-    expect(results.some((r) => r.result?.ok)).toBe(true);
+    expect(results.some((r) => r.status === "ok")).toBe(true);
     await client.shutdown();
   });
 
   test("gossip publish caps e/a hints at 5 unique URLs", async () => {
     const author = new KeysSigner(SK);
-    const client = Client.builder()
-      .signer(author)
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      signer: author,
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
     await client.connect();
 
     const note = EventBuilder.textNote("hints").createdAt(1);
@@ -1244,11 +1246,11 @@ describe("Client", () => {
 
   test("gossip publish with only invalid hints uses default relays", async () => {
     const author = new KeysSigner(SK);
-    const client = Client.builder()
-      .signer(author)
-      .relays(["wss://default.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .build();
+    const client = new Client({
+      signer: author,
+      relays: ["wss://default.example"],
+      websocketImplementation: MockWebSocketCtor,
+    });
     await client.connect();
 
     const publishP = client.publish(
@@ -1268,18 +1270,18 @@ describe("Client", () => {
       replyOkToEvent(ws);
     }
     const results = await publishP;
-    expect(results.some((r) => r.result?.ok)).toBe(true);
+    expect(results.some((r) => r.status === "ok")).toBe(true);
     await client.shutdown();
   });
 });
 
 describe("issue #130", () => {
   test("fetchEvents aborts mid-flight with signal.reason", async () => {
-    const client = Client.builder()
-      .relays(["wss://abort.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://abort.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
     const ac = new AbortController();
     const reason = new Error("user aborted");
     const fetchP = client.fetchEvents({ kinds: [1] }, { signal: ac.signal });
@@ -1289,16 +1291,16 @@ describe("issue #130", () => {
     await client.shutdown();
   });
 
-  test("throwing onstorageerror is reported and storage errors still surface", async () => {
+  test("throwing storageerror listener is reported and storage errors still surface", async () => {
     const { reported, restore } = stubReportError();
     const boom = new Error("callback boom");
     try {
       const inner = new MemoryEventStore();
-      const client = Client.builder()
-        .relays(["wss://a.example"])
-        .websocketImplementation(MockWebSocketCtor)
-        .enableReconnect(false)
-        .storage({
+      const client = new Client({
+        relays: ["wss://a.example"],
+        websocketImplementation: MockWebSocketCtor,
+        enableReconnect: false,
+        storage: {
           put: async (e) => inner.put(e),
           putMany: async () => Promise.reject(new Error("disk full")),
           get: async (id) => inner.get(id),
@@ -1309,11 +1311,11 @@ describe("issue #130", () => {
           clear: async () => inner.clear(),
           getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
           setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
-        })
-        .onstorageerror(() => {
-          throw boom;
-        })
-        .build();
+        },
+      });
+      client.on("storageerror", () => {
+        throw boom;
+      });
       await client.connect();
       const keys = Keys.fromSecretKey(SK);
       const note = EventBuilder.textNote("hi").createdAt(1).signWithKeys(keys);

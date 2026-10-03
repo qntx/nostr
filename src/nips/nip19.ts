@@ -1,6 +1,6 @@
 import { bech32 } from "@scure/base";
 
-import { NostrError } from "../core/error.ts";
+import { NostrError, errorMessage } from "../core/error.ts";
 import {
   assertByteLength,
   assertHex32,
@@ -60,9 +60,6 @@ export type DecodedResult =
 /** Error thrown by NIP-19 encoding/decoding failures. */
 export class Nip19Error extends NostrError {
   override name = "Nip19Error";
-  constructor(message: string) {
-    super(message);
-  }
 }
 
 type TLV = Record<number, Uint8Array[]>;
@@ -201,10 +198,21 @@ export function naddrEncode(addr: AddressPointer): NAddr {
   return encodeBech32("naddr", data);
 }
 
+function readUint32(bytes: Uint8Array): number {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
+}
+
 /** Decode a NIP-19 bech32 entity; throws {@link Nip19Error} on bad input or unknown prefix. */
 export function decode(code: string): DecodedResult {
-  const { prefix, words } = bech32.decode(code, Bech32MaxSize);
-  const data = new Uint8Array(bech32.fromWords(words));
+  let prefix: string;
+  let data: Uint8Array;
+  try {
+    const { prefix: hrp, words } = bech32.decode(code, Bech32MaxSize);
+    prefix = hrp;
+    data = new Uint8Array(bech32.fromWords(words));
+  } catch (error) {
+    throw new Nip19Error(`invalid bech32: ${errorMessage(error)}`, { cause: error });
+  }
 
   switch (prefix) {
     case "nprofile": {
@@ -247,7 +255,7 @@ export function decode(code: string): DecodedResult {
       }
       const kind = tlv[3]?.[0];
       if (kind !== undefined) {
-        pointer.kind = Number.parseInt(bytesToHex(kind), 16);
+        pointer.kind = readUint32(kind);
       }
       return { type: "nevent", data: pointer };
     }
@@ -273,7 +281,7 @@ export function decode(code: string): DecodedResult {
         data: {
           identifier: utf8Decoder.decode(tlv[0][0]),
           pubkey: bytesToHex(tlv[2][0]),
-          kind: Number.parseInt(bytesToHex(tlv[3][0]), 16),
+          kind: readUint32(tlv[3][0]),
           relays: tlv[1] ? tlv[1].map((d) => utf8Decoder.decode(d)) : [],
         },
       };
@@ -291,24 +299,5 @@ export function decode(code: string): DecodedResult {
       return { type: prefix, data: bytesToHex(data) };
     default:
       throw new Nip19Error(`unknown prefix ${prefix}`);
-  }
-}
-
-/** Decode `nostr:` URI or bare bech32; returns invalid sentinel instead of throwing. */
-export function decodeNostrURI(
-  nip19code: string,
-): DecodedResult | { type: "invalid"; data: undefined } {
-  try {
-    let code = nip19code;
-    if (code.startsWith("nostr:")) {
-      code = code.slice(6);
-      // NIP-21 excludes nsec from nostr: identifiers.
-      if (code.startsWith("nsec1")) {
-        return { type: "invalid", data: undefined };
-      }
-    }
-    return decode(code);
-  } catch {
-    return { type: "invalid", data: undefined };
   }
 }

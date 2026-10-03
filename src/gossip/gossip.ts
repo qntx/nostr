@@ -1,8 +1,9 @@
+import { touchKey, trimOldest } from "../core/collections.ts";
 import type { Event } from "../core/event.ts";
 import { isReplaceableWinner } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
-import { normalizeURL } from "../core/util.ts";
+import { normalizeRelayUrls, normalizeURL, nowSeconds } from "../core/util.ts";
 import { parseDmRelayList } from "../nips/nip17.ts";
 import { parseRelayList } from "../nips/nip65.ts";
 import type { RelayListItem } from "../nips/nip65.ts";
@@ -10,19 +11,19 @@ import type { RelayListItem } from "../nips/nip65.ts";
 /** Relay routing state for one pubkey: NIP-65 outbox/inbox plus NIP-17 DM relays. */
 export type PubkeyRoutes = {
   /** Relays the user writes to (outbox). NIP-65. */
-  write: string[];
+  readonly write: ReadonlyArray<string>;
   /** Relays the user reads from (inbox). NIP-65. */
-  read: string[];
+  readonly read: ReadonlyArray<string>;
   /** Relays for NIP-17 gift-wrap delivery. Kind 10050. */
-  dm: string[];
+  readonly dm: ReadonlyArray<string>;
   /** `created_at` of the last accepted kind:10002 list. */
-  updatedAt: number;
+  readonly updatedAt: number;
   /** `created_at` of the last accepted kind:10050 list. */
-  dmUpdatedAt: number;
+  readonly dmUpdatedAt: number;
   /** Event id of the last accepted kind:10002 (NIP-01 equal-timestamp tie-break). */
-  relayListId?: string | undefined;
+  readonly relayListId?: string | undefined;
   /** Event id of the last accepted kind:10050. */
-  dmListId?: string | undefined;
+  readonly dmListId?: string | undefined;
 };
 
 /** A filter split by gossip routes: per-relay narrowed filters plus the unrouted remainder. */
@@ -30,21 +31,24 @@ export type RoutedFilter = {
   /** Url → already-narrowed filter. Empty when nothing routed. */
   perRelay: Map<string, Filter>;
   /**
-   * Unrouted work for the caller: - no authors and no #p: original filter (today's "generic") -
-   * authors/#p all unrouted: original filter (today's "orphan") - mixed: narrowed leftover (today's
-   * fallback) - all routed: undefined
+   * Unrouted work for the caller:
+   *
+   * - No authors and no #p: original filter ("generic")
+   * - Authors/#p all unrouted: original filter ("orphan")
+   * - Mixed: narrowed leftover ("fallback")
+   * - All routed: undefined
    */
   remainder?: Filter;
 };
 
 export type GossipOptions = {
   /** Max relays to keep per direction when ranking. Default 4. */
-  maxRelaysPerPubkey?: number;
+  maxRelaysPerPubkey?: number | undefined;
   /**
    * Max pubkeys with tracked routes; the map is LRU — writes and lookups refresh recency, and
    * inserting beyond the cap drops the oldest entry. Default 10_000.
    */
-  maxPubkeys?: number;
+  maxPubkeys?: number | undefined;
 };
 
 function emptyRoutes(): PubkeyRoutes {
@@ -72,7 +76,11 @@ export class Gossip {
   }
 
   /**
-   * Ingest a routing list event. - kind:10002 → write/read (NIP-65) - kind:10050 → dm (NIP-17)
+   * Ingest a routing list event.
+   *
+   * - Kind:10002 → write/read (NIP-65)
+   * - Kind:10050 → dm (NIP-17)
+   *
    * Returns true if routes for that list type were updated.
    */
   ingest(event: Event): boolean {
@@ -99,8 +107,8 @@ export class Gossip {
 
   setRoutes(
     pubkey: string,
-    items: RelayListItem[],
-    updatedAt: number = Math.floor(Date.now() / 1000),
+    items: ReadonlyArray<RelayListItem>,
+    updatedAt: number = nowSeconds(),
     eventId?: string,
   ): boolean {
     const pk = pubkey.toLowerCase();
@@ -129,10 +137,10 @@ export class Gossip {
       } catch {
         continue;
       }
-      if (item.write && !write.includes(url)) {
+      if (item.marker !== "read" && !write.includes(url)) {
         write.push(url);
       }
-      if (item.read && !read.includes(url)) {
+      if (item.marker !== "write" && !read.includes(url)) {
         read.push(url);
       }
     }
@@ -152,7 +160,7 @@ export class Gossip {
   setDmRoutes(
     pubkey: string,
     relays: ReadonlyArray<string>,
-    updatedAt: number = Math.floor(Date.now() / 1000),
+    updatedAt: number = nowSeconds(),
     eventId?: string,
   ): boolean {
     const pk = pubkey.toLowerCase();
@@ -172,18 +180,7 @@ export class Gossip {
       return false;
     }
 
-    const dm: string[] = [];
-    for (const raw of relays) {
-      let url: string;
-      try {
-        url = normalizeURL(raw);
-      } catch {
-        continue;
-      }
-      if (!dm.includes(url)) {
-        dm.push(url);
-      }
-    }
+    const dm = normalizeRelayUrls(relays);
 
     this.#put(pk, {
       write: prev.write,
@@ -197,20 +194,20 @@ export class Gossip {
     return true;
   }
 
-  getRoutes(pubkey: string): PubkeyRoutes | undefined {
+  getRoutes(pubkey: string): Readonly<PubkeyRoutes> | undefined {
     return this.#lookup(pubkey.toLowerCase());
   }
 
-  outboxRelays(pubkey: string): string[] {
+  outboxRelays(pubkey: string): ReadonlyArray<string> {
     return this.#lookup(pubkey.toLowerCase())?.write ?? [];
   }
 
-  inboxRelays(pubkey: string): string[] {
+  inboxRelays(pubkey: string): ReadonlyArray<string> {
     return this.#lookup(pubkey.toLowerCase())?.read ?? [];
   }
 
   /** NIP-17 kind:10050 delivery relays for gift-wraps. */
-  dmRelays(pubkey: string): string[] {
+  dmRelays(pubkey: string): ReadonlyArray<string> {
     return this.#lookup(pubkey.toLowerCase())?.dm ?? [];
   }
 
@@ -227,10 +224,12 @@ export class Gossip {
   }
 
   /**
-   * Route a user-facing filter into per-relay sub-filters plus leftover. - authors → outbox relays,
-   * filter narrowed per relay's authors - #p only → inbox relays of those pubkeys - neither / all
-   * unrouted → remainder is the original filter - mixed → remainder is the narrowed leftover; all
-   * routed → no remainder
+   * Route a user-facing filter into per-relay sub-filters plus leftover.
+   *
+   * - Authors → outbox relays, filter narrowed per relay's authors
+   * - #p only → inbox relays of those pubkeys
+   * - Neither / all unrouted → remainder is the original filter
+   * - Mixed → remainder is the narrowed leftover; all routed → no remainder
    */
   route(filter: Filter): RoutedFilter {
     const authors = filter.authors?.map((a) => a.toLowerCase());
@@ -319,22 +318,14 @@ export class Gossip {
   #lookup(pk: string): PubkeyRoutes | undefined {
     const routes = this.#routes.get(pk);
     if (routes !== undefined) {
-      this.#routes.delete(pk);
-      this.#routes.set(pk, routes);
+      touchKey(this.#routes, pk, routes);
     }
     return routes;
   }
 
   /** Write at the newest LRU end, then trim the oldest beyond the cap. */
   #put(pk: string, routes: PubkeyRoutes): void {
-    this.#routes.delete(pk);
-    this.#routes.set(pk, routes);
-    while (this.#routes.size > this.#maxPubkeys) {
-      const oldest = this.#routes.keys().next().value;
-      if (oldest === undefined) {
-        break;
-      }
-      this.#routes.delete(oldest);
-    }
+    touchKey(this.#routes, pk, routes);
+    trimOldest(this.#routes, this.#maxPubkeys);
   }
 }

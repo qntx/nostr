@@ -10,6 +10,7 @@ import {
   Relay,
   RelayTimeoutError,
   SyncDirection,
+  bytesToHex,
   encodeClientMessage,
   parseClientMessage,
   parseRelayMessage,
@@ -51,6 +52,20 @@ function wrapEventStore(
     getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
     setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
   };
+}
+
+function varintBytes(n: number): number[] {
+  if (n === 0) {
+    return [0];
+  }
+  const digits: number[] = [];
+  let value = n;
+  while (value !== 0) {
+    digits.push(value % 128);
+    value = Math.floor(value / 128);
+  }
+  digits.reverse();
+  return digits.map((digit, i) => (i === digits.length - 1 ? digit : digit + 0x80));
 }
 
 function runUntilDone(
@@ -323,6 +338,58 @@ describe("Negentropy algorithm", () => {
     }
   });
 
+  test("varint bound timestamps round-trip, including above 2^31", () => {
+    const id = "ab".repeat(32);
+    // The bound varint carries timestamp + 1; 0 is reserved for the infinity bound.
+    for (const wire of [127, 128, 2 ** 31, 2 ** 32 + 5, Number.MAX_SAFE_INTEGER]) {
+      const storage = new NegentropyStorageVector();
+      storage.insert(1, id);
+      storage.seal();
+      const neg = new Negentropy(storage);
+      // version byte, bound {ts: wire-1, id: ""}, mode IdList, numIds 0
+      const query = bytesToHex(Uint8Array.from([0x61, ...varintBytes(wire), 0, 0x02, 0]));
+      const out = neg.reconcile(query);
+      // reply echoes the bound: version, ts varint, empty id prefix, IdList, count, id
+      const expected = `61${bytesToHex(Uint8Array.from(varintBytes(wire)))}000201${id}`;
+      expect(out.nextMessage).toBe(expected);
+      expect(out.have).toStrictEqual([]);
+      expect(out.need).toStrictEqual([]);
+    }
+  });
+
+  test("rejects oversized and truncated varints", () => {
+    const storage = new NegentropyStorageVector();
+    storage.insert(1, "ab".repeat(32));
+    storage.seal();
+    const neg = new Negentropy(storage);
+    // varint(2^53) exceeds Number.MAX_SAFE_INTEGER mid-decode
+    const overflow = bytesToHex(Uint8Array.from([0x61, ...varintBytes(2 ** 53), 0, 0]));
+    expect(() => neg.reconcile(overflow)).toThrow(Nip77Error);
+    // continuation bit set but the buffer ends
+    const truncated = bytesToHex(Uint8Array.from([0x61, 0x81]));
+    expect(() => neg.reconcile(truncated)).toThrow(Nip77Error);
+  });
+
+  test("reconcile converges for items with created_at above 2^31", () => {
+    const base = 2 ** 31 + 5000;
+    const keys = Keys.fromSecretKey(SK_A);
+    const events = Array.from({ length: 40 }, (_, i) =>
+      EventBuilder.textNote(`big-ts-${i}`)
+        .createdAt(base + i)
+        .signWithKeys(keys),
+    );
+    const missing = events[17]!;
+    const remote = events.filter((_, i) => i !== 17);
+    remote.push(note(SK_B, "extra", base + 100));
+    const extra = remote.at(-1)!;
+    const { have, need } = runUntilDone(
+      new Negentropy(storageFromEvents(events)),
+      new Negentropy(storageFromEvents(remote)),
+    );
+    expect(have).toStrictEqual([missing.id]);
+    expect(need).toStrictEqual([extra.id]);
+  });
+
   test("reconcile throws on a version byte outside 0x60..0x6f", () => {
     const storage = new NegentropyStorageVector();
     storage.seal();
@@ -384,12 +451,12 @@ describe("Relay.negReconcile + Client.sync", () => {
     const remote = note(SK_B, "from-relay", 20);
     net.relay("wss://neg.example").seed([remote]);
     const store = new MemoryEventStore();
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -406,12 +473,12 @@ describe("Relay.negReconcile + Client.sync", () => {
     const local = note(SK_A, "to-relay", 21);
     const store = new MemoryEventStore();
     await store.put(local);
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -435,7 +502,7 @@ describe("Relay.negReconcile + Client.sync", () => {
     await inner.putMany(events);
     let getCount = 0;
     let queryCount = 0;
-    let queried: Filter[] | undefined;
+    let queried: ReadonlyArray<Filter> | undefined;
     const store = wrapEventStore(inner, {
       get: async (id) => {
         getCount += 1;
@@ -447,13 +514,13 @@ describe("Relay.negReconcile + Client.sync", () => {
         return inner.query(filters);
       },
     });
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: false,
+    });
     await client.connect();
     const summary = await client.syncToRelay(
       "wss://neg.example",
@@ -489,13 +556,13 @@ describe("Relay.negReconcile + Client.sync", () => {
         return inner.query(filters);
       },
     });
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: false,
+    });
     await client.connect();
     const summary = await client.syncToRelay(
       "wss://neg.example",
@@ -514,12 +581,12 @@ describe("Relay.negReconcile + Client.sync", () => {
     const events = Array.from({ length: 16 }, (_, i) => note(SK_A, `n${i}`, 100 + i));
     const store = new MemoryEventStore();
     await store.putMany(events);
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await client.connect();
     let inflight = 0;
     let maxInflight = 0;
@@ -553,7 +620,7 @@ describe("Relay.negReconcile + Client.sync", () => {
     await inner.putMany(events);
     let getCount = 0;
     let queryCount = 0;
-    let queried: Filter[] | undefined;
+    let queried: ReadonlyArray<Filter> | undefined;
     const store = wrapEventStore(inner, {
       get: async (id) => {
         getCount += 1;
@@ -566,13 +633,13 @@ describe("Relay.negReconcile + Client.sync", () => {
         return found.filter((event) => event.id !== missing.id);
       },
     });
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: false,
+    });
     await client.connect();
     const summary = await client.syncToRelay(
       "wss://neg.example",
@@ -600,12 +667,12 @@ describe("Relay.negReconcile + Client.sync", () => {
     const boom = events[1]!;
     const store = new MemoryEventStore();
     await store.putMany(events);
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await client.connect();
     const origPublish = client.pool.publish.bind(client.pool);
     client.pool.publish = publishFailing(origPublish, boom.id);
@@ -627,12 +694,12 @@ describe("Relay.negReconcile + Client.sync", () => {
     const remote = note(SK_B, "stay", 22);
     net.relay("wss://neg.example").seed([remote]);
     const store = new MemoryEventStore();
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -668,13 +735,13 @@ describe("Relay.negReconcile + Client.sync", () => {
       getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
       setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: false,
+    });
     await client.connect();
     const summary = await client.syncToRelay(
       "wss://neg.example",
@@ -703,7 +770,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         return Promise.reject(new Error("disk full"));
       },
       get: async () => Promise.resolve(undefined),
-      query: async (_filters: Filter[]) => Promise.resolve([]),
+      query: async (_filters: ReadonlyArray<Filter>) => Promise.resolve([]),
       count: async () => Promise.resolve(0),
       negentropyItems: async () => Promise.resolve([]),
       remove: async () => Promise.resolve(0),
@@ -711,13 +778,13 @@ describe("Relay.negReconcile + Client.sync", () => {
       getOutboxBound: async () => Promise.resolve(undefined),
       setOutboxBound: async () => Promise.resolve(),
     };
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(true)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: true,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -745,7 +812,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         return Promise.reject(new Error("disk full"));
       },
       get: async () => Promise.resolve(undefined),
-      query: async (_filters: Filter[]) => Promise.resolve([]),
+      query: async (_filters: ReadonlyArray<Filter>) => Promise.resolve([]),
       count: async () => Promise.resolve(0),
       negentropyItems: async () => Promise.resolve([]),
       remove: async () => Promise.resolve(0),
@@ -753,13 +820,13 @@ describe("Relay.negReconcile + Client.sync", () => {
       getOutboxBound: async () => Promise.resolve(undefined),
       setOutboxBound: async () => Promise.resolve(),
     };
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(true)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: true,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -788,13 +855,13 @@ describe("Relay.negReconcile + Client.sync", () => {
         throw new Error("disk full");
       },
     });
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(true)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: true,
+    });
     await client.connect();
     let fetchCalls = 0;
     const fetchedIds: string[] = [];
@@ -834,13 +901,13 @@ describe("Relay.negReconcile + Client.sync", () => {
     net.relay("wss://neg-ok.example").seed([okRemote]);
     const inner = new MemoryEventStore();
     const store = wrapEventStore(inner, { putMany: putManyFailing(inner, failRemote.id) });
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://neg-fail.example", "wss://neg-ok.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(true)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://neg-fail.example", "wss://neg-ok.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: true,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -886,14 +953,14 @@ describe("Relay.negReconcile + Client.sync", () => {
       getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
       setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
-    const client = Client.builder()
-      .storage(store)
-      .gossip(gossip)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      gossip,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: false,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -938,14 +1005,14 @@ describe("Relay.negReconcile + Client.sync", () => {
       getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
       setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
-    const client = Client.builder()
-      .storage(store)
-      .gossip(gossip)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(true)
-      .build();
+    const client = new Client({
+      storage: store,
+      gossip,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: true,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -990,14 +1057,14 @@ describe("Relay.negReconcile + Client.sync", () => {
       getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
       setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
     };
-    const client = Client.builder()
-      .storage(store)
-      .gossip(gossip)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(true)
-      .build();
+    const client = new Client({
+      storage: store,
+      gossip,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: true,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -1032,14 +1099,14 @@ describe("Relay.negReconcile + Client.sync", () => {
       getOutboxBound: async () => Promise.resolve(undefined),
       setOutboxBound: async () => Promise.resolve(),
     };
-    const client = Client.builder()
-      .storage(store)
-      .gossip(gossip)
-      .relays(["wss://neg.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .persistEvents(true)
-      .build();
+    const client = new Client({
+      storage: store,
+      gossip,
+      relays: ["wss://neg.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+      persistEvents: true,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -1057,12 +1124,12 @@ describe("Relay.negReconcile + Client.sync", () => {
     net.relay("wss://neg.example").seed([remote]);
 
     const store = new MemoryEventStore();
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://silent-neg.example", "wss://neg.example"])
-      .websocketImplementation(dropSend(net.websocketImplementation, isSilentNegUrl))
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://silent-neg.example", "wss://neg.example"],
+      websocketImplementation: dropSend(net.websocketImplementation, isSilentNegUrl),
+      enableReconnect: false,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1] },
@@ -1091,12 +1158,12 @@ describe("Negentropy session timeout", () => {
 
   test("Client.sync rejects on session deadline when the relay never sends NEG-MSG", async () => {
     const store = new MemoryEventStore();
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://silent-neg.example"])
-      .websocketImplementation(silentWs())
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://silent-neg.example"],
+      websocketImplementation: silentWs(),
+      enableReconnect: false,
+    });
     await client.connect();
     const started = Date.now();
     await expect(
@@ -1110,12 +1177,12 @@ describe("Negentropy session timeout", () => {
 
   test("Client.sync throws the first rejection in URL order when every relay rejects", async () => {
     const store = new MemoryEventStore();
-    const client = Client.builder()
-      .storage(store)
-      .relays(["wss://silent-a.example", "wss://silent-b.example"])
-      .websocketImplementation(silentWs())
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      relays: ["wss://silent-a.example", "wss://silent-b.example"],
+      websocketImplementation: silentWs(),
+      enableReconnect: false,
+    });
     await client.connect();
     const syncErr = await client
       .sync({ kinds: [1] }, { direction: SyncDirection.Down, timeoutMs: 80 })
@@ -1145,12 +1212,12 @@ describe("issue #125", () => {
   test("#4 NEG-OPEN honors the filter limit", async () => {
     const notes = [note(SK_A, "n1", 1), note(SK_A, "n2", 2), note(SK_A, "n3", 3)];
     net.relay("wss://neg-limit.example").seed(notes);
-    const client = Client.builder()
-      .storage(new MemoryEventStore())
-      .relays(["wss://neg-limit.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: new MemoryEventStore(),
+      relays: ["wss://neg-limit.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     await client.connect();
     const summary = await client.sync(
       { kinds: [1], limit: 1 },

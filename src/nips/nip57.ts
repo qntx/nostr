@@ -12,8 +12,8 @@ import { EventValidationError } from "../core/error.ts";
 import { validateSignedEvent } from "../core/event.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { isAddressableKind, Kind } from "../core/kind.ts";
-import { eventAddress, getDTag, parseEventAddress, Tag } from "../core/tag.ts";
-import { hexToBytes, utf8Encoder } from "../core/util.ts";
+import { eventAddress, firstTagValue, getDTag, parseEventAddress, Tag } from "../core/tag.ts";
+import { hexToBytes, nowSeconds, utf8Encoder } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
 
 export type ProfileZapRequest = {
@@ -35,6 +35,9 @@ export type EventZapRequest = {
 };
 
 export function makeZapRequest(params: ProfileZapRequest | EventZapRequest): EventTemplate {
+  if (!Number.isSafeInteger(params.amount) || params.amount <= 0) {
+    throw new EventValidationError("zap amount must be a positive integer (msats)");
+  }
   if (params.relays.length === 0) {
     throw new EventValidationError("relays tag requires one or more URLs");
   }
@@ -68,7 +71,7 @@ export function makeZapRequest(params: ProfileZapRequest | EventZapRequest): Eve
 
   return {
     kind: Kind.ZapRequest,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: nowSeconds(),
     content: params.comment ?? "",
     tags,
   };
@@ -79,12 +82,13 @@ export type ZapReceiptContext = {
   lnurl?: string;
 };
 
-export type ZapReceiptValidation = {
-  valid: boolean;
-  reason?: string;
-  request?: Event;
-  amountMsats?: number;
-};
+export type ZapReceiptValidation =
+  | {
+      readonly valid: true;
+      readonly request: Event;
+      readonly amountMsats: number | undefined;
+    }
+  | { readonly valid: false; readonly reason: string };
 
 export type Bolt11Fields = {
   amountMsats?: number;
@@ -97,15 +101,6 @@ export type Bolt11Fields = {
   /** `x` tagged field — seconds after `timestamp` until expiry. Defaults to 3600 when absent. */
   expiry: number;
 };
-
-function firstTagValue(tags: ReadonlyArray<Tag>, name: string): string | undefined {
-  for (const tag of tags) {
-    if (tag[0] === name && tag[1] !== undefined) {
-      return tag[1];
-    }
-  }
-  return undefined;
-}
 
 function fail(reason: string): ZapReceiptValidation {
   return { valid: false, reason };
@@ -142,17 +137,19 @@ function amountMsatsFromHrp(hrp: string): number | undefined {
     return undefined;
   }
   const mul = m.at(2);
-  if (mul === undefined) {
-    return n * MSATS_PER_BTC;
-  }
-  if (mul === "m") {
-    return n * MSATS_PER_MILLI;
-  }
-  if (mul === "u") {
-    return n * MSATS_PER_MICRO;
-  }
-  if (mul === "n") {
-    return n * MSATS_PER_NANO;
+  const factor =
+    mul === undefined
+      ? MSATS_PER_BTC
+      : mul === "m"
+        ? MSATS_PER_MILLI
+        : mul === "u"
+          ? MSATS_PER_MICRO
+          : mul === "n"
+            ? MSATS_PER_NANO
+            : 0;
+  if (factor !== 0) {
+    const msats = n * factor;
+    return Number.isSafeInteger(msats) ? msats : undefined;
   }
   // p: 0.1 msat; drop amounts that are not whole millisats
   if (n % 10 !== 0) {
@@ -458,9 +455,7 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
     const amountMsats =
       bolt11.amountMsats ??
       (requestAmount === undefined ? undefined : parseMsatsTag(requestAmount));
-    return amountMsats === undefined
-      ? { valid: true, request }
-      : { valid: true, request, amountMsats };
+    return { valid: true, request, amountMsats };
   } catch {
     return fail("invalid receipt");
   }

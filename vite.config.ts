@@ -9,7 +9,7 @@ import { config as lintConfig, merge } from "@qntx/oxlint";
 
 const packWasm = process.env["WASM_PACK"] === "1";
 const wasmTest = process.env["WASM_TEST"] === "1";
-const storeBench = process.env["STORE_BENCH"] === "1";
+const bench = process.env["BENCH"] === "1";
 
 /** Always declare ./wasm so `vp pack` without WASM_PACK does not strip the export. */
 export function applyPackExports(pkgExports: Record<string, unknown>): Record<string, unknown> {
@@ -25,6 +25,12 @@ export function applyPackExports(pkgExports: Record<string, unknown>): Record<st
   }
   // Re-append after the generated "./package.json" so the export order is
   // identical whether or not the wasm entry was part of this build.
+  delete pkgExports["./wasm.browser"];
+  pkgExports["./wasm.browser"] = {
+    types: "./dist/wasm.browser.d.mts",
+    import: "./dist/wasm.browser.mjs",
+    default: "./dist/wasm.browser.mjs",
+  };
   delete pkgExports["./wasm"];
   pkgExports["./wasm"] = {
     types: "./dist/wasm.d.mts",
@@ -109,7 +115,6 @@ const config: UserConfig = defineConfig({
       "nips/nip59": "src/nips/nip59.ts",
       "nips/nip65": "src/nips/nip65.ts",
       "nips/nip77": "src/nips/nip77.ts",
-      "nips/nip96": "src/nips/nip96.ts",
       "nips/nip98": "src/nips/nip98.ts",
       testing: "src/testing/index.ts",
       // bun CI is Rust-free; wasm entry is publish / build:wasm only
@@ -128,7 +133,7 @@ const config: UserConfig = defineConfig({
   test: {
     include: wasmTest
       ? ["wasm-tests/**/*.ts"]
-      : storeBench
+      : bench
         ? ["bench/**/*.ts"]
         : ["tests/**/*.{test,spec}.ts"],
     exclude: ["3rdparty/**", "node_modules/**", "dist/**"],

@@ -16,13 +16,12 @@ export {
   type ReplaceableLoader,
   type ReplaceableLoadResult,
 } from "./replaceable.ts";
-export { type ListResult, type ListLoaders, type MutedEntity } from "./lists.ts";
+export { type ListResult, type ListLoaders } from "./lists.ts";
 export { bareNostrUser, type NostrUser, type ProfileLoader } from "./profile.ts";
 export { type EventLoader, type EventRef } from "./event.ts";
 export {
   OutboxError,
   OutboxFeed,
-  createOutboxFeed,
   groupAuthorsByOutboxRelay,
   type OutboxBound,
   type OutboxFeedOptions,
@@ -52,9 +51,9 @@ export type CreateLoadersOptions = {
    * Inbound-event sink for fetched events; defaults to `index.add`. Client wires its single ingest
    * path so loader fetches get gossip meta and persistence like every other inbound event.
    */
-  ingest?: (event: Event, relayUrl: string) => void;
-  staleAfterSec?: number;
-  fetchTimeoutMs?: number;
+  ingest?: ((event: Event, relayUrl: string) => void) | undefined;
+  staleAfterSec?: number | undefined;
+  fetchTimeoutMs?: number | undefined;
 };
 
 /** Build an instance-scoped loader suite (no module globals). */

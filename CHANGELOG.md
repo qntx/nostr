@@ -9,6 +9,41 @@ A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --prov
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** `ClientBuilder` and `Client.builder()`. Pass a `ClientOptions` object to `new Client(...)`.
+- **Breaking:** NIP-96 (`@qntx/nostr/nips/nip96`). The spec is `unrecommended` in favor of NIP-B7 Blossom, which `@qntx/nostr/nips/blossom` implements.
+- **Breaking:** `createOutboxFeed` (use `new OutboxFeed(...)`), `decodeNostrURI` (use `parseNostrURI` / `isNostrURI` from NIP-21), `markerOf`, `BUNKER_REGEX`, the `MutedEntity` type (mute lists use NIP-51 `MuteItem`), and the unreferenced `src/nips/index.ts` barrel.
+- **Breaking:** the `Subscription` class is no longer exported; `Relay.subscribe` returns the `RelaySubscription` type. `ReactiveEventStore` no longer exposes `_version`, `_register`, or `_unregister`.
+
+### Changed
+
+- **Breaking:** `Relay` lifecycle callbacks `onnotice`, `onclose`, `onauth`, `onreconnect`, and `oninvalidevent` are replaced by `relay.on(type, listener)`, which returns an unsubscribe function and is typed by `RelayEventMap`. `Pool` registers its own bookkeeping through the same API, so user listeners can no longer overwrite it. `Client` replaces the `onstorageerror` option and property with `client.on("storageerror", listener)`.
+- **Breaking:** `PoolPublishResult` and `PoolCountResult` are discriminated by `status` (`"ok" | "rejected" | "failed"`, and `"ok" | "failed"` for COUNT). `Pool.publishAny` resolves to the `"ok"` variant.
+- **Breaking:** `PoolOptions` is derived from `RelayOptions` and `ClientOptions` from `PoolOptions`, so every relay option is accepted, and forwarded, at every layer. Exported option bags accept `undefined` for every optional property, and public methods take `ReadonlyArray` inputs.
+- **Breaking:** NIP-65 `RelayListItem` is `{ url, marker }` with `RelayMarker = "read" | "write" | "both"`, so an item can no longer be neither read nor write.
+- **Breaking:** NIP-57 `validateZapReceipt` returns a discriminated `ZapReceiptValidation` (`{ valid: true, request, amountMsats }` or `{ valid: false, reason }`), and `makeZapRequest` rejects an `amount` that is not a positive safe integer.
+- **Breaking:** `WasmVerifyPoisonedError` is renamed `WasmPoisonedError`; it is also raised by `sign` and `publicKey` on an aborted instance.
+- **Breaking:** `Pool.publish`, `publishAny`, `fetchEach`, and `count` de-duplicate relay URLs after normalization and report the normalized URL.
+- `signEvent` throws `EventValidationError` (not `CryptoError`) for a structurally invalid unsigned event. NIP-04 decoding failures throw `CryptoError`, NIP-19 `decode` wraps bech32 failures in `Nip19Error`, and NIP-21 `parseNostrURI` throws `Nip21Error`.
+- Blossom `createAuthTemplate` / `createUploadAuth` accept `servers` to add BUD-11 `server` scoping tags, and `upload` / `checkUpload` accept a precomputed `sha256` so the blob is not hashed twice.
+- `Relay` connection state is a single status plus a manual-stop flag instead of four overlapping booleans.
+- `ReactiveEventStore` tracks the ids pinned by subscribed watches incrementally instead of rebuilding the set on every over-capacity insert.
+- `OutboxFeed` persists live outbox bounds in one trailing write per second instead of one write per event.
+- NIP-13 `minePow` serializes the event once per second and writes only the nonce digits per hash.
+- The NIP-77 decoder reads through a cursor instead of allocating a view per byte.
+
+### Fixed
+
+- Two concurrent `Relay.publish` calls for the same event no longer reject the first with a timeout after the relay answered OK; the second call joins the in-flight publish.
+- `Relay.fetch`, `Pool.fetch`, `Pool.subscribe`, `subscriptionToAsyncIterable`, `Relay.count`, NIP-77 sessions, and `subscribePrivateMessages` no longer leave an `abort` listener on a long-lived `AbortSignal` after they finish.
+- NIP-77 varints are decoded and encoded arithmetically, so timestamps after 2038 and values above 2^32 round-trip.
+- NIP-46 `parseBunkerURL` parses with `URL`, so secrets containing `+`, spaces, or other reserved characters round-trip through `toBunkerURL`.
+- `Relay` no longer references `WebAssembly`, which threw a `ReferenceError` on Hermes when a custom verifier threw.
+- Profile metadata parsing keeps only string-valued `ProfileMetadata` fields instead of passing arbitrary JSON through.
+- NIP-59 timestamp randomization uses unbiased rejection sampling.
+- `vp pack` without `WASM_PACK` no longer deletes the `./wasm.browser` export from `package.json`.
+
 ## [0.6.0] - 2026-10-02
 
 ### Added

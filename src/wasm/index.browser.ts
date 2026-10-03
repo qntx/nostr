@@ -1,2 +1,2 @@
 export { loadNostrWasm, type LoadNostrWasmOptions, type NostrWasm } from "./load.browser.ts";
-export { WasmVerifyPoisonedError } from "./adapter.ts";
+export { WasmPoisonedError } from "./adapter.ts";

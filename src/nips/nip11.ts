@@ -82,7 +82,7 @@ export function relayInfoHttpUrl(wsUrl: string): string {
     url = new URL(wsUrl);
   } catch (error) {
     throw new Nip11Error(`invalid relay URL: ${wsUrl}`, {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
 
@@ -157,7 +157,7 @@ export async function fetchRelayInformation(
     { headers: { Accept: ACCEPT }, signal: opts?.signal },
     (cause) =>
       new Nip11Error(`relay information request failed: ${httpUrl}`, {
-        cause: cause instanceof Error ? cause : undefined,
+        cause,
       }),
   );
 
@@ -170,7 +170,7 @@ export async function fetchRelayInformation(
     json = await res.json();
   } catch (error) {
     throw new Nip11Error("relay information document is not valid JSON", {
-      cause: error instanceof Error ? error : undefined,
+      cause: error,
     });
   }
 

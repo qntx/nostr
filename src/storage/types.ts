@@ -32,9 +32,9 @@ export type EventStore = {
    */
   putMany: (events: ReadonlyArray<Event>) => Promise<PutResult[]>;
   get: (id: string) => Promise<Event | undefined>;
-  query: (filters: Filter[]) => Promise<Event[]>;
+  query: (filters: ReadonlyArray<Filter>) => Promise<Event[]>;
   /** Unique events matching `filters` (same cardinality as {@link query}). */
-  count: (filters: Filter[]) => Promise<number>;
+  count: (filters: ReadonlyArray<Filter>) => Promise<number>;
   /**
    * Matching `{ id, created_at }` for one filter, sorted created_at asc then id. Does not allocate
    * an `Event[]`.
@@ -43,6 +43,6 @@ export type EventStore = {
   getOutboxBound: (pubkey: string, kind: number) => Promise<OutboxBound | undefined>;
   setOutboxBound: (pubkey: string, kind: number, bound: OutboxBound) => Promise<void>;
   /** Remove by id (does not publish NIP-09). */
-  remove: (ids: string[]) => Promise<number>;
+  remove: (ids: ReadonlyArray<string>) => Promise<number>;
   clear: () => Promise<void>;
 };

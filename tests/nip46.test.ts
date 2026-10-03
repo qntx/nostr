@@ -67,6 +67,19 @@ describe("nip46 protocol", () => {
     });
   });
 
+  test("bunker URL round-trips a secret with reserved characters", () => {
+    const pointer = {
+      pubkey: getPublicKey(BUNKER_SK),
+      relays: ["wss://relay.example"],
+      secret: "a b+c~d&e=f",
+    };
+    expect(parseBunkerURL(toBunkerURL(pointer))).toStrictEqual({
+      pubkey: pointer.pubkey,
+      relays: pointer.relays,
+      secret: "a b+c~d&e=f",
+    });
+  });
+
   test("nostrconnect URI round-trip", () => {
     const clientPubkey = getPublicKey(CLIENT_SK);
     const uri = createNostrConnectURI({
@@ -444,7 +457,7 @@ describe("Nip46Signer", () => {
             }),
             publish: async () => {
               await Promise.resolve();
-              return [{ result: { ok: true, message: "" } }];
+              return [{ status: "ok", message: "" }];
             },
             close: () => {
               poolClosed = true;
@@ -615,8 +628,8 @@ describe("issue #130", () => {
           publish: async () => {
             await Promise.resolve();
             return [
-              { error: "blocked: spam" },
-              { result: { ok: false, message: "restricted: no" } },
+              { status: "failed", error: "blocked: spam" },
+              { status: "rejected", message: "restricted: no" },
             ];
           },
           close: () => {},

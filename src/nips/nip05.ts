@@ -46,9 +46,6 @@ export type Nip05Fetch = ManualFetch;
 
 export class Nip05Error extends NostrError {
   override name = "Nip05Error";
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-  }
 }
 
 /** Matches optional local@domain. Groups: 1=local (optional), 2=domain. */

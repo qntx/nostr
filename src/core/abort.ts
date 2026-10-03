@@ -13,6 +13,19 @@ export function throwIfAborted(signal: AbortSignal | undefined): void {
   }
 }
 
+/** Listen for `abort` once; the returned disposer removes the listener. No-op without a signal. */
+export function onAbort(signal: AbortSignal | undefined, listener: () => void): () => void {
+  if (!signal) {
+    return () => {
+      // no signal — nothing to remove
+    };
+  }
+  signal.addEventListener("abort", listener, { once: true });
+  return () => {
+    signal.removeEventListener("abort", listener);
+  };
+}
+
 /**
  * Race `promise` against the caller's `signal` without cancelling the shared work: on abort the
  * returned promise rejects with `signal.reason` (or an `AbortError`-named Error) while `promise`
@@ -29,11 +42,10 @@ export async function raceSignal<T>(
     throw abortReason(signal);
   }
   return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => {
+    const dispose = onAbort(signal, () => {
       // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the rejection is the caller's signal.reason verbatim
       reject(abortReason(signal));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
+    });
     void (async (): Promise<void> => {
       try {
         resolve(await promise);
@@ -41,7 +53,7 @@ export async function raceSignal<T>(
         // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- forwards the raced promise's own rejection
         reject(error);
       } finally {
-        signal.removeEventListener("abort", onAbort);
+        dispose();
       }
     })();
   });

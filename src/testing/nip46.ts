@@ -1,7 +1,7 @@
 import { Keys, finalizeEvent } from "../core/index.ts";
 import { Kind } from "../core/kind.ts";
 import { isTag } from "../core/tag.ts";
-import { isRecord } from "../core/util.ts";
+import { isRecord, nowSeconds } from "../core/util.ts";
 import {
   getConversationKey,
   decrypt as nip44Decrypt,
@@ -18,27 +18,27 @@ export type FakeNip46SignerOptions = {
   /** Pubkey of the NIP-46 client under test. */
   clientPubkey: string;
   /** Remote-signer key; random when omitted. */
-  bunkerSk?: string;
+  bunkerSk?: string | undefined;
   /** The user key the signer signs for; random when omitted. */
-  userSk?: string;
+  userSk?: string | undefined;
   /** First answer `auth_url` (result) with this URL in the error field, then the real response. */
-  authUrl?: string;
-  authUrlMethods?: ReadonlyArray<string>;
+  authUrl?: string | undefined;
+  authUrlMethods?: ReadonlyArray<string> | undefined;
   /** Delay in ms before the real response after an `auth_url` reply. */
-  authReplyDelayMs?: number;
+  authReplyDelayMs?: number | undefined;
   /** Collected RPC requests (mutated as they arrive). */
-  requests?: Array<{ method: string; params: string[] }>;
+  requests?: Array<{ method: string; params: string[] }> | undefined;
   /** `switch_relays` result. Default `"null"`. */
   switchRelays?: string[] | undefined;
   /** Override `connect` RPC result. Default `"ack"`. */
-  connectResult?: string;
+  connectResult?: string | undefined;
   /** Reply with neither `result` nor `error` for these methods. */
-  emptyMethods?: ReadonlyArray<string>;
+  emptyMethods?: ReadonlyArray<string> | undefined;
   /**
    * Serialize the response JSON; default {@link encodeNip46Response}, which omits absent fields.
    * Lets tests put explicit `null`s on the wire like some remote signers do.
    */
-  encodeResponse?: (res: Nip46Response) => string;
+  encodeResponse?: ((res: Nip46Response) => string) | undefined;
 };
 
 export type FakeNip46Signer = {
@@ -210,7 +210,7 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
         kind: Kind.NostrConnect,
         tags: [["p", clientPubkey]],
         content: nip44Encrypt(payload, convKey),
-        created_at: Math.floor(Date.now() / 1000),
+        created_at: nowSeconds(),
       },
       bunkerKeys.secretKey,
     );
@@ -229,7 +229,7 @@ export function createFakeNip46Signer(opts: FakeNip46SignerOptions): FakeNip46Si
           kind: Kind.NostrConnect,
           tags: [["p", opts.clientPubkey]],
           content: nip44Encrypt(payload, convKey),
-          created_at: Math.floor(Date.now() / 1000),
+          created_at: nowSeconds(),
         },
         bunkerKeys.secretKey,
       );

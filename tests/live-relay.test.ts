@@ -38,16 +38,16 @@ describeLive("live relay", () => {
     await ensureNodeWebSocket();
     const url = LIVE!;
     const keys = Keys.generate();
-    const client = Client.builder()
-      .signer(new KeysSigner(keys))
-      .relays([url])
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      signer: new KeysSigner(keys),
+      relays: [url],
+      enableReconnect: false,
+    });
 
     await client.connect();
     const stamp = `qntx-live-${Date.now()}`;
     const results = await client.publish(EventBuilder.textNote(stamp));
-    expect(results.some((r) => r.result?.ok)).toBe(true);
+    expect(results.some((r) => r.status === "ok")).toBe(true);
 
     const found = await client.fetchEvents(
       { kinds: [1], authors: [keys.publicKey], limit: 5 },

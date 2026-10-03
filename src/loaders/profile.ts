@@ -1,6 +1,7 @@
 import type { ProfileMetadata } from "../core/builder.ts";
 import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
+import { isRecord } from "../core/util.ts";
 import { npubEncode } from "../nips/nip19.ts";
 import type { LoadStyle, ReplaceableLoader } from "./replaceable.ts";
 
@@ -40,13 +41,32 @@ function nonEmpty(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
+const PROFILE_METADATA_KEYS: ReadonlyArray<keyof ProfileMetadata> = [
+  "name",
+  "display_name",
+  "about",
+  "picture",
+  "banner",
+  "website",
+  "nip05",
+  "lud06",
+  "lud16",
+];
+
 function parseMetadata(content: string): ProfileMetadata {
   try {
     const obj: unknown = JSON.parse(content);
-    if (typeof obj !== "object" || obj === null) {
+    if (!isRecord(obj)) {
       return {};
     }
-    return obj;
+    const out: Record<string, string> = {};
+    for (const key of PROFILE_METADATA_KEYS) {
+      const value = obj[key];
+      if (typeof value === "string") {
+        out[key] = value;
+      }
+    }
+    return out;
   } catch {
     return {};
   }

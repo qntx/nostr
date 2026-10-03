@@ -58,7 +58,7 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
   throw new Error("timeout waiting for condition");
 }
 
-function idsOf(filters: Filter[]): string[] {
+function idsOf(filters: ReadonlyArray<Filter>): string[] {
   const ids = filters[0]?.ids;
   if (!ids) {
     throw new Error("expected filter.ids");

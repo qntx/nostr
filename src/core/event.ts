@@ -116,6 +116,17 @@ export function getEventHash(event: UnsignedEvent): string {
   return bytesToHex(sha256(utf8Encoder.encode(serialized)));
 }
 
+/** Id tie-break: plain code-unit order (ids are canonical lowercase hex, so `<` is lexical). */
+function compareIds(a: { id: string }, b: { id: string }): number {
+  if (a.id < b.id) {
+    return -1;
+  }
+  if (a.id > b.id) {
+    return 1;
+  }
+  return 0;
+}
+
 /**
  * NIP-01 newest-first order: `created_at` descending, then `id` in plain code-unit order (ids are
  * canonical lowercase hex, so `<` is lexical order).
@@ -127,13 +138,7 @@ export function compareEventsDesc(
   if (a.created_at !== b.created_at) {
     return b.created_at - a.created_at;
   }
-  if (a.id < b.id) {
-    return -1;
-  }
-  if (a.id > b.id) {
-    return 1;
-  }
-  return 0;
+  return compareIds(a, b);
 }
 
 /**
@@ -160,13 +165,7 @@ export function itemCompare(
   if (a.created_at !== b.created_at) {
     return a.created_at - b.created_at;
   }
-  if (a.id < b.id) {
-    return -1;
-  }
-  if (a.id > b.id) {
-    return 1;
-  }
-  return 0;
+  return compareIds(a, b);
 }
 
 /**

@@ -1,19 +1,10 @@
 import { EventValidationError } from "./error.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "./event.ts";
 import { finalizeEvent } from "./key.ts";
-import type { Keys, SecretKey } from "./key.ts";
+import type { Keys, SecretKeyInput } from "./key.ts";
 import { Kind, isAddressableKind, isReplaceableKind } from "./kind.ts";
 import { Tag, formatEventAddress, getDTag, parseEventAddress } from "./tag.ts";
-import { normalizeURL } from "./util.ts";
-
-function hasProtectedTag(event: Event): boolean {
-  for (const tag of event.tags) {
-    if (tag[0] === "-") {
-      return true;
-    }
-  }
-  return false;
-}
+import { normalizeURL, nowSeconds } from "./util.ts";
 
 /** NIP-18 e third entry MUST be a relay URL; empty string is not one. */
 function requireRelayUrl(relayHint: string | undefined): string {
@@ -43,14 +34,12 @@ export type ProfileMetadata = {
 export class EventBuilder {
   #kind: number;
   #content: string;
-  readonly #tags: Tag[];
+  readonly #tags: Tag[] = [];
   #createdAt: number | undefined;
 
   constructor(kind: number, content = "") {
     this.#kind = kind;
     this.#content = content;
-    this.#tags = [];
-    this.#createdAt = undefined;
   }
 
   static textNote(content: string): EventBuilder {
@@ -61,7 +50,7 @@ export class EventBuilder {
     return new EventBuilder(Kind.Metadata, JSON.stringify(meta));
   }
 
-  static contacts(pubkeys: string[]): EventBuilder {
+  static contacts(pubkeys: ReadonlyArray<string>): EventBuilder {
     const b = new EventBuilder(Kind.Contacts, "");
     for (const pk of pubkeys) {
       b.#tags.push(Tag.p(pk));
@@ -129,8 +118,8 @@ export class EventBuilder {
     if (target.kind !== Kind.TextNote) {
       throw new EventValidationError("non-kind-1 uses EventBuilder.genericRepost");
     }
-    const hint = requireRelayUrl(opts?.relayHint);
-    const content = hasProtectedTag(target) ? "" : JSON.stringify(target);
+    const hint = requireRelayUrl(opts.relayHint);
+    const content = target.tags.some((tag) => tag[0] === "-") ? "" : JSON.stringify(target);
     const b = new EventBuilder(Kind.Repost, content);
     b.#tags.push(Tag.e(target.id, hint));
     b.#tags.push(Tag.p(target.pubkey));
@@ -141,7 +130,7 @@ export class EventBuilder {
     if (target.kind === Kind.TextNote) {
       throw new EventValidationError("kind 1 uses EventBuilder.repost");
     }
-    const hint = requireRelayUrl(opts?.relayHint);
+    const hint = requireRelayUrl(opts.relayHint);
     const replaceable = isReplaceableKind(target.kind);
     const addressable = isAddressableKind(target.kind);
     const d = getDTag(target.tags);
@@ -149,11 +138,11 @@ export class EventBuilder {
       throw new EventValidationError("addressable event is missing d tag");
     }
 
-    const content =
-      hasProtectedTag(target) || replaceable || addressable ? "" : JSON.stringify(target);
+    const protectedTag = target.tags.some((tag) => tag[0] === "-");
+    const content = protectedTag || replaceable || addressable ? "" : JSON.stringify(target);
     const b = new EventBuilder(Kind.GenericRepost, content);
     b.#tags.push(Tag.e(target.id, hint));
-    b.#tags.push(Tag.p(opts?.pPubkey ?? target.pubkey));
+    b.#tags.push(Tag.p(opts.pPubkey ?? target.pubkey));
     b.#tags.push(Tag.k(target.kind));
     if (replaceable || addressable) {
       b.#tags.push(Tag.a(formatEventAddress(target.kind, target.pubkey, d ?? "")));
@@ -210,7 +199,7 @@ export class EventBuilder {
       kind: this.#kind,
       content: this.#content,
       tags: [...this.#tags],
-      created_at: this.#createdAt ?? Math.floor(Date.now() / 1000),
+      created_at: this.#createdAt ?? nowSeconds(),
     };
   }
 
@@ -224,7 +213,7 @@ export class EventBuilder {
   }
 
   /** Sign with local Keys (synchronous). */
-  signWithKeys(keys: Keys | SecretKeyLike): Event {
+  signWithKeys(keys: Keys | SecretKeyInput): Event {
     return finalizeEvent(this.toTemplate(), keys);
   }
 
@@ -240,5 +229,3 @@ export class EventBuilder {
     return signer.signEvent(this.buildUnsigned(pubkey));
   }
 }
-
-type SecretKeyLike = SecretKey | Uint8Array | string;

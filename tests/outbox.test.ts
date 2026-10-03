@@ -15,6 +15,7 @@ import {
   useWebSocketImplementation,
 } from "../src/index.ts";
 import type { Event, EventStore, PutResult } from "../src/index.ts";
+import { BOUND_FLUSH_MS } from "../src/loaders/outbox.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK_A = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -174,10 +175,12 @@ function trackingStore(
   opts?: {
     putMany?: (events: ReadonlyArray<Event>) => Promise<PutResult[]>;
   },
-): EventStore & { persistCalls: string[] } {
+): EventStore & { persistCalls: string[]; boundCalls: string[] } {
   const persistCalls: string[] = [];
+  const boundCalls: string[] = [];
   return {
     persistCalls,
+    boundCalls,
     put: async (event) => {
       persistCalls.push("put");
       return inner.put(event);
@@ -196,7 +199,10 @@ function trackingStore(
     count: async (filters) => inner.count(filters),
     negentropyItems: async (filter) => inner.negentropyItems(filter),
     getOutboxBound: async (pubkey, kind) => inner.getOutboxBound(pubkey, kind),
-    setOutboxBound: async (pubkey, kind, bound) => inner.setOutboxBound(pubkey, kind, bound),
+    setOutboxBound: async (pubkey, kind, bound) => {
+      boundCalls.push(`${pubkey}:${kind}`);
+      return inner.setOutboxBound(pubkey, kind, bound);
+    },
     remove: async (ids) => inner.remove(ids),
     clear: async () => inner.clear(),
   };
@@ -207,14 +213,14 @@ async function feedClient(opts: {
   gossip: Gossip;
   persistEvents?: boolean;
 }): Promise<Client> {
-  const client = Client.builder()
-    .storage(opts.store)
-    .gossip(opts.gossip)
-    .relays(["wss://discovery.example"])
-    .websocketImplementation(MockWebSocketCtor)
-    .enableReconnect(false)
-    .persistEvents(opts.persistEvents ?? true)
-    .build();
+  const client = new Client({
+    storage: opts.store,
+    gossip: opts.gossip,
+    relays: ["wss://discovery.example"],
+    websocketImplementation: MockWebSocketCtor,
+    enableReconnect: false,
+    persistEvents: opts.persistEvents ?? true,
+  });
   await client.connect();
   return client;
 }
@@ -234,8 +240,8 @@ describe("groupAuthorsByOutboxRelay", () => {
     const a = Keys.fromSecretKey(SK_A);
     const b = Keys.fromSecretKey(SK_B);
     gossip.setRoutes(a.publicKey, [
-      { url: "wss://a-out.example", read: false, write: true },
-      { url: "wss://shared.example", read: true, write: true },
+      { url: "wss://a-out.example", marker: "write" },
+      { url: "wss://shared.example", marker: "both" },
     ]);
 
     const map = groupAuthorsByOutboxRelay(
@@ -256,10 +262,10 @@ describe("groupAuthorsByOutboxRelay", () => {
     const gossip = new Gossip();
     const a = Keys.fromSecretKey(SK_A);
     gossip.setRoutes(a.publicKey, [
-      { url: "wss://a.example", read: true, write: true },
-      { url: "wss://b.example", read: true, write: true },
-      { url: "wss://c.example", read: true, write: true },
-      { url: "wss://d.example", read: true, write: true },
+      { url: "wss://a.example", marker: "both" },
+      { url: "wss://b.example", marker: "both" },
+      { url: "wss://c.example", marker: "both" },
+      { url: "wss://d.example", marker: "both" },
     ]);
 
     const map = groupAuthorsByOutboxRelay([a.publicKey], gossip, ["wss://discovery.example"], 3, [
@@ -279,8 +285,8 @@ describe("groupAuthorsByOutboxRelay", () => {
     const gossip = new Gossip();
     const a = Keys.fromSecretKey(SK_A);
     gossip.setRoutes(a.publicKey, [
-      { url: "wss://a.example", read: true, write: true },
-      { url: "wss://b.example", read: true, write: true },
+      { url: "wss://a.example", marker: "both" },
+      { url: "wss://b.example", marker: "both" },
     ]);
 
     const extra = normalizeURL("wss://connected-other.example");
@@ -323,7 +329,7 @@ describe("groupAuthorsByOutboxRelay", () => {
     const gossip = new Gossip();
     const a = Keys.fromSecretKey(SK_A);
     const b = Keys.fromSecretKey(SK_B);
-    gossip.setRoutes(a.publicKey, [{ url: "wss://a.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://a.example", marker: "both" }]);
 
     const map = groupAuthorsByOutboxRelay([a.publicKey, b.publicKey], gossip, [], 3);
     expect([...map.keys()].some((u) => u.includes("a.example"))).toBe(true);
@@ -336,7 +342,7 @@ describe("OutboxFeed", () => {
   test("sync pulls notes from outbox relays and updates storage", async () => {
     const a = Keys.fromSecretKey(SK_A);
     const note = EventBuilder.textNote("outbox note").createdAt(50).signWithKeys(a);
-    const list = relayListEventBuilder([{ url: "wss://out.example", read: false, write: true }])
+    const list = relayListEventBuilder([{ url: "wss://out.example", marker: "write" }])
       .createdAt(1)
       .signWithKeys(a);
 
@@ -344,13 +350,13 @@ describe("OutboxFeed", () => {
     const gossip = new Gossip();
     gossip.ingest(list);
 
-    const client = Client.builder()
-      .storage(store)
-      .gossip(gossip)
-      .relays(["wss://discovery.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      gossip,
+      relays: ["wss://discovery.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     await client.connect();
 
@@ -376,14 +382,14 @@ describe("OutboxFeed", () => {
       .createdAt(Math.floor(Date.now() / 1000))
       .signWithKeys(a);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://live.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://live.example", marker: "both" }]);
 
-    const client = Client.builder()
-      .gossip(gossip)
-      .relays(["wss://discovery.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      gossip,
+      relays: ["wss://discovery.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     await client.connect();
     const got: string[] = [];
@@ -408,10 +414,84 @@ describe("OutboxFeed", () => {
     await client.shutdown();
   });
 
+  test("live bound persistence batches into one trailing flush", async () => {
+    const a = Keys.fromSecretKey(SK_A);
+    const notes = [0, 1, 2].map((i) =>
+      EventBuilder.textNote(`live bound ${i}`)
+        .createdAt(100 + i)
+        .signWithKeys(a),
+    );
+    const inner = new MemoryEventStore();
+    const store = trackingStore(inner);
+    const gossip = new Gossip();
+    gossip.setRoutes(a.publicKey, [{ url: "wss://live.example", marker: "both" }]);
+
+    const client = await feedClient({ store, gossip });
+    const feed = new OutboxFeed({
+      pool: client.pool,
+      gossip,
+      storage: store,
+      discoveryRelays: client.relays,
+      authors: [a.publicKey],
+      kinds: [Kind.TextNote],
+    });
+
+    const live = feed.startLive({ since: 0 });
+    await waitForReq();
+    for (const note of notes) {
+      answerAllReqs(note);
+    }
+    await sleep(20);
+    expect(store.boundCalls).toStrictEqual([]);
+
+    await sleep(BOUND_FLUSH_MS + 100);
+    expect(store.boundCalls).toStrictEqual([`${a.publicKey}:${Kind.TextNote}`]);
+    await expect(inner.getOutboxBound(a.publicKey, Kind.TextNote)).resolves.toStrictEqual({
+      oldest: 100,
+      newest: 102,
+    });
+
+    live.close();
+    feed.close();
+    await client.shutdown();
+  });
+
+  test("close flushes pending live bounds immediately", async () => {
+    const a = Keys.fromSecretKey(SK_A);
+    const note = EventBuilder.textNote("live bound").createdAt(200).signWithKeys(a);
+    const inner = new MemoryEventStore();
+    const store = trackingStore(inner);
+    const gossip = new Gossip();
+    gossip.setRoutes(a.publicKey, [{ url: "wss://live.example", marker: "both" }]);
+
+    const client = await feedClient({ store, gossip });
+    const feed = new OutboxFeed({
+      pool: client.pool,
+      gossip,
+      storage: store,
+      discoveryRelays: client.relays,
+      authors: [a.publicKey],
+      kinds: [Kind.TextNote],
+    });
+
+    const live = feed.startLive({ since: 0 });
+    await waitForReq();
+    answerAllReqs(note);
+    await sleep(20);
+    expect(store.boundCalls).toStrictEqual([]);
+
+    feed.close();
+    await sleep(20);
+    expect(store.boundCalls).toStrictEqual([`${a.publicKey}:${Kind.TextNote}`]);
+
+    live.close();
+    await client.shutdown();
+  });
+
   test("sync REQ since is derived from stored newest on a fresh feed", async () => {
     const a = Keys.fromSecretKey(SK_A);
     const stored = EventBuilder.textNote("seeded newest").createdAt(100).signWithKeys(a);
-    const list = relayListEventBuilder([{ url: "wss://out.example", read: false, write: true }])
+    const list = relayListEventBuilder([{ url: "wss://out.example", marker: "write" }])
       .createdAt(1)
       .signWithKeys(a);
 
@@ -420,13 +500,13 @@ describe("OutboxFeed", () => {
     const gossip = new Gossip();
     gossip.ingest(list);
 
-    const client = Client.builder()
-      .storage(store)
-      .gossip(gossip)
-      .relays(["wss://discovery.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      gossip,
+      relays: ["wss://discovery.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     await client.connect();
     const feed = new OutboxFeed({
@@ -463,16 +543,16 @@ describe("OutboxFeed", () => {
     const store = new MemoryEventStore();
     await store.put(stored);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://shared.example", read: true, write: true }]);
-    gossip.setRoutes(b.publicKey, [{ url: "wss://shared.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://shared.example", marker: "both" }]);
+    gossip.setRoutes(b.publicKey, [{ url: "wss://shared.example", marker: "both" }]);
 
-    const client = Client.builder()
-      .storage(store)
-      .gossip(gossip)
-      .relays(["wss://discovery.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      gossip,
+      relays: ["wss://discovery.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     await client.connect();
     const feed = new OutboxFeed({
@@ -512,16 +592,16 @@ describe("OutboxFeed", () => {
     const store = new MemoryEventStore();
     await store.put(stored);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://shared.example", read: true, write: true }]);
-    gossip.setRoutes(b.publicKey, [{ url: "wss://shared.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://shared.example", marker: "both" }]);
+    gossip.setRoutes(b.publicKey, [{ url: "wss://shared.example", marker: "both" }]);
 
-    const client = Client.builder()
-      .storage(store)
-      .gossip(gossip)
-      .relays(["wss://discovery.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      storage: store,
+      gossip,
+      relays: ["wss://discovery.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     await client.connect();
     const feed = new OutboxFeed({
@@ -562,18 +642,18 @@ describe("OutboxFeed", () => {
     const a = Keys.fromSecretKey(SK_A);
     const gossip = new Gossip();
     gossip.setRoutes(a.publicKey, [
-      { url: "wss://out-a.example", read: true, write: true },
-      { url: "wss://out-b.example", read: true, write: true },
-      { url: "wss://out-c.example", read: true, write: true },
-      { url: "wss://out-d.example", read: true, write: true },
+      { url: "wss://out-a.example", marker: "both" },
+      { url: "wss://out-b.example", marker: "both" },
+      { url: "wss://out-c.example", marker: "both" },
+      { url: "wss://out-d.example", marker: "both" },
     ]);
 
-    const client = Client.builder()
-      .gossip(gossip)
-      .relays(["wss://discovery.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      gossip,
+      relays: ["wss://discovery.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     await client.connect();
     await client.pool.ensureRelay("wss://out-d.example");
@@ -608,14 +688,14 @@ describe("OutboxFeed", () => {
   test("startLive does not add a connected relay missing from the author's list", async () => {
     const a = Keys.fromSecretKey(SK_A);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://out-a.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://out-a.example", marker: "both" }]);
 
-    const client = Client.builder()
-      .gossip(gossip)
-      .relays(["wss://discovery.example"])
-      .websocketImplementation(MockWebSocketCtor)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      gossip,
+      relays: ["wss://discovery.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
 
     await client.connect();
     await client.pool.ensureRelay("wss://other.example");
@@ -651,7 +731,7 @@ describe("OutboxFeed", () => {
     await inner.put(newer);
     const store = trackingStore(inner);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", marker: "both" }]);
 
     const client = await feedClient({ store, gossip });
     const feed = new OutboxFeed({
@@ -706,7 +786,7 @@ describe("OutboxFeed", () => {
     const inner = new MemoryEventStore();
     const store = trackingStore(inner);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", marker: "both" }]);
 
     const client = await feedClient({ store, gossip, persistEvents: true });
     const observed: string[] = [];
@@ -743,7 +823,7 @@ describe("OutboxFeed", () => {
     const inner = new MemoryEventStore();
     const store = trackingStore(inner);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", marker: "both" }]);
     const got: string[] = [];
 
     const client = await feedClient({ store, gossip });
@@ -780,7 +860,7 @@ describe("OutboxFeed", () => {
     const inner = new MemoryEventStore();
     const store = trackingStore(inner);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", marker: "both" }]);
     const got: string[] = [];
     let ingested = 0;
     const origIngest = gossip.ingest.bind(gossip);
@@ -823,7 +903,7 @@ describe("OutboxFeed", () => {
       },
     });
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://out.example", marker: "both" }]);
     const got: string[] = [];
     let ingested = 0;
     const origIngest = gossip.ingest.bind(gossip);
@@ -863,7 +943,7 @@ describe("OutboxFeed", () => {
     const inner = new MemoryEventStore();
     const store = trackingStore(inner);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://live.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://live.example", marker: "both" }]);
     const observed: string[] = [];
     const got: string[] = [];
 
@@ -902,7 +982,7 @@ describe("OutboxFeed", () => {
     const inner = new MemoryEventStore();
     const store = trackingStore(inner);
     const gossip = new Gossip();
-    gossip.setRoutes(a.publicKey, [{ url: "wss://live.example", read: true, write: true }]);
+    gossip.setRoutes(a.publicKey, [{ url: "wss://live.example", marker: "both" }]);
     const got: string[] = [];
 
     const client = await feedClient({ store, gossip });

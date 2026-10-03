@@ -27,9 +27,6 @@ const Mode = {
 
 export class Nip77Error extends NostrError {
   override name = "Nip77Error";
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-  }
 }
 
 export type NegItem = {
@@ -46,25 +43,33 @@ export type ReconcileOutcome = {
   nextMessage: string | undefined;
 };
 
+/**
+ * Byte buffer that is either an append target (`extend`/`unwrap`, `#pos` stays 0) or a read cursor
+ * (`read`/`readN` advance `#pos`). `length` is bytes remaining ahead of `#pos`.
+ */
 class EncodedBuf {
   #raw: Uint8Array;
-  length: number;
+  #pos = 0;
+  #end = 0;
 
   constructor(buffer?: Uint8Array | number) {
     if (typeof buffer === "number") {
       this.#raw = new Uint8Array(buffer);
-      this.length = 0;
     } else if (buffer) {
       this.#raw = new Uint8Array(buffer);
-      this.length = buffer.length;
+      this.#end = buffer.length;
     } else {
       this.#raw = new Uint8Array(512);
-      this.length = 0;
     }
   }
 
+  get length(): number {
+    return this.#end - this.#pos;
+  }
+
+  /** Unread (or written) bytes — never a live view for appends after reads. */
   unwrap(): Uint8Array {
-    return this.#raw.subarray(0, this.length);
+    return this.#raw.subarray(this.#pos, this.#end);
   }
 
   get capacity(): number {
@@ -73,37 +78,35 @@ class EncodedBuf {
 
   extend(buf: Uint8Array | EncodedBuf): void {
     const bytes = buf instanceof EncodedBuf ? buf.unwrap() : buf;
-    const targetSize = bytes.length + this.length;
+    const targetSize = bytes.length + this.#end;
     if (this.capacity < targetSize) {
       const old = this.#raw;
       const next = new Uint8Array(Math.max(this.capacity * 2, targetSize));
       next.set(old);
       this.#raw = next;
     }
-    this.#raw.set(bytes, this.length);
-    this.length += bytes.length;
+    this.#raw.set(bytes, this.#end);
+    this.#end += bytes.length;
   }
 
-  shift(): number {
+  read(): number {
     if (this.length === 0) {
       throw new Nip77Error("parse ends prematurely");
     }
-    const [first] = this.#raw;
+    const first = this.#raw[this.#pos];
     if (first === undefined) {
       throw new Nip77Error("parse ends prematurely");
     }
-    this.#raw = this.#raw.subarray(1);
-    this.length -= 1;
+    this.#pos += 1;
     return first;
   }
 
-  shiftN(n: number): Uint8Array {
+  readN(n: number): Uint8Array {
     if (this.length < n) {
       throw new Nip77Error("parse ends prematurely");
     }
-    const head = this.#raw.subarray(0, n);
-    this.#raw = this.#raw.subarray(n);
-    this.length -= n;
+    const head = this.#raw.subarray(this.#pos, this.#pos + n);
+    this.#pos += n;
     return head;
   }
 }
@@ -111,9 +114,12 @@ class EncodedBuf {
 function decodeVarInt(buf: EncodedBuf): number {
   let res = 0;
   for (;;) {
-    const byte = buf.shift();
-    res = (res << 7) | (byte & 127);
-    if ((byte & 128) === 0) {
+    const byte = buf.read();
+    res = res * 128 + (byte & 0x7f);
+    if (res > Number.MAX_SAFE_INTEGER) {
+      throw new Nip77Error("varint exceeds max safe integer");
+    }
+    if ((byte & 0x80) === 0) {
       break;
     }
   }
@@ -121,22 +127,25 @@ function decodeVarInt(buf: EncodedBuf): number {
 }
 
 function encodeVarInt(n: number): EncodedBuf {
+  if (!Number.isSafeInteger(n) || n < 0) {
+    throw new Nip77Error("varint must be a non-negative safe integer");
+  }
   if (n === 0) {
     return new EncodedBuf(new Uint8Array([0]));
   }
   const digits: number[] = [];
   let value = n;
   while (value !== 0) {
-    digits.push(value & 127);
-    value >>>= 7;
+    digits.push(value % 128);
+    value = Math.floor(value / 128);
   }
   digits.reverse();
-  const encoded = digits.map((digit, i) => (i === digits.length - 1 ? digit : digit | 128));
+  const encoded = digits.map((digit, i) => (i === digits.length - 1 ? digit : digit | 0x80));
   return new EncodedBuf(new Uint8Array(encoded));
 }
 
 function getBytes(buf: EncodedBuf, n: number): Uint8Array {
-  return buf.shiftN(n);
+  return buf.readN(n);
 }
 
 class Accumulator {
@@ -346,7 +355,7 @@ export class Negentropy {
     const fullOutput = new EncodedBuf();
     fullOutput.extend(new Uint8Array([PROTOCOL_VERSION]));
 
-    const protocolVersion = query.shift();
+    const protocolVersion = query.read();
     if (protocolVersion < 0x60 || protocolVersion > 0x6f) {
       throw new Nip77Error("invalid negentropy protocol version byte");
     }

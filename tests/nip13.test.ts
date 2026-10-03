@@ -1,6 +1,8 @@
+import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, test } from "vite-plus/test";
 
-import { getEventHash, hexToBytes } from "../src/index.ts";
+import { bytesToHex, utf8Encoder } from "../src/core/util.ts";
+import { getEventHash, hexToBytes, serializeEvent } from "../src/index.ts";
 import type { UnsignedEvent } from "../src/index.ts";
 import { getPow, minePow, Nip13Error } from "../src/nips/nip13.ts";
 
@@ -55,6 +57,18 @@ describe("nip13 minePow", () => {
     expect(unsigned.tags).toBe(tags);
     expect(unsigned.tags).toStrictEqual([["t", "pow"]]);
     expect(unsigned.created_at).toBe(0);
+  });
+
+  test("mined id equals serializeEvent hashing at several difficulties", async () => {
+    for (const difficulty of [4, 8, 12]) {
+      // oxlint-disable-next-line no-await-in-loop -- difficulties are mined one at a time
+      const mined = await minePow({ ...UNSIGNED, tags: [...UNSIGNED.tags] }, difficulty);
+      expect(getPow(mined.id)).toBeGreaterThanOrEqual(difficulty);
+      expect(mined.id).toBe(getEventHash(mined));
+      expect(mined.id).toBe(bytesToHex(sha256(utf8Encoder.encode(serializeEvent(mined)))));
+      const nonce = mined.tags.find((tag) => tag[0] === "nonce");
+      expect(nonce?.[2]).toBe(String(difficulty));
+    }
   });
 
   test("abort rejects with signal.reason", async () => {

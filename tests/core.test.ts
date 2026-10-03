@@ -32,6 +32,7 @@ import {
   parseEventAddress,
   parseRelayMessage,
   serializeEvent,
+  signEvent,
   normalizeURL,
   Tag,
   validateEvent,
@@ -82,6 +83,22 @@ describe("events", () => {
     expect(verifyEvent(event)).toBe(true);
     // WeakSet cache path
     expect(verifyEvent(event)).toBe(true);
+  });
+
+  test("signEvent on a structurally invalid unsigned event throws EventValidationError", () => {
+    const keys = Keys.fromSecretKey(SK_HEX);
+    expect(() =>
+      signEvent(
+        {
+          kind: Kind.TextNote,
+          tags: [],
+          content: "hi",
+          created_at: 1.5,
+          pubkey: keys.publicKey,
+        },
+        keys,
+      ),
+    ).toThrow(EventValidationError);
   });
 
   test("validateEvent rejects kind outside 0..65535", () => {

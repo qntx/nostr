@@ -67,11 +67,11 @@ describe("relay URL callbacks", () => {
     net.relay("wss://a.example").seed([note]);
     net.relay("wss://b.example").seed([note]);
 
-    const client = Client.builder()
-      .relays(["wss://a.example", "wss://b.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://a.example", "wss://b.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
 
     const events: Array<[Event, string]> = [];
     const received: Array<[string, string]> = [];
@@ -129,15 +129,15 @@ describe("relay URL callbacks", () => {
     net.relay("wss://out-a.example").seed([note]);
     net.relay("wss://out-b.example").seed([note]);
 
-    const client = Client.builder()
-      .relays(["wss://default.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://default.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     client.gossip.ingest(
       relayListEventBuilder([
-        { url: "wss://out-a.example", read: true, write: true },
-        { url: "wss://out-b.example", read: true, write: true },
+        { url: "wss://out-a.example", marker: "both" },
+        { url: "wss://out-b.example", marker: "both" },
       ])
         .createdAt(1)
         .signWithKeys(a),
@@ -205,11 +205,11 @@ describe("issue #125", () => {
       expect(pooled.map((e) => e.id).toSorted()).toStrictEqual([older.id, newer.id].toSorted());
       pool.close();
 
-      const client = Client.builder()
-        .relays(["wss://a.example"])
-        .websocketImplementation(net.websocketImplementation)
-        .enableReconnect(false)
-        .build();
+      const client = new Client({
+        relays: ["wss://a.example"],
+        websocketImplementation: net.websocketImplementation,
+        enableReconnect: false,
+      });
       const fetched = await client.fetchEvents(
         { kinds: [1] },
         { onevent: (event) => throwOnOlder(event), timeoutMs: 2000 },
@@ -238,11 +238,11 @@ describe("issue #125", () => {
     const note = EventBuilder.textNote("dup-url").createdAt(1).signWithKeys(keys);
     net.relay("wss://a.example").seed([note]);
 
-    const client = Client.builder()
-      .relays(["wss://a.example", "wss://a.example/"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const client = new Client({
+      relays: ["wss://a.example", "wss://a.example/"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
 
     const events: Event[] = [];
     const received: string[] = [];
@@ -259,11 +259,11 @@ describe("issue #125", () => {
     expect(received).toHaveLength(1);
     closer.close();
 
-    const single = Client.builder()
-      .relays(["wss://a.example"])
-      .websocketImplementation(net.websocketImplementation)
-      .enableReconnect(false)
-      .build();
+    const single = new Client({
+      relays: ["wss://a.example"],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
     single.addRelay("wss://a.example/");
     expect(single.relays).toHaveLength(1);
     expect(client.relays).toHaveLength(1);

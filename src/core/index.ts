@@ -13,7 +13,7 @@ export {
   MessageError,
   NostrError,
   UrlError,
-  WasmVerifyPoisonedError,
+  WasmPoisonedError,
 } from "./error.ts";
 
 export {
@@ -23,6 +23,7 @@ export {
   hexToBytes,
   isHex32,
   isHex64,
+  normalizeRelayUrls,
   normalizeURL,
 } from "./util.ts";
 
@@ -41,6 +42,7 @@ export {
 export {
   Tag,
   eventAddress,
+  firstTagValue,
   formatEventAddress,
   getDTag,
   isTag,
@@ -75,11 +77,18 @@ export {
   getPublicKey,
   publicKeyFromHex,
   signEvent,
+  toSecretKey,
   type PublicKey,
+  type SecretKeyInput,
   type SigningBackend,
 } from "./key.ts";
 
-export { createEventVerifier, verifyEvent, type SerializedEventVerifier } from "./verifier.ts";
+export {
+  createEventVerifier,
+  verifyEvent,
+  type EventVerifier,
+  type SerializedEventVerifier,
+} from "./verifier.ts";
 
 export { EventBuilder, type ProfileMetadata } from "./builder.ts";
 

@@ -6,28 +6,13 @@ import type { Tag } from "../core/tag.ts";
 import { normalizeURL } from "../core/util.ts";
 
 /** NIP-65 `r` tag marker: read-only, write-only, or unmarked (both). */
-export type RelayMarker = "read" | "write" | "readwrite";
+export type RelayMarker = "read" | "write" | "both";
 
-/** One NIP-65 relay-list entry: normalized URL plus read/write flags. */
+/** One NIP-65 relay-list entry: normalized URL plus its marker. */
 export type RelayListItem = {
-  url: string;
-  read: boolean;
-  write: boolean;
+  readonly url: string;
+  readonly marker: RelayMarker;
 };
-
-/** The NIP-65 marker an item's read/write flags map to. */
-export function markerOf(item: RelayListItem): RelayMarker {
-  if (item.read && item.write) {
-    return "readwrite";
-  }
-  if (item.read) {
-    return "read";
-  }
-  if (item.write) {
-    return "write";
-  }
-  return "readwrite";
-}
 
 /** Parse a kind:10002 NIP-65 event into relay list entries. */
 export function parseRelayList(event: Event): RelayListItem[] {
@@ -54,44 +39,33 @@ export function parseRelayList(event: Event): RelayListItem[] {
     seen.add(url);
 
     const marker = tag.at(2);
-    if (marker === "read") {
-      out.push({ url, read: true, write: false });
-    } else if (marker === "write") {
-      out.push({ url, read: false, write: true });
+    if (marker === "read" || marker === "write") {
+      out.push({ url, marker });
     } else {
-      out.push({ url, read: true, write: true });
+      out.push({ url, marker: "both" });
     }
   }
   return out;
 }
 
-/** Encode relay list items as NIP-65 `r` tags. */
-export function relayListToTags(items: RelayListItem[]): Tag[] {
-  return items.map((item) => {
-    if (item.read && item.write) {
-      return ["r", item.url];
-    }
-    if (item.read) {
-      return ["r", item.url, "read"];
-    }
-    if (item.write) {
-      return ["r", item.url, "write"];
-    }
-    throw new EventValidationError("relay list item must be read, write, or both");
-  });
+/** Encode relay list items as NIP-65 `r` tags (`both` is unmarked). */
+export function relayListToTags(items: ReadonlyArray<RelayListItem>): Tag[] {
+  return items.map((item) =>
+    item.marker === "both" ? ["r", item.url] : ["r", item.url, item.marker],
+  );
 }
 
 /** Build an unsigned kind:10002 EventBuilder from relay list items. */
-export function relayListEventBuilder(items: RelayListItem[]): EventBuilder {
+export function relayListEventBuilder(items: ReadonlyArray<RelayListItem>): EventBuilder {
   return new EventBuilder(Kind.RelayList, "").tags(relayListToTags(items));
 }
 
 /** URLs of the read-enabled items. */
-export function readRelays(items: RelayListItem[]): string[] {
-  return items.filter((i) => i.read).map((i) => i.url);
+export function readRelays(items: ReadonlyArray<RelayListItem>): string[] {
+  return items.filter((i) => i.marker !== "write").map((i) => i.url);
 }
 
 /** URLs of the write-enabled items. */
-export function writeRelays(items: RelayListItem[]): string[] {
-  return items.filter((i) => i.write).map((i) => i.url);
+export function writeRelays(items: ReadonlyArray<RelayListItem>): string[] {
+  return items.filter((i) => i.marker !== "read").map((i) => i.url);
 }

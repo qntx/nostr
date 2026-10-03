@@ -1,6 +1,6 @@
 import { CryptoError } from "../core/error.ts";
-import type { Event } from "../core/event.ts";
 import type { SigningBackend } from "../core/key.ts";
+import type { EventVerifier } from "../core/verifier.ts";
 import {
   instantiateCryptoWasm,
   wasmPublicKey,
@@ -9,11 +9,11 @@ import {
   wasmVerifySerialized,
 } from "./abi.ts";
 import type { CryptoWasmExports } from "./abi.ts";
-import { createWasmEventVerifier, WasmVerifyPoisonedError } from "./adapter.ts";
+import { createWasmEventVerifier, runPoisoned } from "./adapter.ts";
 
 export type LoadNostrWasmOptions = {
   /** Bytes, or a URL whose bytes will be read by the platform loader. */
-  module?: ArrayBuffer | ArrayBufferView | URL;
+  module?: ArrayBuffer | ArrayBufferView | URL | undefined;
 };
 
 export type NostrWasm = SigningBackend & {
@@ -24,7 +24,7 @@ export type NostrWasm = SigningBackend & {
     pubkey: Uint8Array,
     sig: Uint8Array,
   ) => boolean;
-  verifyEvent: (event: Event) => boolean;
+  verifyEvent: EventVerifier;
 };
 
 export function isWasmBytes(value: unknown): value is ArrayBuffer | ArrayBufferView {
@@ -45,23 +45,6 @@ function requireByteLength(bytes: Uint8Array, expected: number, label: string): 
   }
 }
 
-function wrapPoison<T>(poison: { error?: Error }, fn: () => T): T {
-  if (poison.error) {
-    throw poison.error;
-  }
-  try {
-    return fn();
-  } catch (error) {
-    if (error instanceof WebAssembly.RuntimeError) {
-      poison.error = new WasmVerifyPoisonedError("wasm verify aborted the instance", {
-        cause: error,
-      });
-      throw poison.error;
-    }
-    throw error;
-  }
-}
-
 function bindExports(exports: CryptoWasmExports): NostrWasm {
   const poison: { error?: Error } = {};
   const rawSerialized = (
@@ -71,12 +54,12 @@ function bindExports(exports: CryptoWasmExports): NostrWasm {
     sig: Uint8Array,
   ): boolean => wasmVerifySerialized(exports, serializedUtf8, id, pubkey, sig);
   return {
-    verify: (id, pubkey, sig) => wrapPoison(poison, () => wasmVerify(exports, id, pubkey, sig)),
+    verify: (id, pubkey, sig) => runPoisoned(poison, () => wasmVerify(exports, id, pubkey, sig)),
     verifySerialized: (serializedUtf8, id, pubkey, sig) =>
-      wrapPoison(poison, () => rawSerialized(serializedUtf8, id, pubkey, sig)),
+      runPoisoned(poison, () => rawSerialized(serializedUtf8, id, pubkey, sig)),
     verifyEvent: createWasmEventVerifier(rawSerialized, poison),
     sign: (id, seckey, aux) =>
-      wrapPoison(poison, () => {
+      runPoisoned(poison, () => {
         requireByteLength(id, 32, "id");
         requireByteLength(seckey, 32, "secret key");
         requireByteLength(aux, 32, "aux");
@@ -87,7 +70,7 @@ function bindExports(exports: CryptoWasmExports): NostrWasm {
         return sig;
       }),
     publicKey: (seckey) =>
-      wrapPoison(poison, () => {
+      runPoisoned(poison, () => {
         requireByteLength(seckey, 32, "secret key");
         const pk = wasmPublicKey(exports, seckey);
         if (pk.length !== 32) {

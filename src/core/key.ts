@@ -1,7 +1,7 @@
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 
-import { CryptoError } from "./error.ts";
+import { CryptoError, EventValidationError } from "./error.ts";
 import { getEventHash, markVerified, validateEvent } from "./event.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "./event.ts";
 import { assertHex32, assertSecretKeyBytes, bytesToHex, hexToBytes } from "./util.ts";
@@ -47,6 +47,20 @@ export class SecretKey {
   }
 }
 
+/** Anything a secret key can be given as: instance, raw bytes, or hex. */
+export type SecretKeyInput = SecretKey | Uint8Array | string;
+
+/** Coerce a {@link SecretKeyInput} to {@link SecretKey}. */
+export function toSecretKey(input: SecretKeyInput): SecretKey {
+  if (input instanceof SecretKey) {
+    return input;
+  }
+  if (typeof input === "string") {
+    return SecretKey.fromHex(input);
+  }
+  return SecretKey.fromBytes(input);
+}
+
 /** Lowercase hex-encoded secp256k1 public key (x-only, 64 chars). */
 export type PublicKey = string;
 
@@ -71,14 +85,8 @@ const nobleSigning: SigningBackend = {
 };
 
 /** Derive the public key for a secret key given as SecretKey, bytes, or hex. */
-export function getPublicKey(secretKey: SecretKey | Uint8Array | string): PublicKey {
-  const bytes =
-    secretKey instanceof SecretKey
-      ? secretKey.bytes
-      : typeof secretKey === "string"
-        ? hexToBytes(assertHex32(secretKey, "secret key"))
-        : (assertSecretKeyBytes(secretKey), secretKey);
-  return bytesToHex(schnorr.getPublicKey(bytes));
+export function getPublicKey(secretKey: SecretKeyInput): PublicKey {
+  return bytesToHex(schnorr.getPublicKey(toSecretKey(secretKey).bytes));
 }
 
 /** Keypair convenience wrapper. */
@@ -106,29 +114,17 @@ export class Keys {
     return new Keys(SecretKey.generate(), backend);
   }
 
-  static fromSecretKey(
-    secretKey: SecretKey | Uint8Array | string,
-    backend: SigningBackend = nobleSigning,
-  ): Keys {
-    const sk =
-      secretKey instanceof SecretKey
-        ? secretKey
-        : typeof secretKey === "string"
-          ? SecretKey.fromHex(secretKey)
-          : SecretKey.fromBytes(secretKey);
-    return new Keys(sk, backend);
+  static fromSecretKey(secretKey: SecretKeyInput, backend: SigningBackend = nobleSigning): Keys {
+    return new Keys(toSecretKey(secretKey), backend);
   }
 }
 
-function resolveKeys(secretKey: SecretKey | Uint8Array | string | Keys): Keys {
+function resolveKeys(secretKey: SecretKeyInput | Keys): Keys {
   return secretKey instanceof Keys ? secretKey : Keys.fromSecretKey(secretKey);
 }
 
 /** Fill pubkey/id/sig on a template and return a signed event. */
-export function finalizeEvent(
-  template: EventTemplate,
-  secretKey: SecretKey | Uint8Array | string | Keys,
-): Event {
+export function finalizeEvent(template: EventTemplate, secretKey: SecretKeyInput | Keys): Event {
   const keys = resolveKeys(secretKey);
   const unsigned: UnsignedEvent = {
     kind: template.kind,
@@ -144,13 +140,10 @@ export function finalizeEvent(
  * Sign an already-assembled unsigned event. Rejects when `unsigned.pubkey` does not match the
  * secret key.
  */
-export function signEvent(
-  unsigned: UnsignedEvent,
-  secretKey: SecretKey | Uint8Array | string | Keys,
-): Event {
+export function signEvent(unsigned: UnsignedEvent, secretKey: SecretKeyInput | Keys): Event {
   const keys = resolveKeys(secretKey);
   if (!validateEvent(unsigned)) {
-    throw new CryptoError("cannot sign invalid unsigned event");
+    throw new EventValidationError("cannot sign invalid unsigned event");
   }
 
   if (unsigned.pubkey !== keys.publicKey) {

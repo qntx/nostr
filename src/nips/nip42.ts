@@ -1,5 +1,6 @@
 import type { EventTemplate } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
+import { nowSeconds } from "../core/util.ts";
 
 /**
  * Build an unsigned NIP-42 AUTH event template for the given relay challenge. Caller must sign with
@@ -8,7 +9,7 @@ import { Kind } from "../core/kind.ts";
 export function makeAuthEvent(relayURL: string, challenge: string): EventTemplate {
   return {
     kind: Kind.ClientAuth,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: nowSeconds(),
     tags: [
       ["relay", relayURL],
       ["challenge", challenge],

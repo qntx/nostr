@@ -5,10 +5,13 @@ import { sortedEvents } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
 import { invokeSafely } from "../core/report.ts";
-import { normalizeURL } from "../core/util.ts";
+import { normalizeRelayUrls, nowSeconds } from "../core/util.ts";
 import type { Gossip } from "../gossip/gossip.ts";
 import type { Pool } from "../relay/pool.ts";
+import { DEFAULT_REQUEST_TIMEOUT_MS } from "../relay/relay.ts";
+import type { Closer } from "../relay/subscription.ts";
 import { toStorageError } from "../storage/error.ts";
+import { outboxBoundKey } from "../storage/put.ts";
 import type { EventStore, OutboxBound } from "../storage/types.ts";
 
 export type { OutboxBound } from "../storage/types.ts";
@@ -18,7 +21,10 @@ export class OutboxError extends NostrError {
   override name = "OutboxError";
 }
 
-/** Options for {@link createOutboxFeed}. */
+/** Trailing-flush delay for live bound persistence: one write per dirty bound per window. */
+export const BOUND_FLUSH_MS = 1000;
+
+/** Options for {@link OutboxFeed}. */
 export type OutboxFeedOptions = {
   pool: Pool;
   gossip: Gossip;
@@ -49,26 +55,6 @@ export type OutboxFeedOptions = {
   hydrate?: ((pubkeys: ReadonlyArray<string>) => Promise<void>) | undefined;
 };
 
-function boundKey(pubkey: string, kind: number): string {
-  return `${pubkey.toLowerCase()}:${kind}`;
-}
-
-/** Same skip/dedup as Gossip.setRoutes so prefer can match Client.relays. */
-function canonicalRelayUrls(urls: ReadonlyArray<string>): string[] {
-  const out: string[] = [];
-  for (const raw of urls) {
-    try {
-      const url = normalizeURL(raw);
-      if (!out.includes(url)) {
-        out.push(url);
-      }
-    } catch {
-      // not a relay URL
-    }
-  }
-  return out;
-}
-
 /**
  * Group authors by outbox relay (discovery fallback). `prefer` reorders existing candidates only;
  * it never appends a URL that is not already in the author's outbox or discovery list. Returns
@@ -86,8 +72,8 @@ export function groupAuthorsByOutboxRelay(
       (a) => a.toLowerCase(),
     ),
   );
-  const preferSet = new Set(canonicalRelayUrls(prefer));
-  const discovery = canonicalRelayUrls(discoveryRelays);
+  const preferSet = new Set(normalizeRelayUrls(prefer));
+  const discovery = normalizeRelayUrls(discoveryRelays);
   const map = new Map<string, string[]>();
 
   for (const author of authors) {
@@ -133,8 +119,11 @@ export class OutboxFeed {
     | undefined;
   readonly #hydrate: ((pubkeys: ReadonlyArray<string>) => Promise<void>) | undefined;
   readonly #bounds = new Map<string, OutboxBound>();
+  /** Bound keys dirtied by live events since the last flush. */
+  readonly #dirtyBounds = new Set<string>();
+  #boundTimer: ReturnType<typeof setTimeout> | undefined;
   #authors: string[];
-  #liveCloser: { close: (reason?: string) => void } | undefined;
+  #liveCloser: Closer | undefined;
   #closed = false;
 
   constructor(opts: OutboxFeedOptions) {
@@ -145,7 +134,7 @@ export class OutboxFeed {
     this.#authors = [...new Set(opts.authors.map((a) => a.toLowerCase()))];
     this.#kinds = [...(opts.kinds ?? [Kind.TextNote])];
     this.#maxRelays = opts.maxRelaysPerAuthor ?? 3;
-    this.#timeoutMs = opts.fetchTimeoutMs ?? 4400;
+    this.#timeoutMs = opts.fetchTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.#onEvent = opts.onEvent;
     this.#observe = opts.observe;
     this.#seen = opts.seen;
@@ -167,7 +156,7 @@ export class OutboxFeed {
   }
 
   getBound(pubkey: string, kind: number): OutboxBound | undefined {
-    return this.#bounds.get(boundKey(pubkey, kind));
+    return this.#bounds.get(outboxBoundKey(pubkey, kind));
   }
 
   /** Load NIP-65 relay lists for authors that have no outbox routes yet. */
@@ -250,7 +239,7 @@ export class OutboxFeed {
     const dirty = new Set<string>();
     for (const event of applied) {
       this.#updateBounds(event);
-      dirty.add(boundKey(event.pubkey, event.kind));
+      dirty.add(outboxBoundKey(event.pubkey, event.kind));
       invokeSafely(() => this.#onEvent?.(event));
     }
     await this.#persistBounds(dirty);
@@ -261,9 +250,7 @@ export class OutboxFeed {
    * Start a live subscription across outbox relays for the current authors. Closes any previous
    * live subscription.
    */
-  startLive(opts?: { signal?: AbortSignal | undefined; since?: number | undefined }): {
-    close: (reason?: string) => void;
-  } {
+  startLive(opts?: { signal?: AbortSignal | undefined; since?: number | undefined }): Closer {
     this.#assertOpen();
     this.#liveCloser?.close("restart");
 
@@ -276,8 +263,8 @@ export class OutboxFeed {
     );
 
     const seen = new Set<string>();
-    const closers: Array<{ close: (reason?: string) => void }> = [];
-    const since = opts?.since ?? Math.floor(Date.now() / 1000) - 60;
+    const closers: Closer[] = [];
+    const since = opts?.since ?? nowSeconds() - 60;
 
     for (const [url, authors] of byRelay) {
       const filter: Filter = {
@@ -318,7 +305,7 @@ export class OutboxFeed {
   async start(opts?: {
     limit?: number | undefined;
     signal?: AbortSignal | undefined;
-  }): Promise<{ close: (reason?: string) => void; events: Event[] }> {
+  }): Promise<Closer & { events: Event[] }> {
     const events = await this.sync({ limit: opts?.limit, signal: opts?.signal });
     const live = this.startLive({ signal: opts?.signal });
     return { close: (r) => live.close(r), events };
@@ -328,6 +315,11 @@ export class OutboxFeed {
     this.#closed = true;
     this.#liveCloser?.close("feed closed");
     this.#liveCloser = undefined;
+    if (this.#boundTimer !== undefined) {
+      clearTimeout(this.#boundTimer);
+      this.#boundTimer = undefined;
+    }
+    void this.#flushBounds();
   }
 
   #assertOpen(): void {
@@ -340,7 +332,7 @@ export class OutboxFeed {
     await Promise.all(
       this.#authors.flatMap((pk) =>
         this.#kinds.map(async (kind) => {
-          const key = boundKey(pk, kind);
+          const key = outboxBoundKey(pk, kind);
           if (this.#bounds.has(key)) {
             return;
           }
@@ -377,7 +369,7 @@ export class OutboxFeed {
       let newest: number | undefined;
       let complete = true;
       for (const kind of this.#kinds) {
-        const b = this.#bounds.get(boundKey(pk, kind));
+        const b = this.#bounds.get(outboxBoundKey(pk, kind));
         if (!b) {
           complete = false;
           break;
@@ -408,21 +400,27 @@ export class OutboxFeed {
 
   #noteEvent(event: Event, relayUrl: string): void {
     this.#updateBounds(event);
-    const bound = this.#bounds.get(boundKey(event.pubkey, event.kind));
-    if (bound) {
-      void (async () => {
-        try {
-          await this.#storage.setOutboxBound(event.pubkey, event.kind, {
-            oldest: bound.oldest,
-            newest: bound.newest,
-          });
-        } catch {
-          // Bound persistence is best-effort.
-        }
-      })();
+    const key = outboxBoundKey(event.pubkey, event.kind);
+    if (this.#bounds.has(key)) {
+      this.#dirtyBounds.add(key);
+      this.#boundTimer ??= setTimeout(() => {
+        this.#boundTimer = undefined;
+        void this.#flushBounds();
+      }, BOUND_FLUSH_MS);
     }
     invokeSafely(() => this.#observe?.(event, relayUrl));
     invokeSafely(() => this.#onEvent?.(event));
+  }
+
+  /** Persist all bounds dirtied since the last flush. Best-effort: errors are swallowed. */
+  async #flushBounds(): Promise<void> {
+    const keys = [...this.#dirtyBounds];
+    this.#dirtyBounds.clear();
+    try {
+      await this.#persistBounds(keys);
+    } catch {
+      // Bound persistence is best-effort.
+    }
   }
 
   async #persistBounds(keys: Iterable<string>): Promise<void> {
@@ -451,7 +449,7 @@ export class OutboxFeed {
   }
 
   #updateBounds(event: Event): void {
-    const key = boundKey(event.pubkey, event.kind);
+    const key = outboxBoundKey(event.pubkey, event.kind);
     const prev = this.#bounds.get(key);
     if (!prev) {
       this.#bounds.set(key, { oldest: event.created_at, newest: event.created_at });
@@ -464,9 +462,4 @@ export class OutboxFeed {
       prev.newest = event.created_at;
     }
   }
-}
-
-/** Factory matching other loaders helpers. */
-export function createOutboxFeed(opts: OutboxFeedOptions): OutboxFeed {
-  return new OutboxFeed(opts);
 }

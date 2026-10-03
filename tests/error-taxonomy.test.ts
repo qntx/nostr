@@ -21,7 +21,7 @@ import {
   RelayClosedError,
   RelayPublishError,
   StorageError,
-  WasmVerifyPoisonedError,
+  WasmPoisonedError,
   createLoaders,
   npubEncode,
   nsecEncode,
@@ -30,8 +30,8 @@ import {
 import { DataLoader, LoaderError } from "../src/loaders/dataloader.ts";
 import { subscriptionToAsyncIterable } from "../src/relay/subscription.ts";
 import { createWasmEventVerifier } from "../src/wasm/adapter.ts";
+import { createNostrWasmLoader, fetchWasmUrl, isWasmBytes } from "../src/wasm/instance.ts";
 import { loadNostrWasm as loadNostrWasmBrowser } from "../src/wasm/load.browser.ts";
-import { loadNostrWasm, resetNostrWasmForTests } from "../src/wasm/load.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -175,12 +175,18 @@ function notFoundFetch(
 }
 
 describe("wasm HTTP load", () => {
-  afterEach(() => {
-    resetNostrWasmForTests();
+  const loader = createNostrWasmLoader(async (opts) => {
+    const source = opts?.module;
+    if (source instanceof URL) {
+      return fetchWasmUrl(source);
+    }
+    if (source !== undefined && isWasmBytes(source)) {
+      return source;
+    }
+    throw new CryptoError("expected wasm module source");
   });
 
   test("fetch 404 throws CryptoError", async () => {
-    resetNostrWasmForTests();
     const href = "https://wasm-404.qntx.test/nostr_crypto_wasm_bg.wasm";
     const prev = globalThis.fetch;
     let fetchCalls = 0;
@@ -192,7 +198,7 @@ describe("wasm HTTP load", () => {
       }),
     );
     try {
-      const err = await captureError(loadNostrWasm({ module: new URL(href) }));
+      const err = await captureError(loader.loadNostrWasm({ module: new URL(href) }));
       expect(fetchCalls).toBe(1);
       expect(err).toBeInstanceOf(CryptoError);
       expect((err as CryptoError).message).toBe(`failed to fetch wasm: 404 ${href}`);
@@ -332,8 +338,8 @@ describe("IndexedDbEventStore missing IndexedDB", () => {
   });
 });
 
-describe("WasmVerifyPoisonedError", () => {
-  test("wasm verifier RuntimeError poisons as WasmVerifyPoisonedError", () => {
+describe("WasmPoisonedError", () => {
+  test("wasm verifier RuntimeError poisons as WasmPoisonedError", () => {
     const poison: { error?: Error } = {};
     let calls = 0;
     const fn = createWasmEventVerifier(() => {
@@ -345,11 +351,11 @@ describe("WasmVerifyPoisonedError", () => {
       .signWithKeys(Keys.fromSecretKey(SK));
     const event = { ...signed };
     const err = syncThrow(() => fn(event));
-    expect(err).toBeInstanceOf(WasmVerifyPoisonedError);
+    expect(err).toBeInstanceOf(WasmPoisonedError);
     expect(err).toBeInstanceOf(NostrError);
     expect(poison.error).toBe(err);
-    expect(poison.error?.name).toBe("WasmVerifyPoisonedError");
-    expect((err as WasmVerifyPoisonedError).cause).toBeInstanceOf(WebAssembly.RuntimeError);
+    expect(poison.error?.name).toBe("WasmPoisonedError");
+    expect((err as WasmPoisonedError).cause).toBeInstanceOf(WebAssembly.RuntimeError);
     expect(calls).toBe(1);
     const sticky = syncThrow(() => fn({ ...event }));
     expect(sticky).toBe(poison.error);

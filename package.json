@@ -149,11 +149,6 @@
       "import": "./dist/nips/nip77.mjs",
       "default": "./dist/nips/nip77.mjs"
     },
-    "./nips/nip96": {
-      "types": "./dist/nips/nip96.d.mts",
-      "import": "./dist/nips/nip96.mjs",
-      "default": "./dist/nips/nip96.mjs"
-    },
     "./nips/nip98": {
       "types": "./dist/nips/nip98.d.mts",
       "import": "./dist/nips/nip98.mjs",
@@ -184,12 +179,12 @@
       "import": "./dist/testing.mjs",
       "default": "./dist/testing.mjs"
     },
+    "./package.json": "./package.json",
     "./wasm.browser": {
       "types": "./dist/wasm.browser.d.mts",
       "import": "./dist/wasm.browser.mjs",
       "default": "./dist/wasm.browser.mjs"
     },
-    "./package.json": "./package.json",
     "./wasm": {
       "types": "./dist/wasm.d.mts",
       "browser": "./dist/wasm.browser.mjs",
@@ -207,8 +202,9 @@
     "test": "vp test",
     "test:wasm": "WASM_TEST=1 vp test wasm-tests/verify.ts wasm-tests/node-load.ts wasm-tests/sign.ts wasm-tests/browser-entry.ts",
     "bench:wasm": "WASM_TEST=1 vp test wasm-tests/bench.ts",
-    "bench:store": "STORE_BENCH=1 vp test bench/reactive-store.bench.ts",
-    "bench:store:sqlite": "STORE_BENCH=1 vp test bench/sqlite-store.bench.ts",
+    "bench:store": "BENCH=1 vp test bench/reactive-store.bench.ts",
+    "bench:store:sqlite": "BENCH=1 vp test bench/sqlite-store.bench.ts",
+    "bench:nip27": "BENCH=1 vp test bench/nip27.bench.ts",
     "lint": "vp check",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.src.json",
     "smoke:hermes": "bun scripts/hermes-smoke.ts",

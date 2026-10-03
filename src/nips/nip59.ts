@@ -13,7 +13,7 @@ import { Keys, finalizeEvent } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
-import { assertHex32, isRecord } from "../core/util.ts";
+import { assertHex32, isRecord, nowSeconds } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
 import { encryptToPubkey } from "./nip44.ts";
 
@@ -66,9 +66,6 @@ export type SealOptions = Pick<WrapOptions, "now" | "randomInt" | "timestamps" |
 
 export class Nip59Error extends NostrError {
   override name = "Nip59Error";
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-  }
 }
 
 export const TWO_DAYS_SECS: number = 2 * 24 * 60 * 60;
@@ -135,19 +132,25 @@ export function eventToJson(event: Event): string {
 }
 
 function defaultRandomInt(maxExclusive: number): number {
-  if (!Number.isSafeInteger(maxExclusive) || maxExclusive <= 0) {
-    throw new Nip59Error("randomInt bound must be a positive integer");
+  if (!Number.isSafeInteger(maxExclusive) || maxExclusive <= 0 || maxExclusive > 0x100000000) {
+    throw new Nip59Error("randomInt bound must be a positive integer within uint32 range");
   }
-  const bytes = randomBytes(4);
-  const n = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
-  return n % maxExclusive;
+  // rejection sampling: discard draws ≥ the largest multiple of maxExclusive that fits uint32
+  const limit = Math.floor(0x100000000 / maxExclusive) * maxExclusive;
+  for (;;) {
+    const bytes = randomBytes(4);
+    const n = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
+    if (n < limit) {
+      return n % maxExclusive;
+    }
+  }
 }
 
 export function randomPastTimestamp(opts?: {
   now?: number | undefined;
   randomInt?: ((maxExclusive: number) => number) | undefined;
 }): number {
-  const now = opts?.now ?? Math.floor(Date.now() / 1000);
+  const now = opts?.now ?? nowSeconds();
   const offset = (opts?.randomInt ?? defaultRandomInt)(TWO_DAYS_SECS);
   return now - offset;
 }
@@ -165,7 +168,7 @@ export function createRumor(
     kind: template.kind,
     content: template.content ?? "",
     tags: template.tags ? [...template.tags] : [],
-    created_at: template.created_at ?? Math.floor(Date.now() / 1000),
+    created_at: template.created_at ?? nowSeconds(),
     pubkey: assertHex32(pubkey, "public key"),
   };
   return { ...unsigned, id: getEventHash(unsigned) };
@@ -177,19 +180,18 @@ export async function createSeal(
   rumor: Rumor,
   opts?: SealOptions,
 ): Promise<Event> {
-  const sealer = requireNip59Crypto(crypto);
   const recipientPk = assertHex32(recipient, "public key");
   let content: string;
   try {
-    content = await sealer.nip44Encrypt(recipientPk, rumorToJson(rumor));
+    content = await crypto.nip44Encrypt(recipientPk, rumorToJson(rumor));
   } catch (error) {
     throw new Nip59Error("failed to encrypt", { cause: error });
   }
   const created_at =
     opts?.timestamps?.seal ??
     (opts?.randomize === "wrap" ? rumor.created_at : randomPastTimestamp(opts));
-  const pubkey = await sealer.getPublicKey();
-  return sealer.signEvent({
+  const pubkey = await crypto.getPublicKey();
+  return crypto.signEvent({
     kind: Kind.Seal,
     content,
     created_at,

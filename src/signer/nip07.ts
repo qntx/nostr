@@ -65,7 +65,7 @@ export class Nip07Signer implements NostrSigner {
       return assertHex32(pk, "pubkey");
     } catch (error) {
       throw new CryptoError("NIP-07 getPublicKey returned an invalid pubkey", {
-        cause: error instanceof Error ? error : undefined,
+        cause: error,
       });
     }
   }

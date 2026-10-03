@@ -5,7 +5,6 @@ import { describe, expect, test } from "vite-plus/test";
 import { HexError } from "../src/core/error.ts";
 import { bytesToHex } from "../src/core/util.ts";
 import {
-  decodeNostrURI,
   getPublicKey,
   Nip19Error,
   naddrEncode,
@@ -23,6 +22,7 @@ import type {
   EventPointer,
   ProfilePointer,
 } from "../src/nips/nip19.ts";
+import { isNostrURI, Nip21Error, parseNostrURI } from "../src/nips/nip21.ts";
 
 const nsecBytes = (r: DecodedResult): Uint8Array => {
   if (r.type !== "nsec") {
@@ -114,18 +114,19 @@ describe("nip19", () => {
     expect(addrData.pubkey).toBe(pk);
   });
 
-  test("decodeNostrURI handles prefix and invalid", () => {
+  test("nostr: URI prefix parses via nip21; invalid input throws", () => {
     const pk = getPublicKey(SecretKey.generate());
     const npub = npubEncode(pk);
-    const ok = decodeNostrURI(`nostr:${npub}`);
-    expect(ok.type).toBe("npub");
-    expect(decodeNostrURI("not-a-code").type).toBe("invalid");
+    expect(parseNostrURI(`nostr:${npub}`).decoded.type).toBe("npub");
+    expect(isNostrURI("not-a-code")).toBe(false);
+    expect(() => parseNostrURI("not-a-code")).toThrow(Nip21Error);
   });
 
-  test("decodeNostrURI rejects nostr:nsec but bare nsec still decodes", () => {
+  test("nostr:nsec is rejected but bare nsec still decodes", () => {
     const sk = SecretKey.generate();
     const nsec = nsecEncode(sk.bytes);
-    expect(decodeNostrURI(`nostr:${nsec}`)).toStrictEqual({ type: "invalid", data: undefined });
+    expect(isNostrURI(`nostr:${nsec}`)).toBe(false);
+    expect(() => parseNostrURI(`nostr:${nsec}`)).toThrow(Nip21Error);
     const bare = nip19Decode(nsec);
     expect(bare.type).toBe("nsec");
   });

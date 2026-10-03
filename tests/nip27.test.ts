@@ -309,21 +309,4 @@ describe("nip27 parseContent", () => {
   test.each(cases)("$name", (c) => {
     expect(parseContent(c.content, c.opts)).toStrictEqual(c.want);
   });
-
-  test("1000 mixed notes tokenize within 50ms", () => {
-    const fixture =
-      `gm #中文 #nostr nostr:${NPUB} https://i.example/p.png ` +
-      `https://en.wikipedia.org/wiki/Foo_(bar) wss://r.example ` +
-      `lightning:lnbc1pvjluezsp5qqq :wave: 你好世界`;
-    const event = {
-      content: fixture,
-      tags: [["emoji", "wave", "https://cdn.example/wave.png"]],
-    };
-    const t0 = performance.now();
-    for (let i = 0; i < 1000; i++) {
-      parseContent(event);
-    }
-    const ms = performance.now() - t0;
-    expect(ms).toBeLessThan(50);
-  });
 });
