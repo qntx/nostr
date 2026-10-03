@@ -915,6 +915,31 @@ describe("Relay", () => {
     relay.close();
   });
 
+  test("far-future created_at clamps the reconnect watermark to wall clock", async () => {
+    const relay = await Relay.connect("wss://future-wm.example");
+    const keys = Keys.fromSecretKey(SK);
+    const now = Math.floor(Date.now() / 1000);
+    const future = EventBuilder.textNote("future")
+      .createdAt(now + 10 * 365 * 24 * 3600)
+      .signWithKeys(keys);
+    const sub = relay.subscribe([{ kinds: [1] }], {}) as Subscription;
+    const ws = MockWebSocket.last();
+    ws.receive(JSON.stringify(["EVENT", sub.id, future]));
+
+    const atAssert = Math.floor(Date.now() / 1000);
+    expect(sub.lastCreatedAt).toBeLessThanOrEqual(atAssert);
+    expect(sub.idsAtWatermark.has(future.id)).toBe(true);
+    expect(sub.replayFilters()[0]!.since).toBeLessThanOrEqual(atAssert);
+
+    // A normal event after the future one keeps the clamped watermark.
+    const normal = EventBuilder.textNote("normal")
+      .createdAt(now - 60)
+      .signWithKeys(keys);
+    ws.receive(JSON.stringify(["EVENT", sub.id, normal]));
+    expect(sub.lastCreatedAt).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
+    relay.close();
+  });
+
   test("subscribe rejects empty and oversize custom ids at the call", async () => {
     const relay = await Relay.connect("wss://sub-id.example", {
       websocketImplementation: MockWebSocketCtor,
@@ -3499,5 +3524,96 @@ describe("duplicate publish and abort-listener cleanup", () => {
     } finally {
       relay.close();
     }
+  });
+});
+
+describe("filter-mismatched EVENTs", () => {
+  test("exclusive subscription drops a valid event that does not match its filters", async () => {
+    let verifyCalls = 0;
+    let invalidEvents = 0;
+    const relay = await Relay.connect("wss://mm-exclusive.example", {
+      websocketImplementation: MockWebSocketCtor,
+      verifyEvent: (event) => {
+        verifyCalls += 1;
+        return verifyEvent(event);
+      },
+    });
+    relay.on("invalidevent", () => {
+      invalidEvents += 1;
+    });
+    const a = Keys.fromSecretKey(SK);
+    const b = Keys.generate();
+    const byB = EventBuilder.textNote("stranger").createdAt(1).signWithKeys(b);
+    const byA = EventBuilder.textNote("mine").createdAt(2).signWithKeys(a);
+    const events: string[] = [];
+    const sub = relay.subscribe([{ authors: [a.publicKey] }], {
+      closeOnEose: true,
+      onevent: (e) => events.push(e.id),
+    });
+    const ws = MockWebSocket.last();
+    ws.receive(JSON.stringify(["EVENT", sub.id, byB]));
+    expect(events).toStrictEqual([]);
+    expect(verifyCalls).toBe(0);
+    expect(invalidEvents).toBe(0);
+    ws.receive(JSON.stringify(["EVENT", sub.id, byA]));
+    expect(events).toStrictEqual([byA.id]);
+    expect(verifyCalls).toBe(1);
+    relay.close();
+  });
+
+  test("live subscription drops a valid event that does not match the wire filters", async () => {
+    let verifyCalls = 0;
+    let invalidEvents = 0;
+    const relay = await Relay.connect("wss://mm-live.example", {
+      websocketImplementation: MockWebSocketCtor,
+      verifyEvent: (event) => {
+        verifyCalls += 1;
+        return verifyEvent(event);
+      },
+    });
+    relay.on("invalidevent", () => {
+      invalidEvents += 1;
+    });
+    const a = Keys.fromSecretKey(SK);
+    const b = Keys.generate();
+    const byB = EventBuilder.textNote("stranger").createdAt(1).signWithKeys(b);
+    const byA = EventBuilder.textNote("mine").createdAt(2).signWithKeys(a);
+    const events: string[] = [];
+    const sub = relay.subscribe([{ authors: [a.publicKey] }], {
+      onevent: (e) => events.push(e.id),
+    });
+    const ws = MockWebSocket.last();
+    ws.receive(JSON.stringify(["EVENT", sub.id, byB]));
+    expect(events).toStrictEqual([]);
+    expect(verifyCalls).toBe(0);
+    expect(invalidEvents).toBe(0);
+    ws.receive(JSON.stringify(["EVENT", sub.id, byA]));
+    expect(events).toStrictEqual([byA.id]);
+    expect(verifyCalls).toBe(1);
+    relay.close();
+  });
+
+  test("fetch drops events that do not match its filters", async () => {
+    let verifyCalls = 0;
+    const relay = await Relay.connect("wss://mm-fetch.example", {
+      websocketImplementation: MockWebSocketCtor,
+      verifyEvent: (event) => {
+        verifyCalls += 1;
+        return verifyEvent(event);
+      },
+    });
+    const a = Keys.fromSecretKey(SK);
+    const b = Keys.generate();
+    const byB = EventBuilder.textNote("stranger").createdAt(1).signWithKeys(b);
+    const fetchP = relay.fetch([{ authors: [a.publicKey] }]);
+    const ws = MockWebSocket.last();
+    const req = ws.lastSent() as [string, string];
+    ws.receive(JSON.stringify(["EVENT", req[1], byB]));
+    ws.receive(JSON.stringify(["EOSE", req[1]]));
+    const result = await fetchP;
+    expect(result.events).toStrictEqual([]);
+    expect(result.end).toStrictEqual({ type: "eose" });
+    expect(verifyCalls).toBe(0);
+    relay.close();
   });
 });

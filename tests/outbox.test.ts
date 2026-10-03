@@ -1015,3 +1015,55 @@ describe("OutboxFeed", () => {
     await client.shutdown();
   });
 });
+
+describe("OutboxFeed sync since clamp", () => {
+  test("a bound with newest far in the future clamps sync since to wall clock", async () => {
+    const a = Keys.fromSecretKey(SK_A);
+    const list = relayListEventBuilder([{ url: "wss://out.example", marker: "write" }])
+      .createdAt(1)
+      .signWithKeys(a);
+
+    const store = new MemoryEventStore();
+    const now = Math.floor(Date.now() / 1000);
+    await store.setOutboxBound(a.publicKey, Kind.TextNote, {
+      oldest: 1,
+      newest: now + 10 * 365 * 24 * 3600,
+    });
+    const gossip = new Gossip();
+    gossip.ingest(list);
+
+    const client = new Client({
+      storage: store,
+      gossip,
+      relays: ["wss://discovery.example"],
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: false,
+    });
+
+    await client.connect();
+    const feed = new OutboxFeed({
+      pool: client.pool,
+      gossip,
+      storage: store,
+      discoveryRelays: client.relays,
+      authors: [a.publicKey],
+      kinds: [Kind.TextNote],
+      observe: (e) => client.observe(e),
+    });
+
+    const syncP = feed.sync({ skipHydrate: true, limit: 20 });
+    await waitForReq();
+    const filters = collectReqFilters().filter(isKind1For(a.publicKey));
+    eoseAllReqs();
+    await syncP;
+
+    const atAssert = Math.floor(Date.now() / 1000);
+    expect(filters.length).toBeGreaterThan(0);
+    for (const filter of filters) {
+      expect(filter.since).toBeLessThanOrEqual(atAssert);
+    }
+
+    feed.close();
+    await client.shutdown();
+  });
+});

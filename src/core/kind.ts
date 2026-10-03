@@ -1,4 +1,7 @@
-/** NIP-01 regular: stored by relays. */
+/**
+ * NIP-01 regular ranges verbatim; kinds outside every defined range are still stored like regular
+ * events (see {@link classifyKind}).
+ */
 export function isRegularKind(kind: number): boolean {
   return kind === 1 || kind === 2 || (kind >= 4 && kind < 45) || (kind >= 1000 && kind < 10000);
 }
@@ -19,18 +22,14 @@ export function isAddressableKind(kind: number): boolean {
 }
 
 /** NIP-01 kind classes: regular / replaceable / ephemeral / addressable. */
-export type KindClassification =
-  | "regular"
-  | "replaceable"
-  | "ephemeral"
-  | "addressable"
-  | "unknown";
+export type KindClassification = "regular" | "replaceable" | "ephemeral" | "addressable";
 
-/** Classify a kind number into its NIP-01 storage class (`"unknown"` outside all ranges). */
+/**
+ * Classify a kind number into its NIP-01 storage class. NIP-01 leaves kinds 45–999 and 40000+
+ * undefined (rather than forbidden); relays store them like regular events, so they classify
+ * `"regular"` here even though {@link isRegularKind} returns false for them.
+ */
 export function classifyKind(kind: number): KindClassification {
-  if (isRegularKind(kind)) {
-    return "regular";
-  }
   if (isReplaceableKind(kind)) {
     return "replaceable";
   }
@@ -40,7 +39,7 @@ export function classifyKind(kind: number): KindClassification {
   if (isAddressableKind(kind)) {
     return "addressable";
   }
-  return "unknown";
+  return "regular";
 }
 
 /** Kind numbers used by this package. */

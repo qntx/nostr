@@ -42,7 +42,10 @@ export type RoutedFilter = {
 };
 
 export type GossipOptions = {
-  /** Max relays to keep per direction when ranking. Default 4. */
+  /**
+   * Max relays kept per direction; the first N in list order win (NIP-65 defines no ranking).
+   * Default 4.
+   */
   maxRelaysPerPubkey?: number | undefined;
   /**
    * Max pubkeys with tracked routes; the map is LRU — writes and lookups refresh recency, and

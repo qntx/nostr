@@ -360,7 +360,14 @@ export class Negentropy {
       throw new Nip77Error("invalid negentropy protocol version byte");
     }
     if (protocolVersion !== PROTOCOL_VERSION) {
-      // NIP-77: reply with the highest supported version so the peer can downgrade.
+      // The initiator is the client: nobody downgrades on its behalf, so a mismatched
+      // version is a hard failure. The responder answers with its highest version so the
+      // peer can downgrade (NIP-77).
+      if (this.#initiator) {
+        throw new Nip77Error(
+          `unsupported negentropy protocol version ${protocolVersion - 0x60} (peer), we speak ${PROTOCOL_VERSION - 0x60}`,
+        );
+      }
       return { have, need, nextMessage: bytesToHex(fullOutput.unwrap()) };
     }
 

@@ -3,6 +3,7 @@ import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { createSubscriptionId } from "../core/message.ts";
 import { invokeSafely } from "../core/report.ts";
+import { nowSeconds } from "../core/util.ts";
 import { RelayClosedError } from "./error.ts";
 
 export type SubscriptionHandlers = {
@@ -204,15 +205,21 @@ export class Subscription {
     invokeSafely(() => this.#handlers.onevent?.(event));
   }
 
-  /** Advance the reconnect watermark after a verified EVENT. */
+  /**
+   * Advance the reconnect watermark after a verified EVENT. A far-future `created_at` (buggy or
+   * hostile publishers do exist on the public network) must not push the replayed `since` past wall
+   * clock — clamp it to the current wall clock. The worst case is re-delivery of events already
+   * seen, never event loss.
+   */
   noteVerified(event: Event): void {
-    if (this.#lastCreatedAt === undefined || event.created_at > this.#lastCreatedAt) {
-      this.#lastCreatedAt = event.created_at;
+    const ts = Math.min(event.created_at, nowSeconds());
+    if (this.#lastCreatedAt === undefined || ts > this.#lastCreatedAt) {
+      this.#lastCreatedAt = ts;
       this.#idsAtWatermark.clear();
       this.#idsAtWatermark.add(event.id);
       return;
     }
-    if (event.created_at === this.#lastCreatedAt) {
+    if (ts === this.#lastCreatedAt) {
       this.#idsAtWatermark.add(event.id);
     }
   }

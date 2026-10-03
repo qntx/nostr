@@ -112,8 +112,13 @@ export function parseEventAddress(value: string): EventAddress | undefined {
   if (second === -1) {
     return undefined;
   }
-  const kind = Number(value.slice(0, first));
-  if (!Number.isInteger(kind) || kind < 0 || kind > 65535) {
+  const kindText = value.slice(0, first);
+  // Strict decimal: Number() also accepts "1e4", "0x10", " 1", "+1" — none are NIP-19 kinds.
+  if (!/^\d{1,5}$/.test(kindText)) {
+    return undefined;
+  }
+  const kind = Number(kindText);
+  if (kind > 65535) {
     return undefined;
   }
   const pubkey = value.slice(first + 1, second).toLowerCase();

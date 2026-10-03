@@ -390,11 +390,15 @@ export class OutboxFeed {
     if (bounded.length === 0 || minBoundedNewest === undefined) {
       return [{ ...base, authors }];
     }
+    // A bound far in the future (bad clock, hostile stored data) must not push `since` past wall
+    // clock — clamp at this single consumer point so live-updated, persisted, and store-derived
+    // bounds are all covered. Worst case is re-delivery, never loss.
+    const since = Math.max(0, Math.min(minBoundedNewest, nowSeconds()) - 1);
     if (unbounded.length === 0) {
-      return [{ ...base, authors, since: Math.max(0, minBoundedNewest - 1) }];
+      return [{ ...base, authors, since }];
     }
     return [
-      { ...base, authors: bounded, since: Math.max(0, minBoundedNewest - 1) },
+      { ...base, authors: bounded, since },
       { ...base, authors: unbounded },
     ];
   }

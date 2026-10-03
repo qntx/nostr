@@ -1,5 +1,6 @@
 import { randomBytes } from "@noble/hashes/utils.js";
 
+import { throwIfAborted } from "../core/abort.ts";
 import { errorMessage } from "../core/error.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
 import { signedMatchesUnsigned, validateSignedEvent } from "../core/event.ts";
@@ -31,7 +32,7 @@ export type Nip46SubscribeOptions = {
 
 /**
  * Structural relay transport for NIP-46 RPC. Satisfied by {@link import("../relay/pool.ts").Pool};
- * constructed above the signer layer so `signer` never imports `relay` (ADR-0001).
+ * constructed above the signer layer so `signer` never imports `relay` (see AGENTS.md).
  */
 export type Nip46Transport = {
   subscribe: (
@@ -278,6 +279,7 @@ export class Nip46Signer implements NostrSigner {
       handshakeTimeoutMs?: number;
     },
   ): Promise<Nip46Signer> {
+    throwIfAborted(opts.signal);
     const params = parseNostrConnectURI(connectionURI);
     const sk = resolveClientSecret(opts.clientSecretKey);
     const clientPubkey = getPublicKey(sk);
@@ -291,13 +293,18 @@ export class Nip46Signer implements NostrSigner {
 
     return new Promise((resolve, reject) => {
       let settled = false;
+      let handshaking = false;
+      // `let` + later assignment: pool.subscribe may fire onclose synchronously (pre-aborted
+      // signal via fanIn) before a const initializer would complete.
+      // oxlint-disable-next-line prefer-const
+      let sub: { close: (reason?: string) => void } | undefined;
       const finish = (err?: Error, signer?: Nip46Signer) => {
         if (settled) {
           return;
         }
         settled = true;
         clearTimeout(timer);
-        sub.close(err ? "failed" : "connected");
+        sub?.close(err ? "failed" : "connected");
         if (err) {
           if (ownsPool) {
             pool.close();
@@ -312,7 +319,7 @@ export class Nip46Signer implements NostrSigner {
         finish(new Nip46Error("nostrconnect handshake timed out"));
       }, handshakeTimeoutMs);
 
-      const sub = pool.subscribe(
+      sub = pool.subscribe(
         params.relays,
         [{ kinds: [Kind.NostrConnect], "#p": [clientPubkey], limit: 0 }],
         {
@@ -325,6 +332,11 @@ export class Nip46Signer implements NostrSigner {
               if (response.result !== params.secret) {
                 return;
               }
+              // A duplicate connect response must not spin up a second signer.
+              if (handshaking) {
+                return;
+              }
+              handshaking = true;
 
               const pointer: BunkerPointer = {
                 pubkey: event.pubkey.toLowerCase(),
@@ -343,6 +355,8 @@ export class Nip46Signer implements NostrSigner {
                   await signer.getPublicKey();
                   finish(undefined, signer);
                 } catch (error: unknown) {
+                  // Do not leak the signer's subscription on a shared pool.
+                  await signer.close();
                   finish(error instanceof Error ? error : new Nip46Error(String(error)));
                 }
               })();

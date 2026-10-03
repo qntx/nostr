@@ -68,6 +68,21 @@ describe("NIP-45 COUNT codec", () => {
     expect(msg).toStrictEqual(["COUNT", "c1", { count: 9, hll: lower }]);
     expect(countPayload(msg).hll).toBe(lower);
   });
+
+  test("rejects counts that are not non-negative safe integers", () => {
+    for (const count of [-1, 1.5, 2 ** 53, 1e20, "3", true]) {
+      expect(() => parseRelayMessage(JSON.stringify(["COUNT", "c1", { count }]))).toThrow(
+        MessageError,
+      );
+    }
+    for (const count of [0, 7, Number.MAX_SAFE_INTEGER]) {
+      expect(parseRelayMessage(JSON.stringify(["COUNT", "c1", { count }]))).toStrictEqual([
+        "COUNT",
+        "c1",
+        { count },
+      ]);
+    }
+  });
 });
 
 describe("mergeCountHll", () => {

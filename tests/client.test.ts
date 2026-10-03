@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import {
   Client,
   EventBuilder,
+  EventValidationError,
   Kind,
   Keys,
   KeysSigner,
@@ -12,6 +13,7 @@ import {
   RelayTimeoutError,
   relayListEventBuilder,
   useWebSocketImplementation,
+  verifyEvent,
 } from "../src/index.ts";
 import type { Event } from "../src/index.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
@@ -1334,6 +1336,48 @@ describe("issue #130", () => {
       await client.shutdown();
     } finally {
       restore();
+    }
+  });
+});
+
+describe("Client.observe verification", () => {
+  test("observe rejects a tampered event without ingesting it", async () => {
+    const client = new Client({ websocketImplementation: MockWebSocketCtor });
+    try {
+      const keys = Keys.fromSecretKey(SK);
+      const list = relayListEventBuilder([{ url: "wss://r.example", marker: "read" }])
+        .createdAt(1)
+        .signWithKeys(keys);
+      const tampered: Event = { ...list, content: "{}" };
+      expect(verifyEvent(tampered)).toBe(false);
+      expect(() => client.observe(tampered)).toThrow(EventValidationError);
+      expect(() => client.observe(tampered)).toThrow("observe requires a verified event");
+      expect(client.index.get(tampered.id)).toBeUndefined();
+      expect(client.gossip.getRoutes(keys.publicKey)).toBeUndefined();
+
+      client.observe(list);
+      expect(client.index.get(list.id)?.id).toBe(list.id);
+      expect(client.gossip.getRoutes(keys.publicKey)).toBeDefined();
+    } finally {
+      await client.shutdown();
+    }
+  });
+
+  test("observeAll is all-or-nothing: one bad event rejects the batch", async () => {
+    const client = new Client({ websocketImplementation: MockWebSocketCtor });
+    try {
+      const keys = Keys.fromSecretKey(SK);
+      const good = EventBuilder.textNote("good").createdAt(1).signWithKeys(keys);
+      const bad = EventBuilder.textNote("bad").createdAt(2).signWithKeys(keys);
+      const tampered: Event = { ...bad, content: "forged" };
+      expect(() => client.observeAll([good, tampered])).toThrow(EventValidationError);
+      expect(client.index.get(good.id)).toBeUndefined();
+      expect(client.index.get(tampered.id)).toBeUndefined();
+
+      client.observeAll([good]);
+      expect(client.index.get(good.id)?.id).toBe(good.id);
+    } finally {
+      await client.shutdown();
     }
   });
 });

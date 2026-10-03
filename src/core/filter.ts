@@ -71,58 +71,6 @@ export function matchFilters(filters: ReadonlyArray<Filter>, event: Event): bool
   return false;
 }
 
-/** Merge filters by unioning list fields; returns a new plain object. */
-export function mergeFilters(...filters: Filter[]): Filter {
-  const result: Record<string, unknown> = {};
-  const mergeList = (property: string, values: ReadonlyArray<unknown> | undefined): void => {
-    if (values === undefined) {
-      return;
-    }
-    const existing = result[property];
-    const list: unknown[] = Array.isArray(existing) ? [...(existing as unknown[])] : [];
-    for (const value of values) {
-      if (!list.includes(value)) {
-        list.push(value);
-      }
-    }
-    result[property] = list;
-  };
-  const mergeMax = (property: "limit" | "until", value: number | undefined): void => {
-    if (value === undefined) {
-      return;
-    }
-    const prev = result[property];
-    if (typeof prev !== "number" || value > prev) {
-      result[property] = value;
-    }
-  };
-  for (const filter of filters) {
-    mergeList("ids", filter.ids);
-    mergeList("authors", filter.authors);
-    mergeList("kinds", filter.kinds);
-    for (const key of Object.keys(filter)) {
-      if (!key.startsWith("#")) {
-        continue;
-      }
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- startsWith("#") above guarantees the template key
-      mergeList(key, filter[key as `#${string}`]);
-    }
-    mergeMax("limit", filter.limit);
-    mergeMax("until", filter.until);
-    if (filter.since !== undefined) {
-      const prev = result["since"];
-      if (typeof prev !== "number" || filter.since < prev) {
-        result["since"] = filter.since;
-      }
-    }
-    if (filter.search !== undefined) {
-      result["search"] = filter.search;
-    }
-  }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built key by key above; the record is filter-shaped by construction
-  return result as Filter;
-}
-
 /**
  * Intrinsic upper bound implied by the filter alone. Returns a positive integer, or `Infinity` when
  * unbounded.

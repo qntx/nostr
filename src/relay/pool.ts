@@ -329,10 +329,13 @@ export class Pool {
       this.#enforceMaxRelays(norm);
       const signFn = this.#automaticallyAuth?.(norm) ?? undefined;
       const created = new Relay(norm, { ...this.#relayOptions, authSigner: signFn });
-      // Only drop from the pool on terminal close (reconnect keeps the entry).
+      // Only drop from the pool on terminal close (reconnect keeps the entry). Guard on
+      // identity: a stale relay's delayed close must not delete a newer relay's entry.
       created.on("close", () => {
-        this.#relays.delete(norm);
-        this.#lastActivity.delete(norm);
+        if (this.#relays.get(norm) === created) {
+          this.#relays.delete(norm);
+          this.#lastActivity.delete(norm);
+        }
       });
       created.on("invalidevent", () => {
         this.#noteInvalidEvent(norm);

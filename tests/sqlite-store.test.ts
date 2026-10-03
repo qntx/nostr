@@ -283,3 +283,49 @@ describe("SqliteEventStore", () => {
     }
   });
 });
+
+describe("SqliteEventStore tag cleanup", () => {
+  const tagCount = async (driver: SqliteTestDriver, id: string): Promise<number> => {
+    const rows = await driver.all<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM tags WHERE event_id = ?`,
+      [id],
+    );
+    return rows.at(0)?.n ?? -1;
+  };
+
+  test("replacement, remove, and kind-5 deletion drop tag rows with foreign_keys off", async () => {
+    const { driver, store } = await openStore();
+    try {
+      // Simulate expo-sqlite's exclusive-transaction connection: foreign_keys is off there,
+      // so ON DELETE CASCADE never fires.
+      await driver.exec("PRAGMA foreign_keys = OFF");
+
+      const v1 = new EventBuilder(0, "v1")
+        .tags([["p", bob().publicKey]])
+        .createdAt(1)
+        .signWithKeys(alice());
+      const v2 = new EventBuilder(0, "v2")
+        .tags([["p", bob().publicKey]])
+        .createdAt(2)
+        .signWithKeys(alice());
+      await store.putMany([v1, v2]);
+      await expect(tagCount(driver, v1.id)).resolves.toBe(0);
+      await expect(tagCount(driver, v2.id)).resolves.toBe(1);
+
+      const removed = note(alice(), "gone", 3, [["e", v2.id]]);
+      await store.put(removed);
+      await store.remove([removed.id]);
+      await expect(tagCount(driver, removed.id)).resolves.toBe(0);
+
+      const target = note(alice(), "del me", 4, [["p", "aabbcc"]]);
+      await store.put(target);
+      const del = EventBuilder.deletion([{ id: target.id, kind: 1 }], "")
+        .createdAt(5)
+        .signWithKeys(alice());
+      await expect(store.put(del)).resolves.toBe("deleted");
+      await expect(tagCount(driver, target.id)).resolves.toBe(0);
+    } finally {
+      driver.close();
+    }
+  });
+});

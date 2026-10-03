@@ -1,10 +1,12 @@
 import { EventBuilder } from "../core/builder.ts";
 import { Emitter } from "../core/emitter.ts";
+import { EventValidationError } from "../core/error.ts";
 import { sortedEvents } from "../core/event.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
 import { canonicalizeFilters, matchFilters } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
 import { normalizeURL } from "../core/util.ts";
+import { verifyEvent } from "../core/verifier.ts";
 import { Gossip } from "../gossip/index.ts";
 import { createLoaders, OutboxFeed } from "../loaders/index.ts";
 import type { Loaders } from "../loaders/index.ts";
@@ -214,13 +216,29 @@ export class Client {
     return list;
   }
 
-  /** Ingest one inbound event: index (with relay URL) → meta → persistence. */
+  /**
+   * Ingest one inbound event: index (with relay URL) → meta → persistence. The event must carry a
+   * valid signature; {@link EventValidationError} is thrown otherwise. Events delivered by relay
+   * subscriptions are already verified, so this is a WeakSet cache hit on those paths.
+   */
   observe(event: Event, relayUrl?: string): void {
+    if (!verifyEvent(event)) {
+      throw new EventValidationError("observe requires a verified event");
+    }
     this.#ingest(event, relayUrl);
   }
 
-  /** Ingest many events (deduped by id, order preserved) as one persist batch. */
+  /**
+   * Ingest many events (deduped by id, order preserved) as one persist batch. Every event must
+   * carry a valid signature — all are verified before anything is ingested, so a batch is
+   * all-or-nothing.
+   */
   observeAll(events: ReadonlyArray<Event>): void {
+    for (const event of events) {
+      if (!verifyEvent(event)) {
+        throw new EventValidationError("observe requires a verified event");
+      }
+    }
     const seen = new Set<string>();
     for (const event of events) {
       if (seen.has(event.id)) {
@@ -242,7 +260,19 @@ export class Client {
     if (opts?.meta !== false) {
       this.gossip.ingest(event);
     }
-    if (opts?.persist === false || !this.#persistEvents) {
+    if (opts?.persist !== false) {
+      this.#queuePersist(event);
+    }
+  }
+
+  /** Gossip + persistence for an event the index already holds — no redundant `index.add`. */
+  #ingestMeta(event: Event): void {
+    this.gossip.ingest(event);
+    this.#queuePersist(event);
+  }
+
+  #queuePersist(event: Event): void {
+    if (!this.#persistEvents) {
       return;
     }
     this.#persistQueue.push(event);
@@ -470,11 +500,19 @@ export class Client {
       }
     }
 
-    // Every inbound event lands in the index (with its relay URL) before the
-    // caller's onevent runs; the batch below re-ingests for persistence.
+    // Every inbound event lands in the index (with its relay URL) before the caller's
+    // onevent runs. `onevent` fires once per relay delivery, so only the first sighting of
+    // an id does a full index put — later relays are recorded via markSeen. The batch loop
+    // below adds gossip meta and persistence without re-putting.
+    const seenIds = new Set<string>();
     const onevent = (event: Event, relayUrl: string) => {
       if (shouldObserve) {
-        this.#ingest(event, relayUrl, { persist: false, meta: false });
+        if (seenIds.has(event.id)) {
+          this.index.markSeen(event.id, relayUrl);
+        } else {
+          seenIds.add(event.id);
+          this.index.add(event, relayUrl);
+        }
       }
       opts?.onevent?.(event, relayUrl);
     };
@@ -494,7 +532,7 @@ export class Client {
     for (const e of batch) {
       candidates.push(e);
       if (shouldObserve) {
-        this.observe(e);
+        this.#ingestMeta(e);
       }
     }
 
@@ -534,15 +572,17 @@ export class Client {
       const seen = new Set<string>();
       for (const result of results) {
         for (const event of result.events) {
-          this.#ingest(event, result.url, { persist: false, meta: false });
-          if (!seen.has(event.id)) {
-            seen.add(event.id);
-            unique.push(event);
+          if (seen.has(event.id)) {
+            this.index.markSeen(event.id, result.url);
+            continue;
           }
+          seen.add(event.id);
+          this.index.add(event, result.url);
+          unique.push(event);
         }
       }
       for (const event of unique) {
-        this.observe(event);
+        this.#ingestMeta(event);
       }
     }
     return results;

@@ -6,7 +6,7 @@ import {
   isMarkedVerified,
   markUnverified,
   markVerified,
-  serializeEvent,
+  serializeValidatedEvent,
   validateSignedEvent,
 } from "./event.ts";
 import type { Event } from "./event.ts";
@@ -46,7 +46,7 @@ export function createEventVerifier(backend: SerializedEventVerifier): EventVeri
       return false;
     }
     const ok = backend(
-      utf8Encoder.encode(serializeEvent(event)),
+      utf8Encoder.encode(serializeValidatedEvent(event)),
       hexToBytes(event.id),
       hexToBytes(event.pubkey),
       hexToBytes(event.sig),
