@@ -4,6 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # >=8 ships sources Hermes cannot parse (tests/hermes/globals.ts).
+      - dependency-name: "whatwg-url"
+        versions: [">=8"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
