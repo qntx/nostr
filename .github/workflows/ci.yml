@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ci:
     uses: qntx/workflows/.github/workflows/ci-bun.yml@v2
@@ -24,3 +28,32 @@ jobs:
     with:
       package-manager: bun
       bench: true
+      # Rust gates live in the rust/rust-minimal jobs.
+      rust-checks: false
+
+  rust:
+    uses: qntx/workflows/.github/workflows/ci-rust.yml@v2
+    permissions:
+      contents: read
+    with:
+      # rust-version omitted: rust-toolchain.toml pins the toolchain.
+      deny: true
+
+  rust-minimal:
+    uses: qntx/workflows/.github/workflows/ci-rust.yml@v2
+    permissions:
+      contents: read
+    with:
+      features: --no-default-features
+      doc: true
+      # package-check stays off until nk-core makes the workspace publishable.
+
+  portable:
+    uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
+    permissions:
+      contents: read
+    with:
+      targets: wasm32-unknown-unknown aarch64-linux-android x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
+      packages: nk-wasm
+      features: --no-default-features
+      forbid-deps: getrandom
