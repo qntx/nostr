@@ -168,7 +168,7 @@
 
     "@qntx/oxfmt": ["@qntx/oxfmt@1.0.4", "", { "peerDependencies": { "oxfmt": ">=0.66.0 <1.0.0" }, "optionalPeers": ["oxfmt"] }, "sha512-4w1V6N/6wq+p9IZ+OjeEy8rDm8owLwxq7AaOr5XWfJF/kqe6gHzFYxsG8WMOXXAjKsPlzK3YdCTci+NCmu3t5Q=="],
 
-    "@qntx/oxlint": ["@qntx/oxlint@1.0.4", "", { "peerDependencies": { "oxlint": "^1.82.0", "oxlint-tsgolint": ">=7.0.2001" }, "optionalPeers": ["oxlint", "oxlint-tsgolint"] }, "sha512-E6kHEZ3xLdY1kcI7EfpPY3evEQbYWmybJthh2US6bWXc5YQNxKdwm+1SITIjJrQFuzKFJ2MROxoWp8+DMYcC3w=="],
+    "@qntx/oxlint": ["@qntx/oxlint@1.1.1", "", { "peerDependencies": { "oxlint": "^1.82.0", "oxlint-tsgolint": ">=7.0.2001" }, "optionalPeers": ["oxlint", "oxlint-tsgolint"] }, "sha512-zvn9BENK1Ly1GmxwVYEDZJOCm7koW2Cji3l+M1i19gLpcTqmatvtWBEtBRNc6rPxfVRNz0mhc+6z76iTKuNFqw=="],
 
     "@qntx/tsconfig": ["@qntx/tsconfig@1.0.1", "", {}, "sha512-ONEFojcKeCateUga4lJO7tf0KUTLuz5DrPGuzf1zgoo9mQVJx7gHjWElj32tGNiCWE5lblO+9EJ28cvb/81PDQ=="],
 
