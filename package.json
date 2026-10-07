@@ -10,18 +10,20 @@
     "sdk",
     "typescript"
   ],
-  "homepage": "https://github.com/qntx/nostr.js#readme",
+  "homepage": "https://github.com/qntx/nostr#readme",
   "bugs": {
-    "url": "https://github.com/qntx/nostr.js/issues"
+    "url": "https://github.com/qntx/nostr/issues"
   },
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "author": "QuantX <x@qntx.org>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/qntx/nostr.js.git"
+    "url": "git+https://github.com/qntx/nostr.git"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
   ],
   "type": "module",
   "sideEffects": [
@@ -205,13 +207,13 @@
     "bench:store": "BENCH=1 vp test bench/reactive-store.bench.ts",
     "bench:store:sqlite": "BENCH=1 vp test bench/sqlite-store.bench.ts",
     "bench:nip27": "BENCH=1 vp test bench/nip27.bench.ts",
-    "lint": "vp check",
+    "lint": "vp check && taplo fmt --check && bun scripts/check-version.ts && bun scripts/check-layers.ts && bun scripts/parity/check.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.src.json",
     "smoke:hermes": "bun scripts/hermes-smoke.ts",
     "check:pkg": "WASM_PACK=1 vp pack && publint && attw --pack . --profile esm-only",
     "prepublishOnly": "bun run build:wasm",
     "pack:local": "vp pack && bun pm pack",
-    "release": "bumpp --commit --tag --push",
+    "release": "bumpp",
     "prepare": "vp config"
   },
   "dependencies": {
@@ -225,6 +227,7 @@
     "@qntx/oxfmt": "^1.0.4",
     "@qntx/oxlint": "^1.0.4",
     "@qntx/tsconfig": "^1.0.1",
+    "@taplo/cli": "0.7.0",
     "@types/node": "^26.6.3",
     "@types/ws": "8.18.1",
     "binaryen": "^132.0.0",

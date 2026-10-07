@@ -15,7 +15,7 @@ async function wasmBytes(opts?: LoadNostrWasmOptions): Promise<ArrayBuffer | Arr
   if (source instanceof URL) {
     throw new CryptoError(`cannot fetch wasm from ${source.href}`);
   }
-  return fetchWasmUrl(new URL("nostr_crypto_wasm_bg.wasm", import.meta.url));
+  return fetchWasmUrl(new URL("nk_wasm_bg.wasm", import.meta.url));
 }
 
 const loader = createNostrWasmLoader(wasmBytes);

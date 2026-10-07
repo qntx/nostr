@@ -1,0 +1,659 @@
+{
+  "schema": 1,
+  "capabilities": [
+    {
+      "id": "core.hex",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/util.ts", "tests": ["tests/core.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "core.url.normalize",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": {
+        "module": "src/core/util.ts",
+        "tests": ["tests/vectors/core.test.ts", "tests/core.test.ts"]
+      },
+      "rust": null,
+      "vectors": ["vectors/core/url-normalize.json"]
+    },
+    {
+      "id": "core.kind.classify",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/kind.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/kind-classify.json"]
+    },
+    {
+      "id": "core.tag.build",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/tag.ts", "tests": ["tests/core.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "core.tag.address",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/tag.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/tag-address.json"]
+    },
+    {
+      "id": "core.event.validate",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/event.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/event-validate.json"]
+    },
+    {
+      "id": "core.event.serialize",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/event.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/event-serialize.json"]
+    },
+    {
+      "id": "core.event.id",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/event.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/event-serialize.json"]
+    },
+    {
+      "id": "core.event.order",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/event.ts", "tests": ["tests/core.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "core.event.signed-matches",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/event.ts", "tests": ["tests/core.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "core.key.public",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": {
+        "module": "src/core/key.ts",
+        "tests": ["tests/core.test.ts", "tests/vectors/bip340.test.ts"]
+      },
+      "rust": null,
+      "vectors": ["vectors/bip340/official.csv"]
+    },
+    {
+      "id": "core.event.sign",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": {
+        "module": "src/core/key.ts",
+        "tests": ["tests/vectors/core.test.ts", "tests/vectors/bip340.test.ts"]
+      },
+      "rust": null,
+      "vectors": ["vectors/core/event-sign.json", "vectors/bip340/official.csv"]
+    },
+    {
+      "id": "core.event.verify",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": {
+        "module": "src/core/verifier.ts",
+        "tests": ["tests/verifier.test.ts", "tests/vectors/bip340.test.ts"]
+      },
+      "rust": null,
+      "vectors": ["vectors/bip340/official.csv"]
+    },
+    {
+      "id": "core.filter.match",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/filter.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/filter-match.json"]
+    },
+    {
+      "id": "core.filter.limit",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/filter.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/filter-limit.json"]
+    },
+    {
+      "id": "core.filter.canonicalize",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/filter.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/filter-canonicalize.json"]
+    },
+    {
+      "id": "core.filter.fingerprint",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/filter.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/filter-fingerprint.json"]
+    },
+    {
+      "id": "core.message.client",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/message.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/message-client.json"]
+    },
+    {
+      "id": "core.message.relay",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/message.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/core/message-relay.json"]
+    },
+    {
+      "id": "core.message.subscription-id",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/message.ts", "tests": ["tests/core.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "core.count.hll",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": {
+        "module": "src/core/message.ts",
+        "tests": ["tests/vectors/core.test.ts", "tests/count.test.ts"]
+      },
+      "rust": null,
+      "vectors": ["vectors/core/count-hll.json"]
+    },
+    {
+      "id": "core.builder",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": { "module": "src/core/builder.ts", "tests": ["tests/builder-signer.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip19.codec",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip19.ts", "tests": ["tests/nip19.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip21.uri",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip21.ts", "tests": ["tests/nip10-21-27.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip44.v2",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip44.ts", "tests": ["tests/nip44.test.ts"] },
+      "rust": null,
+      "vectors": ["vectors/nip44/official.json"]
+    },
+    {
+      "id": "nip04.codec",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip04.ts", "tests": ["tests/reconnect-nip04.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip49.ncryptsec",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip49.ts", "tests": ["tests/nip49.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip13.pow",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip13.ts", "tests": ["tests/nip13.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip42.auth-event",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip42.ts", "tests": ["tests/nip42-65-storage.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip98.http-auth",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip98.ts", "tests": ["tests/nip98.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip59.wrap",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip59.ts", "tests": ["tests/nip59.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip17.dm",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK2",
+      "ts": { "module": "src/nips/nip17.ts", "tests": ["tests/nip17.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip10.thread",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/nip10.ts", "tests": ["tests/nip10-21-27.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip27.tokenize",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/nip27.ts", "tests": ["tests/nip27.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip51.lists",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/nip51.ts", "tests": ["tests/nip51.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip57.zap",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/nip57.ts", "tests": ["tests/nip57.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip65.relay-list",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/nip65.ts", "tests": ["tests/nip42-65-storage.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip77.negentropy",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/nip77.ts", "tests": ["tests/nip77.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip46.codec",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/nip46.ts", "tests": ["tests/nip46.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip05.identifier",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/nip05.ts", "tests": ["tests/nip05.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "nip11.info",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/nip11.ts", "tests": ["tests/nip11.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "blossom.client",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK3",
+      "ts": { "module": "src/nips/blossom.ts", "tests": ["tests/blossom.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "signer.keys",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK4",
+      "ts": { "module": "src/signer/keys.ts", "tests": ["tests/signing-backend.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "signer.nip46",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK4",
+      "ts": { "module": "src/signer/nip46.ts", "tests": ["tests/nip46.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "signer.nip07",
+      "tier": "C",
+      "status": "n/a",
+      "milestone": "NK4",
+      "ts": { "module": "src/signer/nip07.ts", "tests": ["tests/nip07.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "gossip.route",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK4",
+      "ts": { "module": "src/gossip/gossip.ts", "tests": ["tests/loaders-gossip.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "relay.url.insecure",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK5",
+      "ts": { "module": "src/relay/url.ts", "tests": ["tests/relay.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "relay.connection",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK5",
+      "ts": { "module": "src/relay/relay.ts", "tests": ["tests/relay.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "relay.subscription",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK5",
+      "ts": { "module": "src/relay/subscription.ts", "tests": ["tests/relay.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "relay.publish",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK5",
+      "ts": {
+        "module": "src/relay/relay.ts",
+        "tests": ["tests/integration-fake-relay.test.ts", "tests/relay.test.ts"]
+      },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "relay.auth",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK5",
+      "ts": { "module": "src/relay/auth.ts", "tests": ["tests/lazy-auth.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "relay.count",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK5",
+      "ts": { "module": "src/relay/count-tracker.ts", "tests": ["tests/count.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "relay.negentropy",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK5",
+      "ts": { "module": "src/relay/neg-session.ts", "tests": ["tests/relay.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "relay.pool",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK5",
+      "ts": {
+        "module": "src/relay/pool.ts",
+        "tests": ["tests/fan-in.test.ts", "tests/invalid-event-policy.test.ts"]
+      },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "testing.fake-relay",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK5",
+      "ts": {
+        "module": "src/testing/relay-core.ts",
+        "tests": ["tests/testing.test.ts", "tests/integration-fake-relay.test.ts"]
+      },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "storage.memory",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK6",
+      "ts": {
+        "module": "src/storage/memory.ts",
+        "tests": ["tests/event-store-conformance.test.ts"]
+      },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "storage.sqlite",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK6",
+      "ts": { "module": "src/storage/sqlite.ts", "tests": ["tests/sqlite-store.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "storage.indexeddb",
+      "tier": "C",
+      "status": "n/a",
+      "milestone": "NK6",
+      "ts": {
+        "module": "src/storage/indexeddb.ts",
+        "tests": ["tests/indexeddb-store.test.ts"]
+      },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "store.reactive",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK6",
+      "ts": { "module": "src/store/reactive.ts", "tests": ["tests/reactive-store.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "loaders.replaceable",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK7",
+      "ts": { "module": "src/loaders/replaceable.ts", "tests": ["tests/event-loader.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "loaders.event",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK7",
+      "ts": { "module": "src/loaders/event.ts", "tests": ["tests/event-loader.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "loaders.profile",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK7",
+      "ts": { "module": "src/loaders/profile.ts", "tests": ["tests/loaders-gossip.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "loaders.lists",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK7",
+      "ts": { "module": "src/loaders/lists.ts", "tests": ["tests/loaders-gossip.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "loaders.outbox",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK7",
+      "ts": { "module": "src/loaders/outbox.ts", "tests": ["tests/outbox.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "client.core",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK8",
+      "ts": { "module": "src/client/client.ts", "tests": ["tests/client.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "client.dm",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK8",
+      "ts": { "module": "src/client/dm.ts", "tests": ["tests/client-nip17.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "client.sync",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK8",
+      "ts": { "module": "src/client/sync.ts", "tests": ["tests/client.test.ts"] },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "wasm.backend",
+      "tier": "A",
+      "status": "ts-only",
+      "milestone": "NK1",
+      "ts": {
+        "module": "src/wasm/load.ts",
+        "tests": ["wasm-tests/verify.ts", "wasm-tests/sign.ts", "wasm-tests/node-load.ts"]
+      },
+      "rust": null,
+      "vectors": []
+    },
+    {
+      "id": "wasm.loader",
+      "tier": "C",
+      "status": "n/a",
+      "milestone": "NK1",
+      "ts": { "module": "src/wasm/load.ts", "tests": ["wasm-tests/node-load.ts"] },
+      "rust": null,
+      "vectors": []
+    }
+  ]
+}

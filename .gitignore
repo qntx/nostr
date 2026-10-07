@@ -23,7 +23,7 @@ docs/*
 # Rust / wasm artifacts (built by scripts/build-wasm.sh, not committed)
 /target
 src/wasm/generated/
-src/wasm/nostr_crypto_wasm_bg.wasm
+src/wasm/nk_wasm_bg.wasm
 
 # Hermes smoke bundle (built by scripts/hermes-smoke.ts, not committed)
 .hermes-smoke.iife.js

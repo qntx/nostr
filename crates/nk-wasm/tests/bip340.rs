@@ -13,9 +13,12 @@
     reason = "integration test crate is itself the test module"
 )]
 
-use nostr_crypto_wasm::verify_id_sig;
+use nk_wasm::verify_id_sig;
 
-const VECTORS: &str = include_str!("bip-0340-test-vectors.csv");
+const VECTORS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/bip340/official.csv"
+));
 
 const fn hex_nibble(byte: u8) -> Option<u8> {
     match byte {

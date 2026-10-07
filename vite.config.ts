@@ -72,7 +72,7 @@ function wasmUrlAsset() {
       const file = id.slice("\0wasm-url:".length);
       const ref = this.emitFile({
         type: "asset",
-        fileName: "nostr_crypto_wasm_bg.wasm",
+        fileName: "nk_wasm_bg.wasm",
         source: new Uint8Array(readFileSync(file)),
       });
       return `export default import.meta.ROLLUP_FILE_URL_${ref};`;
@@ -239,6 +239,10 @@ const config: UserConfig = defineConfig({
       "target/**",
       "src/wasm/generated/**",
       "bun.lock",
+      // TOML is owned by taplo (.taplo.toml, align_entries); generated vectors
+      // stay byte-frozen.
+      "**/*.toml",
+      "vectors/**",
     ],
   },
 });

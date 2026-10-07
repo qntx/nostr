@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "capability": "core.event.sign",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.9.0"
+  },
+  "cases": [
+    {
+      "secretKey": "0000000000000000000000000000000000000000000000000000000000000003",
+      "aux": "0000000000000000000000000000000000000000000000000000000000000001",
+      "unsigned": {
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "hi"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "791e76a4715f1514309947f51c1d20a6f80698833ecc97b7b3a9c56cc3063113",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "hi"
+          ]
+        ],
+        "content": "gm",
+        "sig": "35931bdb21989c9049272418de0df733b0ebede3bcb45c54161511d8633cab516d6b25cd808ddb8cbba7600940678e3ba3fe655a830abbe631e640e9fc460ff1"
+      }
+    },
+    {
+      "secretKey": "0000000000000000000000000000000000000000000000000000000000000003",
+      "aux": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "unsigned": {
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1,
+        "kind": 30023,
+        "tags": [
+          [
+            "d",
+            "article"
+          ],
+          [
+            "t",
+            "nostr"
+          ],
+          [
+            "t",
+            "rust"
+          ]
+        ],
+        "content": "long form \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f"
+      },
+      "event": {
+        "id": "e096d188278b41312c82e504e8bd87afe6f2451f441228778ce3e2d28d94aa6e",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1,
+        "kind": 30023,
+        "tags": [
+          [
+            "d",
+            "article"
+          ],
+          [
+            "t",
+            "nostr"
+          ],
+          [
+            "t",
+            "rust"
+          ]
+        ],
+        "content": "long form \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f",
+        "sig": "9ec5465bc7ed5da86e43a7666e8db0b39f74dfa710512324d1bb7cda9b1529a00c588e8e22c8c6f6a75ae221a351877d475884503276d6801299fc69a9da5d1a"
+      }
+    },
+    {
+      "secretKey": "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf",
+      "aux": "0000000000000000000000000000000000000000000000000000000000000001",
+      "unsigned": {
+        "pubkey": "6af0f9de588f2c53cedcba26c5e2402e0d0aa64ec7b47c9f8d97b5bc562bab5f",
+        "created_at": 2000000000,
+        "kind": 0,
+        "tags": [],
+        "content": "{\"name\":\"q\"}"
+      },
+      "event": {
+        "id": "5ae2ef8c6a65ce421994bdb04529222c1b420586616e2c630a3fc2910f6577c9",
+        "pubkey": "6af0f9de588f2c53cedcba26c5e2402e0d0aa64ec7b47c9f8d97b5bc562bab5f",
+        "created_at": 2000000000,
+        "kind": 0,
+        "tags": [],
+        "content": "{\"name\":\"q\"}",
+        "sig": "37a3358d92660a0caebcef09f09cc5f206b5bf416d09812995a5b8178e5154ac729d996c4348293d0ac10f9ae285739eb26d95362041b4dd4d996044d15f1562"
+      }
+    }
+  ]
+}

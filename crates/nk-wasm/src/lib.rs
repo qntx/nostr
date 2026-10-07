@@ -8,8 +8,8 @@
     reason = "wasm-bindgen emits unsafe extern shims for exported functions"
 )]
 
-use secp256k1::schnorr::Signature;
-use secp256k1::{Keypair, SECP256K1, XOnlyPublicKey};
+use secp256k1::schnorr::{self, Signature};
+use secp256k1::{Keypair, XOnlyPublicKey};
 use sha2::{Digest, Sha256};
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -31,7 +31,7 @@ pub fn verify_id_sig(id: &[u8], pubkey: &[u8], sig: &[u8]) -> bool {
         return false;
     };
     let signature = Signature::from_byte_array(*sig_bytes);
-    SECP256K1.verify_schnorr(&signature, id32, &pk).is_ok()
+    schnorr::verify(&signature, id32, &pk).is_ok()
 }
 
 /// SHA-256(`serialized`) must equal `id`, then [`verify_id_sig`].
@@ -50,7 +50,7 @@ fn take_keypair(seckey: &mut [u8]) -> Option<Keypair> {
     let sk_bytes = <[u8; 32]>::try_from(&*seckey);
     seckey.fill(0);
     let mut sk_bytes = sk_bytes.ok()?;
-    let keypair = Keypair::from_seckey_byte_array(SECP256K1, sk_bytes);
+    let keypair = Keypair::from_secret_bytes(sk_bytes);
     sk_bytes.fill(0);
     keypair.ok()
 }
@@ -69,7 +69,7 @@ pub fn sign_id(id: &[u8], seckey: &mut [u8], aux: &[u8]) -> Option<[u8; 64]> {
         return None;
     };
     let mut keypair = take_keypair(seckey)?;
-    let sig = SECP256K1.sign_schnorr_with_aux_rand(&id32, &keypair, &aux32);
+    let sig = schnorr::sign_with_aux_rand(&id32, &keypair, &aux32);
     keypair.non_secure_erase();
     Some(sig.to_byte_array())
 }
@@ -82,7 +82,7 @@ pub fn public_key_bytes(seckey: &mut [u8]) -> Option<[u8; 32]> {
     let mut keypair = take_keypair(seckey)?;
     let (pk, _) = keypair.x_only_public_key();
     keypair.non_secure_erase();
-    Some(pk.serialize())
+    Some(pk.to_byte_array())
 }
 
 /// Owned slices so the wasm allocator frees the JS-copied buffers after return.
@@ -145,15 +145,15 @@ mod tests {
     use super::{
         public_key, public_key_bytes, sign, sign_id, verify_id_sig, verify_serialized_bytes,
     };
-    use secp256k1::{Keypair, SECP256K1, SecretKey};
+    use secp256k1::{Keypair, SecretKey};
     use sha2::{Digest, Sha256};
 
     fn sign_id_no_aux(seckey: [u8; 32], id: [u8; 32]) -> ([u8; 32], [u8; 64]) {
-        let secret = SecretKey::from_byte_array(seckey).expect("test secret key");
-        let keypair = Keypair::from_secret_key(SECP256K1, &secret);
+        let secret = SecretKey::from_secret_bytes(seckey).expect("test secret key");
+        let keypair = Keypair::from_secret_key(&secret);
         let signature = keypair.sign_schnorr_no_aux_rand(&id);
         (
-            keypair.x_only_public_key().0.serialize(),
+            keypair.x_only_public_key().0.to_byte_array(),
             signature.to_byte_array(),
         )
     }

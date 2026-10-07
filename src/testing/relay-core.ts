@@ -44,6 +44,12 @@ export type FakeRelay = {
    * failure handling.
    */
   deliver: (event: Event) => void;
+  /**
+   * Live subscriptions whose filters match the event and whose initial dump already finished (their
+   * EOSE is on the wire). A publish that waits for this to be non-zero always lands on the client's
+   * live path — an earlier event is just another initial-page row.
+   */
+  matchingLiveSubscribers: (event: Event) => number;
   disconnect: () => void;
   closeSubscriptions: (reason: string) => void;
   configure: (opts: Partial<FakeRelayOptions>) => void;
@@ -60,6 +66,8 @@ export type RelayTransport = {
 export type FakeRelaySession = {
   transport: RelayTransport;
   subs: Map<string, Filter[]>;
+  /** REQ ids whose initial dump finished — EOSE already sent to the client. */
+  eosed: Set<string>;
   negs: Map<string, Negentropy>;
   authed: boolean;
   queue: Promise<void>;
@@ -151,6 +159,19 @@ export class FakeRelayCore implements FakeRelay {
     })();
   }
 
+  matchingLiveSubscribers(event: Event): number {
+    let count = 0;
+    for (const session of this.#sessions) {
+      for (const id of session.eosed) {
+        const filters = session.subs.get(id);
+        if (filters !== undefined && subMatches(filters, event)) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  }
+
   disconnect(): void {
     const sessions: FakeRelaySession[] = [...this.#sessions];
     this.#sessions.clear();
@@ -165,6 +186,7 @@ export class FakeRelayCore implements FakeRelay {
         this.#send(session, ["CLOSED", id, reason]);
       }
       session.subs.clear();
+      session.eosed.clear();
       session.negs.clear();
     }
   }
@@ -178,6 +200,7 @@ export class FakeRelayCore implements FakeRelay {
     const session: FakeRelaySession = {
       transport,
       subs: new Map(),
+      eosed: new Set(),
       negs: new Map(),
       authed: false,
       queue: Promise.resolve(),
@@ -337,18 +360,23 @@ export class FakeRelayCore implements FakeRelay {
         const readKinds = this.#opts.auth?.readKinds;
         if (readKinds !== undefined && !session.authed && mayReadKinds(filters, readKinds)) {
           this.#send(session, ["CLOSED", id, "auth-required: we only serve to authed users"]);
+          session.subs.delete(id);
+          session.eosed.delete(id);
           return;
         }
         session.subs.set(id, filters);
+        session.eosed.delete(id);
         const matched = await this.#matched(filters);
         if (this.#opts.eoseBeforeEvents === true) {
           this.#send(session, ["EOSE", id]);
+          session.eosed.add(id);
         }
         for (const event of matched) {
           this.#send(session, ["EVENT", id, event]);
         }
         if (this.#opts.eoseBeforeEvents !== true) {
           this.#send(session, ["EOSE", id]);
+          session.eosed.add(id);
         }
         return;
       }
@@ -356,6 +384,7 @@ export class FakeRelayCore implements FakeRelay {
         const [, id] = items;
         if (typeof id === "string") {
           session.subs.delete(id);
+          session.eosed.delete(id);
         }
         return;
       }

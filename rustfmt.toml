@@ -1,7 +1,7 @@
 edition = "2024"
 
 # Line width and formatting
-max_width = 100
+max_width            = 100
 use_small_heuristics = "Default"
 
 # Import organization
@@ -11,9 +11,9 @@ reorder_modules = true
 # Enforce manually: std → external → crate.
 
 # Code style
-newline_style = "Auto"
+newline_style            = "Auto"
 use_field_init_shorthand = true
-use_try_shorthand = true
+use_try_shorthand        = true
 
 # Function formatting
 fn_params_layout = "Tall"

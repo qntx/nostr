@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "capability": "core.message.relay",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.9.0"
+  },
+  "cases": [
+    {
+      "raw": "[\"EVENT\",\"sub1\",{\"id\":\"791e76a4715f1514309947f51c1d20a6f80698833ecc97b7b3a9c56cc3063113\",\"pubkey\":\"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",\"created_at\":1700000000,\"kind\":1,\"tags\":[[\"t\",\"hi\"]],\"content\":\"gm\",\"sig\":\"35931bdb21989c9049272418de0df733b0ebede3bcb45c54161511d8633cab516d6b25cd808ddb8cbba7600940678e3ba3fe655a830abbe631e640e9fc460ff1\"}]"
+    },
+    {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\"]"
+    },
+    {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",false,\"invalid: bad sig\"]"
+    },
+    {
+      "raw": "[\"EOSE\",\"sub1\"]"
+    },
+    {
+      "raw": "[\"CLOSED\",\"sub1\",\"auth-required: we only allow authd\"]"
+    },
+    {
+      "raw": "[\"NOTICE\",\"rate limited\"]"
+    },
+    {
+      "raw": "[\"AUTH\",\"challenge-string\"]"
+    },
+    {
+      "raw": "[\"COUNT\",\"sub1\",{\"count\":7}]"
+    },
+    {
+      "raw": "[\"COUNT\",\"sub1\",{\"count\":7,\"approximate\":true,\"hll\":\"abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\"}]"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":3,\"hll\":\"ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB\"}]",
+      "encoded": "[\"COUNT\",\"s\",{\"count\":3,\"hll\":\"abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\"}]"
+    },
+    {
+      "raw": "[\"NEG-MSG\",\"sub\",\"deadbeef\"]"
+    },
+    {
+      "raw": "[\"NEG-MSG\",\"sub\",\"AABB\"]",
+      "encoded": "[\"NEG-MSG\",\"sub\",\"aabb\"]"
+    },
+    {
+      "raw": "[\"NEG-ERR\",\"sub\",\"error: something\"]"
+    },
+    {
+      "raw": "not json",
+      "error": "MessageError"
+    },
+    {
+      "raw": "{}",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"EVENT\",\"s\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"EVENT\",\"s\",{}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"EVENT\",1,{\"id\":\"791e76a4715f1514309947f51c1d20a6f80698833ecc97b7b3a9c56cc3063113\",\"pubkey\":\"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",\"created_at\":1700000000,\"kind\":1,\"tags\":[[\"t\",\"hi\"]],\"content\":\"gm\",\"sig\":\"35931bdb21989c9049272418de0df733b0ebede3bcb45c54161511d8633cab516d6b25cd808ddb8cbba7600940678e3ba3fe655a830abbe631e640e9fc460ff1\"}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"OK\",\"id\",\"true\",\"\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"OK\",\"id\",true]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"EOSE\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"EOSE\",\"s\",\"x\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"CLOSED\",\"s\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NOTICE\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NOTICE\",\"a\",\"b\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"AUTH\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":-1}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":1.5}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",\"x\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-MSG\",\"s\",\"abc\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-MSG\",\"s\",\"\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-ERR\",\"s\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-ERR\",\"s\",1]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"UNKNOWN\",\"s\"]",
+      "error": "MessageError"
+    }
+  ]
+}
