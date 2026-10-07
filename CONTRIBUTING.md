@@ -17,10 +17,13 @@
 - **wasm-bindgen CLI** matching the `wasm-bindgen` version in `Cargo.lock`
   (`cargo install wasm-bindgen-cli --version 0.2.122`). `scripts/build-wasm.sh`
   verifies the match. This pin stays until the wasm-bindgen ABI is replaced.
-- **Optional**, for local portable builds: the iOS and Android rustup targets
-  (`rustup target add aarch64-apple-ios aarch64-apple-ios-sim
-aarch64-linux-android x86_64-linux-android`), Xcode, and the Android NDK. CI
-  runs these builds.
+- **Optional**, for local portable builds: Xcode, the Android NDK, and the iOS
+  and Android rustup targets. CI runs these builds.
+
+  ```bash
+  rustup target add aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android x86_64-linux-android
+  ```
+
 - `cargo-deny` for the supply-chain check (`cargo install cargo-deny`).
 
 ## Repository layout
