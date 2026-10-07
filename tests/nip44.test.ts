@@ -18,7 +18,7 @@ import {
 } from "../src/nips/nip44.ts";
 
 const dir = import.meta.dirname;
-const vectors = JSON.parse(readFileSync(join(dir, "fixtures/nip44.vectors.json"), "utf8")) as {
+const vectors = JSON.parse(readFileSync(join(dir, "../vectors/nip44/official.json"), "utf8")) as {
   v2: {
     valid: {
       get_conversation_key: Array<{ sec1: string; pub2: string; conversation_key: string }>;

@@ -65,7 +65,7 @@ const EXPECTED_SER =
   '[0,"90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",1700000000,1,[["t","smoke"]],"hermes"]';
 const EXPECTED_ID = "ca9b7b32e94eb1fa671703b2480f48f217faec663ba5b43d3b1a37cda7ae3458";
 
-// tests/fixtures/nip44.vectors.json v2.valid.encrypt_decrypt[0].
+// vectors/nip44/official.json v2.valid.encrypt_decrypt[0].
 const NIP44_VECTOR = {
   sec1: "0000000000000000000000000000000000000000000000000000000000000001",
   pub2: "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",

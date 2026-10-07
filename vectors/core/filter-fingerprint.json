@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "capability": "core.filter.fingerprint",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.9.0"
+  },
+  "cases": [
+    {
+      "filters": [
+        {
+          "kinds": [
+            1
+          ]
+        }
+      ],
+      "fingerprint": "[{\"kinds\":[1]}]"
+    },
+    {
+      "filters": [
+        {
+          "kinds": [
+            1,
+            0
+          ],
+          "since": 10
+        },
+        {
+          "#e": [
+            "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "authors": [
+            "90A80DB6EB294B9EAB0B4E8DDFA3EFE7263458CE2D07566DF4E6C58868FEEF23"
+          ]
+        }
+      ],
+      "fingerprint": "[{\"#e\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"authors\":[\"90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23\"]},{\"kinds\":[0,1],\"since\":10}]"
+    },
+    {
+      "filters": [
+        {
+          "ids": []
+        }
+      ],
+      "fingerprint": "[{\"ids\":[]}]"
+    }
+  ]
+}
