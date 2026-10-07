@@ -4,7 +4,8 @@
 
 - **Bun 1.4** — package scripts, tests, and tooling.
 - **Rust 1.94** — via `rust-toolchain.toml` (kept in sync with
-  `[workspace.package].rust-version`; includes the wasm32/iOS/Android targets).
+  `[workspace.package].rust-version`; includes the `wasm32-unknown-unknown`
+  target).
 - **LLVM clang** for `wasm32-unknown-unknown` — `secp256k1-sys` needs a
   wasm-capable clang; Apple clang will not work.
 
@@ -16,8 +17,10 @@
 - **wasm-bindgen CLI** matching the `wasm-bindgen` version in `Cargo.lock`
   (`cargo install wasm-bindgen-cli --version 0.2.122`). `scripts/build-wasm.sh`
   verifies the match. This pin stays until the wasm-bindgen ABI is replaced.
-- **Optional**: Xcode (iOS targets) and the Android NDK
-  (`aarch64-linux-android`, `x86_64-linux-android`) for portable builds.
+- **Optional**, for local portable builds: the iOS and Android rustup targets
+  (`rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+aarch64-linux-android x86_64-linux-android`), Xcode, and the Android NDK. CI
+  runs these builds.
 - `cargo-deny` for the supply-chain check (`cargo install cargo-deny`).
 
 ## Repository layout

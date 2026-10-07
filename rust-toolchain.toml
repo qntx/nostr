@@ -3,5 +3,5 @@
 # updating rust-version under [workspace.package] in Cargo.toml.
 channel    = "1.94"
 components = ["rustfmt", "clippy"]
-targets    = ["wasm32-unknown-unknown", "aarch64-apple-ios", "aarch64-apple-ios-sim", "aarch64-linux-android", "x86_64-linux-android"]
+targets    = ["wasm32-unknown-unknown"]
 profile    = "minimal"
