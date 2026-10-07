@@ -166,7 +166,7 @@
 
     "@publint/pack": ["@publint/pack@0.1.7", "", { "dependencies": { "tinyexec": "^1.3.0" } }, "sha512-4EDEmvxWtgsCnnVeBvtFIFZtUhPPt1+bA9JrSwU4Sa//6oKtzCSlGGXYJr44OD9aGISymbieJ4mCKHUygUDU+g=="],
 
-    "@qntx/oxfmt": ["@qntx/oxfmt@1.0.4", "", { "peerDependencies": { "oxfmt": ">=0.66.0 <1.0.0" }, "optionalPeers": ["oxfmt"] }, "sha512-4w1V6N/6wq+p9IZ+OjeEy8rDm8owLwxq7AaOr5XWfJF/kqe6gHzFYxsG8WMOXXAjKsPlzK3YdCTci+NCmu3t5Q=="],
+    "@qntx/oxfmt": ["@qntx/oxfmt@1.1.1", "", { "peerDependencies": { "oxfmt": ">=0.66.0 <1.0.0" }, "optionalPeers": ["oxfmt"] }, "sha512-i/+3GBLZlwDNW6gT1Z76LKEfPBm4LMSjee0URPRn5YeILbEtGQtMuUNNLcfabYpGPZI4wGL3YyPjdD3/Abf9Kw=="],
 
     "@qntx/oxlint": ["@qntx/oxlint@1.0.4", "", { "peerDependencies": { "oxlint": "^1.82.0", "oxlint-tsgolint": ">=7.0.2001" }, "optionalPeers": ["oxlint", "oxlint-tsgolint"] }, "sha512-E6kHEZ3xLdY1kcI7EfpPY3evEQbYWmybJthh2US6bWXc5YQNxKdwm+1SITIjJrQFuzKFJ2MROxoWp8+DMYcC3w=="],
 
