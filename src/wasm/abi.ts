@@ -40,7 +40,7 @@ export type CryptoWasmExports = {
 /** Imports 0.2.122 may request. Instantiation fails if anything else appears. */
 export const ALLOWED_WASM_IMPORTS: ReadonlyArray<{ module: string; name: string }> = [
   { module: "wbg", name: "__wbindgen_throw" },
-  { module: "./nostr_crypto_wasm_bg.js", name: "__wbindgen_throw" },
+  { module: "./nk_wasm_bg.js", name: "__wbindgen_throw" },
 ];
 
 const utf8 = new TextDecoder();
@@ -60,7 +60,7 @@ function makeWbgImports(holder: { exports?: CryptoWasmExports }): WebAssembly.Im
   };
   return {
     wbg,
-    "./nostr_crypto_wasm_bg.js": wbg,
+    "./nk_wasm_bg.js": wbg,
   };
 }
 

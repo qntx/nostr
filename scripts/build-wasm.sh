@@ -52,7 +52,7 @@ fi
 export AR_wasm32_unknown_unknown="${AR_wasm32_unknown_unknown:-llvm-ar}"
 export CFLAGS_wasm32_unknown_unknown="${CFLAGS_wasm32_unknown_unknown:---target=wasm32-unknown-unknown -Wno-implicit-function-declaration}"
 
-cargo build --target wasm32-unknown-unknown --release -p nostr-crypto-wasm
+cargo build --target wasm32-unknown-unknown --release -p nk-wasm
 
 gen="${root}/src/wasm/generated"
 rm -rf "${gen}"
@@ -60,9 +60,9 @@ mkdir -p "${gen}"
 wasm-bindgen \
   --target bundler \
   --out-dir "${gen}" \
-  "${root}/target/wasm32-unknown-unknown/release/nostr_crypto_wasm.wasm"
+  "${root}/target/wasm32-unknown-unknown/release/nk_wasm.wasm"
 
-wasm_bg="${gen}/nostr_crypto_wasm_bg.wasm"
+wasm_bg="${gen}/nk_wasm_bg.wasm"
 test -f "${wasm_bg}" || { echo "wasm-bindgen did not emit ${wasm_bg}" >&2; exit 1; }
 # rustc emits SIMD, bulk-memory and friends; allow every feature the module uses.
 wasm-opt -Oz --all-features "${wasm_bg}" -o "${wasm_bg}"
@@ -75,4 +75,4 @@ if [[ "${gz_size}" -gt "${WASM_GZIP_BUDGET}" ]]; then
   echo "wasm gzip size ${gz_size} exceeds the ${WASM_GZIP_BUDGET} byte budget" >&2
   exit 1
 fi
-cp "${wasm_bg}" "${root}/src/wasm/nostr_crypto_wasm_bg.wasm"
+cp "${wasm_bg}" "${root}/src/wasm/nk_wasm_bg.wasm"
