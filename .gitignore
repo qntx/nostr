@@ -27,3 +27,4 @@ src/wasm/nk_wasm_bg.wasm
 
 # Hermes smoke bundle (built by scripts/hermes-smoke.ts, not committed)
 .hermes-smoke.iife.js
+.vitest/
