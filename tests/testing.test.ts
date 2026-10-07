@@ -20,6 +20,7 @@ import {
 } from "../src/testing/index.ts";
 import type { FakeRelayNetwork } from "../src/testing/index.ts";
 import { FakeRelayCore } from "../src/testing/relay-core.ts";
+import type { FakeRelaySession } from "../src/testing/relay-core.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
@@ -183,6 +184,121 @@ describe("FakeRelay NIP-01 + faults", () => {
     expect(got.map((e) => e.id)).toContain(after.id);
 
     relay.close();
+  });
+});
+
+describe("FakeRelay matchingLiveSubscribers", () => {
+  function connectRaw(core: FakeRelayCore): { session: FakeRelaySession; received: unknown[][] } {
+    const received: unknown[][] = [];
+    const session = core.connect({
+      send: (data) => received.push(JSON.parse(data) as unknown[]),
+      close: () => {},
+    });
+    return { session, received };
+  }
+
+  function connectLive(
+    core: FakeRelayCore,
+    ev: Event,
+  ): { session: FakeRelaySession; sent: Array<[unknown[], number]> } {
+    const sent: Array<[unknown[], number]> = [];
+    const session = core.connect({
+      send: (data) => {
+        const msg = JSON.parse(data) as unknown[];
+        sent.push([msg, core.matchingLiveSubscribers(ev)]);
+      },
+      close: () => {},
+    });
+    return { session, sent };
+  }
+
+  test("counts a matching subscription only after its EOSE went out", async () => {
+    const core = new FakeRelayCore("wss://live-count.example");
+    const { session, received } = connectRaw(core);
+    const ev = note("x", 1);
+    core.handleMessage(session, JSON.stringify(["REQ", "sub1", { kinds: [1] }]));
+    expect(core.matchingLiveSubscribers(ev)).toBe(0);
+    await session.queue;
+    expect(hasEose(received, "sub1")).toBe(true);
+    expect(core.matchingLiveSubscribers(ev)).toBe(1);
+  });
+
+  test("ignores subscriptions whose filters do not match", async () => {
+    const core = new FakeRelayCore("wss://live-filter.example");
+    const { session } = connectRaw(core);
+    const other = EventBuilder.textNote("dm")
+      .kind(4)
+      .createdAt(1)
+      .signWithKeys(Keys.fromSecretKey(SK));
+    core.handleMessage(session, JSON.stringify(["REQ", "sub1", { kinds: [1] }]));
+    await session.queue;
+    expect(core.matchingLiveSubscribers(other)).toBe(0);
+  });
+
+  test("drops the count after CLOSE", async () => {
+    const core = new FakeRelayCore("wss://live-close.example");
+    const { session } = connectRaw(core);
+    const ev = note("x", 1);
+    core.handleMessage(session, JSON.stringify(["REQ", "sub1", { kinds: [1] }]));
+    await session.queue;
+    expect(core.matchingLiveSubscribers(ev)).toBe(1);
+    core.handleMessage(session, JSON.stringify(["CLOSE", "sub1"]));
+    await session.queue;
+    expect(core.matchingLiveSubscribers(ev)).toBe(0);
+  });
+
+  test("a REQ reusing an id stops counting until the new EOSE", async () => {
+    const core = new FakeRelayCore("wss://live-rereq.example");
+    const ev = note("x", 1);
+    const { session, sent } = connectLive(core, ev);
+    core.handleMessage(session, JSON.stringify(["REQ", "sub1", { kinds: [1] }]));
+    await session.queue;
+    expect(core.matchingLiveSubscribers(ev)).toBe(1);
+    core.handleMessage(session, JSON.stringify(["REQ", "sub1", { kinds: [1] }]));
+    await session.queue;
+    expect(core.matchingLiveSubscribers(ev)).toBe(1);
+    // The id drops out of the live set for the whole re-dump: at the instant
+    // each EOSE hits the wire the sub is not counted yet.
+    const liveAtEose = sent.filter(([msg]) => msg[0] === "EOSE").map(([, live]) => live);
+    expect(liveAtEose).toStrictEqual([0, 0]);
+  });
+
+  test("sums live subscriptions across sessions", async () => {
+    const core = new FakeRelayCore("wss://live-multi.example");
+    const ev = note("x", 1);
+    const { session: a } = connectRaw(core);
+    const { session: b } = connectRaw(core);
+    core.handleMessage(a, JSON.stringify(["REQ", "sub1", { kinds: [1] }]));
+    core.handleMessage(a, JSON.stringify(["REQ", "sub2", { kinds: [1] }]));
+    core.handleMessage(b, JSON.stringify(["REQ", "sub3", { kinds: [1] }]));
+    await Promise.all([a.queue, b.queue]);
+    expect(core.matchingLiveSubscribers(ev)).toBe(3);
+  });
+
+  test("counts with eoseBeforeEvents: true", async () => {
+    const core = new FakeRelayCore("wss://live-eose-first.example", {
+      eoseBeforeEvents: true,
+    });
+    const { session, received } = connectRaw(core);
+    const ev = note("x", 1);
+    core.handleMessage(session, JSON.stringify(["REQ", "sub1", { kinds: [1] }]));
+    await session.queue;
+    expect(hasEose(received, "sub1")).toBe(true);
+    expect(core.matchingLiveSubscribers(ev)).toBe(1);
+  });
+
+  test("auth-required CLOSED clears a re-REQed id", async () => {
+    const core = new FakeRelayCore("wss://live-auth.example", {
+      auth: { challenge: "c", readKinds: [1] },
+    });
+    const { session } = connectRaw(core);
+    const ev = EventBuilder.textNote("x").kind(2).createdAt(1).signWithKeys(Keys.fromSecretKey(SK));
+    core.handleMessage(session, JSON.stringify(["REQ", "sub1", { kinds: [2] }]));
+    await session.queue;
+    expect(core.matchingLiveSubscribers(ev)).toBe(1);
+    core.handleMessage(session, JSON.stringify(["REQ", "sub1", { kinds: [1] }]));
+    await session.queue;
+    expect(core.matchingLiveSubscribers(ev)).toBe(0);
   });
 });
 
