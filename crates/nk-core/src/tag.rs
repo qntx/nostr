@@ -55,6 +55,13 @@ impl Tag {
         Ok(Self(items))
     }
 
+    /// Infallible constructor for crate-internal callers that build `items`
+    /// from known non-empty literals; the caller guarantees non-emptiness by
+    /// construction.
+    pub(crate) const fn from_parts(items: Vec<String>) -> Self {
+        Self(items)
+    }
+
     /// NIP-10 `e` tag: `["e", id, relay, marker, pubkey]`.
     #[must_use]
     pub fn event(

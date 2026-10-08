@@ -202,7 +202,6 @@ impl<'de> Deserialize<'de> for Signature {
     }
 }
 
-
 /// An unsigned event: `pubkey`, `created_at`, `kind`, `tags`, `content`.
 ///
 /// Constructed directly or via `nk-core`'s future `EventBuilder`; signature

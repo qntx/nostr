@@ -6,12 +6,13 @@
 //! shapes fixed by NIP-09, NIP-18, and NIP-25.
 
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, ErrorKind, Result};
 use crate::canonical;
+use crate::error::{Error, ErrorKind, Result};
 use crate::event::{Event, EventId, UnsignedEvent};
 use crate::key::PublicKey;
 use crate::kind::Kind;
@@ -224,16 +225,15 @@ impl EventBuilder {
         } else {
             None
         };
-        let pubkey_hex = target.pubkey().to_hex();
         let mut builder = Self::new(Kind::REACTION, content);
-        // NIP-25's four-slot e tag is `Tag::event` with the pubkey in the
-        // marker position; an absent hint pads the relay slot with `""`.
-        builder.tags.push(Tag::event(
-            target.id(),
-            relay_hint,
-            Some(pubkey_hex.as_str()),
-            None,
-        ));
+        // NIP-25's four-slot e tag: `["e", id, relay_or_"", pubkey]`; an
+        // absent hint leaves the relay slot empty.
+        builder.tags.push(Tag::from_parts(vec![
+            String::from("e"),
+            target.id().to_hex(),
+            relay_hint.map_or_else(String::new, |url| String::from(url.as_str())),
+            target.pubkey().to_hex(),
+        ]));
         builder
             .tags
             .push(Tag::public_key(target.pubkey(), relay_hint, None));
