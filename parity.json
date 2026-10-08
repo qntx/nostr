@@ -4,14 +4,17 @@
     {
       "id": "core.hex",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/util.ts",
         "tests": ["packages/nostr/tests/core.test.ts"]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-core/src/hex.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
+      "vectors": ["vectors/core/hex.json"]
     },
     {
       "id": "core.url.normalize",
@@ -31,13 +34,16 @@
     {
       "id": "core.kind.classify",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/kind.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/kind.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/kind-classify.json"]
     },
     {
@@ -55,49 +61,61 @@
     {
       "id": "core.tag.address",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/tag.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/tag.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/tag-address.json"]
     },
     {
       "id": "core.event.validate",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/event.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/event.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/event-validate.json"]
     },
     {
       "id": "core.event.serialize",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/event.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/event.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/event-serialize.json"]
     },
     {
       "id": "core.event.id",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/event.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/event.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/event-serialize.json"]
     },
     {

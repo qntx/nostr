@@ -16,6 +16,8 @@ pub enum ErrorKind {
     Hex,
     /// Relay URL parsing or normalization failed.
     Url,
+    /// An event, tag, or event address failed structural validation.
+    EventValidation,
 }
 
 impl fmt::Display for ErrorKind {
@@ -23,6 +25,7 @@ impl fmt::Display for ErrorKind {
         match self {
             Self::Hex => f.write_str("hex"),
             Self::Url => f.write_str("url"),
+            Self::EventValidation => f.write_str("event validation"),
         }
     }
 }

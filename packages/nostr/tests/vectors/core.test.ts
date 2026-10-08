@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { describe, expect, test } from "vite-plus/test";
 
-import { MessageError, UrlError } from "../../src/core/error.ts";
+import { HexError, MessageError, UrlError } from "../../src/core/error.ts";
 import { serializeEvent, getEventHash, validateSignedEvent } from "../../src/core/event.ts";
 import type { Event, UnsignedEvent } from "../../src/core/event.ts";
 import {
@@ -31,7 +31,7 @@ import {
   parseRelayMessage,
 } from "../../src/core/message.ts";
 import { formatEventAddress, parseEventAddress } from "../../src/core/tag.ts";
-import { hexToBytes, normalizeURL } from "../../src/core/util.ts";
+import { assertHex32, bytesToHex, hexToBytes, isHex32, normalizeURL } from "../../src/core/util.ts";
 
 // Shared vectors consumed by the nk-* Rust crates as well; regenerate with
 // `bun scripts/parity/gen/core.ts`.
@@ -101,6 +101,12 @@ const addressCases = readVector<AddressParseCase | AddressFormatCase>("tag-addre
 const normalizeUrlCases = readVector<{ input: string; output?: string; error?: string }>(
   "url-normalize.json",
 );
+const hexCases = readVector<{
+  op: "caller" | "wire";
+  input: string;
+  output?: string;
+  error?: string;
+}>("hex.json");
 
 // Derived vectors kept out of the test bodies: `??`, `||` and ternaries inside
 // `test` callbacks are rejected by the no-conditional-in-test lint.
@@ -124,6 +130,10 @@ const addressParse = addressCases
 const addressFormats = addressCases.filter((c): c is AddressFormatCase => c.op === "format");
 const normalizeUrlValid = normalizeUrlCases.filter((c) => c.error === undefined);
 const normalizeUrlInvalid = normalizeUrlCases.filter((c) => c.error !== undefined);
+const hexCallerValid = hexCases.filter((c) => c.op === "caller" && c.error === undefined);
+const hexCallerInvalid = hexCases.filter((c) => c.op === "caller" && c.error !== undefined);
+const hexWireValid = hexCases.filter((c) => c.op === "wire" && c.error === undefined);
+const hexWireInvalid = hexCases.filter((c) => c.op === "wire" && c.error !== undefined);
 
 describe("vectors/core", () => {
   test("event serialize: canonical serialization and id", () => {
@@ -225,6 +235,28 @@ describe("vectors/core", () => {
     }
     for (const c of addressFormats) {
       expect(formatEventAddress(c.kind, c.pubkey, c.identifier)).toBe(c.formatted);
+    }
+  });
+
+  test("hex: caller decode accepts any case", () => {
+    for (const c of hexCallerValid) {
+      expect(assertHex32(c.input, "hex")).toBe(c.output);
+    }
+  });
+
+  test("hex: caller decode rejects malformed input", () => {
+    for (const c of hexCallerInvalid) {
+      expect(() => assertHex32(c.input, "hex")).toThrow(HexError);
+    }
+  });
+
+  test("hex: wire decode is strict lowercase", () => {
+    for (const c of hexWireValid) {
+      expect(isHex32(c.input)).toBe(true);
+      expect(bytesToHex(hexToBytes(c.input))).toBe(c.output);
+    }
+    for (const c of hexWireInvalid) {
+      expect(isHex32(c.input)).toBe(false);
     }
   });
 

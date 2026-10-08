@@ -77,6 +77,22 @@
       },
       "serialized": "[0,\"90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23\",42,4,[[\"x\"],[\"p\",\"90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23\",\"wss://r.example\",\"pet\"]],\"\"]",
       "id": "77408d75a36a326ee8404b042c26801919d4b5e86f9117b54cf8ca73d747684a"
+    },
+    {
+      "unsigned": {
+        "pubkey": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "created_at": 9007199254740991,
+        "kind": 0,
+        "tags": [
+          [
+            "d",
+            "sep  "
+          ]
+        ],
+        "content": "del  line   para   end"
+      },
+      "serialized": "[0,\"90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23\",9007199254740991,0,[[\"d\",\"sep  \"]],\"del  line   para   end\"]",
+      "id": "534c49c17fc024ef692928d3412f9a8db02fb95a187401b06e0607b49a84ffe0"
     }
   ]
 }
