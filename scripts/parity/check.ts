@@ -88,21 +88,32 @@ export function checkParity(
     }
 
     const vectors = asStrings(cap["vectors"]);
-    for (const vector of vectors) {
-      referencedVectors.add(vector);
-      if (!fileExists(vector)) {
-        errors.push(`${label}: vector file does not exist: ${vector}`);
-        continue;
-      }
+    const citedBy = (tests: string[], vector: string): boolean => {
       const needles = [vector, basename(vector)];
-      const cited = testFiles.some((testFile) => {
+      return tests.some((testFile) => {
         if (!fileExists(testFile)) {
           return false;
         }
         const content = readFile(testFile);
         return needles.some((needle) => content.includes(needle));
       });
-      if (!cited) {
+    };
+    for (const vector of vectors) {
+      referencedVectors.add(vector);
+      if (!fileExists(vector)) {
+        errors.push(`${label}: vector file does not exist: ${vector}`);
+        continue;
+      }
+      // A "stable" capability means both sides run the file; each side's
+      // own test list must cite it, not just some test file somewhere.
+      if (status === "stable") {
+        if (!citedBy(ts.tests, vector)) {
+          errors.push(`${label}: vector ${vector} is not referenced by any ts test file`);
+        }
+        if (!citedBy(rust.tests, vector)) {
+          errors.push(`${label}: vector ${vector} is not referenced by any rust test file`);
+        }
+      } else if (!citedBy(testFiles, vector)) {
         errors.push(`${label}: vector ${vector} is not referenced by any of its test files`);
       }
     }

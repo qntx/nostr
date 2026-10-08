@@ -17,7 +17,7 @@
 use nk_core::{
     ClientMessage, CountHll, DeletionTarget, ErrorKind, Event, EventAddress, EventBuilder, EventId,
     Filter, Keys, Kind, KindClass, ProfileMetadata, PublicKey, RelayMessage, RelayUrl, SecretKey,
-    Tag, Timestamp, UnsignedEvent, fingerprint,
+    Tag, Timestamp, UnsignedEvent, cmp_newest_first, cmp_oldest_first, fingerprint,
 };
 use serde::Deserialize;
 
@@ -873,4 +873,234 @@ fn count_hll() {
             (Err(kind), None) => panic!("unexpected {kind:?} for {:?}", case.inputs),
         }
     }
+}
+
+const TAG_BUILD: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/tag-build.json"
+));
+const EVENT_ORDER: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/event-order.json"
+));
+const EVENT_SIGNED_MATCHES: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/event-signed-matches.json"
+));
+
+#[derive(Debug, Deserialize)]
+struct TagBuildCase {
+    op: String,
+    id: Option<String>,
+    pubkey: Option<String>,
+    relay: Option<String>,
+    marker: Option<String>,
+    petname: Option<String>,
+    address: Option<String>,
+    identifier: Option<String>,
+    hashtag: Option<String>,
+    url: Option<String>,
+    kind: Option<serde_json::Value>,
+    tag: Vec<String>,
+    rust: Option<bool>,
+}
+
+/// Number of tag-build cases the typed Rust API cannot express (`rust: false`
+/// in the vector: non-URL relay strings, verbatim uppercase `a` coordinates,
+/// string kinds).
+const TAG_BUILD_RUST_SKIPS: u32 = 5;
+
+fn build_tag(case: &TagBuildCase, index: usize) -> Tag {
+    let relay = case.relay.as_deref().map(|raw| {
+        RelayUrl::parse(raw).unwrap_or_else(|_| panic!("case {index}: relay {raw:?} must parse"))
+    });
+    match case.op.as_str() {
+        "e" => {
+            let id = EventId::from_hex(
+                case.id
+                    .as_deref()
+                    .unwrap_or_else(|| panic!("case {index}: id missing")),
+            )
+            .unwrap_or_else(|_| panic!("case {index}: id must parse"));
+            let pubkey = case.pubkey.as_deref().map(|hex| {
+                PublicKey::from_hex(hex)
+                    .unwrap_or_else(|_| panic!("case {index}: pubkey must parse"))
+            });
+            Tag::event(id, relay.as_ref(), case.marker.as_deref(), pubkey)
+        }
+        "p" => {
+            let pubkey = PublicKey::from_hex(
+                case.pubkey
+                    .as_deref()
+                    .unwrap_or_else(|| panic!("case {index}: pubkey missing")),
+            )
+            .unwrap_or_else(|_| panic!("case {index}: pubkey must parse"));
+            Tag::public_key(pubkey, relay.as_ref(), case.petname.as_deref())
+        }
+        "a" => {
+            let address = case
+                .address
+                .as_deref()
+                .unwrap_or_else(|| panic!("case {index}: address missing"))
+                .parse::<EventAddress>()
+                .unwrap_or_else(|_| panic!("case {index}: address must parse"));
+            Tag::address(&address, relay.as_ref())
+        }
+        "d" => Tag::identifier(
+            case.identifier
+                .clone()
+                .unwrap_or_else(|| panic!("case {index}: identifier missing")),
+        ),
+        "t" => Tag::hashtag(
+            case.hashtag
+                .clone()
+                .unwrap_or_else(|| panic!("case {index}: hashtag missing")),
+        ),
+        "r" => Tag::reference(
+            case.url
+                .clone()
+                .unwrap_or_else(|| panic!("case {index}: url missing")),
+            case.marker.as_deref(),
+        ),
+        "k" => {
+            let kind = match case.kind.as_ref() {
+                Some(serde_json::Value::Number(n)) => n
+                    .as_u64()
+                    .and_then(|v| u16::try_from(v).ok())
+                    .unwrap_or_else(|| panic!("case {index}: kind out of range")),
+                other => panic!("case {index}: kind must be a number, got {other:?}"),
+            };
+            Tag::kind(Kind::new(kind))
+        }
+        op => panic!("case {index}: unknown op {op:?}"),
+    }
+}
+
+#[test]
+fn tag_build() {
+    #[derive(Deserialize)]
+    struct TagBuildVector {
+        cases: Vec<TagBuildCase>,
+    }
+    let vector: TagBuildVector =
+        serde_json::from_str(TAG_BUILD).expect("tag-build.json must parse");
+    assert!(!vector.cases.is_empty(), "tag-build.json has no cases");
+    let mut skipped = 0_u32;
+    for (index, case) in vector.cases.iter().enumerate() {
+        if case.rust == Some(false) {
+            skipped += 1;
+            continue;
+        }
+        let tag = build_tag(case, index);
+        assert_eq!(
+            tag.as_slice(),
+            case.tag.as_slice(),
+            "case {index}: tag mismatch"
+        );
+    }
+    assert_eq!(
+        skipped, TAG_BUILD_RUST_SKIPS,
+        "unexpected number of rust:false cases skipped"
+    );
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "op")]
+enum EventOrderCase {
+    #[serde(rename = "sort")]
+    Sort {
+        events: Vec<Event>,
+        order: Vec<String>,
+    },
+    #[serde(rename = "item")]
+    Item {
+        events: Vec<Event>,
+        order: Vec<String>,
+    },
+    #[serde(rename = "winner")]
+    Winner {
+        candidate: Box<Event>,
+        incumbent: Box<Event>,
+        wins: bool,
+    },
+}
+
+#[test]
+fn event_order() {
+    #[derive(Deserialize)]
+    struct EventOrderVector {
+        cases: Vec<EventOrderCase>,
+    }
+    let vector: EventOrderVector =
+        serde_json::from_str(EVENT_ORDER).expect("event-order.json must parse");
+    assert!(!vector.cases.is_empty(), "event-order.json has no cases");
+    for case in &vector.cases {
+        match case {
+            EventOrderCase::Sort { events, order } => {
+                let mut sorted = events.clone();
+                sorted.sort_by(cmp_newest_first);
+                let ids: Vec<String> = sorted.iter().map(|e| e.id().to_hex()).collect();
+                assert_eq!(&ids, order, "cmp_newest_first order mismatch");
+            }
+            EventOrderCase::Item { events, order } => {
+                let mut sorted = events.clone();
+                sorted.sort_by(cmp_oldest_first);
+                let ids: Vec<String> = sorted.iter().map(|e| e.id().to_hex()).collect();
+                assert_eq!(&ids, order, "cmp_oldest_first order mismatch");
+            }
+            EventOrderCase::Winner {
+                candidate,
+                incumbent,
+                wins,
+            } => {
+                assert_eq!(candidate.supersedes(incumbent), *wins, "winner mismatch");
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SignedMatchesCase {
+    unsigned: serde_json::Value,
+    event: serde_json::Value,
+    matches: bool,
+    rust: Option<bool>,
+}
+
+/// signed-matches cases the typed Rust API cannot express (`rust: false` in
+/// the vector: uppercase/empty pubkeys — the TS side compares them leniently).
+const SIGNED_MATCHES_RUST_SKIPS: u32 = 3;
+
+#[test]
+fn event_signed_matches() {
+    #[derive(Deserialize)]
+    struct SignedMatchesVector {
+        cases: Vec<SignedMatchesCase>,
+    }
+    let vector: SignedMatchesVector =
+        serde_json::from_str(EVENT_SIGNED_MATCHES).expect("event-signed-matches.json must parse");
+    assert!(
+        !vector.cases.is_empty(),
+        "event-signed-matches.json has no cases"
+    );
+    let mut skipped = 0_u32;
+    for (index, case) in vector.cases.iter().enumerate() {
+        if case.rust == Some(false) {
+            skipped += 1;
+            continue;
+        }
+        let unsigned: UnsignedEvent = serde_json::from_value(case.unsigned.clone())
+            .unwrap_or_else(|e| panic!("case {index}: unsigned must parse: {e}"));
+        let event: Event = serde_json::from_value(case.event.clone())
+            .unwrap_or_else(|e| panic!("case {index}: event must parse: {e}"));
+        assert_eq!(
+            event.matches_unsigned(&unsigned),
+            case.matches,
+            "case {index}: matches_unsigned mismatch"
+        );
+    }
+    assert_eq!(
+        skipped, SIGNED_MATCHES_RUST_SKIPS,
+        "unexpected number of rust:false cases skipped"
+    );
 }

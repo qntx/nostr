@@ -1,0 +1,385 @@
+{
+  "schema": 1,
+  "capability": "core.event.signed-matches",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.10.1",
+    "cross_check": null
+  },
+  "cases": [
+    {
+      "unsigned": {
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": true
+    },
+    {
+      "unsigned": {
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 2,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": false
+    },
+    {
+      "unsigned": {
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "other"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": false
+    },
+    {
+      "unsigned": {
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000001,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": false
+    },
+    {
+      "unsigned": {
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ],
+          [
+            "t",
+            "a"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": false
+    },
+    {
+      "unsigned": {
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "b"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": false
+    },
+    {
+      "unsigned": {
+        "pubkey": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": false
+    },
+    {
+      "unsigned": {
+        "pubkey": "F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": true,
+      "rust": false
+    },
+    {
+      "unsigned": {
+        "pubkey": "",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": true,
+      "rust": false
+    },
+    {
+      "unsigned": {
+        "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm"
+      },
+      "event": {
+        "id": "93063e99192dd3311f0fdb6b44641a74f2485104a6c645968f34a18b3b51dcdb",
+        "pubkey": "F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9",
+        "created_at": 1700000000,
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "a"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "gm",
+        "sig": "13653d5a6b9d1170dd8cc25060f7a54e8f53b1fd3a7b56dd59b82ed91058367ac4e74552345c9db9b8a3c2d023d2b02dde715c786722cf1e6386a8bdfa8c0f35"
+      },
+      "matches": true,
+      "rust": false
+    }
+  ]
+}

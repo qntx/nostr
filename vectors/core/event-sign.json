@@ -4,7 +4,8 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.10.1"
+    "version": "0.10.1",
+    "cross_check": "nostr-tools 2.24.1 @7fa1ef4: verifyEvent signatures match (3/3)"
   },
   "cases": [
     {

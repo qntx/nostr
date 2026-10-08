@@ -8,7 +8,7 @@
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/util.ts",
-        "tests": ["packages/nostr/tests/core.test.ts"]
+        "tests": ["packages/nostr/tests/core.test.ts", "packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
         "module": "crates/nk-core/src/hex.rs",
@@ -49,14 +49,17 @@
     {
       "id": "core.tag.build",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/tag.ts",
-        "tests": ["packages/nostr/tests/core.test.ts"]
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-core/src/tag.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
+      "vectors": ["vectors/core/tag-build.json"]
     },
     {
       "id": "core.tag.address",
@@ -121,26 +124,32 @@
     {
       "id": "core.event.order",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/event.ts",
-        "tests": ["packages/nostr/tests/core.test.ts"]
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-core/src/event.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
+      "vectors": ["vectors/core/event-order.json"]
     },
     {
       "id": "core.event.signed-matches",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/event.ts",
-        "tests": ["packages/nostr/tests/core.test.ts"]
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-core/src/event.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
+      "vectors": ["vectors/core/event-signed-matches.json"]
     },
     {
       "id": "core.key.public",

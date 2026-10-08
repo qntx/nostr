@@ -125,4 +125,74 @@ describe("parity check", () => {
     );
     expect(errors).toStrictEqual([]);
   });
+
+  test("rejects a stable vector cited only by ts tests", () => {
+    const c = cap({
+      status: "stable",
+      rust: { module: "src/x.rs", tests: ["tests/x.rs"] },
+      vectors: ["vectors/core/x.json"],
+    });
+    const files = new Map([
+      ["src/x.ts", ""],
+      ["tests/x.test.ts", "x.json"],
+      ["src/x.rs", ""],
+      ["tests/x.rs", "no citation"],
+      ["vectors/core/x.json", "{}"],
+    ]);
+    const errors = checkParity(
+      parity([c]),
+      ["vectors/core/x.json"],
+      (p) => files.has(p),
+      mapReader(files),
+    );
+    expect(errors).toStrictEqual([
+      'capability "core.example": vector vectors/core/x.json is not referenced by any rust test file',
+    ]);
+  });
+
+  test("rejects a stable vector cited only by rust tests", () => {
+    const c = cap({
+      status: "stable",
+      rust: { module: "src/x.rs", tests: ["tests/x.rs"] },
+      vectors: ["vectors/core/x.json"],
+    });
+    const files = new Map([
+      ["src/x.ts", ""],
+      ["tests/x.test.ts", "no citation"],
+      ["src/x.rs", ""],
+      ["tests/x.rs", "x.json"],
+      ["vectors/core/x.json", "{}"],
+    ]);
+    const errors = checkParity(
+      parity([c]),
+      ["vectors/core/x.json"],
+      (p) => files.has(p),
+      mapReader(files),
+    );
+    expect(errors).toStrictEqual([
+      'capability "core.example": vector vectors/core/x.json is not referenced by any ts test file',
+    ]);
+  });
+
+  test("accepts a stable vector cited by both ts and rust tests", () => {
+    const c = cap({
+      status: "stable",
+      rust: { module: "src/x.rs", tests: ["tests/x.rs"] },
+      vectors: ["vectors/core/x.json"],
+    });
+    const files = new Map([
+      ["src/x.ts", ""],
+      ["tests/x.test.ts", "x.json"],
+      ["src/x.rs", ""],
+      ["tests/x.rs", "vectors/core/x.json"],
+      ["vectors/core/x.json", "{}"],
+    ]);
+    const errors = checkParity(
+      parity([c]),
+      ["vectors/core/x.json"],
+      (p) => files.has(p),
+      mapReader(files),
+    );
+    expect(errors).toStrictEqual([]);
+  });
 });

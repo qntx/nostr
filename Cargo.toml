@@ -18,6 +18,7 @@ nk-core      = { path = "crates/nk-core", version = "=0.10.1", default-features 
 base16ct     = { version = "1.0", default-features = false, features = ["alloc"] }
 criterion    = { version = "0.8", default-features = false }
 getrandom    = { version = "0.4", default-features = false }
+proptest     = { version = "1.11" }
 rand_core    = { version = "0.10", default-features = false }
 secp256k1    = { version = "0.33", default-features = false }
 serde        = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
