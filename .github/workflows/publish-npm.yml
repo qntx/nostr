@@ -29,6 +29,7 @@ jobs:
     with:
       package-manager: bun
       wasm: true
+      dist-export: .
       working-directory: packages/nostr-wasm
       cargo-directory: .
       timeout-minutes: 30
