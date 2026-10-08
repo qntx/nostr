@@ -15,8 +15,8 @@
 )]
 
 use nk_core::{
-    ErrorKind, Event, EventAddress, EventId, Keys, Kind, KindClass, PublicKey, RelayUrl, SecretKey,
-    UnsignedEvent,
+    ErrorKind, Event, EventAddress, EventId, Filter, Keys, Kind, KindClass, PublicKey, RelayUrl,
+    SecretKey, UnsignedEvent, fingerprint,
 };
 use serde::Deserialize;
 
@@ -47,6 +47,22 @@ const HEX: &str = include_str!(concat!(
 const EVENT_SIGN: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../vectors/core/event-sign.json"
+));
+const FILTER_MATCH: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/filter-match.json"
+));
+const FILTER_LIMIT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/filter-limit.json"
+));
+const FILTER_CANONICALIZE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/filter-canonicalize.json"
+));
+const FILTER_FINGERPRINT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/filter-fingerprint.json"
 ));
 
 /// One vector case: either an expected output or the expected error kind
@@ -417,6 +433,120 @@ fn event_sign() {
         signed
             .verify()
             .unwrap_or_else(|_| panic!("case {index}: signed event must verify"));
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct FilterMatchCase {
+    filter: Filter,
+    event: Event,
+    matches: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct FilterMatchVector {
+    cases: Vec<FilterMatchCase>,
+}
+
+#[test]
+fn filter_match() {
+    let vector: FilterMatchVector =
+        serde_json::from_str(FILTER_MATCH).expect("filter-match.json must parse");
+    assert!(!vector.cases.is_empty(), "filter-match.json has no cases");
+    for case in &vector.cases {
+        assert_eq!(
+            case.filter.matches(&case.event),
+            case.matches,
+            "match mismatch for {case:?}"
+        );
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct FilterLimitCase {
+    filter: Filter,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FilterLimitVector {
+    cases: Vec<FilterLimitCase>,
+}
+
+#[test]
+fn filter_limit() {
+    let vector: FilterLimitVector =
+        serde_json::from_str(FILTER_LIMIT).expect("filter-limit.json must parse");
+    assert!(!vector.cases.is_empty(), "filter-limit.json has no cases");
+    for case in &vector.cases {
+        assert_eq!(
+            case.filter.limit_bound(),
+            case.limit,
+            "limit mismatch for {case:?}"
+        );
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct FilterCanonicalizeCase {
+    input: Filter,
+    #[serde(rename = "canonicalJson")]
+    canonical_json: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct FilterCanonicalizeVector {
+    cases: Vec<FilterCanonicalizeCase>,
+}
+
+#[test]
+fn filter_canonicalize() {
+    let vector: FilterCanonicalizeVector =
+        serde_json::from_str(FILTER_CANONICALIZE).expect("filter-canonicalize.json must parse");
+    assert!(
+        !vector.cases.is_empty(),
+        "filter-canonicalize.json has no cases"
+    );
+    for case in &vector.cases {
+        // The serde wire form and the in-crate canonical writer must agree.
+        assert_eq!(
+            serde_json::to_string(&case.input).expect("filter must serialize"),
+            case.canonical_json.as_str(),
+            "serde canonical mismatch for {case:?}"
+        );
+        assert_eq!(
+            case.input.canonical_json(),
+            case.canonical_json.as_str(),
+            "canonical writer mismatch for {case:?}"
+        );
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct FilterFingerprintCase {
+    filters: Vec<Filter>,
+    fingerprint: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct FilterFingerprintVector {
+    cases: Vec<FilterFingerprintCase>,
+}
+
+#[test]
+fn filter_fingerprint() {
+    let vector: FilterFingerprintVector =
+        serde_json::from_str(FILTER_FINGERPRINT).expect("filter-fingerprint.json must parse");
+    assert!(
+        !vector.cases.is_empty(),
+        "filter-fingerprint.json has no cases"
+    );
+    for case in &vector.cases {
+        assert_eq!(
+            fingerprint(&case.filters),
+            case.fingerprint.as_str(),
+            "fingerprint mismatch for {case:?}"
+        );
     }
 }
 

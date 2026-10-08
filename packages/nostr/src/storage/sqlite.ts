@@ -1,7 +1,6 @@
 // oxlint-disable no-await-in-loop -- SqlDriver statements are issued sequentially; drivers are not required to support overlapping statements on one connection
 import { compareEventsDesc, itemCompare, sortEvents } from "../core/event.ts";
 import type { Event } from "../core/event.ts";
-import { matchFilter } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
 import { SerialQueue } from "../core/serial.ts";
@@ -168,11 +167,10 @@ type FilterPlan = {
 /**
  * Compile one NIP-01 filter into query variants. `IN` lists are chunked so a variant never binds
  * more than {@link IN_CHUNK} values per list; variants are the cartesian product of chunks across
- * constrained fields. `deferred` means a `#<multi-char>` tag term cannot use the tags index (only
- * single-letter tag names are indexed) and must be checked with `matchFilter` before `limit`.
- * Returns `undefined` when an empty list field makes the filter match nothing.
+ * constrained fields. Multi-letter `#` keys are not NIP-01 tag conditions and are skipped, exactly
+ * like `matchFilter`. Returns `undefined` when an empty list field makes the filter match nothing.
  */
-function compileFilter(filter: Filter): { plans: FilterPlan[]; deferred: boolean } | undefined {
+function compileFilter(filter: Filter): FilterPlan[] | undefined {
   const variants: FilterPlan[][] = [];
   const pushIn = (values: ReadonlyArray<SqlValue>, clause: (n: number) => string) => {
     variants.push(
@@ -214,19 +212,17 @@ function compileFilter(filter: Filter): { plans: FilterPlan[]; deferred: boolean
     variants.push([{ wheres: ["created_at <= ?"], params: [filter.until] }]);
   }
 
-  let deferred = false;
   for (const key of Object.keys(filter)) {
     if (!key.startsWith("#")) {
       continue;
     }
     const name = key.slice(1);
+    if (name.length !== 1) {
+      continue;
+    }
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- startsWith("#") above guarantees the template key
     const values = filter[key as `#${string}`];
     if (!values) {
-      continue;
-    }
-    if (name.length !== 1) {
-      deferred = true;
       continue;
     }
     if (values.length === 0) {
@@ -258,7 +254,7 @@ function compileFilter(filter: Filter): { plans: FilterPlan[]; deferred: boolean
     plans.length = 0;
     plans.push(...next);
   }
-  return { plans, deferred };
+  return plans;
 }
 
 /**
@@ -594,8 +590,7 @@ export class SqliteEventStore implements EventStore {
 
   /**
    * Rows matching one filter, deduped, newest-first, with `limit` applied. `select` is a trusted
-   * column list for the projection. A filter with a non-indexed (multi-char) `#` tag term falls
-   * back to a `matchFilter` pass and cannot push `limit` down.
+   * column list for the projection.
    */
   async #filterRows(filter: Filter, select: "*"): Promise<Event[]>;
   async #filterRows(filter: Filter, select: "id, created_at"): Promise<NegentropyItem[]>;
@@ -606,21 +601,9 @@ export class SqliteEventStore implements EventStore {
     if (filter.limit === 0) {
       return [];
     }
-    const compiled = compileFilter(filter);
-    if (compiled === undefined) {
+    const plans = compileFilter(filter);
+    if (plans === undefined) {
       return [];
-    }
-    const { plans, deferred } = compiled;
-
-    if (deferred) {
-      // A multi-char #tag term bypasses the tags index — matchFilter decides and
-      // `limit` cannot be pushed down.
-      const merged = await this.#planRows<EventRow>(plans, "*", undefined);
-      const matched = merged.map(rowToEvent).filter((event) => matchFilter(filter, event));
-      const limited = filter.limit === undefined ? matched : matched.slice(0, filter.limit);
-      return select === "*"
-        ? limited
-        : limited.map((e) => ({ id: e.id, created_at: e.created_at }));
     }
 
     if (select === "*") {

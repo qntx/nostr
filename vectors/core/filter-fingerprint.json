@@ -45,6 +45,58 @@
         }
       ],
       "fingerprint": "[{\"ids\":[]}]"
+    },
+    {
+      "filters": [
+        {
+          "#t": [
+            "�"
+          ]
+        },
+        {
+          "#t": [
+            "😀"
+          ]
+        }
+      ],
+      "fingerprint": "[{\"#t\":[\"😀\"]},{\"#t\":[\"�\"]}]"
+    },
+    {
+      "filters": [
+        {
+          "#A": [
+            "x"
+          ],
+          "#a": [
+            "y"
+          ]
+        }
+      ],
+      "fingerprint": "[{\"#A\":[\"x\"],\"#a\":[\"y\"]}]"
+    },
+    {
+      "filters": [
+        {
+          "kinds": [
+            1
+          ],
+          "#custom": [
+            "x"
+          ]
+        }
+      ],
+      "fingerprint": "[{\"kinds\":[1]}]"
+    },
+    {
+      "filters": [
+        {
+          "ids": [
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        }
+      ],
+      "fingerprint": "[{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]"
     }
   ]
 }

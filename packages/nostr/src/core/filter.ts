@@ -14,6 +14,9 @@ export type Filter = {
   readonly [key: `#${string}`]: ReadonlyArray<string> | undefined;
 };
 
+/** NIP-01 only defines single-letter tag conditions. */
+const SINGLE_LETTER_TAG = /^#[a-zA-Z]$/;
+
 /** Local NIP-01 match. `search` is ignored; relays interpret NIP-50. */
 export function matchFilter(filter: Filter, event: Event): boolean {
   if (filter.ids && !filter.ids.some((id) => id.toLowerCase() === event.id)) {
@@ -27,7 +30,8 @@ export function matchFilter(filter: Filter, event: Event): boolean {
   }
 
   for (const key of Object.keys(filter)) {
-    if (!key.startsWith("#")) {
+    // Multi-letter # keys are outside NIP-01 and ignored.
+    if (!SINGLE_LETTER_TAG.test(key)) {
       continue;
     }
     const tagName = key.slice(1);
@@ -88,18 +92,20 @@ export function getFilterLimit(filter: Filter): number {
 
   let limit = Number.POSITIVE_INFINITY;
   if (filter.ids) {
-    limit = Math.min(limit, filter.ids.length);
+    limit = Math.min(limit, new Set(filter.ids.map((id) => id.toLowerCase())).size);
   }
   if (filter.limit !== undefined) {
     limit = Math.min(limit, filter.limit);
   }
 
   if (filter.kinds && filter.authors) {
-    const allReplaceable = filter.kinds.every((k) => isReplaceableKind(k) || isAddressableKind(k));
+    const kinds = new Set(filter.kinds);
+    const allReplaceable = [...kinds].every((k) => isReplaceableKind(k) || isAddressableKind(k));
     if (allReplaceable) {
       const dTags = filter["#d"];
-      const perAuthor = dTags && dTags.length > 0 ? dTags.length : 1;
-      limit = Math.min(limit, filter.authors.length * filter.kinds.length * perAuthor);
+      const perAuthor = dTags && dTags.length > 0 ? new Set(dTags).size : 1;
+      const authors = new Set(filter.authors.map((pk) => pk.toLowerCase())).size;
+      limit = Math.min(limit, authors * kinds.size * perAuthor);
     }
   }
 
@@ -108,11 +114,25 @@ export function getFilterLimit(filter: Filter): number {
 
 const HEX_LIST_KEYS = new Set(["ids", "authors", "#e", "#p"]);
 
-/** Lowercase hex lists and sort every array. Omits undefined so `[]` stays distinct from missing. */
+/** NIP-01 known fields; everything else (incl. multi-letter `#` keys) is dropped. */
+const KNOWN_FILTER_KEYS = new Set(["ids", "authors", "kinds", "since", "until", "limit", "search"]);
+
+/**
+ * Lowercase hex lists, sort and dedupe every array, and keep only the NIP-01 known fields plus
+ * single-letter `#` keys — unknown keys and multi-letter `#` keys are dropped. Omits undefined so
+ * `[]` stays distinct from missing.
+ */
 export function canonicalizeFilter(filter: Filter): Filter {
   const raw = filter as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(raw).sort()) {
+    if (key.startsWith("#")) {
+      if (!SINGLE_LETTER_TAG.test(key)) {
+        continue;
+      }
+    } else if (!KNOWN_FILTER_KEYS.has(key)) {
+      continue;
+    }
     const value = raw[key];
     // omit undefined so a missing key is not `[]` / null
     if (value === undefined) {
@@ -120,11 +140,11 @@ export function canonicalizeFilter(filter: Filter): Filter {
     }
     if (Array.isArray(value)) {
       if (HEX_LIST_KEYS.has(key)) {
-        out[key] = value.map((v) => String(v).toLowerCase()).sort();
+        out[key] = [...new Set(value.map((v) => String(v).toLowerCase()))].sort();
       } else if (key === "kinds") {
-        out[key] = value.map(Number).sort((a, b) => a - b);
+        out[key] = [...new Set(value.map(Number))].sort((a, b) => a - b);
       } else {
-        out[key] = value.map(String).sort();
+        out[key] = [...new Set(value.map(String))].sort();
       }
     } else {
       out[key] = value;

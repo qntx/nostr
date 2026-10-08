@@ -55,23 +55,102 @@
     },
     {
       "input": {
-        "search": "hello",
-        "zzz": "keep",
-        "limit": 1
+        "ids": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
       },
-      "canonicalJson": "{\"limit\":1,\"search\":\"hello\",\"zzz\":\"keep\"}"
+      "canonicalJson": "{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]}"
+    },
+    {
+      "input": {
+        "kinds": [
+          1,
+          1,
+          0
+        ]
+      },
+      "canonicalJson": "{\"kinds\":[0,1]}"
+    },
+    {
+      "input": {
+        "#t": [
+          "b",
+          "a",
+          "b"
+        ]
+      },
+      "canonicalJson": "{\"#t\":[\"a\",\"b\"]}"
     },
     {
       "input": {
         "#e": [
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      },
+      "canonicalJson": "{\"#e\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}"
+    },
+    {
+      "input": {
+        "#custom": [
+          "x"
         ],
+        "kinds": [
+          1
+        ]
+      },
+      "canonicalJson": "{\"kinds\":[1]}"
+    },
+    {
+      "input": {
+        "#A": [
+          "x"
+        ],
+        "#a": [
+          "y"
+        ]
+      },
+      "canonicalJson": "{\"#A\":[\"x\"],\"#a\":[\"y\"]}"
+    },
+    {
+      "input": {
+        "#t": [
+          "�",
+          "😀",
+          "z"
+        ]
+      },
+      "canonicalJson": "{\"#t\":[\"z\",\"😀\",\"�\"]}"
+    },
+    {
+      "input": {
+        "#t": []
+      },
+      "canonicalJson": "{\"#t\":[]}"
+    },
+    {
+      "input": {
+        "limit": 0,
+        "search": "s",
+        "since": 2,
+        "until": 9
+      },
+      "canonicalJson": "{\"limit\":0,\"search\":\"s\",\"since\":2,\"until\":9}"
+    },
+    {
+      "input": {
+        "kinds": [
+          1
+        ],
+        "zzz": 1,
         "custom": [
           "b",
           "a"
         ]
       },
-      "canonicalJson": "{\"#e\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"custom\":[\"a\",\"b\"]}"
+      "canonicalJson": "{\"kinds\":[1]}"
     }
   ]
 }
