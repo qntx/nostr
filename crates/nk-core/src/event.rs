@@ -2,17 +2,20 @@
 //! and the canonical serialization used for hashing — the counterpart of
 //! `@qntx/nostr`'s `core/event.ts`.
 
+use alloc::borrow::Cow;
 use alloc::string::String;
 use core::cmp::Ordering;
 use core::fmt;
 use core::str::FromStr;
 
+use serde::de::{Error as DeError, IgnoredAny, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::canonical;
 use crate::error::{Error, ErrorKind, Result};
 use crate::hex;
+use crate::json::{self, Captured, MAX_SAFE_INTEGER, WireCow, WireInt, WireStr, WireTags};
 use crate::key::PublicKey;
 use crate::kind::Kind;
 use crate::tag::{EventAddress, Tags};
@@ -305,28 +308,111 @@ impl Serialize for UnsignedEvent {
     }
 }
 
+/// Captured wire fields shared by the `Event` and `UnsignedEvent`
+/// visitors; a later duplicate key overwrites the earlier capture
+/// (`JSON.parse` semantics, NK-ADR-012 ruling 7).
+#[derive(Default)]
+struct EventFields<'de> {
+    id: Option<Captured<Cow<'de, str>>>,
+    pubkey: Option<Captured<Cow<'de, str>>>,
+    created_at: Option<Captured<u64>>,
+    kind: Option<Captured<u64>>,
+    tags: Option<Captured<Tags>>,
+    content: Option<Captured<String>>,
+    sig: Option<Captured<Cow<'de, str>>>,
+}
+
+impl<'de> EventFields<'de> {
+    /// Captures every entry of `map`. `Cow` keys and hex-field values
+    /// borrow the input unless they contain JSON escapes.
+    fn collect<M: MapAccess<'de>>(mut map: M) -> core::result::Result<Self, M::Error> {
+        let mut fields = Self::default();
+        while let Some(key) = map.next_key::<Cow<'de, str>>()? {
+            fields.read(&key, &mut map)?;
+        }
+        Ok(fields)
+    }
+
+    /// Reads one map entry: a lenient capture for known keys, `IgnoredAny`
+    /// for anything else.
+    fn read<M: MapAccess<'de>>(
+        &mut self,
+        key: &str,
+        map: &mut M,
+    ) -> core::result::Result<(), M::Error> {
+        match key {
+            "id" => self.id = Some(map.next_value::<WireCow<'de>>()?.0),
+            "pubkey" => self.pubkey = Some(map.next_value::<WireCow<'de>>()?.0),
+            "created_at" => {
+                self.created_at = Some(map.next_value::<WireInt<MAX_SAFE_INTEGER>>()?.0);
+            }
+            "kind" => {
+                self.kind = Some(map.next_value::<WireInt<{ u16::MAX as u64 }>>()?.0);
+            }
+            "tags" => self.tags = Some(map.next_value::<WireTags>()?.0),
+            "content" => self.content = Some(map.next_value::<WireStr>()?.0),
+            "sig" => self.sig = Some(map.next_value::<WireCow<'de>>()?.0),
+            _ => {
+                map.next_value::<IgnoredAny>()?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Finalizes a captured `kind` (`0..=u16::MAX` already enforced).
+fn kind_value<E: DeError>(slot: Option<Captured<u64>>) -> core::result::Result<u16, E> {
+    let value = json::finish(slot, "kind")?;
+    u16::try_from(value).map_err(|_| E::custom("invalid kind: integer out of range"))
+}
+
+/// Finalizes a captured hex field through the type's wire `Deserialize`
+/// (lowercase hex, exact length).
+fn hex_field<const N: usize, T, E: DeError>(
+    slot: Option<Captured<Cow<'_, str>>>,
+    field: &'static str,
+    build: fn([u8; N]) -> T,
+) -> core::result::Result<T, E> {
+    let raw = json::finish(slot, field)?;
+    hex::decode_wire::<N>(&raw).map(build).map_err(E::custom)
+}
+
 impl<'de> Deserialize<'de> for UnsignedEvent {
     /// Strictness matches TS `validateEvent`: `pubkey` is 64-char lowercase
-    /// hex, `created_at` a non-negative integer, `kind` an integer in
+    /// hex, `created_at` a non-negative safe integer, `kind` an integer in
     /// `0..=65535`, `content` a string, `tags` an array of non-empty string
-    /// arrays; unknown fields are ignored.
+    /// arrays; unknown fields are ignored and a duplicate key takes the last
+    /// value (NK-ADR-012 ruling 7), matching `JSON.parse`.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        #[derive(Deserialize)]
-        struct De {
-            pubkey: PublicKey,
-            created_at: Timestamp,
-            kind: Kind,
-            tags: Tags,
-            content: String,
+        struct UnsignedVisitor;
+
+        impl<'de> Visitor<'de> for UnsignedVisitor {
+            type Value = UnsignedEvent;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("an unsigned NIP-01 event object")
+            }
+
+            fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<UnsignedEvent, M::Error> {
+                let EventFields {
+                    pubkey,
+                    created_at,
+                    kind,
+                    tags,
+                    content,
+                    ..
+                } = EventFields::collect(map)?;
+                Ok(UnsignedEvent {
+                    pubkey: hex_field(pubkey, "pubkey", PublicKey::from_bytes)?,
+                    created_at: Timestamp::from_secs(json::finish(created_at, "created_at")?),
+                    kind: Kind::new(kind_value(kind)?),
+                    tags: json::finish(tags, "tags")?,
+                    content: json::finish(content, "content")?,
+                })
+            }
         }
-        let event = De::deserialize(deserializer)?;
-        Ok(Self {
-            pubkey: event.pubkey,
-            created_at: event.created_at,
-            kind: event.kind,
-            tags: event.tags,
-            content: event.content,
-        })
+
+        deserializer.deserialize_map(UnsignedVisitor)
     }
 }
 
@@ -512,26 +598,38 @@ impl<'de> Deserialize<'de> for Event {
     /// Strictness matches TS `validateSignedEvent`: [`UnsignedEvent`] rules
     /// plus `id` and `sig` as exact-length lowercase hex.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        #[derive(Deserialize)]
-        struct De {
-            id: EventId,
-            pubkey: PublicKey,
-            created_at: Timestamp,
-            kind: Kind,
-            tags: Tags,
-            content: String,
-            sig: Signature,
+        struct EventVisitor;
+
+        impl<'de> Visitor<'de> for EventVisitor {
+            type Value = Event;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a signed NIP-01 event object")
+            }
+
+            fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<Event, M::Error> {
+                let EventFields {
+                    id,
+                    pubkey,
+                    created_at,
+                    kind,
+                    tags,
+                    content,
+                    sig,
+                } = EventFields::collect(map)?;
+                Ok(Event {
+                    id: hex_field(id, "id", EventId::from_bytes)?,
+                    pubkey: hex_field(pubkey, "pubkey", PublicKey::from_bytes)?,
+                    created_at: Timestamp::from_secs(json::finish(created_at, "created_at")?),
+                    kind: Kind::new(kind_value(kind)?),
+                    tags: json::finish(tags, "tags")?,
+                    content: json::finish(content, "content")?,
+                    sig: hex_field(sig, "sig", Signature::from_bytes)?,
+                })
+            }
         }
-        let event = De::deserialize(deserializer)?;
-        Ok(Self {
-            id: event.id,
-            pubkey: event.pubkey,
-            created_at: event.created_at,
-            kind: event.kind,
-            tags: event.tags,
-            content: event.content,
-            sig: event.sig,
-        })
+
+        deserializer.deserialize_map(EventVisitor)
     }
 }
 

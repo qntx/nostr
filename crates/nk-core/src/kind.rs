@@ -3,12 +3,22 @@
 
 use core::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::json;
 
 /// A NIP-01 event kind (`0..=65535`), serialized as a bare JSON number.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct Kind(u16);
+
+impl<'de> Deserialize<'de> for Kind {
+    /// Accepts any integer-valued JSON number (`1e3`, `1.0`, `-0`) in
+    /// `0..=65535` (NK-ADR-012 ruling 8).
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        json::de_u16(deserializer).map(Self)
+    }
+}
 
 /// The NIP-01 storage class of a kind.
 ///

@@ -12,7 +12,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 
 import { EventBuilder } from "../../../src/core/builder.ts";
 import type { ProfileMetadata } from "../../../src/core/builder.ts";
-import { serializeEvent, getEventHash } from "../../../src/core/event.ts";
+import { serializeEvent, getEventHash, validateSignedEvent } from "../../../src/core/event.ts";
 import type { Event, UnsignedEvent } from "../../../src/core/event.ts";
 import {
   canonicalizeFilter,
@@ -204,6 +204,7 @@ const invalidEvents: Array<{ reason: string; raw: string }> = [
   { reason: "kind string", raw: evRaw({ kind: "1" }) },
   { reason: "created_at float", raw: evRaw({ created_at: 1700000000.5 }) },
   { reason: "created_at string", raw: evRaw({ created_at: "1700000000" }) },
+  { reason: "created_at -1", raw: evRaw({ created_at: -1 }) },
   { reason: "content number", raw: evRaw({ content: 42 }) },
   { reason: "tags not array", raw: evRaw({ tags: "none" }) },
   { reason: "tag not array", raw: evRaw({ tags: ["t"] }) },
@@ -212,6 +213,75 @@ const invalidEvents: Array<{ reason: string; raw: string }> = [
   { reason: "missing id", raw: JSON.stringify({ ...baseEvent, id: undefined }) },
   { reason: "missing sig", raw: JSON.stringify({ ...baseEvent, sig: undefined }) },
   { reason: "not an object", raw: "[1,2,3]" },
+];
+
+// Raw JSON text exercises rulings 7–10: duplicate keys (last wins), integer
+// spellings (`1e3`, `1.0`, `-0`), the 2^53-1 bound, and lone surrogates. These
+// cannot be produced by patching a parsed object, so they are built as text.
+const baseFields: Array<[string, string]> = [
+  ["id", JSON.stringify(baseEvent.id)],
+  ["pubkey", JSON.stringify(baseEvent.pubkey)],
+  ["created_at", String(baseEvent.created_at)],
+  ["kind", String(baseEvent.kind)],
+  ["tags", JSON.stringify(baseEvent.tags)],
+  ["content", JSON.stringify(baseEvent.content)],
+  ["sig", JSON.stringify(baseEvent.sig)],
+];
+
+const evText = (fields: Array<[string, string]>): string =>
+  `{${fields.map(([k, v]) => `${JSON.stringify(k)}:${v}`).join(",")}}`;
+
+const evFieldPatched = (key: string, value: string): Array<[string, string]> =>
+  baseFields.map(([k, v]): [string, string] => [k, k === key ? value : v]);
+
+const evPatched = (key: string, value: string): string => evText(evFieldPatched(key, value));
+
+/** Canonical parse result: field order id, pubkey, created_at, kind, tags, content, sig. */
+const evParsed = (raw: string): string => {
+  const o: unknown = JSON.parse(raw);
+  if (!validateSignedEvent(o)) {
+    throw new Error(`generator bug: valid case does not validate: ${raw}`);
+  }
+  return JSON.stringify({
+    id: o.id,
+    pubkey: o.pubkey,
+    created_at: o.created_at,
+    kind: o.kind,
+    tags: o.tags,
+    content: o.content,
+    sig: o.sig,
+  });
+};
+
+const validWireEvents: Array<[string, string]> = [
+  // Duplicate keys: the last value wins (ECMAScript JSON.parse semantics).
+  ["dup kind 7 then 1", evText([...baseFields, ["kind", "1"]])],
+  ["dup kind bad then good", evText([...evFieldPatched("kind", "99999"), ["kind", "1"]])],
+  // Integer spellings normalize to plain integers.
+  ["created_at 1e3", evPatched("created_at", "1e3")],
+  ["created_at float .0", evPatched("created_at", "1700000000.0")],
+  ["created_at -0", evPatched("created_at", "-0")],
+  ["kind 1e3", evPatched("kind", "1e3")],
+  ["kind -0", evPatched("kind", "-0")],
+  ["created_at max safe", evPatched("created_at", "9007199254740991")],
+  // A proper surrogate pair is a valid astral character.
+  ["content emoji escape", evPatched("content", String.raw`"\ud83d\ude00"`)],
+];
+const validEventCases = validWireEvents.map(([reason, raw]) => ({
+  reason,
+  raw,
+  parsed: evParsed(raw),
+}));
+
+const invalidWireEvents: Array<{ reason: string; raw: string }> = [
+  { reason: "created_at 2^53", raw: evPatched("created_at", "9007199254740992") },
+  { reason: "created_at 2^53+1", raw: evPatched("created_at", "9007199254740993") },
+  { reason: "kind 1e40", raw: evPatched("kind", "1e40") },
+  { reason: "content lone surrogate", raw: evPatched("content", String.raw`"a\ud800"`) },
+  {
+    reason: "tag value lone surrogate",
+    raw: evPatched("tags", String.raw`[["t","x\udfff"]]`),
+  },
 ];
 
 // Events for filter matching (canonical order).
@@ -412,6 +482,15 @@ const clientMessages = [
     raw: `["REQ","s",{"ids":["${"A".repeat(64)}"],"#e":["${"B".repeat(64)}"],"#custom":["x"],"junk":1}]`,
     encoded: `["REQ","s",{"#e":["${"b".repeat(64)}"],"ids":["${"a".repeat(64)}"]}]`,
   },
+  {
+    // Duplicate keys: last wins; integer spellings serialize as plain integers.
+    raw: '["REQ","s",{"kinds":[9],"kinds":[1],"limit":1e2}]',
+    encoded: '["REQ","s",{"kinds":[1],"limit":100}]',
+  },
+  {
+    raw: '["REQ","s",{"since":1e3,"until":2.0,"limit":-0}]',
+    encoded: '["REQ","s",{"limit":0,"since":1000,"until":2}]',
+  },
   { raw: encodeClientMessage(["CLOSE", "sub1"]) },
   { raw: authMsg },
   { raw: encodeClientMessage(["COUNT", "c1", { kinds: [0] }]) },
@@ -463,6 +542,15 @@ const relayMessages = [
   // COUNT accepts the max safe integer; non-bool approximate and invalid hll are ignored.
   { raw: encodeRelayMessage(["COUNT", "s", { count: 9007199254740991 }]) },
   {
+    // Duplicate keys: last wins; `1e2` normalizes to 100.
+    raw: '["COUNT","s",{"count":1,"count":2}]',
+    encoded: '["COUNT","s",{"count":2}]',
+  },
+  {
+    raw: '["COUNT","s",{"count":1e2}]',
+    encoded: '["COUNT","s",{"count":100}]',
+  },
+  {
     raw: '["COUNT","s",{"count":3,"approximate":"yes","hll":"zz"}]',
     encoded: '["COUNT","s",{"count":3}]',
   },
@@ -491,7 +579,11 @@ const invalidClientMessages = [
   '["REQ","s",{"since":-1}]',
   '["REQ","s",{"since":"x"}]',
   '["REQ","s",{"until":1.5}]',
+  '["REQ","s",{"since":9007199254740992}]',
   '["REQ","s",{"limit":-1}]',
+  '["REQ","s",{"limit":-0.5}]',
+  '["REQ","s",{"limit":1e20}]',
+  '["REQ","s",{"kinds":[1e10]}]',
   '["REQ","s",{"search":1}]',
   '["REQ","s",{"#e":"x"}]',
   '["REQ","s",{"#t":[1]}]',
@@ -539,6 +631,8 @@ const invalidRelayMessages = [
   '["AUTH"]',
   '["COUNT","s",{"count":-1}]',
   '["COUNT","s",{"count":1.5}]',
+  '["COUNT","s",{"count":-0.5}]',
+  '["COUNT","s",{"count":1e20}]',
   '["COUNT","s","x"]',
   '["COUNT","s"]',
   '["NEG-MSG","s","abc"]',
@@ -668,11 +762,14 @@ const normalizeUrlCases = [
 
 emit("core.event.serialize", "event-serialize.json", serialize);
 emit("core.event.sign", "event-sign.json", signed);
-emit(
-  "core.event.validate",
-  "event-validate.json",
-  invalidEvents.map((c) => ({ reason: c.reason, raw: c.raw, error: "EventValidationError" })),
-);
+emit("core.event.validate", "event-validate.json", [
+  ...[...invalidEvents, ...invalidWireEvents].map((c) => ({
+    reason: c.reason,
+    raw: c.raw,
+    error: "EventValidationError",
+  })),
+  ...validEventCases,
+]);
 emit(
   "core.filter.match",
   "filter-match.json",

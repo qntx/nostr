@@ -3,7 +3,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { EventValidationError } from "./error.ts";
 import type { Tag } from "./tag.ts";
 import { isTag } from "./tag.ts";
-import { isHex32, isHex64, isRecord, utf8Encoder, bytesToHex } from "./util.ts";
+import { bytesToHex, hasLoneSurrogate, isHex32, isHex64, isRecord, utf8Encoder } from "./util.ts";
 
 /** Wire event template before pubkey/id/sig. */
 export type EventTemplate = {
@@ -58,16 +58,22 @@ export function validateEvent(event: unknown): event is UnsignedEvent {
   }
   if (
     typeof event["kind"] !== "number" ||
-    !Number.isInteger(event["kind"]) ||
+    !Number.isSafeInteger(event["kind"]) ||
     event["kind"] < 0 ||
     event["kind"] > 65535
   ) {
     return false;
   }
-  if (typeof event["content"] !== "string") {
+  // Lone surrogates are rejected per NIP-01: after JSON.parse they differ from
+  // what serde_json (and thus Rust) can express, so the event id would diverge.
+  if (typeof event["content"] !== "string" || hasLoneSurrogate(event["content"])) {
     return false;
   }
-  if (typeof event["created_at"] !== "number" || !Number.isInteger(event["created_at"])) {
+  if (
+    typeof event["created_at"] !== "number" ||
+    !Number.isSafeInteger(event["created_at"]) ||
+    event["created_at"] < 0
+  ) {
     return false;
   }
   if (typeof event["pubkey"] !== "string" || !isHex32(event["pubkey"])) {
@@ -79,6 +85,11 @@ export function validateEvent(event: unknown): event is UnsignedEvent {
   for (const tag of event["tags"]) {
     if (!isTag(tag)) {
       return false;
+    }
+    for (const item of tag) {
+      if (hasLoneSurrogate(item)) {
+        return false;
+      }
     }
   }
   return true;

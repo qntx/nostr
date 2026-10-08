@@ -56,6 +56,14 @@
       "raw": "[\"COUNT\",\"s\",{\"count\":9007199254740991}]"
     },
     {
+      "raw": "[\"COUNT\",\"s\",{\"count\":1,\"count\":2}]",
+      "encoded": "[\"COUNT\",\"s\",{\"count\":2}]"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":1e2}]",
+      "encoded": "[\"COUNT\",\"s\",{\"count\":100}]"
+    },
+    {
       "raw": "[\"COUNT\",\"s\",{\"count\":3,\"approximate\":\"yes\",\"hll\":\"zz\"}]",
       "encoded": "[\"COUNT\",\"s\",{\"count\":3}]"
     },
@@ -127,6 +135,14 @@
     },
     {
       "raw": "[\"COUNT\",\"s\",{\"count\":1.5}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":-0.5}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":1e20}]",
       "error": "MessageError"
     },
     {

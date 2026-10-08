@@ -25,6 +25,14 @@
       "encoded": "[\"REQ\",\"s\",{\"#e\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]"
     },
     {
+      "raw": "[\"REQ\",\"s\",{\"kinds\":[9],\"kinds\":[1],\"limit\":1e2}]",
+      "encoded": "[\"REQ\",\"s\",{\"kinds\":[1],\"limit\":100}]"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"since\":1e3,\"until\":2.0,\"limit\":-0}]",
+      "encoded": "[\"REQ\",\"s\",{\"limit\":0,\"since\":1000,\"until\":2}]"
+    },
+    {
       "raw": "[\"CLOSE\",\"sub1\"]"
     },
     {
@@ -136,7 +144,23 @@
       "error": "MessageError"
     },
     {
+      "raw": "[\"REQ\",\"s\",{\"since\":9007199254740992}]",
+      "error": "MessageError"
+    },
+    {
       "raw": "[\"REQ\",\"s\",{\"limit\":-1}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"limit\":-0.5}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"limit\":1e20}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"kinds\":[1e10]}]",
       "error": "MessageError"
     },
     {

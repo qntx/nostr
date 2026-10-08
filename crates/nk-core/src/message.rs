@@ -554,9 +554,6 @@ impl ClientMessage<'_> {
     }
 }
 
-/// The maximum NIP-01/`Number.MAX_SAFE_INTEGER` count on the wire.
-const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
-
 impl RelayMessage<'_> {
     /// The NIP-01 JSON wire form — byte-identical to `encodeRelayMessage`.
     #[must_use]
@@ -721,12 +718,12 @@ impl RelayMessage<'_> {
                 let Some(payload) = items.get(1).and_then(serde_json::Value::as_object) else {
                     return Err(msg_error(fail));
                 };
-                let Some(count) = payload.get("count").and_then(serde_json::Value::as_u64) else {
+                let Some(count) = payload
+                    .get("count")
+                    .and_then(|v| crate::json::de_u64(v).ok())
+                else {
                     return Err(msg_error(fail));
                 };
-                if count > MAX_SAFE_INTEGER {
-                    return Err(msg_error(fail));
-                }
                 let approximate = payload
                     .get("approximate")
                     .and_then(serde_json::Value::as_bool);

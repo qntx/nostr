@@ -2,16 +2,26 @@
 
 use core::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::json;
 
 /// Seconds since the Unix epoch, serialized as a bare JSON number (the
 /// NIP-01 `created_at` representation).
 #[cfg_attr(not(feature = "clock"), doc = "```compile_fail")]
 #[cfg_attr(not(feature = "clock"), doc = "let _ = nk_core::Timestamp::now();")]
 #[cfg_attr(not(feature = "clock"), doc = "```")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct Timestamp(u64);
+
+impl<'de> Deserialize<'de> for Timestamp {
+    /// Accepts any integer-valued JSON number (`1e3`, `1.0`, `-0`) up to
+    /// `2^53-1`; output is always a plain integer (NK-ADR-012 rulings 8–9).
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        json::de_u64(deserializer).map(Self)
+    }
+}
 
 impl Timestamp {
     /// Wraps a seconds count.

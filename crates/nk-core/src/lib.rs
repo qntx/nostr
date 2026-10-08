@@ -34,6 +34,7 @@ pub(crate) mod canonical;
 pub mod event;
 pub mod filter;
 pub(crate) mod hex;
+pub(crate) mod json;
 pub mod key;
 pub mod kind;
 pub mod message;
