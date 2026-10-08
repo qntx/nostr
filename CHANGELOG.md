@@ -5,13 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and `packages/nostr-wasm` via npm trusted publishing (OIDC).
+A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages/nostr-wasm` via npm trusted publishing / OIDC) and `publish-crates.yml` (publishing `nk-core` to crates.io).
 
 ## [Unreleased]
 
 ### Added
 
-- `nk-core` crate foundation (not yet published): `no_std` + `alloc` error type, limits, internal hex codec, `Timestamp`, and `RelayUrl` — the Rust counterpart of `normalizeURL`/`normalizeRelayUrls`, verified byte-for-byte against the shared `vectors/core/url-normalize.json` cases by the new `nk-vectors` runner. The Hermes smoke test now runs the same vectors through the `whatwg-url` polyfill.
+- `nk-core` is published to crates.io from this release on. The crate is a from-scratch implementation inside this repository and is unrelated to the old `nk` 0.3.x crates on crates.io.
+- `nk-core` crate foundation: `no_std` + `alloc` error type, limits, internal hex codec, `Timestamp`, and `RelayUrl` — the Rust counterpart of `normalizeURL`/`normalizeRelayUrls`, verified byte-for-byte against the shared `vectors/core/url-normalize.json` cases by the new `nk-vectors` runner. The Hermes smoke test now runs the same vectors through the `whatwg-url` polyfill.
 - `nk-core` event model: `Kind`/`KindClass` (every named `Kind` constant), `PublicKey`, `EventId`, `Signature`, `Tag`/`Tags`/`EventAddress`, `UnsignedEvent`/`Event`, canonical NIP-01 serialization and SHA-256 event ids, `cmp_newest_first`/`cmp_oldest_first`, and `ErrorKind::EventValidation` — parity-verified by the shared kind/tag/event/hex vectors in `nk-vectors`.
 - `nk-core` keys, signing, and verification: `SecretKey` (zeroized on drop, `CryptoRng`-injected generation, `os-rng` convenience methods) and `Keys` with BIP-340 Schnorr signing (`sign_id_with_aux`, `sign_event_with_aux`/`_with_rng`/`sign_event`), `Signature::verify`, `Event::verify`, and `ErrorKind::Crypto` — parity-verified against `vectors/core/event-sign.json` and the official `vectors/bip340/official.csv` rows.
 - `nk-core` filters: `SingleLetterTag`, `Filter` (chainable builders, set semantics, `matches`/`matches_any`, `limit_bound`, canonical serialization), and `fingerprint` — parity-verified by the shared filter vectors in `nk-vectors`.
