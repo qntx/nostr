@@ -9,10 +9,19 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-08
+
+### Added
+
+- `@qntx/nostr-wasm`: the WebAssembly cryptography backend, published as its own package next to `@qntx/nostr` (#194).
+- `FakeRelay.matchingLiveSubscribers(event)` in `@qntx/nostr/testing`: the number of subscriptions whose initial dump ended with EOSE and whose filters match the event (#184).
+
 ### Changed
 
-- **Breaking:** the WASM acceleration layer moved out of `@qntx/nostr` into a dedicated `@qntx/nostr-wasm` package — replace `import { loadNostrWasm } from "@qntx/nostr/wasm"` with `import { loadNostrWasm } from "@qntx/nostr-wasm"`. `@qntx/nostr` no longer ships a `.wasm` file and no longer needs a Rust toolchain to build or publish. `WasmPoisonedError` stays exported from `@qntx/nostr/core`.
-- The TypeScript side is now a `packages/*` monorepo: `@qntx/nostr` at `packages/nostr`, `@qntx/nostr-wasm` at `packages/nostr-wasm`; versioning stays lockstep across both packages and the Cargo workspace.
+- **Breaking:** the WASM acceleration layer moved out of `@qntx/nostr` into a dedicated `@qntx/nostr-wasm` package — replace `import { loadNostrWasm } from "@qntx/nostr/wasm"` with `import { loadNostrWasm } from "@qntx/nostr-wasm"`. `@qntx/nostr` no longer ships a `.wasm` file and no longer needs a Rust toolchain to build or publish. `WasmPoisonedError` stays exported from `@qntx/nostr/core` (#194).
+- The TypeScript side is now a `packages/*` monorepo: `@qntx/nostr` at `packages/nostr`, `@qntx/nostr-wasm` at `packages/nostr-wasm`; versioning stays lockstep across both packages and the Cargo workspace (#194).
+- Licensed under MIT OR Apache-2.0 (previously MIT); the repository moved to `github.com/qntx/nostr` (#184).
+- `@qntx/nostr` declares `sideEffects: false` now that it ships no `.wasm` asset (#194).
 
 ## [0.9.0] - 2026-10-03
 
