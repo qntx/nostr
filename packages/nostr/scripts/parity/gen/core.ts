@@ -483,25 +483,50 @@ const addressFormats = [
 const normalizeUrlCases = [
   "example.com",
   "EXAMPLE.com",
+  "WSS://A.EXAMPLE",
   "http://a.example:80/x",
   "https://a.example:443",
+  "http://a.example:443/x",
+  "https://a.example:80/x",
+  "http://a.example:80",
   "http://a.example:8080/x",
   "wss://a.example:443/x",
+  "wss://a.example:8443/x",
+  "wss://a.example:80/x",
+  "ws://a.example:443/x",
   "ws://a.example:80/x",
   "wss://a.example//a///b/",
+  "wss://a.example//",
+  "wss://a.example///",
   "wss://a.example/?b=2&a=1&a=0",
+  "wss://a.example/?a=1&a=2&b=0&a=3",
+  "wss://a.example/?q=a+b",
+  "wss://a.example/?q=a%2Bb",
+  "wss://a.example/?q=a%20b",
+  "wss://a.example/?",
+  "wss://a.example/?#x",
   "wss://a.example/path#frag",
+  "#frag",
   "wss://a.example",
   "relay.example:4443/p?q=z",
+  "wss://u:p@a.example",
+  "wss://127.0.0.1:7777/x",
+  "wss://[::1]:8080/x",
+  "wss://bücher.example",
   "ftp://a.example",
+  "ftp://x",
+  "wss://",
+  "ws://exa mple.com",
+  "http://",
   "",
   "not a url",
   "wss://a.example/üñí",
 ].map((input) => {
   try {
     return { input, output: normalizeURL(input) };
-  } catch {
-    return { input, output: null };
+  } catch (error) {
+    // Failure vectors name the error class so Rust can assert ErrorKind.
+    return { input, error: error instanceof Error ? error.constructor.name : "Error" };
   }
 });
 

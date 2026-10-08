@@ -9,6 +9,10 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 
 ## [Unreleased]
 
+### Added
+
+- `nk-core` crate foundation (not yet published): `no_std` + `alloc` error type, limits, internal hex codec, `Timestamp`, and `RelayUrl` — the Rust counterpart of `normalizeURL`/`normalizeRelayUrls`, verified byte-for-byte against the shared `vectors/core/url-normalize.json` cases by the new `nk-vectors` runner. The Hermes smoke test now runs the same vectors through the `whatwg-url` polyfill.
+
 ### Changed
 
 - Rust toolchain and workspace MSRV (`rust-version`) moved to 1.99.

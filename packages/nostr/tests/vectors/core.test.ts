@@ -98,7 +98,7 @@ type AddressFormatCase = {
   formatted: string;
 };
 const addressCases = readVector<AddressParseCase | AddressFormatCase>("tag-address.json");
-const normalizeUrlCases = readVector<{ input: string; output: string | null }>(
+const normalizeUrlCases = readVector<{ input: string; output?: string; error?: string }>(
   "url-normalize.json",
 );
 
@@ -122,8 +122,8 @@ const addressParse = addressCases
   .filter((c): c is AddressParseCase => c.op === "parse")
   .map((c) => ({ input: c.input, expected: c.parsed ?? undefined }));
 const addressFormats = addressCases.filter((c): c is AddressFormatCase => c.op === "format");
-const normalizeUrlValid = normalizeUrlCases.filter((c) => c.output !== null);
-const normalizeUrlInvalid = normalizeUrlCases.filter((c) => c.output === null);
+const normalizeUrlValid = normalizeUrlCases.filter((c) => c.error === undefined);
+const normalizeUrlInvalid = normalizeUrlCases.filter((c) => c.error !== undefined);
 
 describe("vectors/core", () => {
   test("event serialize: canonical serialization and id", () => {
@@ -236,6 +236,7 @@ describe("vectors/core", () => {
 
   test("url normalize rejects invalid URLs", () => {
     for (const c of normalizeUrlInvalid) {
+      expect(c.error).toBe("UrlError");
       expect(() => normalizeURL(c.input)).toThrow(UrlError);
     }
   });

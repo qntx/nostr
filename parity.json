@@ -16,13 +16,16 @@
     {
       "id": "core.url.normalize",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/util.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/url.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/url-normalize.json"]
     },
     {
