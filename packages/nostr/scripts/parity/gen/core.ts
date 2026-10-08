@@ -289,6 +289,13 @@ const validWireEvents: Array<[string, string]> = [
   ["kind 1e3", evPatched("kind", "1e3")],
   ["kind -0", evPatched("kind", "-0")],
   ["created_at max safe", evPatched("created_at", "9007199254740991")],
+  // Large integral spellings pin correctly-rounded f64 parsing (NK-ADR-012
+  // ruling 8: serde_json float_roundtrip): above 2^52 a sloppy parse loses
+  // one ulp and emits an integer one below the written value.
+  ["created_at max safe .0", evPatched("created_at", "9007199254740991.0")],
+  ["created_at 2^53-2 .0", evPatched("created_at", "9007199254740990.0")],
+  ["created_at 2^52+1 .0", evPatched("created_at", "4503599627370497.0")],
+  ["kind max .0", evPatched("kind", "65535.0")],
   // A proper surrogate pair is a valid astral character.
   ["content emoji escape", evPatched("content", String.raw`"\ud83d\ude00"`)],
 ];
@@ -302,6 +309,11 @@ const invalidWireEvents: Array<{ reason: string; raw: string }> = [
   { reason: "created_at 2^53", raw: evPatched("created_at", "9007199254740992") },
   { reason: "created_at 2^53+1", raw: evPatched("created_at", "9007199254740993") },
   { reason: "kind 1e40", raw: evPatched("kind", "1e40") },
+  // Integral f64 but past 2^53-1: still rejected (ruling 9).
+  {
+    reason: "created_at max finite float",
+    raw: evPatched("created_at", "1.7976931348623157e308"),
+  },
   { reason: "content lone surrogate", raw: evPatched("content", String.raw`"a\ud800"`) },
   {
     reason: "tag value lone surrogate",
@@ -515,6 +527,11 @@ const clientMessages = [
   {
     raw: '["REQ","s",{"since":1e3,"until":2.0,"limit":-0}]',
     encoded: '["REQ","s",{"limit":0,"since":1000,"until":2}]',
+  },
+  {
+    // 2^53-1 spelled .0 must round-trip exactly (float_roundtrip, ruling 8).
+    raw: '["REQ","s",{"until":9007199254740991.0}]',
+    encoded: '["REQ","s",{"until":9007199254740991}]',
   },
   { raw: encodeClientMessage(["CLOSE", "sub1"]) },
   { raw: authMsg },
