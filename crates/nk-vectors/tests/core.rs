@@ -15,7 +15,8 @@
 )]
 
 use nk_core::{
-    ErrorKind, Event, EventAddress, Kind, KindClass, PublicKey, RelayUrl, UnsignedEvent,
+    ErrorKind, Event, EventAddress, EventId, Keys, Kind, KindClass, PublicKey, RelayUrl, SecretKey,
+    UnsignedEvent,
 };
 use serde::Deserialize;
 
@@ -42,6 +43,10 @@ const EVENT_SERIALIZE: &str = include_str!(concat!(
 const HEX: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../vectors/core/hex.json"
+));
+const EVENT_SIGN: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/event-sign.json"
 ));
 
 /// One vector case: either an expected output or the expected error kind
@@ -369,6 +374,49 @@ fn hex() {
                 )
             }
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct EventSignCase {
+    #[serde(rename = "secretKey")]
+    secret_key: String,
+    aux: String,
+    unsigned: UnsignedEvent,
+    event: Event,
+}
+
+#[derive(Debug, Deserialize)]
+struct EventSignVector {
+    cases: Vec<EventSignCase>,
+}
+
+#[test]
+fn event_sign() {
+    let vector: EventSignVector =
+        serde_json::from_str(EVENT_SIGN).expect("event-sign.json must parse");
+    assert!(!vector.cases.is_empty(), "event-sign.json has no cases");
+    for (index, case) in vector.cases.iter().enumerate() {
+        let keys = Keys::new(
+            SecretKey::from_hex(&case.secret_key)
+                .unwrap_or_else(|_| panic!("case {index}: secret key must be a scalar")),
+        );
+        // The aux value is a 32-byte hex string; `EventId` is the public
+        // fixed-width hex container.
+        let aux = EventId::from_hex(&case.aux)
+            .unwrap_or_else(|_| panic!("case {index}: aux must be 64 hex chars"));
+        let signed = keys
+            .sign_event_with_aux(case.unsigned.clone(), aux.as_bytes())
+            .unwrap_or_else(|_| panic!("case {index}: pubkey must match"));
+        assert_eq!(signed, case.event, "case {index}: signed event mismatch");
+        assert_eq!(
+            serde_json::to_string(&signed).expect("signed event serializes"),
+            serde_json::to_string(&case.event).expect("vector event serializes"),
+            "case {index}: wire serialization mismatch"
+        );
+        signed
+            .verify()
+            .unwrap_or_else(|_| panic!("case {index}: signed event must verify"));
     }
 }
 

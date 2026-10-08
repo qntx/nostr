@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 
 /// Seconds since the Unix epoch, serialized as a bare JSON number (the
 /// NIP-01 `created_at` representation).
+#[cfg_attr(not(feature = "clock"), doc = "```compile_fail")]
+#[cfg_attr(not(feature = "clock"), doc = "let _ = nk_core::Timestamp::now();")]
+#[cfg_attr(not(feature = "clock"), doc = "```")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Timestamp(u64);
