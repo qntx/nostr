@@ -141,12 +141,13 @@ impl SecretKey {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Crypto`] when `bytes` is not exactly 32 bytes long or is
+    /// [`ErrorKind::Hex`] when `bytes` is not exactly 32 bytes long (TS
+    /// `assertByteLength` throws `HexError`); [`ErrorKind::Crypto`] when it is
     /// not a valid secret scalar.
     pub fn from_slice(bytes: &[u8]) -> Result<Self> {
         let mut array = [0u8; 32];
         if bytes.len() != array.len() {
-            return Err(Error::new(ErrorKind::Crypto, "invalid secret key length"));
+            return Err(Error::new(ErrorKind::Hex, "invalid secret key length"));
         }
         array.copy_from_slice(bytes);
         Self::from_bytes(array)
@@ -448,8 +449,18 @@ mod tests {
 
     #[test]
     fn secret_key_from_slice_checks_length() {
+        // Wrong length: `Hex` (TS `assertByteLength` -> `HexError`).
         assert_eq!(
             SecretKey::from_slice(&[1u8; 31]).unwrap_err().kind(),
+            ErrorKind::Hex
+        );
+        assert_eq!(
+            SecretKey::from_slice(&[1u8; 33]).unwrap_err().kind(),
+            ErrorKind::Hex
+        );
+        // Right length, invalid scalar: `Crypto`.
+        assert_eq!(
+            SecretKey::from_slice(&[0xff; 32]).unwrap_err().kind(),
             ErrorKind::Crypto
         );
         SecretKey::from_slice(&[1u8; 32]).unwrap();
