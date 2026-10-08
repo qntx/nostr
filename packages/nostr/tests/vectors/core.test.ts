@@ -7,7 +7,15 @@ import { describe, expect, test } from "vite-plus/test";
 import { EventBuilder } from "../../src/core/builder.ts";
 import type { ProfileMetadata } from "../../src/core/builder.ts";
 import { EventValidationError, HexError, MessageError, UrlError } from "../../src/core/error.ts";
-import { serializeEvent, getEventHash, validateSignedEvent } from "../../src/core/event.ts";
+import {
+  serializeEvent,
+  getEventHash,
+  itemCompare,
+  isReplaceableWinner,
+  signedMatchesUnsigned,
+  sortEvents,
+  validateSignedEvent,
+} from "../../src/core/event.ts";
 import type { Event, UnsignedEvent } from "../../src/core/event.ts";
 import {
   canonicalizeFilter,
@@ -32,7 +40,7 @@ import {
   parseClientMessage,
   parseRelayMessage,
 } from "../../src/core/message.ts";
-import { formatEventAddress, parseEventAddress } from "../../src/core/tag.ts";
+import { formatEventAddress, parseEventAddress, Tag } from "../../src/core/tag.ts";
 import { assertHex32, bytesToHex, hexToBytes, isHex32, normalizeURL } from "../../src/core/util.ts";
 
 // Shared vectors consumed by the nk-* Rust crates as well; regenerate with
@@ -112,6 +120,62 @@ const hexCases = readVector<{
   output?: string;
   error?: string;
 }>("hex.json");
+
+type TagBuildCase = {
+  op: string;
+  id?: string;
+  pubkey?: string;
+  relay?: string;
+  marker?: string;
+  petname?: string;
+  address?: string;
+  identifier?: string;
+  hashtag?: string;
+  url?: string;
+  kind?: number | string;
+  tag: ReadonlyArray<string>;
+  rust?: boolean;
+};
+const tagBuildCases = readVector<TagBuildCase>("tag-build.json");
+
+type EventOrderSortCase = { op: "sort" | "item"; events: Event[]; order: string[] };
+type EventOrderCase =
+  | EventOrderSortCase
+  | { op: "winner"; candidate: Event; incumbent: Event; wins: boolean };
+const eventOrderCases = readVector<EventOrderCase>("event-order.json");
+const orderSortCases = eventOrderCases.filter((c): c is EventOrderSortCase => c.op === "sort");
+const orderItemCases = eventOrderCases.filter((c): c is EventOrderSortCase => c.op === "item");
+const orderWinnerCases = eventOrderCases.filter(
+  (c): c is Extract<EventOrderCase, { op: "winner" }> => c.op === "winner",
+);
+
+const signedMatchesCases = readVector<{
+  unsigned: UnsignedEvent;
+  event: Event;
+  matches: boolean;
+  rust?: boolean;
+}>("event-signed-matches.json");
+
+function runTagBuildCase(c: TagBuildCase): ReadonlyArray<string> {
+  switch (c.op) {
+    case "e":
+      return Tag.e(c.id ?? "", c.relay, c.marker, c.pubkey);
+    case "p":
+      return Tag.p(c.pubkey ?? "", c.relay, c.petname);
+    case "a":
+      return Tag.a(c.address ?? "", c.relay);
+    case "d":
+      return Tag.d(c.identifier ?? "");
+    case "t":
+      return Tag.t(c.hashtag ?? "");
+    case "r":
+      return Tag.r(c.url ?? "", c.marker);
+    case "k":
+      return Tag.k(c.kind ?? 0);
+    default:
+      throw new Error(`unknown tag op ${c.op}`);
+  }
+}
 
 type BuilderCase = {
   op: string;
@@ -380,6 +444,36 @@ describe("vectors/core", () => {
     for (const c of builderInvalid) {
       expect(c.error).toBe("EventValidationError");
       expect(() => runBuilderCase(c)).toThrow(EventValidationError);
+    }
+  });
+
+  test("tag build: every constructor output matches", () => {
+    for (const c of tagBuildCases) {
+      expect(runTagBuildCase(c)).toStrictEqual(c.tag);
+    }
+  });
+
+  test("event order: sortEvents is newest-first with id tie-break", () => {
+    for (const c of orderSortCases) {
+      expect(sortEvents([...c.events]).map((e) => e.id)).toStrictEqual(c.order);
+    }
+  });
+
+  test("event order: itemCompare is oldest-first with id tie-break", () => {
+    for (const c of orderItemCases) {
+      expect(c.events.toSorted(itemCompare).map((e) => e.id)).toStrictEqual(c.order);
+    }
+  });
+
+  test("event order: isReplaceableWinner", () => {
+    for (const c of orderWinnerCases) {
+      expect(isReplaceableWinner(c.candidate, c.incumbent)).toBe(c.wins);
+    }
+  });
+
+  test("signed matches unsigned: match and each field mismatch", () => {
+    for (const c of signedMatchesCases) {
+      expect(signedMatchesUnsigned(c.event, c.unsigned)).toBe(c.matches);
     }
   });
 });

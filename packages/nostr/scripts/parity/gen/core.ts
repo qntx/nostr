@@ -12,7 +12,15 @@ import { sha256 } from "@noble/hashes/sha2.js";
 
 import { EventBuilder } from "../../../src/core/builder.ts";
 import type { ProfileMetadata } from "../../../src/core/builder.ts";
-import { serializeEvent, getEventHash, validateSignedEvent } from "../../../src/core/event.ts";
+import {
+  serializeEvent,
+  getEventHash,
+  itemCompare,
+  isReplaceableWinner,
+  signedMatchesUnsigned,
+  sortedEvents,
+  validateSignedEvent,
+} from "../../../src/core/event.ts";
 import type { Event, UnsignedEvent } from "../../../src/core/event.ts";
 import {
   canonicalizeFilter,
@@ -33,7 +41,7 @@ import {
   encodeRelayMessage,
   mergeCountHll,
 } from "../../../src/core/message.ts";
-import { formatEventAddress, parseEventAddress } from "../../../src/core/tag.ts";
+import { formatEventAddress, parseEventAddress, Tag } from "../../../src/core/tag.ts";
 import {
   bytesToHex,
   hexToBytes,
@@ -59,15 +67,32 @@ const version =
     ? String(pkgJson.version)
     : "0.0.0";
 
-function emit(capability: string, file: string, cases: unknown): void {
+function emit(capability: string, file: string, cases: unknown, crossCheck?: string): void {
   const doc = {
     schema: 1,
     capability,
-    source: { kind: "generated", generator: "@qntx/nostr", version },
+    source: {
+      kind: "generated",
+      generator: "@qntx/nostr",
+      version,
+      cross_check: crossCheck ?? null,
+    },
     cases,
   };
   writeFileSync(join(vectors, file), `${JSON.stringify(doc, null, 2)}\n`);
 }
+
+// Recorded once by scripts/parity/cross-check.ts against the local
+// 3rdparty/nostr-tools checkout (not wired into CI — see that script's header).
+const CROSS_CHECK_IDS = "nostr-tools 2.24.1 @7fa1ef4: getEventHash/serializeEvent ids match (5/5)";
+const CROSS_CHECK_SIGS = "nostr-tools 2.24.1 @7fa1ef4: verifyEvent signatures match (3/3)";
+const CROSS_CHECK_KINDS =
+  "nostr-tools 2.24.1 @7fa1ef4: is*Kind booleans agree inside the NIP-01 ranges; kind 45/999 " +
+  "isRegularKind and 40000+ classifyKind differ by definition (nostr-tools uses `<10000 except " +
+  "0/3` and reports `unknown`/`parameterized`)";
+const CROSS_CHECK_URLS =
+  "nostr-tools 2.24.1 @7fa1ef4: 38/40 agree; ftp://* differs — nostr-tools keeps non-ws schemes, " +
+  "normalizeURL here rejects them with UrlError";
 
 // Events must be emitted in the canonical field order used on the wire.
 function canonEvent(e: Event): Event {
@@ -760,8 +785,8 @@ const normalizeUrlCases = [
   }
 });
 
-emit("core.event.serialize", "event-serialize.json", serialize);
-emit("core.event.sign", "event-sign.json", signed);
+emit("core.event.serialize", "event-serialize.json", serialize, CROSS_CHECK_IDS);
+emit("core.event.sign", "event-sign.json", signed, CROSS_CHECK_SIGS);
 emit("core.event.validate", "event-validate.json", [
   ...[...invalidEvents, ...invalidWireEvents].map((c) => ({
     reason: c.reason,
@@ -1012,9 +1037,224 @@ const builderCases = builderInputs.map((input) => {
   }
 });
 
-emit("core.kind.classify", "kind-classify.json", kinds);
+// --- core.tag.build ------------------------------------------------------
+// Every Tag constructor across its optional-position permutations (the
+// NIP-10/NIP-02 "" padding). Cases the typed Rust API cannot express carry
+// `rust: false`; the Rust runner asserts the skipped count.
+const TAG_ID = "ab".repeat(32);
+// RelayUrl normalizes to a trailing slash; use a normalized-stable URL so the
+// typed Rust constructors reproduce the tag verbatim.
+const TAG_RELAY = "wss://r.example/";
+const tagBuildCases = [
+  { op: "e", id: TAG_ID, tag: Tag.e(TAG_ID) },
+  { op: "e", id: TAG_ID.toUpperCase(), tag: Tag.e(TAG_ID.toUpperCase()) },
+  { op: "e", id: TAG_ID, relay: TAG_RELAY, tag: Tag.e(TAG_ID, TAG_RELAY) },
+  { op: "e", id: TAG_ID, marker: "reply", tag: Tag.e(TAG_ID, undefined, "reply") },
+  { op: "e", id: TAG_ID, pubkey: PK, tag: Tag.e(TAG_ID, undefined, undefined, PK) },
+  {
+    op: "e",
+    id: TAG_ID,
+    relay: TAG_RELAY,
+    marker: "reply",
+    pubkey: PK,
+    tag: Tag.e(TAG_ID, TAG_RELAY, "reply", PK),
+  },
+  {
+    op: "e",
+    id: TAG_ID.toUpperCase(),
+    relay: TAG_RELAY,
+    pubkey: PK.toUpperCase(),
+    tag: Tag.e(TAG_ID.toUpperCase(), TAG_RELAY, undefined, PK.toUpperCase()),
+  },
+  // Relay strings the typed Rust RelayUrl cannot express are TS-only.
+  {
+    op: "e",
+    id: TAG_ID,
+    relay: "not a url",
+    tag: Tag.e(TAG_ID, "not a url"),
+    rust: false,
+  },
+  { op: "p", pubkey: PK, tag: Tag.p(PK) },
+  { op: "p", pubkey: PK.toUpperCase(), tag: Tag.p(PK.toUpperCase()) },
+  { op: "p", pubkey: PK, relay: TAG_RELAY, tag: Tag.p(PK, TAG_RELAY) },
+  {
+    op: "p",
+    pubkey: PK,
+    relay: TAG_RELAY,
+    petname: "alice",
+    tag: Tag.p(PK, TAG_RELAY, "alice"),
+  },
+  { op: "p", pubkey: PK, petname: "alice", tag: Tag.p(PK, undefined, "alice") },
+  {
+    op: "p",
+    pubkey: PK,
+    relay: "not a url",
+    tag: Tag.p(PK, "not a url"),
+    rust: false,
+  },
+  { op: "a", address: `30023:${PK}:post`, tag: Tag.a(`30023:${PK}:post`) },
+  {
+    op: "a",
+    address: `30023:${PK}:post`,
+    relay: TAG_RELAY,
+    tag: Tag.a(`30023:${PK}:post`, TAG_RELAY),
+  },
+  // TS keeps the coordinate verbatim; Tag::address would normalize the pubkey.
+  {
+    op: "a",
+    address: `30023:${PK.toUpperCase()}:post`,
+    tag: Tag.a(`30023:${PK.toUpperCase()}:post`),
+    rust: false,
+  },
+  {
+    op: "a",
+    address: `30023:${PK}:post`,
+    relay: "not a url",
+    tag: Tag.a(`30023:${PK}:post`, "not a url"),
+    rust: false,
+  },
+  { op: "d", identifier: "post", tag: Tag.d("post") },
+  { op: "d", identifier: "", tag: Tag.d("") },
+  { op: "d", identifier: "with:colon", tag: Tag.d("with:colon") },
+  { op: "t", hashtag: "nostr", tag: Tag.t("nostr") },
+  { op: "t", hashtag: "😀", tag: Tag.t("😀") },
+  { op: "r", url: "https://x.example/a", tag: Tag.r("https://x.example/a") },
+  {
+    op: "r",
+    url: "https://x.example/a",
+    marker: "mention",
+    tag: Tag.r("https://x.example/a", "mention"),
+  },
+  { op: "k", kind: 1, tag: Tag.k(1) },
+  { op: "k", kind: 65535, tag: Tag.k(65535) },
+  // A string kind is not expressible through the typed Rust Kind input.
+  { op: "k", kind: "1", tag: Tag.k("1"), rust: false },
+];
+
+// --- core.event.order ----------------------------------------------------
+// sortEvents (newest-first), itemCompare (oldest-first) and isReplaceableWinner
+// over event lists with created_at ties broken by lexicographic id.
+const ordEvent = (id: string, created_at: number): Event =>
+  canonEvent({
+    id,
+    pubkey: PK,
+    created_at,
+    kind: 1,
+    tags: [],
+    content: "x",
+    sig: "c".repeat(128),
+  });
+
+const ordA = ordEvent("a".repeat(64), 2000);
+const ordB = ordEvent("b".repeat(64), 2000);
+const ordC = ordEvent("c".repeat(64), 1000);
+const ordD = ordEvent("d".repeat(64), 3000);
+const ord1 = ordEvent("1".repeat(64), 777);
+const ord2 = ordEvent("2".repeat(64), 777);
+const ord3 = ordEvent("3".repeat(64), 777);
+
+const ordList = [ordB, ordC, ordD, ordA];
+const ordTies = [ord3, ord1, ord2];
+const eventOrderCases = [
+  {
+    op: "sort",
+    events: ordList,
+    order: sortedEvents(ordList).map((e) => e.id),
+  },
+  {
+    op: "item",
+    events: ordList,
+    order: ordList.toSorted(itemCompare).map((e) => e.id),
+  },
+  // Pure id ordering when every created_at is equal.
+  {
+    op: "sort",
+    events: ordTies,
+    order: sortedEvents(ordTies).map((e) => e.id),
+  },
+  { op: "item", events: ordTies, order: ordTies.toSorted(itemCompare).map((e) => e.id) },
+  { op: "winner", candidate: ordD, incumbent: ordA, wins: isReplaceableWinner(ordD, ordA) },
+  { op: "winner", candidate: ordA, incumbent: ordD, wins: isReplaceableWinner(ordA, ordD) },
+  { op: "winner", candidate: ordA, incumbent: ordB, wins: isReplaceableWinner(ordA, ordB) },
+  { op: "winner", candidate: ordB, incumbent: ordA, wins: isReplaceableWinner(ordB, ordA) },
+  { op: "winner", candidate: ordA, incumbent: ordA, wins: isReplaceableWinner(ordA, ordA) },
+];
+
+// --- core.event.signed-matches -------------------------------------------
+// signedMatchesUnsigned / Event::matches_unsigned: one match plus each field
+// mismatch (kind, content, created_at, tags order/values, pubkey). TS compares
+// pubkeys case-insensitively and skips a falsy unsigned pubkey; the typed Rust
+// API cannot express those inputs, so they are TS-only.
+const matchBase: UnsignedEvent = {
+  pubkey: SK_PK,
+  created_at: 1700000000,
+  kind: 1,
+  tags: [
+    ["t", "a"],
+    ["e", TAG_ID],
+  ],
+  content: "gm",
+};
+const matchEvent = sign(matchBase, SK, AUX);
+
+const signedMatchesCases = [
+  { unsigned: matchBase, event: matchEvent, matches: signedMatchesUnsigned(matchEvent, matchBase) },
+  ...[
+    { ...matchBase, kind: 2 },
+    { ...matchBase, content: "other" },
+    { ...matchBase, created_at: 1700000001 },
+    {
+      ...matchBase,
+      tags: [
+        ["e", TAG_ID],
+        ["t", "a"],
+      ],
+    },
+    {
+      ...matchBase,
+      tags: [
+        ["t", "b"],
+        ["e", TAG_ID],
+      ],
+    },
+    { ...matchBase, pubkey: PK },
+  ].map((unsigned) => ({
+    unsigned,
+    event: matchEvent,
+    matches: signedMatchesUnsigned(matchEvent, unsigned),
+  })),
+  {
+    unsigned: { ...matchBase, pubkey: SK_PK.toUpperCase() },
+    event: matchEvent,
+    matches: signedMatchesUnsigned(matchEvent, {
+      ...matchBase,
+      pubkey: SK_PK.toUpperCase(),
+    }),
+    rust: false,
+  },
+  {
+    unsigned: { ...matchBase, pubkey: "" },
+    event: matchEvent,
+    matches: signedMatchesUnsigned(matchEvent, { ...matchBase, pubkey: "" }),
+    rust: false,
+  },
+  {
+    unsigned: matchBase,
+    event: { ...matchEvent, pubkey: matchEvent.pubkey.toUpperCase() },
+    matches: signedMatchesUnsigned(
+      { ...matchEvent, pubkey: matchEvent.pubkey.toUpperCase() },
+      matchBase,
+    ),
+    rust: false,
+  },
+];
+
+emit("core.tag.build", "tag-build.json", tagBuildCases);
+emit("core.event.order", "event-order.json", eventOrderCases);
+emit("core.event.signed-matches", "event-signed-matches.json", signedMatchesCases);
+emit("core.kind.classify", "kind-classify.json", kinds, CROSS_CHECK_KINDS);
 emit("core.tag.address", "tag-address.json", [...addressCases, ...addressFormats]);
 emit("core.hex", "hex.json", hexCases);
-emit("core.url.normalize", "url-normalize.json", normalizeUrlCases);
+emit("core.url.normalize", "url-normalize.json", normalizeUrlCases, CROSS_CHECK_URLS);
 emit("core.builder", "builder.json", builderCases);
 console.log("wrote vectors/core/*.json");

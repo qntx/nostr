@@ -1,0 +1,280 @@
+{
+  "schema": 1,
+  "capability": "core.tag.build",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.10.1",
+    "cross_check": null
+  },
+  "cases": [
+    {
+      "op": "e",
+      "id": "abababababababababababababababababababababababababababababababab",
+      "tag": [
+        "e",
+        "abababababababababababababababababababababababababababababababab"
+      ]
+    },
+    {
+      "op": "e",
+      "id": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+      "tag": [
+        "e",
+        "abababababababababababababababababababababababababababababababab"
+      ]
+    },
+    {
+      "op": "e",
+      "id": "abababababababababababababababababababababababababababababababab",
+      "relay": "wss://r.example/",
+      "tag": [
+        "e",
+        "abababababababababababababababababababababababababababababababab",
+        "wss://r.example/"
+      ]
+    },
+    {
+      "op": "e",
+      "id": "abababababababababababababababababababababababababababababababab",
+      "marker": "reply",
+      "tag": [
+        "e",
+        "abababababababababababababababababababababababababababababababab",
+        "",
+        "reply"
+      ]
+    },
+    {
+      "op": "e",
+      "id": "abababababababababababababababababababababababababababababababab",
+      "pubkey": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+      "tag": [
+        "e",
+        "abababababababababababababababababababababababababababababababab",
+        "",
+        "",
+        "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23"
+      ]
+    },
+    {
+      "op": "e",
+      "id": "abababababababababababababababababababababababababababababababab",
+      "relay": "wss://r.example/",
+      "marker": "reply",
+      "pubkey": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+      "tag": [
+        "e",
+        "abababababababababababababababababababababababababababababababab",
+        "wss://r.example/",
+        "reply",
+        "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23"
+      ]
+    },
+    {
+      "op": "e",
+      "id": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+      "relay": "wss://r.example/",
+      "pubkey": "90A80DB6EB294B9EAB0B4E8DDFA3EFE7263458CE2D07566DF4E6C58868FEEF23",
+      "tag": [
+        "e",
+        "abababababababababababababababababababababababababababababababab",
+        "wss://r.example/",
+        "",
+        "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23"
+      ]
+    },
+    {
+      "op": "e",
+      "id": "abababababababababababababababababababababababababababababababab",
+      "relay": "not a url",
+      "tag": [
+        "e",
+        "abababababababababababababababababababababababababababababababab",
+        "not a url"
+      ],
+      "rust": false
+    },
+    {
+      "op": "p",
+      "pubkey": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+      "tag": [
+        "p",
+        "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23"
+      ]
+    },
+    {
+      "op": "p",
+      "pubkey": "90A80DB6EB294B9EAB0B4E8DDFA3EFE7263458CE2D07566DF4E6C58868FEEF23",
+      "tag": [
+        "p",
+        "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23"
+      ]
+    },
+    {
+      "op": "p",
+      "pubkey": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+      "relay": "wss://r.example/",
+      "tag": [
+        "p",
+        "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "wss://r.example/"
+      ]
+    },
+    {
+      "op": "p",
+      "pubkey": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+      "relay": "wss://r.example/",
+      "petname": "alice",
+      "tag": [
+        "p",
+        "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "wss://r.example/",
+        "alice"
+      ]
+    },
+    {
+      "op": "p",
+      "pubkey": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+      "petname": "alice",
+      "tag": [
+        "p",
+        "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "",
+        "alice"
+      ]
+    },
+    {
+      "op": "p",
+      "pubkey": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+      "relay": "not a url",
+      "tag": [
+        "p",
+        "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "not a url"
+      ],
+      "rust": false
+    },
+    {
+      "op": "a",
+      "address": "30023:90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23:post",
+      "tag": [
+        "a",
+        "30023:90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23:post"
+      ]
+    },
+    {
+      "op": "a",
+      "address": "30023:90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23:post",
+      "relay": "wss://r.example/",
+      "tag": [
+        "a",
+        "30023:90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23:post",
+        "wss://r.example/"
+      ]
+    },
+    {
+      "op": "a",
+      "address": "30023:90A80DB6EB294B9EAB0B4E8DDFA3EFE7263458CE2D07566DF4E6C58868FEEF23:post",
+      "tag": [
+        "a",
+        "30023:90A80DB6EB294B9EAB0B4E8DDFA3EFE7263458CE2D07566DF4E6C58868FEEF23:post"
+      ],
+      "rust": false
+    },
+    {
+      "op": "a",
+      "address": "30023:90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23:post",
+      "relay": "not a url",
+      "tag": [
+        "a",
+        "30023:90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23:post",
+        "not a url"
+      ],
+      "rust": false
+    },
+    {
+      "op": "d",
+      "identifier": "post",
+      "tag": [
+        "d",
+        "post"
+      ]
+    },
+    {
+      "op": "d",
+      "identifier": "",
+      "tag": [
+        "d",
+        ""
+      ]
+    },
+    {
+      "op": "d",
+      "identifier": "with:colon",
+      "tag": [
+        "d",
+        "with:colon"
+      ]
+    },
+    {
+      "op": "t",
+      "hashtag": "nostr",
+      "tag": [
+        "t",
+        "nostr"
+      ]
+    },
+    {
+      "op": "t",
+      "hashtag": "😀",
+      "tag": [
+        "t",
+        "😀"
+      ]
+    },
+    {
+      "op": "r",
+      "url": "https://x.example/a",
+      "tag": [
+        "r",
+        "https://x.example/a"
+      ]
+    },
+    {
+      "op": "r",
+      "url": "https://x.example/a",
+      "marker": "mention",
+      "tag": [
+        "r",
+        "https://x.example/a",
+        "mention"
+      ]
+    },
+    {
+      "op": "k",
+      "kind": 1,
+      "tag": [
+        "k",
+        "1"
+      ]
+    },
+    {
+      "op": "k",
+      "kind": 65535,
+      "tag": [
+        "k",
+        "65535"
+      ]
+    },
+    {
+      "op": "k",
+      "kind": "1",
+      "tag": [
+        "k",
+        "1"
+      ],
+      "rust": false
+    }
+  ]
+}
