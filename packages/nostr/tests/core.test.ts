@@ -24,6 +24,7 @@ import {
   isRegularKind,
   isReplaceableKind,
   filterFingerprint,
+  getFilterLimit,
   matchFilter,
   EventValidationError,
   matchFilters,
@@ -330,6 +331,12 @@ describe("filter", () => {
     expect(matchFilter({ ids: [base.id.toUpperCase()] }, base)).toBe(true);
   });
 
+  test("matchFilter ignores multi-letter # keys per NIP-01", () => {
+    expect(matchFilter({ "#custom": ["v1"] }, base)).toBe(true);
+    expect(matchFilter({ "#missing": ["x"] }, base)).toBe(true);
+    expect(matchFilter({ "#1": ["x"] }, base)).toBe(true);
+  });
+
   test("matchFilter ignores NIP-50 search", () => {
     expect(matchFilter({ search: "nope" }, base)).toBe(true);
     expect(matchFilter({ kinds: [1], search: "nope" }, base)).toBe(true);
@@ -426,6 +433,36 @@ describe("filter", () => {
     expect(filter.kinds).toStrictEqual([2, 1]);
   });
 
+  test("canonicalizeFilter dedupes and drops non-NIP-01 keys", () => {
+    const id = "ab".repeat(32);
+    expect(
+      canonicalizeFilter({
+        ids: [id, id.toUpperCase(), id],
+        kinds: [1, 1, 0],
+        "#t": ["b", "a", "b"],
+        "#e": [id.toUpperCase(), id],
+        "#custom": ["x"],
+        "#missing": ["y"],
+        zzz: "keep",
+        custom: ["b", "a"],
+      } as Filter),
+    ).toStrictEqual({
+      ids: [id],
+      kinds: [0, 1],
+      "#t": ["a", "b"],
+      "#e": [id],
+    });
+  });
+
+  test("getFilterLimit counts unique values", () => {
+    const id = "ab".repeat(32);
+    const pk = "cd".repeat(32);
+    expect(getFilterLimit({ ids: [id, id.toUpperCase()] })).toBe(1);
+    expect(getFilterLimit({ kinds: [0, 0, 3], authors: [pk, pk.toUpperCase()] })).toBe(2);
+    expect(getFilterLimit({ kinds: [30023], authors: [pk], "#d": ["a", "a"] })).toBe(1);
+    expect(getFilterLimit({ ids: [id, id], limit: 10 })).toBe(1);
+  });
+
   test("canonicalizeFilters maps each filter; fingerprint matches stored form", () => {
     const filters: Filter[] = [
       { kinds: [2, 1], authors: ["BB".repeat(32), "aa".repeat(32)] },
@@ -484,6 +521,54 @@ describe("messages", () => {
     expect(() => parseClientMessage(JSON.stringify(["REQ", "abc"]))).toThrow(
       "invalid REQ client message",
     );
+  });
+
+  test("encodeClientMessage canonicalizes REQ, COUNT, and NEG-OPEN filters", () => {
+    const id = "ab".repeat(32);
+    const messy = { kinds: [2, 1], ids: [id.toUpperCase(), id], "#custom": ["x"] } as Filter;
+    expect(JSON.parse(encodeClientMessage(["REQ", "s", messy]))).toStrictEqual([
+      "REQ",
+      "s",
+      { ids: [id], kinds: [1, 2] },
+    ]);
+    expect(JSON.parse(encodeClientMessage(["COUNT", "s", messy]))).toStrictEqual([
+      "COUNT",
+      "s",
+      { ids: [id], kinds: [1, 2] },
+    ]);
+    expect(JSON.parse(encodeClientMessage(["NEG-OPEN", "s", messy, "aabb"]))).toStrictEqual([
+      "NEG-OPEN",
+      "s",
+      { ids: [id], kinds: [1, 2] },
+      "aabb",
+    ]);
+  });
+
+  test("parseClientMessage validates and normalizes wire filters", () => {
+    const id = "ab".repeat(32);
+    const parsed = parseClientMessage(
+      JSON.stringify([
+        "REQ",
+        "s",
+        { ids: [id.toUpperCase()], "#e": [id.toUpperCase()], "#custom": ["x"], junk: 1 },
+      ]),
+    );
+    expect(parsed).toStrictEqual(["REQ", "s", { "#e": [id], ids: [id] }]);
+    expect(() => parseClientMessage(JSON.stringify(["REQ", "s", { kinds: [65536] }]))).toThrow(
+      MessageError,
+    );
+    expect(() => parseClientMessage(JSON.stringify(["REQ", "s", { ids: ["zz"] }]))).toThrow(
+      MessageError,
+    );
+    expect(() => parseClientMessage(JSON.stringify(["REQ", "s", { since: -1 }]))).toThrow(
+      MessageError,
+    );
+    expect(() => parseClientMessage(JSON.stringify(["COUNT", "s", { "#t": [1] }]))).toThrow(
+      MessageError,
+    );
+    expect(() =>
+      parseClientMessage(JSON.stringify(["NEG-OPEN", "s", { search: 1 }, "aabb"])),
+    ).toThrow(MessageError);
   });
 
   test("assertSubscriptionId accepts 1..max and rejects empty/too long", () => {

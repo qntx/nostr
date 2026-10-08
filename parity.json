@@ -199,49 +199,61 @@
     {
       "id": "core.filter.match",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/filter.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/filter.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/filter-match.json"]
     },
     {
       "id": "core.filter.limit",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/filter.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/filter.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/filter-limit.json"]
     },
     {
       "id": "core.filter.canonicalize",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/filter.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/filter.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/filter-canonicalize.json"]
     },
     {
       "id": "core.filter.fingerprint",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/filter.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/filter.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/filter-fingerprint.json"]
     },
     {

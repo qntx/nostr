@@ -269,15 +269,16 @@ describe("SqliteEventStore", () => {
     }
   });
 
-  test("multi-char #tag filters fall back to a matchFilter pass", async () => {
+  test("multi-char #tag conditions are ignored (NIP-01)", async () => {
     const { driver, store } = await openStore();
     try {
       const tagged = note(alice(), "tagged", 1, [["client", "test-app"]]);
       const plain = note(alice(), "plain", 2);
       await store.putMany([tagged, plain]);
+      // A multi-letter key is not a tag condition, so both events match.
       const tagRows = await store.query([{ "#client": ["test-app"] }]);
-      expect(tagRows.map((e) => e.id)).toStrictEqual([tagged.id]);
-      await expect(store.count([{ "#client": ["test-app"] }])).resolves.toBe(1);
+      expect(tagRows.map((e) => e.id)).toStrictEqual([plain.id, tagged.id]);
+      await expect(store.count([{ "#client": ["test-app"] }])).resolves.toBe(2);
     } finally {
       driver.close();
     }

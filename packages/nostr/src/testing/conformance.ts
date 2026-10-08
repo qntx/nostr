@@ -197,6 +197,21 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
     },
   },
   {
+    name: "multi-letter # keys are ignored (NIP-01 single-letter tag conditions only)",
+    async run(store) {
+      const tagged = note(alice(), "tagged", 1, [["client", "test-app"]]);
+      const plain = note(bob(), "plain", 2);
+      await store.putMany([tagged, plain]);
+      eq(await store.count([{ "#client": ["test-app"] }]), 2, "ignored on count");
+      eq(await store.count([{ "#client": ["other"] }]), 2, "ignored regardless of value");
+      eq(
+        ids(await store.query([{ "#client": ["test-app"] }])).sort(),
+        [plain.id, tagged.id].sort(),
+        "ignored on query",
+      );
+    },
+  },
+  {
     name: "count matches query cardinality across overlapping filters",
     async run(store) {
       const a = note(alice(), "a", 1);

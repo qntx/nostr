@@ -29,7 +29,9 @@ extern crate std;
 pub mod error;
 pub mod limits;
 
+pub(crate) mod canonical;
 pub mod event;
+pub mod filter;
 pub(crate) mod hex;
 pub mod key;
 pub mod kind;
@@ -39,6 +41,7 @@ pub mod url;
 
 pub use error::{Error, ErrorKind, Result};
 pub use event::{Event, EventId, Signature, UnsignedEvent, cmp_newest_first, cmp_oldest_first};
+pub use filter::{Filter, SingleLetterTag, fingerprint};
 pub use key::{Keys, PublicKey, SecretKey};
 pub use kind::{Kind, KindClass};
 pub use tag::{EventAddress, Tag, Tags};
@@ -57,6 +60,7 @@ const _: () = {
     assert_send_sync::<Event>();
     assert_send_sync::<EventAddress>();
     assert_send_sync::<EventId>();
+    assert_send_sync::<Filter>();
     assert_send_sync::<Kind>();
     assert_send_sync::<KindClass>();
     assert_send_sync::<Keys>();
@@ -64,6 +68,7 @@ const _: () = {
     assert_send_sync::<RelayUrl>();
     assert_send_sync::<SecretKey>();
     assert_send_sync::<Signature>();
+    assert_send_sync::<SingleLetterTag>();
     assert_send_sync::<Tag>();
     assert_send_sync::<Tags>();
     assert_send_sync::<Timestamp>();

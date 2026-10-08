@@ -1,6 +1,7 @@
 import { MessageError } from "./error.ts";
 import type { Event } from "./event.ts";
 import { validateSignedEvent } from "./event.ts";
+import { canonicalizeFilter, canonicalizeFilters } from "./filter.ts";
 import type { Filter } from "./filter.ts";
 import { SUBSCRIPTION_ID_MAX_CHARS } from "./limits.ts";
 import type { Mutable } from "./util.ts";
@@ -88,7 +89,18 @@ export function mergeCountHll(hexes: ReadonlyArray<string>): string {
 
 /** Serialize a client->relay message to its NIP-01 JSON wire form. */
 export function encodeClientMessage(message: ClientMessage): string {
-  return JSON.stringify(message);
+  // REQ/COUNT/NEG-OPEN filters are canonicalized so the wire form matches nk-core.
+  switch (message[0]) {
+    case "REQ":
+    case "COUNT": {
+      const [type, id, ...filters] = message;
+      return JSON.stringify([type, id, ...canonicalizeFilters(filters)]);
+    }
+    case "NEG-OPEN":
+      return JSON.stringify(["NEG-OPEN", message[1], canonicalizeFilter(message[2]), message[3]]);
+    default:
+      return JSON.stringify(message);
+  }
 }
 
 /** Serialize a relay->client message to its NIP-01 JSON wire form. */
@@ -147,12 +159,12 @@ export function parseClientMessage(raw: string): ClientMessage {
       if (
         items.length !== 4 ||
         typeof items[1] !== "string" ||
-        !isWireFilter(items[2]) ||
+        !isRecord(items[2]) ||
         !isNegHex(items[3])
       ) {
         throw new MessageError("invalid NEG-OPEN client message");
       }
-      return ["NEG-OPEN", items[1], items[2], items[3].toLowerCase()];
+      return ["NEG-OPEN", items[1], parseWireFilter(items[2], "NEG-OPEN"), items[3].toLowerCase()];
 
     case "NEG-MSG":
       if (items.length !== 3 || typeof items[1] !== "string" || !isNegHex(items[2])) {
@@ -277,19 +289,64 @@ function parseCountHll(value: unknown): string | undefined {
   return value.toLowerCase();
 }
 
-function isWireFilter(value: unknown): value is Filter {
-  return isRecord(value);
+const HEX64_RE = /^[0-9a-fA-F]{64}$/;
+
+/**
+ * Validates a wire filter per NIP-01: `ids`/`authors` are 64-hex arrays (normalized lowercase),
+ * `kinds` are integers in 0..=65535, `since`/`until`/`limit` non-negative integers, `search` a
+ * string, and `#<single letter>` arrays of strings (`#e`/`#p` lowercased). Multi-letter `#` keys
+ * and unknown non-`#` keys are dropped; wrong types throw {@link MessageError}.
+ */
+function parseWireFilter(value: unknown, kind: string): Filter {
+  if (!isRecord(value)) {
+    throw new MessageError(`invalid ${kind} filter`);
+  }
+  const fail = (): MessageError => new MessageError(`invalid ${kind} filter`);
+  const out: Mutable<Filter> = {};
+  for (const [key, v] of Object.entries(value)) {
+    if (key.startsWith("#")) {
+      if (!/^#[a-zA-Z]$/.test(key)) {
+        continue;
+      }
+      if (!Array.isArray(v) || !v.every((x): x is string => typeof x === "string")) {
+        throw fail();
+      }
+      out[`#${key.slice(1)}`] = key === "#e" || key === "#p" ? v.map((x) => x.toLowerCase()) : v;
+    } else if (key === "ids" || key === "authors") {
+      if (
+        !Array.isArray(v) ||
+        !v.every((x): x is string => typeof x === "string" && HEX64_RE.test(x))
+      ) {
+        throw fail();
+      }
+      out[key] = v.map((x) => x.toLowerCase());
+    } else if (key === "kinds") {
+      if (
+        !Array.isArray(v) ||
+        !v.every(
+          (x): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 65535,
+        )
+      ) {
+        throw fail();
+      }
+      out.kinds = v;
+    } else if (key === "since" || key === "until" || key === "limit") {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+        throw fail();
+      }
+      out[key] = v;
+    } else if (key === "search") {
+      if (typeof v !== "string") {
+        throw fail();
+      }
+      out.search = v;
+    }
+  }
+  return out;
 }
 
 function parseWireFilters(items: unknown[], kind: string): Filter[] {
-  const filters: Filter[] = [];
-  for (const item of items) {
-    if (!isWireFilter(item)) {
-      throw new MessageError(`invalid ${kind} filter`);
-    }
-    filters.push(item);
-  }
-  return filters;
+  return items.map((item) => parseWireFilter(item, kind));
 }
 
 function isNegHex(value: unknown): value is string {
