@@ -15,9 +15,9 @@
 )]
 
 use nk_core::{
-    DeletionTarget, ErrorKind, Event, EventAddress, EventBuilder, EventId, Filter, Keys, Kind,
-    KindClass, ProfileMetadata, PublicKey, RelayUrl, SecretKey, Tag, Timestamp, UnsignedEvent,
-    fingerprint,
+    ClientMessage, CountHll, DeletionTarget, ErrorKind, Event, EventAddress, EventBuilder, EventId,
+    Filter, Keys, Kind, KindClass, ProfileMetadata, PublicKey, RelayMessage, RelayUrl, SecretKey,
+    Tag, Timestamp, UnsignedEvent, fingerprint,
 };
 use serde::Deserialize;
 
@@ -709,6 +709,72 @@ fn build_case(case: &BuilderCase, index: usize) -> nk_core::Result<EventBuilder>
     }
 }
 
+const MESSAGE_CLIENT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/message-client.json"
+));
+const MESSAGE_RELAY: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/message-relay.json"
+));
+const COUNT_HLL: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/count-hll.json"
+));
+
+#[derive(Deserialize)]
+struct MessageVector {
+    cases: Vec<MessageCase>,
+}
+
+#[derive(Deserialize)]
+struct MessageCase {
+    raw: String,
+    encoded: Option<String>,
+    error: Option<String>,
+}
+
+fn check_message_cases<M>(vector: &str, name: &str, parse: fn(&str) -> nk_core::Result<M>)
+where
+    M: MessageEncode,
+{
+    let vector: MessageVector = serde_json::from_str(vector).expect("message vector must parse");
+    assert!(!vector.cases.is_empty(), "{name} has no cases");
+    for case in &vector.cases {
+        match (parse(&case.raw), &case.error) {
+            (Ok(msg), None) => assert_eq!(
+                &msg.encode(),
+                case.encoded.as_deref().unwrap_or(&case.raw),
+                "encode mismatch for {:?}",
+                case.raw
+            ),
+            (Err(error), Some(expected)) => {
+                assert_eq!(expected.as_str(), "MessageError", "for {:?}", case.raw);
+                assert_eq!(error.kind(), ErrorKind::Message, "for {:?}", case.raw);
+            }
+            (Ok(_), Some(expected)) => panic!("{name}: expected {expected} for {:?}", case.raw),
+            (Err(error), None) => panic!("{name}: unexpected {error} for {:?}", case.raw),
+        }
+    }
+}
+
+/// Dispatch over the two message types without exposing a trait on them.
+trait MessageEncode {
+    fn encode(&self) -> String;
+}
+
+impl MessageEncode for ClientMessage<'_> {
+    fn encode(&self) -> String {
+        ClientMessage::encode(self)
+    }
+}
+
+impl MessageEncode for RelayMessage<'_> {
+    fn encode(&self) -> String {
+        RelayMessage::encode(self)
+    }
+}
+
 #[test]
 fn builder() {
     let vector: BuilderVector = serde_json::from_str(BUILDER).expect("builder.json must parse");
@@ -738,6 +804,61 @@ fn builder() {
                 panic!("case {index}: expected {class}, built successfully")
             }
             (Err(error), None) => panic!("case {index}: unexpected error {error:?}"),
+        }
+    }
+}
+
+#[test]
+fn message_client() {
+    check_message_cases(MESSAGE_CLIENT, "message-client.json", |raw| {
+        ClientMessage::parse(raw)
+    });
+}
+
+#[test]
+fn message_relay() {
+    check_message_cases(MESSAGE_RELAY, "message-relay.json", |raw| {
+        RelayMessage::parse(raw)
+    });
+}
+
+#[derive(Deserialize)]
+struct CountHllVector {
+    cases: Vec<CountHllCase>,
+}
+
+#[derive(Deserialize)]
+struct CountHllCase {
+    inputs: Vec<String>,
+    output: Option<String>,
+    error: Option<String>,
+}
+
+#[test]
+fn count_hll() {
+    let vector: CountHllVector =
+        serde_json::from_str(COUNT_HLL).expect("count-hll.json must parse");
+    assert!(!vector.cases.is_empty(), "count-hll.json has no cases");
+    for case in &vector.cases {
+        let merged: Result<CountHll, ErrorKind> =
+            case.inputs
+                .iter()
+                .try_fold(CountHll::zero(), |mut acc, input| {
+                    let sketch: CountHll = input.parse().map_err(|e: nk_core::Error| e.kind())?;
+                    acc.merge(&sketch);
+                    Ok(acc)
+                });
+        match (merged, &case.error) {
+            (Ok(merged), None) => assert_eq!(
+                merged.to_string(),
+                case.output.as_deref().expect("valid case has output")
+            ),
+            (Err(kind), Some(expected)) => {
+                assert_eq!(expected.as_str(), "MessageError");
+                assert_eq!(kind, ErrorKind::Message);
+            }
+            (Ok(_), Some(expected)) => panic!("expected {expected} for {:?}", case.inputs),
+            (Err(kind), None) => panic!("unexpected {kind:?} for {:?}", case.inputs),
         }
     }
 }

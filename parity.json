@@ -259,49 +259,61 @@
     {
       "id": "core.message.client",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/message.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/message.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/message-client.json"]
     },
     {
       "id": "core.message.relay",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/message.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/message.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/message-relay.json"]
     },
     {
       "id": "core.message.subscription-id",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/message.ts",
-        "tests": ["packages/nostr/tests/core.test.ts"]
+        "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-core/src/message.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk-core/src/message.rs"]
+      },
+      "vectors": ["vectors/core/message-client.json", "vectors/core/message-relay.json"]
     },
     {
       "id": "core.count.hll",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/message.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/count.test.ts"]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/message.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
       "vectors": ["vectors/core/count-hll.json"]
     },
     {

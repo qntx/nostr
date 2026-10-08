@@ -49,6 +49,23 @@
       "raw": "[\"NEG-ERR\",\"sub\",\"error: something\"]"
     },
     {
+      "raw": "[\"NEG-ERR\",\"sub\",\"error: something\",\"ignored\"]",
+      "encoded": "[\"NEG-ERR\",\"sub\",\"error: something\"]"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":9007199254740991}]"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":3,\"approximate\":\"yes\",\"hll\":\"zz\"}]",
+      "encoded": "[\"COUNT\",\"s\",{\"count\":3}]"
+    },
+    {
+      "raw": "[\"EOSE\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]"
+    },
+    {
+      "raw": "[\"EOSE\",\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"]"
+    },
+    {
       "raw": "not json",
       "error": "MessageError"
     },
@@ -138,6 +155,50 @@
     },
     {
       "raw": "[\"UNKNOWN\",\"s\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"OK\",\"id\",true,\"\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"OK\",\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",true,\"\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"EOSE\",\"\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"EOSE\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"EOSE\",\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"CLOSED\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"x\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-MSG\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"aabb\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-ERR\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"error\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":9007199254740992}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":9007199254740993}]",
       "error": "MessageError"
     }
   ]
