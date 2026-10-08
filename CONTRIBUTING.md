@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **Bun 1.4** — package scripts, tests, and tooling.
-- **Rust 1.94** — via `rust-toolchain.toml` (kept in sync with
+- **Rust 1.99** — via `rust-toolchain.toml` (kept in sync with
   `[workspace.package].rust-version`; includes the `wasm32-unknown-unknown`
   target).
 - **LLVM clang** for `wasm32-unknown-unknown` — `secp256k1-sys` needs a

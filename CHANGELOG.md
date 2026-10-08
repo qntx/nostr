@@ -9,6 +9,10 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 
 ## [Unreleased]
 
+### Changed
+
+- Rust toolchain and workspace MSRV (`rust-version`) moved to 1.99.
+
 ## [0.10.1] - 2026-10-08
 
 ### Fixed

@@ -37,12 +37,9 @@ fn decode_hex(input: &str) -> Vec<u8> {
         bytes.len()
     );
     let mut out = Vec::with_capacity(bytes.len() / 2);
-    for pair in bytes.chunks_exact(2) {
-        let [hi, lo] = pair else {
-            unreachable!("chunks_exact(2)");
-        };
-        let hi = hex_nibble(*hi).expect("hex digit");
-        let lo = hex_nibble(*lo).expect("hex digit");
+    for &[hi, lo] in bytes.as_chunks::<2>().0 {
+        let hi = hex_nibble(hi).expect("hex digit");
+        let lo = hex_nibble(lo).expect("hex digit");
         out.push((hi << 4) | lo);
     }
     out
