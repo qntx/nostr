@@ -235,13 +235,23 @@ mod canonical {
         }
     }
 
-    /// Writes `n` as decimal digits without `itoa` or an allocation.
+    /// Writes `n` as decimal digits (a `u64` needs at most 20) filled from
+    /// the right of a stack buffer, then pushed as one slice.
     fn push_u64(n: u64, out: &mut impl Sink) {
-        if n >= 10 {
-            push_u64(n / 10, out);
+        let mut buf = [0u8; 20];
+        let mut value = n;
+        let mut written = 0;
+        for slot in buf.iter_mut().rev() {
+            *slot = b'0' + u8::try_from(value % 10).unwrap_or(0);
+            value /= 10;
+            written += 1;
+            if value == 0 {
+                break;
+            }
         }
-        let digit = u8::try_from(n % 10).map_or(b'0', |d| b'0' + d);
-        out.push_char(char::from(digit));
+        out.push_str(
+            core::str::from_utf8(buf.get(buf.len() - written..).unwrap_or(&[])).unwrap_or(""),
+        );
     }
 
     /// Writes `c` (below U+0020, a single UTF-8 byte) as a `\u00xx` escape.
@@ -253,11 +263,16 @@ mod canonical {
         }
     }
 
-    /// Writes `s` as a JSON string with `JSON.stringify` escaping.
+    /// Writes `s` as a JSON string with `JSON.stringify` escaping, flushing
+    /// maximal unescaped runs as single slices.
     fn push_json_string(s: &str, out: &mut impl Sink) {
-        let mut buf = [0u8; 4];
         out.push_char('"');
-        for c in s.chars() {
+        let mut run_start = 0;
+        for (i, c) in s.char_indices() {
+            if c != '"' && c != '\\' && c >= '\u{20}' {
+                continue;
+            }
+            out.push_str(s.get(run_start..i).unwrap_or_default());
             match c {
                 '"' => out.push_str("\\\""),
                 '\\' => out.push_str("\\\\"),
@@ -266,10 +281,11 @@ mod canonical {
                 '\n' => out.push_str("\\n"),
                 '\r' => out.push_str("\\r"),
                 '\t' => out.push_str("\\t"),
-                c if c < '\u{20}' => push_control_escape(c, out),
-                c => out.push_str(c.encode_utf8(&mut buf)),
+                c => push_control_escape(c, out),
             }
+            run_start = i + c.len_utf8();
         }
+        out.push_str(s.get(run_start..).unwrap_or_default());
         out.push_char('"');
     }
 
@@ -625,7 +641,7 @@ pub fn cmp_oldest_first(a: &Event, b: &Event) -> Ordering {
 mod tests {
     #![allow(clippy::unwrap_used, reason = "tests fail by panicking")]
 
-    use alloc::string::ToString;
+    use alloc::string::{String, ToString};
 
     use super::*;
     use crate::tag::Tag;
@@ -665,6 +681,33 @@ mod tests {
     #[test]
     fn id_matches_hash_of_canonical_bytes() {
         let event = unsigned();
+        assert_eq!(event.id(), EventId::hash(event.canonical_json().as_bytes()));
+    }
+
+    #[test]
+    fn canonical_json_flushes_long_runs_and_sparse_escapes() {
+        let mut content = String::with_capacity(10_000);
+        let mut escaped = String::with_capacity(10_000);
+        for i in 0..10_000 {
+            if i % 1024 == 512 {
+                content.push('\n');
+                escaped.push_str("\\n");
+            } else {
+                content.push('x');
+                escaped.push('x');
+            }
+        }
+        let event = UnsignedEvent::new(
+            PublicKey::from_hex(PK).unwrap(),
+            Timestamp::from_secs(0),
+            Kind::METADATA,
+            Tags::new(),
+            content,
+        );
+        assert_eq!(
+            event.canonical_json(),
+            alloc::format!("[0,\"{PK}\",0,0,[],\"{escaped}\"]")
+        );
         assert_eq!(event.id(), EventId::hash(event.canonical_json().as_bytes()));
     }
 

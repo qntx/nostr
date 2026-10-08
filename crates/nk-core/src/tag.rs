@@ -22,12 +22,12 @@ fn push_positions<const N: usize>(items: &mut Vec<String>, positions: [Option<St
         .iter()
         .rposition(Option::is_some)
         .map_or(0, |i| i + 1);
-    for (i, position) in positions.into_iter().enumerate() {
-        if i >= end {
-            break;
-        }
-        items.push(position.unwrap_or_default());
-    }
+    items.extend(
+        positions
+            .into_iter()
+            .take(end)
+            .map(Option::unwrap_or_default),
+    );
 }
 
 /// A NIP-01 tag: the first element is the name, the rest are values.
@@ -191,14 +191,17 @@ impl Tags {
         self.0.is_empty()
     }
 
-    /// First value of a tag with `name`, or `None` when none carries a value
-    /// (TS `firstTagValue`).
+    /// First value of a tag with `name`, skipping same-name tags without a
+    /// value, or `None` when none carries one (TS `firstTagValue`).
     #[must_use]
     pub fn first_value(&self, name: &str) -> Option<&str> {
-        self.0
-            .iter()
-            .find(|tag| tag.name() == name)
-            .and_then(Tag::value)
+        self.0.iter().find_map(|tag| {
+            if tag.name() == name {
+                tag.value()
+            } else {
+                None
+            }
+        })
     }
 
     /// The first `d` tag value (TS `getDTag`).
@@ -420,6 +423,16 @@ mod tests {
         assert_eq!(tags.identifier(), Some("post"));
         assert_eq!(tags.first_value("t"), Some("nostr"));
         assert_eq!(tags.first_value("missing"), None);
+        tags.push(Tag::new(["d"]).unwrap());
+        assert_eq!(
+            tags.identifier(),
+            Some("post"),
+            "first_value skips value-less tags"
+        );
+        let mut only_bare = Tags::new();
+        only_bare.push(Tag::new(["d"]).unwrap());
+        only_bare.push(Tag::identifier("x"));
+        assert_eq!(only_bare.identifier(), Some("x"));
         assert_eq!(tags.public_keys().collect::<Vec<_>>(), vec![pubkey()]);
         assert_eq!(tags.event_ids().collect::<Vec<_>>(), vec![event_id()]);
         assert_eq!(tags.hashtags().collect::<Vec<_>>(), vec!["nostr"]);
