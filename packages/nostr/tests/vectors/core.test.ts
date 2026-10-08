@@ -57,9 +57,12 @@ const signed = readVector<{
   unsigned: UnsignedEvent;
   event: Event;
 }>("event-sign.json");
-const invalidEvents = readVector<{ reason: string; raw: string; error: string }>(
-  "event-validate.json",
-);
+const eventValidateCases = readVector<{
+  reason: string;
+  raw: string;
+  parsed?: string;
+  error?: string;
+}>("event-validate.json");
 const matchFilterCases = readVector<{ filter: Filter; event: Event; matches: boolean }>(
   "filter-match.json",
 );
@@ -225,8 +228,26 @@ describe("vectors/core", () => {
   });
 
   test("event validate: invalid wire events rejected", () => {
-    for (const c of invalidEvents) {
+    for (const c of eventValidateCases.filter((c) => c.error !== undefined)) {
       expect(validateSignedEvent(JSON.parse(c.raw) as unknown)).toBe(false);
+    }
+  });
+
+  test("event validate: raw JSON rulings (dup keys, int spellings, bounds)", () => {
+    for (const c of eventValidateCases.filter((c) => c.parsed !== undefined)) {
+      const parsed = JSON.parse(c.raw) as Event;
+      expect(validateSignedEvent(parsed)).toBe(true);
+      expect(
+        JSON.stringify({
+          id: parsed.id,
+          pubkey: parsed.pubkey,
+          created_at: parsed.created_at,
+          kind: parsed.kind,
+          tags: parsed.tags,
+          content: parsed.content,
+          sig: parsed.sig,
+        }),
+      ).toBe(c.parsed);
     }
   });
 

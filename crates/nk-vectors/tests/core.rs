@@ -261,7 +261,8 @@ fn tag_address() {
 struct EventValidateCase {
     reason: String,
     raw: String,
-    error: String,
+    parsed: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -275,17 +276,28 @@ fn event_validate() {
         serde_json::from_str(EVENT_VALIDATE).expect("event-validate.json must parse");
     assert!(!vector.cases.is_empty(), "event-validate.json has no cases");
     for case in &vector.cases {
-        assert_eq!(
-            case.error.as_str(),
-            "EventValidationError",
-            "{}: unexpected error kind in vector",
-            case.reason
-        );
-        assert!(
-            serde_json::from_str::<Event>(&case.raw).is_err(),
-            "{}: invalid wire event must fail deserialization",
-            case.reason
-        );
+        match (&case.parsed, &case.error) {
+            (Some(parsed), None) => {
+                let event: Event = serde_json::from_str(&case.raw)
+                    .unwrap_or_else(|e| panic!("{}: must parse: {e}", case.reason));
+                let wire = serde_json::to_string(&event).expect("event serializes");
+                assert_eq!(&wire, parsed, "{}: canonical output mismatch", case.reason);
+            }
+            (None, Some(error)) => {
+                assert_eq!(
+                    error.as_str(),
+                    "EventValidationError",
+                    "{}: unexpected error kind in vector",
+                    case.reason
+                );
+                assert!(
+                    serde_json::from_str::<Event>(&case.raw).is_err(),
+                    "{}: invalid wire event must fail deserialization",
+                    case.reason
+                );
+            }
+            _ => panic!("{}: case needs exactly one of parsed/error", case.reason),
+        }
     }
 }
 

@@ -67,6 +67,22 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * True when `value` contains a UTF-16 surrogate code unit without its other half (NIP-01 events
+ * reject these; `JSON.parse` accepts `\ud800`-style escapes, so validate after parsing).
+ * Char-by-char because Hermes may lack `String.prototype.isWellFormed`.
+ */
+export function hasLoneSurrogate(value: string): boolean {
+  // Iterating by code point skips proper pairs; only unpaired surrogates match.
+  for (const ch of value) {
+    const code = ch.codePointAt(0);
+    if (code !== undefined && code >= 0xd800 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Mutable view of a readonly exported type, for local construction. */
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 

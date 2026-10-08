@@ -23,6 +23,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 - `assertSubscriptionId` counts Unicode scalar values (`[...id].length`), so astral characters count once per NIP-01's "chars" wording.
 - `parseClientMessage` and `parseRelayMessage` now validate subscription ids (1..=64 scalar values) in both directions for every message type carrying one (NIP-01).
 - `parseRelayMessage` requires the `OK` event id to be 64-char lowercase hex (NIP-01).
+- `validateEvent`/`validateSignedEvent` reject `kind`/`created_at` that are not non-negative safe integers (`Number.isSafeInteger`) and `content` or tag values containing lone UTF-16 surrogates — both of which `JSON.parse` accepts but the Rust side cannot express (NIP-01).
+- `parseClientMessage` wire filters require safe integers for `since`/`until`/`limit`/`kinds`, matching the `2^53-1` bound enforced by `nk-core` (NIP-01).
 
 - `matchFilter` and the local event stores (memory, SQLite, IndexedDB) ignore multi-letter `#` keys, matching NIP-01's single-letter tag conditions; the SQLite fallback path for them is removed (NIP-01).
 - `canonicalizeFilter` drops unknown non-`#` keys and multi-letter `#` keys, keeping only the NIP-01 known fields plus single-letter tag conditions (NIP-01).

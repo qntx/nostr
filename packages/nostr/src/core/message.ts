@@ -311,7 +311,9 @@ const HEX64_LOWER_RE = /^[0-9a-f]{64}$/;
  * Validates a wire filter per NIP-01: `ids`/`authors` are 64-hex arrays (normalized lowercase),
  * `kinds` are integers in 0..=65535, `since`/`until`/`limit` non-negative integers, `search` a
  * string, and `#<single letter>` arrays of strings (`#e`/`#p` lowercased). Multi-letter `#` keys
- * and unknown non-`#` keys are dropped; wrong types throw {@link MessageError}.
+ * and unknown non-`#` keys are dropped; wrong types throw {@link MessageError}. Duplicate keys and
+ * integer spellings (`1e3`, `1.0`, `-0`) need no handling: `JSON.parse` already applied last-wins
+ * and normalized the numbers before this runs (nk-core's map visitors mirror that, NK-ADR-012).
  */
 function parseWireFilter(value: unknown, kind: string): Filter {
   if (!isRecord(value)) {
@@ -340,14 +342,15 @@ function parseWireFilter(value: unknown, kind: string): Filter {
       if (
         !Array.isArray(v) ||
         !v.every(
-          (x): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 65535,
+          (x): x is number =>
+            typeof x === "number" && Number.isSafeInteger(x) && x >= 0 && x <= 65535,
         )
       ) {
         throw fail();
       }
       out.kinds = v;
     } else if (key === "since" || key === "until" || key === "limit") {
-      if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+      if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 0) {
         throw fail();
       }
       out[key] = v;

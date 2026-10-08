@@ -2,6 +2,7 @@
 //! canonical serialization used by REQ coalescing — the counterpart of
 //! `@qntx/nostr`'s `core/filter.ts` (NK-ADR-012).
 
+use alloc::borrow::Cow;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -15,6 +16,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::canonical::{self, Sink};
 use crate::error::Result;
 use crate::event::{Event, EventId};
+use crate::json::{
+    self, Captured, MAX_SAFE_INTEGER, WireHexList, WireInt, WireStr, WireStrList, WireU16List,
+};
 use crate::key::PublicKey;
 use crate::kind::Kind;
 use crate::time::Timestamp;
@@ -534,70 +538,97 @@ fn single_letter_key(key: &str) -> Option<SingleLetterTag> {
     SingleLetterTag::new(c)
 }
 
-fn de_hex_set<T: Ord, F, E>(raw: &[String], build: F) -> Result<BTreeSet<T>, E>
-where
-    F: Fn(&str) -> Result<T>,
-    E: serde::de::Error,
-{
-    raw.iter()
-        .map(|item| build(item).map_err(E::custom))
-        .collect()
-}
-
-/// Reads a wire-filter object (see [`Filter::deserialize`]).
+/// Reads a wire-filter object (see [`Filter::deserialize`]). Each known
+/// field is captured leniently into a per-key slot so a duplicate key's
+/// last value wins even when an earlier value was invalid (`JSON.parse`
+/// semantics, NK-ADR-012 ruling 7); unknown keys drain via `IgnoredAny`.
 fn read_filter<'de, M: MapAccess<'de>>(mut map: M) -> Result<Filter, M::Error> {
-    let mut filter = Filter::default();
-    while let Some(key) = map.next_key::<String>()? {
-        parse_field(&mut filter, &key, &mut map)?;
-    }
-    Ok(filter)
-}
-
-/// Parses one wire-filter field into `filter` (see
-/// [`Filter::deserialize`]).
-fn parse_field<'de, M: MapAccess<'de>>(
-    filter: &mut Filter,
-    key: &str,
-    map: &mut M,
-) -> Result<(), M::Error> {
-    match key {
-        "ids" => {
-            let raw: Vec<String> = map.next_value()?;
-            filter.ids = Some(de_hex_set(&raw, EventId::from_hex)?);
-        }
-        "authors" => {
-            let raw: Vec<String> = map.next_value()?;
-            filter.authors = Some(de_hex_set(&raw, PublicKey::from_hex)?);
-        }
-        "kinds" => {
-            let kinds: Vec<u16> = map.next_value()?;
-            filter.kinds = Some(kinds.into_iter().map(Kind::new).collect());
-        }
-        "since" => {
-            filter.since = Some(Timestamp::from_secs(map.next_value::<u64>()?));
-        }
-        "until" => {
-            filter.until = Some(Timestamp::from_secs(map.next_value::<u64>()?));
-        }
-        "limit" => {
-            let value: u64 = map.next_value()?;
-            filter.limit =
-                Some(usize::try_from(value).map_err(|_| M::Error::custom("limit out of range"))?);
-        }
-        "search" => {
-            filter.search = Some(map.next_value()?);
-        }
-        key => {
-            if let Some(letter) = single_letter_key(key) {
-                let values: Vec<String> = map.next_value()?;
-                let set = tag_value_set(letter, values);
-                filter.tags.insert(letter, set);
-            } else {
-                map.next_value::<IgnoredAny>()?;
+    let mut ids = None;
+    let mut authors = None;
+    let mut kinds = None;
+    let mut since = None;
+    let mut until = None;
+    let mut limit = None;
+    let mut search = None;
+    let mut tags = BTreeMap::new();
+    while let Some(key) = map.next_key::<Cow<'de, str>>()? {
+        match key.as_ref() {
+            "ids" => ids = Some(map.next_value::<WireHexList<32, false>>()?.0),
+            "authors" => authors = Some(map.next_value::<WireHexList<32, false>>()?.0),
+            "kinds" => kinds = Some(map.next_value::<WireU16List>()?.0),
+            "since" => since = Some(map.next_value::<WireInt<MAX_SAFE_INTEGER>>()?.0),
+            "until" => until = Some(map.next_value::<WireInt<MAX_SAFE_INTEGER>>()?.0),
+            "limit" => limit = Some(map.next_value::<WireInt<MAX_SAFE_INTEGER>>()?.0),
+            "search" => search = Some(map.next_value::<WireStr>()?.0),
+            _ => {
+                if let Some(letter) = single_letter_key(&key) {
+                    tags.insert(letter, map.next_value::<WireStrList>()?.0);
+                } else {
+                    map.next_value::<IgnoredAny>()?;
+                }
             }
         }
     }
-    Ok(())
+    Ok(Filter {
+        ids: opt_hex_set(ids, "ids", EventId::from_bytes)?,
+        authors: opt_hex_set(authors, "authors", PublicKey::from_bytes)?,
+        kinds: kinds
+            .map(|captured| json::finish_opt(captured, "kinds"))
+            .transpose()?
+            .map(|kinds| kinds.into_iter().map(Kind::new).collect()),
+        since: opt_timestamp(since, "since")?,
+        until: opt_timestamp(until, "until")?,
+        limit: opt_limit(limit)?,
+        search: search
+            .map(|captured| json::finish_opt(captured, "search"))
+            .transpose()?,
+        tags: build_tag_sets(tags)?,
+    })
+}
+
+/// Converts a captured hex-list (any case, decoded at capture) into a
+/// typed set.
+fn opt_hex_set<T: Ord, E: DeError>(
+    slot: Option<Captured<Vec<[u8; 32]>>>,
+    field: &'static str,
+    build: fn([u8; 32]) -> T,
+) -> Result<Option<BTreeSet<T>>, E> {
+    Ok(slot
+        .map(|captured| json::finish_opt(captured, field))
+        .transpose()?
+        .map(|bytes| bytes.into_iter().map(build).collect()))
+}
+
+/// Converts a captured safe integer into a `Timestamp`.
+fn opt_timestamp<E: DeError>(
+    slot: Option<Captured<u64>>,
+    field: &'static str,
+) -> Result<Option<Timestamp>, E> {
+    Ok(slot
+        .map(|captured| json::finish_opt(captured, field))
+        .transpose()?
+        .map(Timestamp::from_secs))
+}
+
+/// Converts a captured safe integer into a `usize` limit.
+fn opt_limit<E: DeError>(slot: Option<Captured<u64>>) -> Result<Option<usize>, E> {
+    slot.map(|captured| json::finish_opt(captured, "limit"))
+        .transpose()?
+        .map(|value| usize::try_from(value).map_err(|_| E::custom("limit out of range")))
+        .transpose()
+}
+
+/// Converts the captured `#<letter>` lists into tag-condition sets.
+fn build_tag_sets<E: DeError>(
+    captured: BTreeMap<SingleLetterTag, Captured<Vec<String>>>,
+) -> Result<BTreeMap<SingleLetterTag, BTreeSet<String>>, E> {
+    captured
+        .into_iter()
+        .map(|(letter, slot)| {
+            let raw = json::finish_opt(slot, &alloc::format!("#{letter}"))?;
+            Ok((letter, tag_value_set(letter, raw)))
+        })
+        .collect()
 }
 
 impl<'de> Deserialize<'de> for Filter {
