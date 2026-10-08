@@ -280,6 +280,15 @@ describe("tags", () => {
     expect(Tag.e(id.toUpperCase())).toStrictEqual(["e", id]);
   });
 
+  test("Tag.e pads absent positions before present ones", () => {
+    expect(Tag.e(id, undefined, "root")).toStrictEqual(["e", id, "", "root"]);
+    expect(Tag.e(id, undefined, undefined, pk)).toStrictEqual(["e", id, "", "", pk]);
+    expect(Tag.e(id, "wss://r", undefined, pk)).toStrictEqual(["e", id, "wss://r", "", pk]);
+    expect(Tag.e(id, undefined, "reply")).toStrictEqual(["e", id, "", "reply"]);
+    expect(Tag.e(id, "wss://r")).toStrictEqual(["e", id, "wss://r"]);
+    expect(Tag.e(id, "wss://r", "mention")).toStrictEqual(["e", id, "wss://r", "mention"]);
+  });
+
   test("Tag.p lowercases pubkey and leaves relay URL and petname", () => {
     expect(Tag.p(pk.toUpperCase(), "wss://Relay.Example", "Alice")).toStrictEqual([
       "p",
@@ -288,6 +297,12 @@ describe("tags", () => {
       "Alice",
     ]);
     expect(Tag.p(pk.toUpperCase())).toStrictEqual(["p", pk]);
+  });
+
+  test("Tag.p pads absent relay before petname", () => {
+    expect(Tag.p(pk, undefined, "alice")).toStrictEqual(["p", pk, "", "alice"]);
+    expect(Tag.p(pk, "wss://r")).toStrictEqual(["p", pk, "wss://r"]);
+    expect(Tag.p(pk, "wss://r", "bob")).toStrictEqual(["p", pk, "wss://r", "bob"]);
   });
 });
 

@@ -30,29 +30,30 @@ export function tagValue(tag: Tag): string | undefined {
   return tag[1];
 }
 
+/**
+ * Push positional tag values: "" for absent slots before a present one, trailing absent slots
+ * omitted.
+ */
+function pushPositions(t: string[], positions: Array<string | undefined>): void {
+  let end = positions.length;
+  while (end > 0 && positions[end - 1] === undefined) {
+    end -= 1;
+  }
+  for (let i = 0; i < end; i += 1) {
+    t.push(positions[i] ?? "");
+  }
+}
+
 /** Construct common tags. */
 export const Tag = {
   e(id: string, relay?: string, marker?: string, pubkey?: string): Tag {
     const t: string[] = ["e", id.toLowerCase()];
-    if (relay !== undefined) {
-      t.push(relay);
-    }
-    if (marker !== undefined) {
-      t.push(marker);
-    }
-    if (pubkey !== undefined) {
-      t.push(pubkey.toLowerCase());
-    }
+    pushPositions(t, [relay, marker, pubkey?.toLowerCase()]);
     return t;
   },
   p(pubkey: string, relay?: string, petname?: string): Tag {
     const t: string[] = ["p", pubkey.toLowerCase()];
-    if (relay !== undefined) {
-      t.push(relay);
-    }
-    if (petname !== undefined) {
-      t.push(petname);
-    }
+    pushPositions(t, [relay, petname]);
     return t;
   },
   a(coordinate: string, relay?: string): Tag {
