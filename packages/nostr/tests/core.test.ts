@@ -582,6 +582,13 @@ describe("messages", () => {
       MessageError,
     );
     expect(() => assertSubscriptionId("x".repeat(SUBSCRIPTION_ID_MAX_CHARS + 1))).toThrow(/1\.\./);
+    // Scalar values, not UTF-16 code units: 64 astral chars are allowed.
+    expect(assertSubscriptionId("\u{1F600}".repeat(SUBSCRIPTION_ID_MAX_CHARS))).toBe(
+      "\u{1F600}".repeat(SUBSCRIPTION_ID_MAX_CHARS),
+    );
+    expect(() => assertSubscriptionId("\u{1F600}".repeat(SUBSCRIPTION_ID_MAX_CHARS + 1))).toThrow(
+      MessageError,
+    );
   });
 
   test("createSubscriptionId validates or generates 8-byte hex", () => {

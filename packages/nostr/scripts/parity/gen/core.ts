@@ -426,6 +426,9 @@ const clientMessages = [
   { raw: encodeClientMessage(["NEG-MSG", "sub", "deadbeef"]) },
   { raw: '["NEG-MSG","sub","FF00"]', encoded: '["NEG-MSG","sub","ff00"]' },
   { raw: encodeClientMessage(["NEG-CLOSE", "sub"]) },
+  // Subscription id boundary: 64 scalar values accepted (incl. astral), 65 rejected.
+  { raw: encodeClientMessage(["CLOSE", "a".repeat(64)]) },
+  { raw: `["CLOSE","${"\u{1F600}".repeat(64)}"]` },
 ];
 
 const relayMessages = [
@@ -452,6 +455,20 @@ const relayMessages = [
   { raw: encodeRelayMessage(["NEG-MSG", "sub", "deadbeef"]) },
   { raw: '["NEG-MSG","sub","AABB"]', encoded: '["NEG-MSG","sub","aabb"]' },
   { raw: encodeRelayMessage(["NEG-ERR", "sub", "error: something"]) },
+  // The optional 4th NEG-ERR element is ignored.
+  {
+    raw: '["NEG-ERR","sub","error: something","ignored"]',
+    encoded: '["NEG-ERR","sub","error: something"]',
+  },
+  // COUNT accepts the max safe integer; non-bool approximate and invalid hll are ignored.
+  { raw: encodeRelayMessage(["COUNT", "s", { count: 9007199254740991 }]) },
+  {
+    raw: '["COUNT","s",{"count":3,"approximate":"yes","hll":"zz"}]',
+    encoded: '["COUNT","s",{"count":3}]',
+  },
+  // Subscription id boundary on the relay direction (64 scalar values incl. astral).
+  { raw: `["EOSE","${"a".repeat(64)}"]` },
+  { raw: `["EOSE","${"\u{1F600}".repeat(64)}"]` },
 ];
 
 const invalidClientMessages = [
@@ -499,6 +516,10 @@ const invalidClientMessages = [
   '["NEG-CLOSE"]',
   '["NEG-CLOSE","s","x"]',
   '["UNKNOWN","s"]',
+  '["REQ","",{"kinds":[1]}]',
+  `["CLOSE","${"a".repeat(65)}"]`,
+  `["CLOSE","${"\u{1F600}".repeat(65)}"]`,
+  `["NEG-MSG","${"a".repeat(65)}","aabb"]`,
 ];
 
 const invalidRelayMessages = [
@@ -525,6 +546,20 @@ const invalidRelayMessages = [
   '["NEG-ERR","s"]',
   '["NEG-ERR","s",1]',
   '["UNKNOWN","s"]',
+  // Ruling 5: OK requires a 64-char lowercase hex event id.
+  '["OK","id",true,""]',
+  `["OK","${"a".repeat(64).toUpperCase()}",true,""]`,
+  `["OK","${"a".repeat(63)}",true,""]`,
+  // Ruling 6: subscription ids validated on parse (1..=64 scalar values).
+  '["EOSE",""]',
+  `["EOSE","${"a".repeat(65)}"]`,
+  `["EOSE","${"\u{1F600}".repeat(65)}"]`,
+  `["CLOSED","${"a".repeat(65)}","x"]`,
+  `["NEG-MSG","${"a".repeat(65)}","aabb"]`,
+  `["NEG-ERR","${"a".repeat(65)}","error"]`,
+  // COUNT rejects counts above the safe-integer bound.
+  '["COUNT","s",{"count":9007199254740992}]',
+  '["COUNT","s",{"count":9007199254740993}]',
 ];
 
 const mergeHllCases = [

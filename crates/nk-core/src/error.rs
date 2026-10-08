@@ -20,6 +20,8 @@ pub enum ErrorKind {
     EventValidation,
     /// Key validation, signing, or signature verification failed.
     Crypto,
+    /// A wire message failed parsing or validation.
+    Message,
 }
 
 impl fmt::Display for ErrorKind {
@@ -29,6 +31,7 @@ impl fmt::Display for ErrorKind {
             Self::Url => f.write_str("url"),
             Self::EventValidation => f.write_str("event validation"),
             Self::Crypto => f.write_str("crypto"),
+            Self::Message => f.write_str("message"),
         }
     }
 }

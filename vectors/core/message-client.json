@@ -54,6 +54,12 @@
       "raw": "[\"NEG-CLOSE\",\"sub\"]"
     },
     {
+      "raw": "[\"CLOSE\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]"
+    },
+    {
+      "raw": "[\"CLOSE\",\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"]"
+    },
+    {
       "raw": "not json",
       "error": "MessageError"
     },
@@ -227,6 +233,22 @@
     },
     {
       "raw": "[\"UNKNOWN\",\"s\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"\",{\"kinds\":[1]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"CLOSE\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"CLOSE\",\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-MSG\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"aabb\"]",
       "error": "MessageError"
     }
   ]

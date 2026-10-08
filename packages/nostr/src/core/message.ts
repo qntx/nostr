@@ -10,9 +10,14 @@ import { bytesToHex, hexToBytes, isRecord } from "./util.ts";
 /** NIP-01 subscription id: 1..64 chars. */
 export type SubscriptionId = string;
 
-/** Validate a subscription id; throws {@link MessageError} unless 1..64 chars. */
+/** Validate a subscription id; throws {@link MessageError} unless 1..64 Unicode scalar values. */
 export function assertSubscriptionId(id: string): SubscriptionId {
-  if (id.length === 0 || id.length > SUBSCRIPTION_ID_MAX_CHARS) {
+  // Iterating a string yields code points, so astral chars count once (NIP-01's "chars").
+  let length = 0;
+  for (const _ of id) {
+    length += 1;
+  }
+  if (length === 0 || length > SUBSCRIPTION_ID_MAX_CHARS) {
     throw new MessageError(`subscription id length must be 1..${SUBSCRIPTION_ID_MAX_CHARS}`);
   }
   return id;
@@ -132,13 +137,13 @@ export function parseClientMessage(raw: string): ClientMessage {
       if (items.length < 3 || typeof items[1] !== "string") {
         throw new MessageError("invalid REQ client message");
       }
-      return ["REQ", items[1], ...parseWireFilters(items.slice(2), "REQ")];
+      return ["REQ", assertSubscriptionId(items[1]), ...parseWireFilters(items.slice(2), "REQ")];
 
     case "CLOSE":
       if (items.length !== 2 || typeof items[1] !== "string") {
         throw new MessageError("invalid CLOSE client message");
       }
-      return ["CLOSE", items[1]];
+      return ["CLOSE", assertSubscriptionId(items[1])];
 
     case "AUTH":
       if (items.length !== 2 || !validateSignedEvent(items[1])) {
@@ -150,7 +155,11 @@ export function parseClientMessage(raw: string): ClientMessage {
       if (items.length < 3 || typeof items[1] !== "string") {
         throw new MessageError("invalid COUNT client message");
       }
-      return ["COUNT", items[1], ...parseWireFilters(items.slice(2), "COUNT")];
+      return [
+        "COUNT",
+        assertSubscriptionId(items[1]),
+        ...parseWireFilters(items.slice(2), "COUNT"),
+      ];
 
     case "NEG-OPEN":
       if (items.length === 5) {
@@ -164,19 +173,24 @@ export function parseClientMessage(raw: string): ClientMessage {
       ) {
         throw new MessageError("invalid NEG-OPEN client message");
       }
-      return ["NEG-OPEN", items[1], parseWireFilter(items[2], "NEG-OPEN"), items[3].toLowerCase()];
+      return [
+        "NEG-OPEN",
+        assertSubscriptionId(items[1]),
+        parseWireFilter(items[2], "NEG-OPEN"),
+        items[3].toLowerCase(),
+      ];
 
     case "NEG-MSG":
       if (items.length !== 3 || typeof items[1] !== "string" || !isNegHex(items[2])) {
         throw new MessageError("invalid NEG-MSG client message");
       }
-      return ["NEG-MSG", items[1], items[2].toLowerCase()];
+      return ["NEG-MSG", assertSubscriptionId(items[1]), items[2].toLowerCase()];
 
     case "NEG-CLOSE":
       if (items.length !== 2 || typeof items[1] !== "string") {
         throw new MessageError("invalid NEG-CLOSE client message");
       }
-      return ["NEG-CLOSE", items[1]];
+      return ["NEG-CLOSE", assertSubscriptionId(items[1])];
 
     default:
       throw new MessageError(`unknown client message type: ${String(type)}`);
@@ -201,12 +215,13 @@ export function parseRelayMessage(raw: string): RelayMessage {
       if (items.length !== 3 || typeof items[1] !== "string" || !validateSignedEvent(items[2])) {
         throw new MessageError("invalid EVENT relay message");
       }
-      return ["EVENT", items[1], items[2]];
+      return ["EVENT", assertSubscriptionId(items[1]), items[2]];
 
     case "OK":
       if (
         items.length !== 4 ||
         typeof items[1] !== "string" ||
+        !HEX64_LOWER_RE.test(items[1]) ||
         typeof items[2] !== "boolean" ||
         typeof items[3] !== "string"
       ) {
@@ -218,13 +233,13 @@ export function parseRelayMessage(raw: string): RelayMessage {
       if (items.length !== 2 || typeof items[1] !== "string") {
         throw new MessageError("invalid EOSE relay message");
       }
-      return ["EOSE", items[1]];
+      return ["EOSE", assertSubscriptionId(items[1])];
 
     case "CLOSED":
       if (items.length !== 3 || typeof items[1] !== "string" || typeof items[2] !== "string") {
         throw new MessageError("invalid CLOSED relay message");
       }
-      return ["CLOSED", items[1], items[2]];
+      return ["CLOSED", assertSubscriptionId(items[1]), items[2]];
 
     case "NOTICE":
       if (items.length !== 2 || typeof items[1] !== "string") {
@@ -259,13 +274,13 @@ export function parseRelayMessage(raw: string): RelayMessage {
       if (hll !== undefined) {
         result.hll = hll;
       }
-      return ["COUNT", items[1], result];
+      return ["COUNT", assertSubscriptionId(items[1]), result];
     }
     case "NEG-MSG":
       if (items.length !== 3 || typeof items[1] !== "string" || !isNegHex(items[2])) {
         throw new MessageError("invalid NEG-MSG relay message");
       }
-      return ["NEG-MSG", items[1], items[2].toLowerCase()];
+      return ["NEG-MSG", assertSubscriptionId(items[1]), items[2].toLowerCase()];
 
     case "NEG-ERR":
       if (
@@ -275,7 +290,7 @@ export function parseRelayMessage(raw: string): RelayMessage {
       ) {
         throw new MessageError("invalid NEG-ERR relay message");
       }
-      return ["NEG-ERR", items[1], items[2]];
+      return ["NEG-ERR", assertSubscriptionId(items[1]), items[2]];
 
     default:
       throw new MessageError(`unknown relay message type: ${String(type)}`);
@@ -290,6 +305,7 @@ function parseCountHll(value: unknown): string | undefined {
 }
 
 const HEX64_RE = /^[0-9a-fA-F]{64}$/;
+const HEX64_LOWER_RE = /^[0-9a-f]{64}$/;
 
 /**
  * Validates a wire filter per NIP-01: `ids`/`authors` are 64-hex arrays (normalized lowercase),

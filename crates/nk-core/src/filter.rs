@@ -318,7 +318,7 @@ impl Filter {
     /// `JSON.stringify`: keys in UTF-16 sort order (`#` conditions first),
     /// `None` fields omitted, hex lists lowercase-sorted, kinds ascending,
     /// tag values sorted by UTF-16 code units.
-    fn write_canonical(&self, out: &mut impl Sink) {
+    pub(crate) fn write_canonical(&self, out: &mut impl Sink) {
         out.push_char('{');
         let mut needs_comma = false;
         for (letter, values) in &self.tags {

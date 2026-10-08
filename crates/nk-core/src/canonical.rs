@@ -150,7 +150,7 @@ pub(crate) fn write_event(event: &UnsignedEvent, out: &mut impl Sink) {
 
 /// Writes the signed event wire object — `JSON.stringify(event)` in
 /// field order `id`, `pubkey`, `created_at`, `kind`, `tags`,
-/// `content`, `sig` (NIP-18 repost content).
+/// `content`, `sig` (NIP-18 repost content; wire encoding).
 pub(crate) fn write_signed(event: &Event, out: &mut impl Sink) {
     out.push_str("{\"id\":\"");
     push_hex(event.id().as_bytes(), out);

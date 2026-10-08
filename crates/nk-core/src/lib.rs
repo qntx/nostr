@@ -36,6 +36,7 @@ pub mod filter;
 pub(crate) mod hex;
 pub mod key;
 pub mod kind;
+pub mod message;
 pub mod tag;
 pub mod time;
 pub mod url;
@@ -46,6 +47,7 @@ pub use event::{Event, EventId, Signature, UnsignedEvent, cmp_newest_first, cmp_
 pub use filter::{Filter, SingleLetterTag, fingerprint};
 pub use key::{Keys, PublicKey, SecretKey};
 pub use kind::{Kind, KindClass};
+pub use message::{ClientMessage, CountHll, CountResult, RelayMessage, SubscriptionId};
 pub use tag::{EventAddress, Tag, Tags};
 pub use time::Timestamp;
 pub use url::RelayUrl;

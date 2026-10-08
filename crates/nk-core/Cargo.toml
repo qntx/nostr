@@ -12,23 +12,23 @@ authors.workspace      = true
 
 [features]
 default = ["std", "clock", "os-rng"]
-std     = ["url/std", "serde/std", "secp256k1/std", "secp256k1/global-context"]
+std     = ["url/std", "serde/std", "serde_json/std", "secp256k1/std", "secp256k1/global-context"]
 clock   = ["std"]
 os-rng  = ["std", "dep:getrandom"]
 
 [dependencies]
-base16ct  = { workspace = true }
-getrandom = { workspace = true, optional = true, features = ["sys_rng"] }
-rand_core = { workspace = true }
-secp256k1 = { workspace = true, features = ["alloc"] }
-serde     = { workspace = true }
-sha2      = { workspace = true }
-url       = { workspace = true }
-zeroize   = { workspace = true }
+base16ct   = { workspace = true }
+getrandom  = { workspace = true, optional = true, features = ["sys_rng"] }
+rand_core  = { workspace = true }
+secp256k1  = { workspace = true, features = ["alloc"] }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+sha2       = { workspace = true }
+url        = { workspace = true }
+zeroize    = { workspace = true }
 
 [dev-dependencies]
-criterion  = { workspace = true, features = ["html_reports"] }
-serde_json = { workspace = true, features = ["std"] }
+criterion = { workspace = true, features = ["html_reports"] }
 
 [[bench]]
 name    = "verify"

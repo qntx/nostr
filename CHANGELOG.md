@@ -16,8 +16,13 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 - `nk-core` keys, signing, and verification: `SecretKey` (zeroized on drop, `CryptoRng`-injected generation, `os-rng` convenience methods) and `Keys` with BIP-340 Schnorr signing (`sign_id_with_aux`, `sign_event_with_aux`/`_with_rng`/`sign_event`), `Signature::verify`, `Event::verify`, and `ErrorKind::Crypto` — parity-verified against `vectors/core/event-sign.json` and the official `vectors/bip340/official.csv` rows.
 - `nk-core` filters: `SingleLetterTag`, `Filter` (chainable builders, set semantics, `matches`/`matches_any`, `limit_bound`, canonical serialization), and `fingerprint` — parity-verified by the shared filter vectors in `nk-vectors`.
 - `nk-core` event builder: `ProfileMetadata`, `DeletionTarget`, and `EventBuilder` (`text_note`, `metadata`, `contacts`, `deletion`, `reaction`, `repost`, `generic_repost`, `tag`/`tags`, `build_at`/`build`) matching `EventBuilder` in `core/builder.ts` — parity-verified byte-for-byte against `vectors/core/builder.json`, including the NIP-18 repost content serialization.
+- `nk-core` wire messages: `SubscriptionId` (1..=64 Unicode scalar values, RNG-injected generation), `CountHll`/`CountResult` (NIP-45), `ClientMessage`/`RelayMessage` with byte-identical `encode`, strict `parse`, and `ErrorKind::Message` — parity-verified by the shared message/count-hll vectors in `nk-vectors`.
 
 ### Changed
+
+- `assertSubscriptionId` counts Unicode scalar values (`[...id].length`), so astral characters count once per NIP-01's "chars" wording.
+- `parseClientMessage` and `parseRelayMessage` now validate subscription ids (1..=64 scalar values) in both directions for every message type carrying one (NIP-01).
+- `parseRelayMessage` requires the `OK` event id to be 64-char lowercase hex (NIP-01).
 
 - `matchFilter` and the local event stores (memory, SQLite, IndexedDB) ignore multi-letter `#` keys, matching NIP-01's single-letter tag conditions; the SQLite fallback path for them is removed (NIP-01).
 - `canonicalizeFilter` drops unknown non-`#` keys and multi-letter `#` keys, keeping only the NIP-01 known fields plus single-letter tag conditions (NIP-01).
