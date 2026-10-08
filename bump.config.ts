@@ -10,7 +10,10 @@ const config: ReturnType<typeof defineConfig> = defineConfig({
   // execute rewrites Cargo.lock and the internal ranges; commit them too.
   all: true,
   commit: true,
-  tag: true,
+  // main is protected: release through a `release/v<version>` pull request
+  // opened via `gh`. No tag is created; after the release PR merges, tag the
+  // merge commit by hand (GITHUB_TOKEN tags do not trigger publish workflows).
+  pr: true,
   push: true,
 });
 
