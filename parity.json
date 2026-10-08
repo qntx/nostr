@@ -307,14 +307,20 @@
     {
       "id": "core.builder",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/builder.ts",
-        "tests": ["packages/nostr/tests/builder-signer.test.ts"]
+        "tests": [
+          "packages/nostr/tests/builder-signer.test.ts",
+          "packages/nostr/tests/vectors/core.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-core/src/builder.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs"]
+      },
+      "vectors": ["vectors/core/builder.json"]
     },
     {
       "id": "nip19.codec",

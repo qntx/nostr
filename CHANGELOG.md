@@ -15,6 +15,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 - `nk-core` event model: `Kind`/`KindClass` (every named `Kind` constant), `PublicKey`, `EventId`, `Signature`, `Tag`/`Tags`/`EventAddress`, `UnsignedEvent`/`Event`, canonical NIP-01 serialization and SHA-256 event ids, `cmp_newest_first`/`cmp_oldest_first`, and `ErrorKind::EventValidation` — parity-verified by the shared kind/tag/event/hex vectors in `nk-vectors`.
 - `nk-core` keys, signing, and verification: `SecretKey` (zeroized on drop, `CryptoRng`-injected generation, `os-rng` convenience methods) and `Keys` with BIP-340 Schnorr signing (`sign_id_with_aux`, `sign_event_with_aux`/`_with_rng`/`sign_event`), `Signature::verify`, `Event::verify`, and `ErrorKind::Crypto` — parity-verified against `vectors/core/event-sign.json` and the official `vectors/bip340/official.csv` rows.
 - `nk-core` filters: `SingleLetterTag`, `Filter` (chainable builders, set semantics, `matches`/`matches_any`, `limit_bound`, canonical serialization), and `fingerprint` — parity-verified by the shared filter vectors in `nk-vectors`.
+- `nk-core` event builder: `ProfileMetadata`, `DeletionTarget`, and `EventBuilder` (`text_note`, `metadata`, `contacts`, `deletion`, `reaction`, `repost`, `generic_repost`, `tag`/`tags`, `build_at`/`build`) matching `EventBuilder` in `core/builder.ts` — parity-verified byte-for-byte against `vectors/core/builder.json`, including the NIP-18 repost content serialization.
 
 ### Changed
 
@@ -23,6 +24,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 - `canonicalizeFilter` now deduplicates every list so semantically equal filters share one `filterFingerprint` (NIP-01).
 - `getFilterLimit` counts unique ids/authors/kinds/`#d` values after deduplication (NIP-01).
 - `encodeClientMessage` canonicalizes the filters of `REQ`, `COUNT`, and `NEG-OPEN` before encoding; `parseClientMessage` validates wire filters per NIP-01 (64-hex `ids`/`authors` normalized lowercase, `kinds` in 0..=65535, non-negative `since`/`until`/`limit`, string `search` and `#<letter>` value arrays), lowercases `ids`/`authors`/`#e`/`#p`, and drops multi-letter `#` keys — malformed filters raise `MessageError` (NIP-01).
+- `EventBuilder.metadata` emits `ProfileMetadata` keys in declaration order (name, display_name, about, picture, banner, website, nip05, lud06, lud16) regardless of the input object's key order, matching `nk-core`'s `ProfileMetadata` serialization (NIP-01).
 - Rust toolchain and workspace MSRV (`rust-version`) moved to 1.99.
 
 ### Fixed
