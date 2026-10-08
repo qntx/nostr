@@ -6,6 +6,37 @@ import type { UserConfig } from "vite-plus";
 import { fmt } from "@qntx/oxfmt";
 import { config as lintConfig, merge } from "@qntx/oxlint";
 
+// The library runs on Node, browsers, and Hermes: Node builtins must not be
+// imported from src (platform shims exempted by override below).
+const platformNeutralImports = {
+  paths: builtinModules.map((name) => ({
+    name,
+    message: "Node builtin — the library must stay platform-neutral",
+  })),
+  patterns: [
+    {
+      group: ["node:*"],
+      message: "Node builtin — the library must stay platform-neutral",
+    },
+  ],
+};
+
+// The wasm package may reach into @qntx/nostr only through the core leaf.
+const nostrCoreOnlyImports = {
+  paths: [
+    {
+      name: "@qntx/nostr",
+      message: "the wasm package may only import @qntx/nostr/core",
+    },
+  ],
+  patterns: [
+    {
+      group: ["@qntx/nostr/**", "!@qntx/nostr/core"],
+      message: "the wasm package may only import @qntx/nostr/core",
+    },
+  ],
+};
+
 const config: UserConfig = defineConfig({
   staged: {
     "*": "vp check --fix",
@@ -81,29 +112,32 @@ const config: UserConfig = defineConfig({
             { name: "localStorage", message: "browser-only global — inject a store" },
             { name: "sessionStorage", message: "browser-only global — inject a store" },
           ],
-          // The library runs on Node, browsers, and Hermes: Node builtins must
-          // not be imported from src (platform shims exempted below).
+          "eslint/no-restricted-imports": ["error", platformNeutralImports],
+        },
+      },
+      {
+        files: ["packages/nostr-wasm/src/**"],
+        rules: {
           "eslint/no-restricted-imports": [
             "error",
             {
-              paths: builtinModules.map((name) => ({
-                name,
-                message: "Node builtin — the library must stay platform-neutral",
-              })),
-              patterns: [
-                {
-                  group: ["node:*"],
-                  message: "Node builtin — the library must stay platform-neutral",
-                },
-              ],
+              paths: [...platformNeutralImports.paths, ...nostrCoreOnlyImports.paths],
+              patterns: [...platformNeutralImports.patterns, ...nostrCoreOnlyImports.patterns],
             },
           ],
         },
       },
       {
-        // Platform shims: wasm loading under Node and the fake-relay test server
-        // legitimately need builtins (and `ws`).
-        files: ["packages/nostr-wasm/src/load.ts", "packages/nostr/src/testing/serve.ts"],
+        // Platform shims: wasm loading under Node legitimately needs builtins
+        // (still bound to the @qntx/nostr/core boundary).
+        files: ["packages/nostr-wasm/src/load.ts"],
+        rules: {
+          "eslint/no-restricted-imports": ["error", nostrCoreOnlyImports],
+        },
+      },
+      {
+        // The fake-relay test server legitimately needs builtins (and `ws`).
+        files: ["packages/nostr/src/testing/serve.ts"],
         rules: {
           "eslint/no-restricted-imports": "off",
         },

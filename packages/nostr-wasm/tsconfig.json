@@ -1,19 +1,6 @@
 {
-  "extends": "@qntx/tsconfig/configs/strictest.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "esnext",
-    "lib": ["es2023"],
-    "moduleDetection": "force",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "resolveJsonModule": true,
-    "types": ["node"],
-    "declaration": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "isolatedDeclarations": true,
-    "erasableSyntaxOnly": true,
-    "verbatimModuleSyntax": true,
     // Development resolution for the workspace sibling without a prior pack
     // build; the emitted package keeps importing @qntx/nostr/* (peer dep).
     "paths": {

@@ -14,7 +14,10 @@ type BunBuildOutput = {
   outputs: ReadonlyArray<{ kind: string }>;
 };
 type BunResolver = {
-  onResolve: (args: { filter: RegExp }, callback: () => { path: string }) => void;
+  onResolve: (
+    args: { filter: RegExp },
+    callback: (args: { importer: string }) => { path: string },
+  ) => void;
 };
 declare const Bun: {
   resolveSync: (specifier: string, from: string) => string;
@@ -56,9 +59,10 @@ async function main(): Promise<number> {
           // tr46 (whatwg-url dependency) `require("punycode")`s; bun build maps
           // the specifier to its `node:punycode` ESM shim (default-only export),
           // so `punycode.ucs2` is undefined at runtime. Resolve to the installed
-          // CJS implementation instead.
-          build.onResolve({ filter: /^(node:)?punycode$/ }, () => ({
-            path: Bun.resolveSync("punycode/punycode.js", root),
+          // CJS implementation instead. punycode is tr46's transitive dep, so it
+          // is only reachable from the importer's location, not this package's.
+          build.onResolve({ filter: /^(node:)?punycode$/ }, (args) => ({
+            path: Bun.resolveSync("punycode/punycode.js", args.importer),
           }));
         },
       },
