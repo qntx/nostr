@@ -17,6 +17,10 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 
 - Rust toolchain and workspace MSRV (`rust-version`) moved to 1.99.
 
+### Fixed
+
+- `Tag.e`/`Tag.p` now keep NIP-10/NIP-02 positional semantics: a present later slot (marker, pubkey, petname) pads earlier absent slots with `""` instead of shifting into them (e.g. `Tag.e(id, undefined, "root")` now emits `["e", id, "", "root"]`, not `["e", id, "root"]`). Emitted tags change only for callers that skipped an earlier optional position.
+
 ## [0.10.1] - 2026-10-08
 
 ### Fixed
