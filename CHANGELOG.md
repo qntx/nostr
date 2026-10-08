@@ -9,6 +9,12 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-08
+
+### Fixed
+
+- `@qntx/nostr-wasm` is published by CI through npm trusted publishing; the 0.10.0 publish job checked the wrong export and the version was published by hand (#199).
+
 ## [0.10.0] - 2026-10-08
 
 ### Added
