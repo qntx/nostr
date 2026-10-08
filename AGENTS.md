@@ -10,7 +10,7 @@
 
 ## Architecture invariants
 
-- One-directional layering inside `packages/nostr/src`: `core` is the leaf; `nips/*` and `storage` may only import `core`; `signer` adds `nips`; `store` adds `storage`; `relay` adds `nips`/`signer`; `gossip` adds `nips`; `loaders` and `testing` consume the mid layers; `client` composes everything. `nips/*` must never import `relay`, `signer`, `storage`, or `client`. The wasm layer is the separate `packages/nostr-wasm` package, which may only import `@qntx/nostr/core`.
+- One-directional layering inside `packages/nostr/src`: `core` is the leaf; `nips/*` and `storage` may only import `core`; `signer` adds `nips`; `store` adds `storage`; `relay` adds `nips`/`signer`; `gossip` adds `nips`; `loaders` and `testing` consume the mid layers; `client` composes everything. `nips/*` must never import `relay`, `signer`, `storage`, or `client`. The wasm layer is the separate `packages/nostr-wasm` package, which may only import `@qntx/nostr/core`. The TypeScript layer graph is enforced by lint (`LAYERS` in `vite.config.ts`); the Rust side mirrors it and is enforced by `scripts/check-layers.ts`.
 - All I/O is injected (WebSocket, fetch, storage drivers); `packages/*/src/` holds no ambient singletons.
 - `packages/*/src/` is platform-neutral: no Node-only or browser-only globals and no `node:*` imports outside the declared lint exceptions (`packages/nostr/src/testing/serve.ts`, `packages/nostr-wasm/src/load.ts`).
 
