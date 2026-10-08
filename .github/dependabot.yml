@@ -1,22 +1,43 @@
+# Adopted releases must be at least 7 days old (cooldown). Minor and patch
+# updates are grouped per ecosystem so the open-PR limit never fills up;
+# majors stay individual PRs and are merged by hand.
 version: 2
 updates:
   - package-ecosystem: "bun"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      bun-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     ignore:
       # >=8 ships sources Hermes cannot parse (tests/hermes/globals.ts).
       - dependency-name: "whatwg-url"
         versions: [">=8"]
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     ignore:
       # Pinned to the wasm-bindgen CLI checked by scripts/build-wasm.sh until the
       # nk-wasm byte ABI drops wasm-bindgen.
       - dependency-name: "wasm-bindgen"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
