@@ -1,5 +1,6 @@
 /// <reference types="node" />
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // The repo does not depend on @types/bun; declare the used surface.
 declare const Bun: {
@@ -20,31 +21,64 @@ function escapeRegExp(text: string): string {
   return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
+export type PackageEntry = { path: string; pkg: unknown };
+
 /**
- * Lockstep check: package.json `version` must equal `[workspace.package].version`, every internal
- * `crates/` path dependency must pin `=<version>`, and the version string may appear nowhere else
- * in Cargo.toml (bumpp rewrites every occurrence).
+ * Lockstep check: every workspace package manifest's `version` must equal
+ * `[workspace.package].version`, every internal `crates/` path dependency must pin `=<version>`,
+ * the version string may appear nowhere else in Cargo.toml (bumpp rewrites every occurrence), and
+ * internal `@qntx/*` dependencies must use `^<version>` in peerDependencies and `<version>` in
+ * devDependencies. The private workspace root is not passed in and takes no part.
  */
-export function checkVersion(pkg: unknown, cargoToml: unknown, cargoText: string): string[] {
+export function checkVersion(
+  packages: PackageEntry[],
+  cargoToml: unknown,
+  cargoText: string,
+): string[] {
   const errors: string[] = [];
-  const { version: packageVersion } = asRecord(pkg);
   const workspace = asRecord(asRecord(cargoToml)["workspace"]);
   const { version: cargoVersion } = asRecord(workspace["package"]);
 
-  if (typeof packageVersion !== "string") {
-    errors.push('package.json: missing string "version"');
-  }
   if (typeof cargoVersion !== "string") {
     errors.push("Cargo.toml: missing string [workspace.package].version");
   }
-  if (
-    typeof packageVersion === "string" &&
-    typeof cargoVersion === "string" &&
-    packageVersion !== cargoVersion
-  ) {
-    errors.push(
-      `version mismatch: package.json has ${packageVersion}, Cargo.toml has ${cargoVersion}`,
-    );
+
+  const internalVersions = new Map<string, string>();
+  for (const { pkg } of packages) {
+    const { name, version } = asRecord(pkg);
+    if (typeof name === "string" && typeof version === "string") {
+      internalVersions.set(name, version);
+    }
+  }
+
+  for (const { path, pkg } of packages) {
+    const manifest = asRecord(pkg);
+    const { version } = manifest;
+    if (typeof version !== "string") {
+      errors.push(`${path}: missing string "version"`);
+      continue;
+    }
+    if (typeof cargoVersion === "string" && version !== cargoVersion) {
+      errors.push(`version mismatch: ${path} has ${version}, Cargo.toml has ${cargoVersion}`);
+    }
+    for (const [section, prefix] of [
+      ["peerDependencies", "^"],
+      ["devDependencies", ""],
+    ] as const) {
+      const deps = asRecord(manifest[section]);
+      for (const [name, spec] of Object.entries(deps)) {
+        const depVersion = internalVersions.get(name);
+        if (depVersion === undefined) {
+          continue;
+        }
+        const expected = `${prefix}${depVersion}`;
+        if (spec !== expected) {
+          errors.push(
+            `${path}: ${section}["${name}"] must be "${expected}", got ${JSON.stringify(spec)}`,
+          );
+        }
+      }
+    }
   }
 
   let internalDeps = 0;
@@ -79,9 +113,14 @@ export function checkVersion(pkg: unknown, cargoToml: unknown, cargoText: string
 }
 
 if (import.meta.main) {
-  const pkg: unknown = JSON.parse(readFileSync("package.json", "utf8"));
+  const packages: PackageEntry[] = readdirSync("packages", { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const path = join("packages", entry.name, "package.json");
+      return { path, pkg: JSON.parse(readFileSync(path, "utf8")) as unknown };
+    });
   const cargoText = readFileSync("Cargo.toml", "utf8");
-  const errors = checkVersion(pkg, Bun.TOML.parse(cargoText), cargoText);
+  const errors = checkVersion(packages, Bun.TOML.parse(cargoText), cargoText);
   for (const error of errors) {
     console.error(`check-version: ${error}`);
   }

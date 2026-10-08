@@ -15,8 +15,9 @@
   ```
 
 - **wasm-bindgen CLI** matching the `wasm-bindgen` version in `Cargo.lock`
-  (`cargo install wasm-bindgen-cli --version 0.2.122`). `scripts/build-wasm.sh`
-  verifies the match. This pin stays until the wasm-bindgen ABI is replaced.
+  (`cargo install wasm-bindgen-cli --version 0.2.122`).
+  `packages/nostr-wasm/scripts/build.sh` verifies the match. This pin stays
+  until the wasm-bindgen ABI is replaced.
 - **Optional**, for local portable builds: Xcode, the Android NDK, and the iOS
   and Android rustup targets. CI runs these builds.
 
@@ -28,15 +29,16 @@
 
 ## Repository layout
 
-```
-src/            @qntx/nostr — TypeScript library (core, nips, signer, relay,
-                storage, store, loaders, gossip, client, wasm, testing)
-crates/         nk-* Rust crates (one crate per TypeScript layer)
-vectors/        shared cross-language test vectors (see vectors/README.md)
-parity.json     capability ledger consumed by scripts/parity/check.ts
-tests/          vitest/bun tests; tests/vectors runs the shared vectors
-wasm-tests/     tests that exercise the compiled wasm module
-scripts/        repo tooling (build-wasm, check-version, check-layers, parity/)
+```text
+packages/nostr/       @qntx/nostr — pure-TypeScript library (core, nips,
+                      signer, relay, storage, store, loaders, gossip, client,
+                      testing); builds with vp pack, no Rust toolchain needed
+packages/nostr-wasm/  @qntx/nostr-wasm — JS bindings of crates/nk-wasm
+crates/               nk-* Rust crates (one crate per TypeScript layer)
+vectors/              shared cross-language test vectors (see vectors/README.md)
+parity.json           capability ledger consumed by scripts/parity/check.ts
+scripts/              repo tooling (check-version, check-layers, sync-versions,
+                      parity/); script tests run under the root vp test
 ```
 
 ## Local gate
@@ -52,11 +54,10 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 cargo test --workspace --all-features
 cargo deny check
+cd packages/nostr-wasm
 CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" bun run build:wasm
 bun run test:wasm
 ```
-
-`bun test` must also pass (it runs the same test files under Bun's runner).
 
 ## Commits
 
@@ -72,10 +73,11 @@ and `docs/meta.json` stubs.
 
 ## Versioning and release
 
-npm and crates versions are lockstep. `bump.config.ts` bumps `package.json` and
-`Cargo.toml` together and runs `cargo update --workspace`; `release` runs
-`bumpp` (commit + tag + push). `scripts/check-version.ts` fails the lint gate
-when they drift.
+npm and crates versions are lockstep. `bump.config.ts` bumps both
+`packages/*/package.json` files and `Cargo.toml` together and runs
+`bun scripts/sync-versions.ts` (internal `@qntx/*` ranges) and
+`cargo update --workspace`; `release` runs `bumpp` (commit + tag + push).
+`scripts/check-version.ts` fails the lint gate when they drift.
 
 ## License
 

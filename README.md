@@ -1,11 +1,15 @@
-<!-- markdownlint-disable MD033 MD041 -->
-
 # nostr
 
-Nostr protocol implementation and SDK. One repo, two languages:
+Nostr protocol implementation and SDK.
 
-- `@qntx/nostr` — layered TypeScript library: events, keys, filters, signers, relays, storage, gossip, and a `Client` facade in one ESM package.
-- `nk-*` — Rust crates mirroring the TypeScript layers (`crates/`), starting with `nk-core`.
+## Repository layout
+
+| Path                                         | Contents                                                                   |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| [`packages/nostr`](packages/nostr)           | `@qntx/nostr`, the TypeScript library                                      |
+| [`packages/nostr-wasm`](packages/nostr-wasm) | `@qntx/nostr-wasm`, the WebAssembly cryptography backend for `@qntx/nostr` |
+| `crates/`                                    | `nk-*` Rust crates                                                         |
+| `vectors/`, `parity.json`                    | Test vectors shared by both languages and the capability ledger            |
 
 Changes are tracked in [CHANGELOG.md](CHANGELOG.md); layering rules and invariants for contributors live in [AGENTS.md](AGENTS.md).
 

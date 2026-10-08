@@ -1,0 +1,69 @@
+/// <reference types="node" />
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+type JsonObject = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asRecord(value: unknown): JsonObject {
+  return isRecord(value) ? value : {};
+}
+
+/**
+ * Rewrites a manifest's internal dependency ranges to `version`: `^<v>` in peerDependencies, `<v>`
+ * in devDependencies. Returns the (possibly mutated) manifest; bumpp rewrites each package's own
+ * `version` field, this covers the ranges bumpp cannot express in JSON.
+ */
+export function syncInternalDeps(
+  pkg: JsonObject,
+  version: string,
+  internalNames: ReadonlySet<string>,
+): JsonObject {
+  for (const [section, prefix] of [
+    ["peerDependencies", "^"],
+    ["devDependencies", ""],
+  ] as const) {
+    const deps = asRecord(pkg[section]);
+    for (const name of Object.keys(deps)) {
+      if (internalNames.has(name)) {
+        deps[name] = `${prefix}${version}`;
+      }
+    }
+  }
+  return pkg;
+}
+
+if (import.meta.main) {
+  const dirs = readdirSync("packages", { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join("packages", entry.name));
+
+  const manifests = new Map<string, JsonObject>();
+  const internalNames = new Set<string>();
+  for (const dir of dirs) {
+    const path = join(dir, "package.json");
+    const pkg: unknown = JSON.parse(readFileSync(path, "utf8"));
+    manifests.set(path, asRecord(pkg));
+    const { name } = asRecord(pkg);
+    if (typeof name === "string") {
+      internalNames.add(name);
+    }
+  }
+
+  const version = manifests.get("packages/nostr/package.json")?.["version"];
+  if (typeof version === "string") {
+    for (const [path, pkg] of manifests) {
+      if (path === "packages/nostr/package.json") {
+        continue;
+      }
+      syncInternalDeps(pkg, version, internalNames);
+      writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+    }
+  } else {
+    console.error('sync-versions: packages/nostr/package.json has no string "version"');
+    process.exitCode = 1;
+  }
+}

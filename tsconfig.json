@@ -1,19 +1,4 @@
 {
-  "extends": "@qntx/tsconfig/configs/strictest.json",
-  "compilerOptions": {
-    "target": "esnext",
-    "lib": ["es2023"],
-    "moduleDetection": "force",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "resolveJsonModule": true,
-    "types": ["node"],
-    "declaration": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "isolatedDeclarations": true,
-    "erasableSyntaxOnly": true,
-    "verbatimModuleSyntax": true
-  },
-  "include": ["src", "tests", "wasm-tests", "bench", "scripts", "vite.config.ts"]
+  "extends": "./tsconfig.base.json",
+  "include": ["scripts", "vite.config.ts", "bump.config.ts"]
 }
