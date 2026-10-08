@@ -16,12 +16,16 @@ categories   = ["cryptography", "network-programming"]
 [workspace.dependencies]
 nk-core      = { path = "crates/nk-core", version = "=0.10.1", default-features = false }
 base16ct     = { version = "1.0", default-features = false, features = ["alloc"] }
-secp256k1    = { version = "0.33", default-features = false, features = ["std"] }
+criterion    = { version = "0.8", default-features = false }
+getrandom    = { version = "0.4", default-features = false }
+rand_core    = { version = "0.10", default-features = false }
+secp256k1    = { version = "0.33", default-features = false }
 serde        = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
 serde_json   = { version = "1.0.151", default-features = false, features = ["alloc"] }
 sha2         = { version = "0.11", default-features = false }
 url          = { version = "2.5.8", default-features = false }
 wasm-bindgen = "=0.2.122"
+zeroize      = { version = "1.9.0", default-features = false }
 
 [profile.release]
 codegen-units = 1

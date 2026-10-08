@@ -13,6 +13,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 
 - `nk-core` crate foundation (not yet published): `no_std` + `alloc` error type, limits, internal hex codec, `Timestamp`, and `RelayUrl` — the Rust counterpart of `normalizeURL`/`normalizeRelayUrls`, verified byte-for-byte against the shared `vectors/core/url-normalize.json` cases by the new `nk-vectors` runner. The Hermes smoke test now runs the same vectors through the `whatwg-url` polyfill.
 - `nk-core` event model: `Kind`/`KindClass` (every named `Kind` constant), `PublicKey`, `EventId`, `Signature`, `Tag`/`Tags`/`EventAddress`, `UnsignedEvent`/`Event`, canonical NIP-01 serialization and SHA-256 event ids, `cmp_newest_first`/`cmp_oldest_first`, and `ErrorKind::EventValidation` — parity-verified by the shared kind/tag/event/hex vectors in `nk-vectors`.
+- `nk-core` keys, signing, and verification: `SecretKey` (zeroized on drop, `CryptoRng`-injected generation, `os-rng` convenience methods) and `Keys` with BIP-340 Schnorr signing (`sign_id_with_aux`, `sign_event_with_aux`/`_with_rng`/`sign_event`), `Signature::verify`, `Event::verify`, and `ErrorKind::Crypto` — parity-verified against `vectors/core/event-sign.json` and the official `vectors/bip340/official.csv` rows.
 
 ### Changed
 

@@ -18,6 +18,8 @@ pub enum ErrorKind {
     Url,
     /// An event, tag, or event address failed structural validation.
     EventValidation,
+    /// Key validation, signing, or signature verification failed.
+    Crypto,
 }
 
 impl fmt::Display for ErrorKind {
@@ -26,6 +28,7 @@ impl fmt::Display for ErrorKind {
             Self::Hex => f.write_str("hex"),
             Self::Url => f.write_str("url"),
             Self::EventValidation => f.write_str("event validation"),
+            Self::Crypto => f.write_str("crypto"),
         }
     }
 }

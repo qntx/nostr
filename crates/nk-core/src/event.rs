@@ -1,8 +1,6 @@
 //! The NIP-01 event model: event ids, signatures, unsigned and signed events,
 //! and the canonical serialization used for hashing — the counterpart of
 //! `@qntx/nostr`'s `core/event.ts`.
-//!
-//! `Signature::verify` and `Event::verify` arrive with `secp256k1` in NK1-03.
 
 use alloc::string::String;
 use core::cmp::Ordering;
@@ -147,6 +145,24 @@ impl Signature {
     #[must_use]
     pub fn to_hex(self) -> String {
         hex::encode(&self.0)
+    }
+
+    /// BIP-340 verification of this signature over `id` for `pubkey`
+    /// (TS `verifyEvent`'s crypto step).
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorKind::Crypto`] when `pubkey` is not a valid curve point or the
+    /// signature does not verify.
+    pub fn verify(&self, id: &EventId, pubkey: &PublicKey) -> Result<()> {
+        // `secp256k1::Error` is not `core::error::Error` without its `std`
+        // feature, so crypto failures carry only a kind and a fixed message —
+        // the upstream variant adds no detail callers can act on.
+        let pubkey = secp256k1::XOnlyPublicKey::from_byte_array(*pubkey.as_bytes())
+            .map_err(|_| Error::new(ErrorKind::Crypto, "invalid public key"))?;
+        let signature = secp256k1::schnorr::Signature::from_byte_array(self.0);
+        secp256k1::schnorr::verify(&signature, id.as_bytes(), &pubkey)
+            .map_err(|_| Error::new(ErrorKind::Crypto, "invalid signature"))
     }
 }
 
@@ -562,6 +578,47 @@ impl Event {
             content: self.content,
         }
     }
+
+    /// Assembles a signed event from its parts; only `Keys::sign_event*`
+    /// and deserialization can produce `Event`s.
+    pub(crate) fn new_signed(unsigned: UnsignedEvent, id: EventId, sig: Signature) -> Self {
+        Self {
+            id,
+            pubkey: unsigned.pubkey,
+            created_at: unsigned.created_at,
+            kind: unsigned.kind,
+            tags: unsigned.tags,
+            content: unsigned.content,
+            sig,
+        }
+    }
+
+    /// Full NIP-01 verification: recomputes the id from the canonical
+    /// serialization, then BIP-340-verifies `sig` over it (TS `verifyEvent`,
+    /// which returns a boolean — the failing stage is reported here instead).
+    ///
+    /// # Errors
+    ///
+    /// [`ErrorKind::EventValidation`] when the stored id does not match the
+    /// recomputed id; [`ErrorKind::Crypto`] when the public key is not on the
+    /// curve or the signature is invalid.
+    pub fn verify(&self) -> Result<()> {
+        let computed = UnsignedEvent::new(
+            self.pubkey,
+            self.created_at,
+            self.kind,
+            self.tags.clone(),
+            self.content.clone(),
+        )
+        .id();
+        if computed != self.id {
+            return Err(Error::new(
+                ErrorKind::EventValidation,
+                "event id does not match the event contents",
+            ));
+        }
+        self.sig.verify(&self.id, &self.pubkey)
+    }
 }
 
 impl Serialize for Event {
@@ -815,5 +872,70 @@ mod tests {
         assert!(serde_json::from_str::<Event>(&base("")).is_ok());
         // Unknown fields are ignored.
         assert!(serde_json::from_str::<Event>(&base(",\"extra\":1")).is_ok());
+    }
+
+    /// `vectors/core/event-sign.json` case 0 — sk=3, aux=1.
+    fn valid_event() -> Event {
+        signed(
+            "{\"id\":\"791e76a4715f1514309947f51c1d20a6f80698833ecc97b7b3a9c56cc3063113\",\"pubkey\":\"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",\"created_at\":1700000000,\"kind\":1,\"tags\":[[\"t\",\"hi\"]],\"content\":\"gm\",\"sig\":\"35931bdb21989c9049272418de0df733b0ebede3bcb45c54161511d8633cab516d6b25cd808ddb8cbba7600940678e3ba3fe655a830abbe631e640e9fc460ff1\"}",
+        )
+    }
+
+    #[test]
+    fn verify_accepts_a_correctly_signed_event() {
+        valid_event().verify().unwrap();
+    }
+
+    #[test]
+    fn verify_rejects_an_id_mismatch() {
+        let mut value = serde_json::to_value(valid_event()).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("content".into(), "tampered".into());
+        let event: Event = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            event.verify().unwrap_err().kind(),
+            ErrorKind::EventValidation
+        );
+    }
+
+    #[test]
+    fn verify_rejects_a_bad_signature() {
+        let mut value = serde_json::to_value(valid_event()).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("sig".into(), "ff".repeat(64).into());
+        let event: Event = serde_json::from_value(value).unwrap();
+        assert_eq!(event.verify().unwrap_err().kind(), ErrorKind::Crypto);
+    }
+
+    #[test]
+    fn signature_verify_rejects_an_off_curve_pubkey() {
+        let event = valid_event();
+        let off_curve = PublicKey::from_bytes([0xff; 32]);
+        assert_eq!(
+            event
+                .sig()
+                .verify(&event.id(), &off_curve)
+                .unwrap_err()
+                .kind(),
+            ErrorKind::Crypto
+        );
+    }
+
+    #[test]
+    fn signature_verify_rejects_a_wrong_message() {
+        let event = valid_event();
+        let other_id = EventId::from_bytes([0u8; 32]);
+        assert_eq!(
+            event
+                .sig()
+                .verify(&other_id, &event.pubkey())
+                .unwrap_err()
+                .kind(),
+            ErrorKind::Crypto
+        );
     }
 }

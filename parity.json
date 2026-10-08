@@ -145,7 +145,7 @@
     {
       "id": "core.key.public",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/key.ts",
@@ -154,13 +154,16 @@
           "packages/nostr/tests/vectors/bip340.test.ts"
         ]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/key.rs",
+        "tests": ["crates/nk-vectors/tests/bip340.rs"]
+      },
       "vectors": ["vectors/bip340/official.csv"]
     },
     {
       "id": "core.event.sign",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/key.ts",
@@ -169,13 +172,16 @@
           "packages/nostr/tests/vectors/bip340.test.ts"
         ]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/key.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk-vectors/tests/bip340.rs"]
+      },
       "vectors": ["vectors/core/event-sign.json", "vectors/bip340/official.csv"]
     },
     {
       "id": "core.event.verify",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr/src/core/verifier.ts",
@@ -184,7 +190,10 @@
           "packages/nostr/tests/vectors/bip340.test.ts"
         ]
       },
-      "rust": null,
+      "rust": {
+        "module": "crates/nk-core/src/event.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk-vectors/tests/bip340.rs"]
+      },
       "vectors": ["vectors/bip340/official.csv"]
     },
     {

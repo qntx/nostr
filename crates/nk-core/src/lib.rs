@@ -6,8 +6,9 @@
 //!
 //! | feature | default | effect |
 //! |---------|---------|--------|
-//! | `std`   | yes     | OS facilities; base for `clock` |
+//! | `std`   | yes     | OS facilities; global secp256k1 context; base for `clock`/`os-rng` |
 //! | `clock` | yes     | `Timestamp::now` (wall clock; off on platforms without one) |
+//! | `os-rng` | yes    | `SecretKey::generate`, `Keys::generate`, `Keys::sign_event` (OS entropy) |
 //!
 //! ```
 //! use nk_core::{RelayUrl, Timestamp};
@@ -38,11 +39,16 @@ pub mod url;
 
 pub use error::{Error, ErrorKind, Result};
 pub use event::{Event, EventId, Signature, UnsignedEvent, cmp_newest_first, cmp_oldest_first};
-pub use key::PublicKey;
+pub use key::{Keys, PublicKey, SecretKey};
 pub use kind::{Kind, KindClass};
 pub use tag::{EventAddress, Tag, Tags};
 pub use time::Timestamp;
 pub use url::RelayUrl;
+
+// `criterion` is a dev-dependency consumed only by `benches/`; without this
+// import the lib-test target reports it unused.
+#[cfg(test)]
+use criterion as _;
 
 const _: () = {
     const fn assert_send_sync<T: Send + Sync>() {}
@@ -53,8 +59,10 @@ const _: () = {
     assert_send_sync::<EventId>();
     assert_send_sync::<Kind>();
     assert_send_sync::<KindClass>();
+    assert_send_sync::<Keys>();
     assert_send_sync::<PublicKey>();
     assert_send_sync::<RelayUrl>();
+    assert_send_sync::<SecretKey>();
     assert_send_sync::<Signature>();
     assert_send_sync::<Tag>();
     assert_send_sync::<Tags>();
