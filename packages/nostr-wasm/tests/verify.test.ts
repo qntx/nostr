@@ -4,7 +4,7 @@ import { finalizeEvent, serializeEvent, verifyEvent } from "@qntx/nostr";
 import type { Event } from "@qntx/nostr";
 import { HexError, Kind, hexToBytes } from "@qntx/nostr/core";
 
-import { assertAllowedWasmImports, instantiateCryptoWasm } from "../src/abi.ts";
+import { instantiateCryptoWasm } from "../src/abi.ts";
 import { createWasmEventVerifier, WasmPoisonedError } from "../src/adapter.ts";
 import { createNostrWasmLoader, isWasmBytes } from "../src/instance.ts";
 import type { NostrWasm } from "../src/load.ts";
@@ -75,15 +75,11 @@ describe("loadNostrWasm intern", () => {
 });
 
 describe("wasm module imports", () => {
-  test("Module.imports is a subset of the pinned 0.2.122 list", async () => {
+  test("Module.imports is empty — the byte ABI imports nothing", async () => {
     const copy = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(copy).set(bytes);
     const mod = await WebAssembly.compile(copy);
-    assertAllowedWasmImports(mod);
-    const unexpected = WebAssembly.Module.imports(mod).filter(
-      (imp) => imp.name !== "__wbindgen_throw",
-    );
-    expect(unexpected).toStrictEqual([]);
+    expect(WebAssembly.Module.imports(mod)).toStrictEqual([]);
   });
 });
 

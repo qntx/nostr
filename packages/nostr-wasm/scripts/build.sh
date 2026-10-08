@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Cargo workspace lives at the repo root; artifacts land in this package's src/.
+# Cargo workspace lives at the repo root; the artifact lands in this package's src/.
 pkg="$(cd "$(dirname "$0")/.." && pwd)"
 root="$(cd "${pkg}/../.." && pwd)"
 cd "$root"
@@ -9,19 +9,11 @@ cd "$root"
 need() { command -v "$1" >/dev/null || { echo "missing $1" >&2; exit 1; }; }
 need rustc
 need cargo
-need wasm-bindgen
 # binaryen (devDependency) provides wasm-opt on PATH inside bun/npm scripts.
 need wasm-opt
 
 if ! rustup target list --installed | grep -qx "wasm32-unknown-unknown"; then
   echo "rustup target wasm32-unknown-unknown is not installed" >&2
-  exit 1
-fi
-
-cli_ver="$(wasm-bindgen -V | awk '{print $NF}')"
-lock_ver="$(awk '$0 == "name = \"wasm-bindgen\"" {p=1} p && /version =/ {gsub(/"/, "", $3); print $3; exit}' Cargo.lock)"
-if [[ -z "${lock_ver}" || "${cli_ver}" != "${lock_ver}" ]]; then
-  echo "wasm-bindgen CLI ${cli_ver} != Cargo.lock ${lock_ver}" >&2
   exit 1
 fi
 
@@ -56,25 +48,17 @@ export CFLAGS_wasm32_unknown_unknown="${CFLAGS_wasm32_unknown_unknown:---target=
 
 cargo build --target wasm32-unknown-unknown --release -p nk-wasm
 
-gen="${pkg}/src/generated"
-rm -rf "${gen}"
-mkdir -p "${gen}"
-wasm-bindgen \
-  --target bundler \
-  --out-dir "${gen}" \
-  "${root}/target/wasm32-unknown-unknown/release/nk_wasm.wasm"
-
-wasm_bg="${gen}/nk_wasm_bg.wasm"
-test -f "${wasm_bg}" || { echo "wasm-bindgen did not emit ${wasm_bg}" >&2; exit 1; }
+wasm="${root}/target/wasm32-unknown-unknown/release/nk_wasm.wasm"
+test -f "${wasm}" || { echo "cargo did not emit ${wasm}" >&2; exit 1; }
 # rustc emits SIMD, bulk-memory and friends; allow every feature the module uses.
-wasm-opt -Oz --all-features "${wasm_bg}" -o "${wasm_bg}"
+wasm-opt -Oz --all-features "${wasm}" -o "${wasm}"
 
 # Size budget: measured gzip size rounded up to the next 50 KiB. Bump only after
 # re-measuring a legitimate growth (N19).
 WASM_GZIP_BUDGET=102400
-gz_size="$(gzip -cn "${wasm_bg}" | wc -c | tr -d ' ')"
+gz_size="$(gzip -cn "${wasm}" | wc -c | tr -d ' ')"
 if [[ "${gz_size}" -gt "${WASM_GZIP_BUDGET}" ]]; then
   echo "wasm gzip size ${gz_size} exceeds the ${WASM_GZIP_BUDGET} byte budget" >&2
   exit 1
 fi
-cp "${wasm_bg}" "${pkg}/src/nk_wasm_bg.wasm"
+cp "${wasm}" "${pkg}/src/nk_wasm.wasm"

@@ -22,8 +22,7 @@ docs/*
 
 # Rust / wasm artifacts (built by packages/nostr-wasm/scripts/build.sh)
 /target
-packages/nostr-wasm/src/generated/
-packages/nostr-wasm/src/nk_wasm_bg.wasm
+packages/nostr-wasm/src/nk_wasm.wasm
 
 # Hermes smoke bundle (built by packages/nostr/scripts/hermes-smoke.ts)
 .hermes-smoke.iife.js

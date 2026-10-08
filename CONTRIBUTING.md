@@ -14,10 +14,6 @@
   export CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang"
   ```
 
-- **wasm-bindgen CLI** matching the `wasm-bindgen` version in `Cargo.lock`
-  (`cargo install wasm-bindgen-cli --version 0.2.122`).
-  `packages/nostr-wasm/scripts/build.sh` verifies the match. This pin stays
-  until the wasm-bindgen ABI is replaced.
 - **Optional**, for local portable builds: Xcode, the Android NDK, and the iOS
   and Android rustup targets. CI runs these builds.
 

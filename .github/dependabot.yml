@@ -27,10 +27,6 @@ updates:
       cargo-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
-    ignore:
-      # Pinned to the wasm-bindgen CLI checked by packages/nostr-wasm/scripts/build.sh until the
-      # nk-wasm byte ABI drops wasm-bindgen.
-      - dependency-name: "wasm-bindgen"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
