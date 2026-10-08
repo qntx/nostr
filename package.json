@@ -17,6 +17,7 @@
     "typecheck": "vp run -r typecheck && tsc --noEmit",
     "build": "vp run -r build",
     "test": "vp run -r test && vp test",
+    "test:parity": "bun packages/nostr/scripts/parity/diff.ts --seed 42 --count 2000 --out target/parity && NK_DIFF_DIR=target/parity cargo test -p nk-vectors --test diff -- --ignored",
     "release": "bumpp",
     "prepare": "vp config"
   },

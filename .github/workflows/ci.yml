@@ -35,6 +35,10 @@ jobs:
       bench: true
       # Rust gates live in the rust/rust-minimal jobs.
       rust-checks: false
+      # NK1-08 differential replay: generator runs under bun, the nk-vectors
+      # diff test replays it through cargo. Runs at the workspace root.
+      scripts: test:parity
+      scripts-directory: .
 
   rust:
     uses: qntx/workflows/.github/workflows/ci-rust.yml@v2

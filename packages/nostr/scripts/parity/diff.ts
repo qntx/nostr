@@ -1,0 +1,624 @@
+/// <reference types="node" />
+// Differential-input generator for the TS ↔ nk-core parity harness (NK1-08).
+//
+//   bun packages/nostr/scripts/parity/diff.ts --seed <n> --count <n> --out target/parity
+//
+// One seeded PRNG (mulberry32 — deterministic, no Math.random) produces
+// `--count` cases per capability and writes one JSONL file per capability into
+// `--out`: the first line is {"capability", "seed", "count"} and every
+// following line is {"i", "input", "out" | "err"}. Inputs are raw JSON text so
+// number spellings (1e3, 1.0, -0), duplicate keys, and dropped keys survive;
+// crates/nk-vectors/tests/diff.rs replays them through nk-core (NK_DIFF_DIR).
+//
+// Capabilities: core.event.serialize, core.event.id, core.filter.match,
+// core.filter.canonicalize, core.message.client, core.message.relay.
+
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { getEventHash, serializeEvent } from "../../src/core/event.ts";
+import type { Event, UnsignedEvent } from "../../src/core/event.ts";
+import { canonicalizeFilter, matchFilter } from "../../src/core/filter.ts";
+import type { Filter } from "../../src/core/filter.ts";
+import {
+  encodeClientMessage,
+  encodeRelayMessage,
+  parseClientMessage,
+  parseRelayMessage,
+} from "../../src/core/message.ts";
+
+/* oxlint-disable no-bitwise -- a PRNG is bit arithmetic by design */
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/* oxlint-enable no-bitwise */
+
+// `r` is rebound per capability so each file draws its own seeded stream.
+let r = mulberry32(0);
+
+function int(bound: number): number {
+  return Math.floor(r() * bound);
+}
+function pick<T>(items: ReadonlyArray<T>): T {
+  const item = items[int(items.length)];
+  if (item === undefined) {
+    throw new Error("pick called with an empty array");
+  }
+  return item;
+}
+function chance(p: number): boolean {
+  return r() < p;
+}
+function useStream(seed: number): void {
+  r = mulberry32(seed);
+}
+
+const ASCII =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-:./#@!%&*()+={}[]|;'?~";
+// Valid Unicode only — a lone surrogate in the input JSON is rejected by
+// serde_json before any capability runs, so it cannot be generated here.
+const EDGE_CHARS = [
+  '"',
+  "\\",
+  "\n",
+  "\r",
+  "\t",
+  "\b",
+  "\f",
+  "\u0000",
+  "\u0001",
+  "\u001A",
+  "\u001B",
+  "\u001F",
+  "\u007F",
+  "\u0085",
+  "\u2028",
+  "\u2029",
+  "<",
+  ">",
+  "&",
+  "'",
+  "\uD83D\uDE00", // astral: surrogate pair, not a lone surrogate
+  "\uD83C\uDF89",
+  "\uD834\uDD1E",
+  "\u4E2D",
+  "\u00E9",
+  "e\u0301",
+  "\uD83E\uDD80",
+  "\u20AC",
+];
+
+function randString(maxLen = 32): string {
+  const len = int(maxLen + 1);
+  const chars: string[] = [];
+  for (let i = 0; i < len; i++) {
+    chars.push(chance(0.35) ? pick(EDGE_CHARS) : ASCII.charAt(int(ASCII.length)));
+  }
+  return chars.join("");
+}
+
+const HEX_DIGITS = "0123456789abcdef";
+
+function randHex(chars: number, { anyCase = false } = {}): string {
+  let out = "";
+  for (let i = 0; i < chars; i++) {
+    out += HEX_DIGITS[int(16)];
+  }
+  return anyCase ? out.toUpperCase() : out;
+}
+
+// Integer spellings the wire grammar must normalize to `n` (rulings 8/9):
+// `1e3`, `1.0`, `-0` all parse to plain integers on both sides.
+function intSpelling(n: number): string {
+  if (n === 0) {
+    return chance(0.2) ? "-0" : "0";
+  }
+  if (n % 1000 === 0 && n <= 9000 && chance(0.4)) {
+    return `${n / 1000}e3`;
+  }
+  if (n % 100 === 0 && n <= 900 && chance(0.4)) {
+    return `${n / 100}e2`;
+  }
+  if (chance(0.15)) {
+    return `${n}.0`;
+  }
+  return String(n);
+}
+
+// Integers at or inside the safe-integer boundary (rejection above it is part
+// of the parity contract).
+function randSafeInt(): number {
+  return pick([
+    0, 1, 2, 7, 42, 100, 999, 1000, 65535, 65536, 999_999, 1_700_000_000, 4_294_967_295,
+    4_294_967_296, 9_007_199_254_740_990, 9_007_199_254_740_991,
+  ]);
+}
+
+function randKind(): number {
+  return pick([
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    40,
+    41,
+    42,
+    1111,
+    1984,
+    9734,
+    9735,
+    10000,
+    10002,
+    1063,
+    22242,
+    30000,
+    30023,
+    31990,
+    39701,
+    65535,
+    int(65536),
+  ]);
+}
+
+function randTagName(): string {
+  return pick(["e", "p", "a", "d", "t", "r", "k", "q", "x", "client", "emoji"]);
+}
+
+function randTag(): string[] {
+  const tag = [randTagName()];
+  const values = int(4);
+  for (let i = 0; i < values; i++) {
+    if (tag[0] === "e" || tag[0] === "p") {
+      tag.push(chance(0.7) ? randHex(64, { anyCase: chance(0.3) }) : randString(16));
+    } else {
+      tag.push(randString(24));
+    }
+  }
+  return tag;
+}
+
+function randTags(): string[][] {
+  return Array.from({ length: int(6) }, randTag);
+}
+
+// Assembles the unsigned-event JSON text by hand so number spellings and
+// duplicate keys stay under generator control.
+function rawUnsignedEvent({ corrupt = 0.15 } = {}): string {
+  const pubkey = chance(corrupt)
+    ? pick([
+        JSON.stringify(randHex(64, { anyCase: true })),
+        JSON.stringify(randHex(63)),
+        JSON.stringify(`${randHex(64)}z`),
+        "42",
+      ])
+    : JSON.stringify(randHex(64));
+  const kindSpell = chance(corrupt)
+    ? pick(["65536", "-1", "1.5", '"one"', "9007199254740992"])
+    : intSpelling(randKind());
+  const createdSpell = chance(corrupt)
+    ? pick(["-1", "9007199254740992", "1e16", "3.5", '"now"'])
+    : intSpelling(randSafeInt());
+  const tags = chance(corrupt)
+    ? pick([JSON.stringify("nope"), JSON.stringify([[]]), JSON.stringify([[1, 2]]), "7"])
+    : JSON.stringify(randTags());
+  const content = chance(corrupt)
+    ? pick(["7", "null", "true", "[1]"])
+    : JSON.stringify(randString(200));
+  const fields = [
+    `"pubkey":${pubkey}`,
+    `"created_at":${createdSpell}`,
+    `"kind":${kindSpell}`,
+    `"tags":${tags}`,
+    `"content":${content}`,
+  ];
+  if (chance(0.08)) {
+    fields.push(`"extra_${int(100)}":${JSON.stringify(randString(8))}`);
+  }
+  if (chance(0.08)) {
+    // Duplicate key: JSON.parse and serde_json both last-win.
+    fields.splice(int(fields.length), 0, `"kind":${pick(["65536", "0", "1.5"])}`);
+  }
+  if (chance(0.06)) {
+    fields.splice(int(fields.length), 1); // drop a required field
+  }
+  // Shuffle field order; parse order is irrelevant to validity.
+  fields.sort(() => r() - 0.5);
+  return `{${fields.join(",")}}`;
+}
+
+// Signed event with the canonical wire-key order (id, pubkey, created_at,
+// kind, tags, content, sig) so the relay/client re-encode paths — TS
+// JSON.stringify passthrough vs nk-core write_signed — emit identical bytes.
+function eventJson({ corrupt = 0.1 } = {}): string {
+  const bad = (hex: string): string => pick([hex.toUpperCase(), hex.slice(0, -2), `${hex}zz`]);
+  const id = JSON.stringify(chance(corrupt) ? bad(randHex(64)) : randHex(64));
+  const pubkey = JSON.stringify(chance(corrupt) ? bad(randHex(64)) : randHex(64));
+  const sig = JSON.stringify(chance(corrupt) ? bad(randHex(128)) : randHex(128));
+  const kind = chance(corrupt) ? "65536" : intSpelling(randKind());
+  const created = chance(corrupt)
+    ? pick(["-1", "9007199254740992", "1.5"])
+    : intSpelling(randSafeInt());
+  const tags = chance(corrupt / 2)
+    ? pick([JSON.stringify([[]]), JSON.stringify("x")])
+    : JSON.stringify(randTags());
+  const content = chance(corrupt / 2) ? "null" : JSON.stringify(randString(120));
+  return `{"id":${id},"pubkey":${pubkey},"created_at":${created},"kind":${kind},"tags":${tags},"content":${content},"sig":${sig}}`;
+}
+
+// A filter in the shared input domain: every key is either a known field
+// nk-core parses or one both sides drop (unknown / multi-letter `#`).
+function filterJson(): string {
+  const fields: string[] = [];
+  const hexList = (count: number): string =>
+    `[${Array.from({ length: count }, () =>
+      JSON.stringify(randHex(64, { anyCase: chance(0.3) })),
+    ).join(",")}]`;
+  if (chance(0.5)) {
+    fields.push(`"ids":${chance(0.15) ? "[]" : hexList(int(4) + 1)}`);
+  }
+  if (chance(0.4)) {
+    fields.push(`"authors":${chance(0.15) ? "[]" : hexList(int(3) + 1)}`);
+  }
+  if (chance(0.5)) {
+    const kinds = Array.from({ length: int(5) + 1 }, () => intSpelling(randKind()));
+    fields.push(`"kinds":${chance(0.1) ? "[]" : `[${kinds.join(",")}]`}`);
+  }
+  if (chance(0.3)) {
+    fields.push(`"since":${intSpelling(randSafeInt())}`);
+  }
+  if (chance(0.3)) {
+    fields.push(`"until":${intSpelling(randSafeInt())}`);
+  }
+  if (chance(0.3)) {
+    fields.push(`"limit":${intSpelling(int(500))}`);
+  }
+  if (chance(0.25)) {
+    fields.push(`"search":${JSON.stringify(randString(24))}`);
+  }
+  for (const letter of ["e", "p", "t", "d", "a", "q"]) {
+    if (chance(0.3)) {
+      const values = Array.from({ length: int(4) + 1 }, () =>
+        JSON.stringify(
+          letter === "e" || letter === "p"
+            ? chance(0.6)
+              ? randHex(64, { anyCase: chance(0.4) })
+              : randString(12)
+            : randString(16),
+        ),
+      );
+      fields.push(`"#${letter}":${chance(0.1) ? "[]" : `[${values.join(",")}]`}`);
+    }
+  }
+  if (chance(0.2)) {
+    // Dropped by both implementations (multi-letter `#` or unknown key).
+    fields.push(pick([`"#client":["x"]`, `"zzz":${int(9)}`, `"custom":["a","b"]`]));
+  }
+  fields.sort(() => r() - 0.5);
+  return `{${fields.join(",")}}`;
+}
+
+function subId(): string {
+  const kind = int(10);
+  if (kind === 0) {
+    return ""; // invalid: empty
+  }
+  if (kind === 1) {
+    return randString(66); // invalid: over 64 scalar values
+  }
+  if (kind === 2) {
+    return "😀".repeat(64); // valid: exactly 64 scalar values (astral)
+  }
+  if (kind === 3) {
+    return "😀".repeat(65); // invalid: 65 scalar values
+  }
+  if (kind === 4) {
+    return `${randString(30)}😀${randString(33)}`;
+  }
+  return randString(int(64) + 1);
+}
+
+function negHex({ bad = false } = {}): string {
+  if (bad) {
+    return pick(["", "abc", "zz", "0x12", "😀😀"]);
+  }
+  return randHex(2 * (int(32) + 1), { anyCase: chance(0.4) });
+}
+
+// Each client/relay message is assembled as raw text so arity, key order,
+// number spellings, and corrupted items stay under generator control. Roughly
+// one in six messages is malformed on purpose — rejection is parity-checked.
+function clientMessageText(): string {
+  const label = pick([
+    "EVENT",
+    "REQ",
+    "REQ",
+    "COUNT",
+    "CLOSE",
+    "AUTH",
+    "NEG-OPEN",
+    "NEG-MSG",
+    "NEG-CLOSE",
+    "BOGUS",
+  ]);
+  const id = JSON.stringify(subId());
+  switch (label) {
+    case "EVENT":
+      return `["EVENT",${eventJson({ corrupt: 0.12 })}]`;
+    case "AUTH":
+      return `["AUTH",${eventJson({ corrupt: 0.12 })}]`;
+    case "REQ":
+    case "COUNT": {
+      const filters = Array.from({ length: int(4) }, () =>
+        chance(0.12) ? pick(["7", '"x"', "null"]) : filterJson(),
+      );
+      const head = chance(0.08) ? "7" : id;
+      return `["${label}",${head}${filters.length > 0 ? "," : ""}${filters.join(",")}]`;
+    }
+    case "CLOSE":
+      return `["CLOSE",${id}]`;
+    case "NEG-OPEN": {
+      if (chance(0.1)) {
+        // Obsolete 5-item form: both parsers reject it.
+        return `["NEG-OPEN",${id},${filterJson()},${JSON.stringify(negHex())},"legacy"]`;
+      }
+      const hexPart = chance(0.15)
+        ? JSON.stringify(negHex({ bad: true }))
+        : JSON.stringify(negHex());
+      return `["NEG-OPEN",${id},${chance(0.1) ? "7" : filterJson()},${hexPart}]`;
+    }
+    case "NEG-MSG":
+      return `["NEG-MSG",${id},${JSON.stringify(negHex({ bad: chance(0.15) }))}]`;
+    case "NEG-CLOSE":
+      return `["NEG-CLOSE",${id}]`;
+    default:
+      return pick([
+        `["${label}"]`,
+        `[${JSON.stringify(randString(8))}]`,
+        `["REQ",${id}]`,
+        `{"type":"${label}"}`,
+        `["EVENT",${eventJson()},7]`,
+      ]);
+  }
+}
+
+function relayMessageText(): string {
+  const label = pick([
+    "EVENT",
+    "OK",
+    "EOSE",
+    "CLOSED",
+    "NOTICE",
+    "AUTH",
+    "COUNT",
+    "COUNT",
+    "NEG-MSG",
+    "NEG-ERR",
+    "BOGUS",
+  ]);
+  const id = JSON.stringify(subId());
+  const message = JSON.stringify(randString(40));
+  switch (label) {
+    case "EVENT":
+      return `["EVENT",${id},${eventJson({ corrupt: 0.12 })}]`;
+    case "OK": {
+      const okId = chance(0.15)
+        ? pick([randHex(64, { anyCase: true }), randHex(63), `${randHex(64)}z`])
+        : randHex(64);
+      const accepted = chance(0.15) ? '"yes"' : chance(0.5) ? "true" : "false";
+      return `["OK",${JSON.stringify(okId)},${accepted},${message}]`;
+    }
+    case "EOSE":
+      return `["EOSE",${id}]`;
+    case "CLOSED":
+      return `["CLOSED",${id},${message}]`;
+    case "AUTH":
+      return `["AUTH",${message}]`;
+    case "NOTICE":
+      return `["NOTICE",${message}]`;
+    case "COUNT": {
+      const count = chance(0.2)
+        ? pick(["-1", "9007199254740992", "3.5", '"5"', "null", "9007199254740993"])
+        : intSpelling(randSafeInt());
+      const parts = [`"count":${count}`];
+      if (chance(0.5)) {
+        parts.push(chance(0.25) ? `"approximate":"yes"` : `"approximate":${String(chance(0.5))}`);
+      }
+      if (chance(0.5)) {
+        const hll = chance(0.3)
+          ? pick([randHex(512, { anyCase: true }), randHex(511), `${randHex(512)}z`, "42"])
+          : randHex(512);
+        parts.push(`"hll":${JSON.stringify(hll)}`);
+      }
+      if (chance(0.15)) {
+        parts.push(`"extra":${int(9)}`);
+      }
+      return `["COUNT",${id},{${parts.join(",")}}]`;
+    }
+    case "NEG-MSG":
+      return `["NEG-MSG",${id},${JSON.stringify(negHex({ bad: chance(0.15) }))}]`;
+    case "NEG-ERR": {
+      const tail = chance(0.2) ? `,${JSON.stringify(randString(8))}` : "";
+      return `["NEG-ERR",${id},${message}${tail}]`;
+    }
+    default:
+      return pick([
+        `["${label}",${id}]`,
+        `[${JSON.stringify(randString(8))}]`,
+        `["NOTICE"]`,
+        "[]",
+        '"NOTICE"',
+        `["OK",${JSON.stringify(randHex(64))},true]`,
+      ]);
+  }
+}
+
+// An event whose filter fields can be copied into a matching filter so hit
+// and miss cases both occur naturally.
+function matchInputText(): string {
+  const id = randHex(64);
+  const pubkey = randHex(64);
+  const kind = randKind();
+  const created = randSafeInt();
+  const tags = randTags();
+  const content = randString(120);
+  const event = `{"id":"${id}","pubkey":"${pubkey}","created_at":${intSpelling(created)},"kind":${kind},"tags":${JSON.stringify(tags)},"content":${JSON.stringify(content)},"sig":"${randHex(128)}"}`;
+  const fields: string[] = [];
+  if (chance(0.5)) {
+    fields.push(`"ids":["${chance(0.6) ? id : randHex(64)}","${randHex(64)}"]`);
+  }
+  if (chance(0.5)) {
+    fields.push(`"authors":["${chance(0.6) ? pubkey : randHex(64)}","${randHex(64)}"]`);
+  }
+  if (chance(0.5)) {
+    fields.push(`"kinds":[${chance(0.6) ? String(kind) : String(randKind())},${randKind()}]`);
+  }
+  if (chance(0.4)) {
+    fields.push(
+      `"since":${intSpelling(chance(0.6) ? Math.max(0, created - int(100)) : randSafeInt())}`,
+    );
+  }
+  if (chance(0.4)) {
+    fields.push(
+      `"until":${intSpelling(chance(0.6) ? Math.min(9_007_199_254_740_991, created + int(100)) : randSafeInt())}`,
+    );
+  }
+  for (const tag of tags) {
+    const name = tag.at(0);
+    if (name === undefined || name.length !== 1 || !chance(0.5)) {
+      continue;
+    }
+    const values = tag.slice(1);
+    if (values.length === 0) {
+      continue;
+    }
+    fields.push(`"#${name}":[${values.map((v) => JSON.stringify(v)).join(",")}]`);
+  }
+  if (chance(0.3)) {
+    fields.push(`"#t":[${JSON.stringify(randString(8))}]`);
+  }
+  const filter = `{${fields.join(",")}}`;
+  return `{"filter":${filter},"event":${event}}`;
+}
+
+type CaseRecord = { i: number; input: string; out?: unknown; err?: string };
+
+function capture(run: () => unknown): { out?: unknown; err?: string } {
+  try {
+    return { out: run() };
+  } catch (error) {
+    return { err: error instanceof Error ? error.constructor.name : "Error" };
+  }
+}
+
+// oxlint-disable-next-line no-unnecessary-type-parameters
+function parseJson<T>(raw: string): T {
+  // The input is generator-produced JSON text; the cast narrows `unknown` to
+  // the shape the capability's public API expects.
+  // oxlint-disable-next-line no-unsafe-type-assertion
+  return JSON.parse(raw) as T;
+}
+
+type Capability = { name: string; make: () => CaseRecord };
+
+const CAPABILITIES: ReadonlyArray<Capability> = [
+  {
+    name: "core.event.serialize",
+    make: () => {
+      const input = rawUnsignedEvent();
+      return { i: 0, input, ...capture(() => serializeEvent(parseJson<UnsignedEvent>(input))) };
+    },
+  },
+  {
+    name: "core.event.id",
+    make: () => {
+      const input = rawUnsignedEvent();
+      return { i: 0, input, ...capture(() => getEventHash(parseJson<UnsignedEvent>(input))) };
+    },
+  },
+  {
+    name: "core.filter.match",
+    make: () => {
+      const input = matchInputText();
+      return {
+        i: 0,
+        input,
+        ...capture(() => {
+          const { filter, event } = parseJson<{ filter: Filter; event: Event }>(input);
+          return matchFilter(filter, event);
+        }),
+      };
+    },
+  },
+  {
+    name: "core.filter.canonicalize",
+    make: () => {
+      const input = filterJson();
+      return {
+        i: 0,
+        input,
+        ...capture(() => JSON.stringify(canonicalizeFilter(parseJson<Filter>(input)))),
+      };
+    },
+  },
+  {
+    name: "core.message.client",
+    make: () => {
+      const input = clientMessageText();
+      return {
+        i: 0,
+        input,
+        ...capture(() => encodeClientMessage(parseClientMessage(input))),
+      };
+    },
+  },
+  {
+    name: "core.message.relay",
+    make: () => {
+      const input = relayMessageText();
+      return {
+        i: 0,
+        input,
+        ...capture(() => encodeRelayMessage(parseRelayMessage(input))),
+      };
+    },
+  },
+];
+
+function parseArgs(): { seed: number; count: number; out: string } {
+  const args = process.argv.slice(2);
+  const get = (flag: string): string | undefined => {
+    const at = args.indexOf(flag);
+    return at === -1 ? undefined : args.at(at + 1);
+  };
+  const seed = Number(get("--seed") ?? "0");
+  const count = Number(get("--count") ?? "0");
+  const out = get("--out") ?? "target/parity";
+  if (!Number.isInteger(seed) || !Number.isInteger(count) || count <= 0) {
+    throw new Error("usage: diff.ts --seed <n> --count <n> [--out <dir>]");
+  }
+  return { seed, count, out };
+}
+
+const { seed, count, out } = parseArgs();
+mkdirSync(out, { recursive: true });
+
+for (const capability of CAPABILITIES) {
+  useStream(seed); // same seed → same stream for every capability
+  const lines: string[] = [JSON.stringify({ capability: capability.name, seed, count })];
+  for (let i = 0; i < count; i++) {
+    lines.push(JSON.stringify({ ...capability.make(), i }));
+  }
+  writeFileSync(join(out, `${capability.name}.jsonl`), `${lines.join("\n")}\n`);
+  console.log(`${capability.name}: ${count} cases`);
+}
