@@ -2,6 +2,15 @@
 
 Nostr protocol implementation and SDK.
 
+## Repository layout
+
+| Path                                         | Contents                                                                   |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| [`packages/nostr`](packages/nostr)           | `@qntx/nostr`, the TypeScript library                                      |
+| [`packages/nostr-wasm`](packages/nostr-wasm) | `@qntx/nostr-wasm`, the WebAssembly cryptography backend for `@qntx/nostr` |
+| `crates/`                                    | `nk-*` Rust crates                                                         |
+| `vectors/`, `parity.json`                    | Test vectors shared by both languages and the capability ledger            |
+
 Changes are tracked in [CHANGELOG.md](CHANGELOG.md); layering rules and invariants for contributors live in [AGENTS.md](AGENTS.md).
 
 ## License
