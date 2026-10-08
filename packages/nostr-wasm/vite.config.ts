@@ -63,15 +63,6 @@ function wasmUrlAsset() {
 }
 
 const config: UserConfig = defineConfig({
-  resolve: {
-    // Development resolution for the workspace sibling: tests and the pack
-    // sources resolve @qntx/nostr subpaths without a prior pack build. The
-    // specifier stays external in the pack output via deps.neverBundle.
-    alias: [
-      { find: /^@qntx\/nostr\/core$/, replacement: path.resolve("../nostr/src/core/index.ts") },
-      { find: /^@qntx\/nostr$/, replacement: path.resolve("../nostr/src/index.ts") },
-    ],
-  },
   pack: {
     plugins: [wasmUrlAsset()],
     entry: {
@@ -80,6 +71,9 @@ const config: UserConfig = defineConfig({
     },
     dts: {
       generator: "tsgo",
+      // Without the dev `paths` mapping: @qntx/nostr/* resolves to the built
+      // package, not ../nostr/src — otherwise tsgo emits stray .d.ts there.
+      tsconfig: "tsconfig.pack.json",
     },
     deps: {
       neverBundle: ["@qntx/nostr"],
@@ -90,6 +84,13 @@ const config: UserConfig = defineConfig({
     },
   },
   test: {
+    // Development resolution for the workspace sibling: tests resolve
+    // @qntx/nostr subpaths against sources without a prior pack build. The
+    // specifier stays external in the pack output via deps.neverBundle.
+    alias: [
+      { find: /^@qntx\/nostr\/core$/, replacement: path.resolve("../nostr/src/core/index.ts") },
+      { find: /^@qntx\/nostr$/, replacement: path.resolve("../nostr/src/index.ts") },
+    ],
     include: bench ? ["tests/**/*.ts"] : ["tests/**/*.test.ts"],
   },
 });

@@ -1,0 +1,8 @@
+{
+  // Pack dts generation resolves @qntx/nostr through node_modules to the built
+  // sibling (build:wasm/check:pkg run @qntx/nostr#build first). Inheriting the
+  // dev `paths` mapping into ../nostr/src would make tsgo emit stray .d.ts
+  // files next to the sibling's sources.
+  "extends": "../../tsconfig.base.json",
+  "include": ["src"]
+}
