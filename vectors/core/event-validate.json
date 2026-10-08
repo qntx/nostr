@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.9.0"
+    "version": "0.10.1"
   },
   "cases": [
     {

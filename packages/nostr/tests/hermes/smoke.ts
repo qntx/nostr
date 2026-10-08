@@ -1,3 +1,4 @@
+import urlNormalizeVector from "../../../../vectors/core/url-normalize.json" with { type: "json" };
 import {
   EventBuilder,
   Keys,
@@ -38,6 +39,8 @@ import { createRumor, unwrap, wrap } from "../../src/nips/nip59.ts";
  * inside a promise callback does not set the exit code), so runners must assert the marker appears
  * in stdout.
  */
+
+type UrlNormalizeCase = { input: string; output?: string; error?: string };
 
 function assert(cond: boolean, name: string): asserts cond {
   if (!cond) {
@@ -151,16 +154,24 @@ export async function main(): Promise<void> {
     "matchFilter",
   );
 
-  // normalizeURL vectors (WHATWG URL path: host lowercase, scheme rewrite,
-  // default port drop, duplicate slash collapse, sorted query, fragment drop,
-  // trailing "/" on the root path).
-  eq(normalizeURL("Relay.EXAMPLE"), "wss://relay.example/", "normalizeURL bare host");
-  eq(
-    normalizeURL("https://Relay.EXAMPLE:443//a//b?z=1&y=2#frag"),
-    "wss://relay.example/a/b?y=2&z=1",
-    "normalizeURL full",
-  );
-  eq(normalizeURL("http://relay.example:80/x/"), "ws://relay.example/x", "normalizeURL ws");
+  // Every url-normalize vector through normalizeURL on the whatwg-url
+  // polyfill: identical output strings for valid inputs, UrlError for
+  // invalid ones. A mismatch fails the smoke (NK-ADR-003 adjudicates any
+  // three-way divergence between TS, Rust, and Hermes).
+  for (const c of urlNormalizeVector.cases as UrlNormalizeCase[]) {
+    if (c.output === undefined) {
+      assert(c.error === "UrlError", `url vector error kind ${JSON.stringify(c.input)}`);
+      let threw = false;
+      try {
+        normalizeURL(c.input);
+      } catch {
+        threw = true;
+      }
+      assert(threw, `url vector rejects ${JSON.stringify(c.input)}`);
+    } else {
+      eq(normalizeURL(c.input), c.output, `url vector ${JSON.stringify(c.input)}`);
+    }
+  }
 
   // ReactiveEventStore: add (with a relay URL → normalizeURL + seenOn), query,
   // watch notification delivered on a microtask.
