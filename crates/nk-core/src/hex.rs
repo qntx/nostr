@@ -2,8 +2,6 @@
 //! Caller input accepts mixed case; wire input is strict lowercase; encoding
 //! is always lowercase.
 
-#![allow(dead_code, reason = "first callers land with the key types in NK1-03")]
-
 use base16ct::{lower, mixed};
 
 use crate::error::{Error, ErrorKind, Result};

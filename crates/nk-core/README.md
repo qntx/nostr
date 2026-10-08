@@ -2,7 +2,7 @@
 
 The leaf crate of the `nk-*` workspace: the platform-neutral (`no_std` + `alloc`, sans-IO) Rust counterpart of `@qntx/nostr`'s `core` layer.
 
-NK1-01 scope: the opaque `Error`/`ErrorKind`, protocol limits, `Timestamp`, and `RelayUrl` (WHATWG relay-URL normalization, byte-identical to the TS `normalizeURL`). Keys, events, filters, tags, and messages land in later milestones.
+NK1-02 scope: the opaque `Error`/`ErrorKind`, protocol limits, `Timestamp`, `RelayUrl` (WHATWG relay-URL normalization, byte-identical to the TS `normalizeURL`), `Kind`/`KindClass`, `PublicKey`, `Tag`/`Tags`/`EventAddress`, and the `UnsignedEvent`/`Event` model with canonical NIP-01 serialization and SHA-256 event ids. Secret keys, signing, and verification land in NK1-03.
 
 ## Features
 

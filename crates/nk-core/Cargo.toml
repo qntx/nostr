@@ -18,6 +18,7 @@ clock   = ["std"]
 [dependencies]
 base16ct = { workspace = true }
 serde    = { workspace = true }
+sha2     = { workspace = true }
 url      = { workspace = true }
 
 [dev-dependencies]

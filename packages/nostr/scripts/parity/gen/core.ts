@@ -32,7 +32,13 @@ import {
   mergeCountHll,
 } from "../../../src/core/message.ts";
 import { formatEventAddress, parseEventAddress } from "../../../src/core/tag.ts";
-import { bytesToHex, hexToBytes, normalizeURL, utf8Encoder } from "../../../src/core/util.ts";
+import {
+  bytesToHex,
+  hexToBytes,
+  isHex32,
+  normalizeURL,
+  utf8Encoder,
+} from "../../../src/core/util.ts";
 
 const PK = "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23";
 const SK = "0000000000000000000000000000000000000000000000000000000000000003";
@@ -106,6 +112,13 @@ const unsignedCases: UnsignedEvent[] = [
     kind: 4,
     tags: [["x"], ["p", PK, "wss://r.example", "pet"]],
     content: "",
+  },
+  {
+    pubkey: PK,
+    created_at: 9007199254740991,
+    kind: 0,
+    tags: [["d", "sep\u2028\u2029"]],
+    content: "del \u007F line \u2028 para \u2029 end",
   },
 ];
 
@@ -562,7 +575,46 @@ emit("core.count.hll", "count-hll.json", [
   { inputs: ["ab".repeat(255)], error: "MessageError" },
   { inputs: ["zz".repeat(256)], error: "MessageError" },
 ]);
+// 32-byte hex decode: `caller` accepts any case and normalizes to lowercase;
+// `wire` is strict lowercase only (both must be exactly 64 characters).
+const hexInputs: Array<{ op: "caller" | "wire"; input: string }> = [
+  { op: "caller", input: "ab".repeat(32) },
+  { op: "caller", input: "AB".repeat(32) },
+  { op: "caller", input: "aB9f".repeat(16) },
+  { op: "caller", input: "zz".repeat(32) },
+  { op: "caller", input: "ab".repeat(31) },
+  { op: "caller", input: "ab".repeat(33) },
+  { op: "caller", input: "abc" },
+  { op: "caller", input: "" },
+  { op: "wire", input: "ab".repeat(32) },
+  { op: "wire", input: "AB".repeat(32) },
+  { op: "wire", input: "aB".repeat(32) },
+  { op: "wire", input: "ab".repeat(31) },
+  { op: "wire", input: "ab".repeat(33) },
+  { op: "wire", input: "zz".repeat(32) },
+];
+const hexCases = hexInputs.map((c) => {
+  if (c.op === "wire") {
+    return isHex32(c.input)
+      ? { op: c.op, input: c.input, output: c.input }
+      : { op: c.op, input: c.input, error: "HexError" };
+  }
+  let output: string | undefined;
+  try {
+    const bytes = hexToBytes(c.input);
+    if (bytes.length === 32) {
+      output = bytesToHex(bytes);
+    }
+  } catch {
+    // falls through to the error case
+  }
+  return output === undefined
+    ? { op: c.op, input: c.input, error: "HexError" }
+    : { op: c.op, input: c.input, output };
+});
+
 emit("core.kind.classify", "kind-classify.json", kinds);
 emit("core.tag.address", "tag-address.json", [...addressCases, ...addressFormats]);
+emit("core.hex", "hex.json", hexCases);
 emit("core.url.normalize", "url-normalize.json", normalizeUrlCases);
 console.log("wrote vectors/core/*.json");

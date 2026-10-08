@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "capability": "core.hex",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.10.1"
+  },
+  "cases": [
+    {
+      "op": "caller",
+      "input": "abababababababababababababababababababababababababababababababab",
+      "output": "abababababababababababababababababababababababababababababababab"
+    },
+    {
+      "op": "caller",
+      "input": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+      "output": "abababababababababababababababababababababababababababababababab"
+    },
+    {
+      "op": "caller",
+      "input": "aB9faB9faB9faB9faB9faB9faB9faB9faB9faB9faB9faB9faB9faB9faB9faB9f",
+      "output": "ab9fab9fab9fab9fab9fab9fab9fab9fab9fab9fab9fab9fab9fab9fab9fab9f"
+    },
+    {
+      "op": "caller",
+      "input": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "error": "HexError"
+    },
+    {
+      "op": "caller",
+      "input": "ababababababababababababababababababababababababababababababab",
+      "error": "HexError"
+    },
+    {
+      "op": "caller",
+      "input": "ababababababababababababababababababababababababababababababababab",
+      "error": "HexError"
+    },
+    {
+      "op": "caller",
+      "input": "abc",
+      "error": "HexError"
+    },
+    {
+      "op": "caller",
+      "input": "",
+      "error": "HexError"
+    },
+    {
+      "op": "wire",
+      "input": "abababababababababababababababababababababababababababababababab",
+      "output": "abababababababababababababababababababababababababababababababab"
+    },
+    {
+      "op": "wire",
+      "input": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+      "error": "HexError"
+    },
+    {
+      "op": "wire",
+      "input": "aBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaBaB",
+      "error": "HexError"
+    },
+    {
+      "op": "wire",
+      "input": "ababababababababababababababababababababababababababababababab",
+      "error": "HexError"
+    },
+    {
+      "op": "wire",
+      "input": "ababababababababababababababababababababababababababababababababab",
+      "error": "HexError"
+    },
+    {
+      "op": "wire",
+      "input": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "error": "HexError"
+    }
+  ]
+}
