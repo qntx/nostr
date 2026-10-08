@@ -7,7 +7,7 @@
 //! | feature | default | effect |
 //! |---------|---------|--------|
 //! | `std`   | yes     | OS facilities; base for `clock` |
-//! | `clock` | yes     | [`Timestamp::now`] (wall clock; off on platforms without one) |
+//! | `clock` | yes     | `Timestamp::now` (wall clock; off on platforms without one) |
 //!
 //! ```
 //! use nk_core::{RelayUrl, Timestamp};
