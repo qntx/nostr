@@ -14,7 +14,7 @@ keywords     = ["nostr", "protocol", "sdk"]
 categories   = ["cryptography", "network-programming"]
 
 [workspace.dependencies]
-nk-core      = { path = "crates/nk-core", version = "=0.10.1" }
+nk-core      = { path = "crates/nk-core", version = "=0.10.1", default-features = false }
 base16ct     = { version = "1.0", default-features = false, features = ["alloc"] }
 secp256k1    = { version = "0.33", default-features = false, features = ["std"] }
 serde        = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }

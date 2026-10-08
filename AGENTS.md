@@ -20,7 +20,7 @@ Runtime dependencies (`@noble/*`, `@scure/base`) use caret ranges so consumers c
 
 ## Rust crates
 
-- One `nk-*` crate per TypeScript layer (`nk-core` is the leaf; crates are added per milestone). Dependency direction mirrors the TS layering and is enforced by `scripts/check-layers.ts`.
+- One `nk-*` crate per TypeScript layer (`nk-core` is the leaf; crates are added per milestone). Dependency direction mirrors the TS layering and is enforced by `scripts/check-layers.ts`. Internal `nk-*` workspace dependencies are declared `default-features = false`; dependents enable and forward features explicitly (Cargo feature unification would otherwise mask minimal-configuration breakage).
 - `nk-core`, `nk-nips`, `nk-signer`, and `nk-gossip` are `no_std` + `alloc` and sans-IO; `nk-storage` is portable but uses `std` (its `sqlite` feature only needs to build for iOS/Android); `nk-wasm` is the wasm binding crate. All of these P-level crates must build for `wasm32-unknown-unknown` with `--no-default-features` and for the iOS/Android toolchain targets. `std` (default), `clock`, and `os-rng` are additive features; OS entropy and wall clock live behind them.
 - Follow the Rust API Guidelines. No third-party types in public APIs. No panics and no `unwrap`/`expect` in library code. `unsafe` only inside `nk-wasm`'s ABI module.
 - Shared test vectors live in `vectors/` (see `vectors/README.md`) and every capability is tracked in `parity.json`; both languages run the same files.

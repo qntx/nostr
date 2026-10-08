@@ -12,13 +12,9 @@
 //! ```
 //! use nk_core::{RelayUrl, Timestamp};
 //!
-//! fn relay(input: &str) -> Result<RelayUrl, nk_core::Error> {
-//!     Ok(RelayUrl::parse(input)?)
-//! }
-//!
-//! let url = relay("Relay.EXAMPLE")?;
+//! let url = RelayUrl::parse("Relay.EXAMPLE")?;
 //! assert_eq!(url.as_str(), "wss://relay.example/");
-//! let _ = Timestamp::now();
+//! let _ = Timestamp::from_secs(1_700_000_000);
 //! # Ok::<(), nk_core::Error>(())
 //! ```
 

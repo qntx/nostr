@@ -20,5 +20,8 @@ base16ct = { workspace = true }
 serde    = { workspace = true }
 url      = { workspace = true }
 
+[dev-dependencies]
+serde_json = { workspace = true, features = ["std"] }
+
 [lints]
 workspace = true

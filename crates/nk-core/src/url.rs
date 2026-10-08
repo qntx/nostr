@@ -2,7 +2,7 @@
 //! TS `normalizeURL`/`normalizeRelayUrls` in `@qntx/nostr`'s `core/util.ts`.
 //! Normalization is byte-for-byte identical to the TS side.
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 use core::str::FromStr;
@@ -37,42 +37,27 @@ impl RelayUrl {
             prefixed = alloc::format!("wss://{input}");
             prefixed.as_str()
         };
-        let mut url = Url::parse(input).map_err(|error| {
-            Error::with_source(
-                ErrorKind::Url,
-                alloc::format!("invalid URL: {input}"),
-                error,
-            )
-        })?;
-        match url.scheme() {
-            "http" => {
-                if url.set_scheme("ws").is_err() {
-                    return Err(Error::new(
-                        ErrorKind::Url,
-                        "could not rewrite scheme http to ws",
-                    ));
-                }
-            }
-            "https" => {
-                if url.set_scheme("wss").is_err() {
-                    return Err(Error::new(
-                        ErrorKind::Url,
-                        "could not rewrite scheme https to wss",
-                    ));
-                }
-            }
-            "ws" | "wss" => {}
+        let mut url = Url::parse(input)
+            .map_err(|error| Error::with_source(ErrorKind::Url, "invalid URL", error))?;
+        let rewrite = match url.scheme() {
+            "http" => Some("ws"),
+            "https" => Some("wss"),
+            "ws" | "wss" => None,
             scheme => {
                 return Err(Error::new(
                     ErrorKind::Url,
                     alloc::format!("unsupported relay URL scheme: {scheme}:"),
                 ));
             }
+        };
+        if let Some(target) = rewrite {
+            url.set_scheme(target)
+                .map_err(|()| Error::new(ErrorKind::Url, "could not rewrite scheme"))?;
         }
         url.set_path(&collapse_path(url.path()));
         sort_query(&mut url);
         url.set_fragment(None);
-        Ok(Self(url.to_string()))
+        Ok(Self(url.into()))
     }
 
     /// The normalized URL string.
@@ -191,7 +176,39 @@ impl<'de> Deserialize<'de> for RelayUrl {
     where
         D: Deserializer<'de>,
     {
-        let raw = <&str>::deserialize(deserializer)?;
-        Self::parse(raw).map_err(serde::de::Error::custom)
+        let raw = String::deserialize(deserializer)?;
+        Self::parse(&raw).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "tests fail by panicking")]
+
+    use alloc::string::ToString;
+
+    use super::*;
+
+    #[test]
+    fn deserialize_accepts_escaped_strings() {
+        let url: RelayUrl = serde_json::from_str("\"wss://a.example/\\u00e9\"").unwrap();
+        assert_eq!(url.as_str(), "wss://a.example/%C3%A9");
+    }
+
+    #[test]
+    fn deserialize_accepts_owned_values() {
+        let url: RelayUrl =
+            serde_json::from_value(serde_json::Value::String(String::from("relay.example")))
+                .unwrap();
+        assert_eq!(url.as_str(), "wss://relay.example/");
+    }
+
+    #[test]
+    fn deserialize_rejects_other_schemes() {
+        let error = serde_json::from_str::<RelayUrl>("\"gopher://a.example\"").unwrap_err();
+        assert!(
+            !error.to_string().is_empty(),
+            "serde error must carry the cause"
+        );
     }
 }

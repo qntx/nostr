@@ -1,4 +1,5 @@
-//! Opaque error type shared by every `nk-*` crate.
+//! nk-core's error type. Each `nk-*` crate defines its own opaque `Error`
+//! and `ErrorKind`; errors from lower crates travel upward via `source`.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -26,7 +27,7 @@ impl fmt::Display for ErrorKind {
     }
 }
 
-/// The single error type returned by `nk-*` APIs.
+/// The error type returned by nk-core APIs.
 ///
 /// The representation is private; inspect [`Error::kind`] for the category.
 /// `Display` renders `"<kind>: <message>"` in lowercase without a trailing
