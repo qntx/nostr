@@ -20,11 +20,11 @@ docs/*
 !docs/index.mdx
 !docs/meta.json
 
-# Rust / wasm artifacts (built by scripts/build-wasm.sh, not committed)
+# Rust / wasm artifacts (built by packages/nostr-wasm/scripts/build.sh)
 /target
-src/wasm/generated/
-src/wasm/nk_wasm_bg.wasm
+packages/nostr-wasm/src/generated/
+packages/nostr-wasm/src/nk_wasm_bg.wasm
 
-# Hermes smoke bundle (built by scripts/hermes-smoke.ts, not committed)
+# Hermes smoke bundle (built by packages/nostr/scripts/hermes-smoke.ts)
 .hermes-smoke.iife.js
 .vitest/

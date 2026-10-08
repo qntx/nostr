@@ -43,4 +43,4 @@ JSON files share a single envelope:
   may mix case shapes (e.g. `tag-address.json` uses `op: "parse" | "format"`).
 
 `vectors/core/*.json` are generated deterministically by
-`bun scripts/parity/gen/core.ts`; never edit them by hand.
+`bun packages/nostr/scripts/parity/gen/core.ts`; never edit them by hand.

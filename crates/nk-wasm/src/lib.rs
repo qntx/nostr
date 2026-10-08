@@ -1,4 +1,4 @@
-//! SHA-256 event-id check plus BIP-340 Schnorr verify and sign for `@qntx/nostr/wasm`.
+//! SHA-256 event-id check plus BIP-340 Schnorr verify and sign for `@qntx/nostr-wasm`.
 //!
 //! Plain functions are no-panic: invalid lengths or points return `false` / [`None`].
 //! `#[wasm_bindgen]` wrappers are a thin ABI over those functions.

@@ -6,7 +6,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/util.ts", "tests": ["tests/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/util.ts",
+        "tests": ["packages/nostr/tests/core.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -16,8 +19,8 @@
       "status": "ts-only",
       "milestone": "NK1",
       "ts": {
-        "module": "src/core/util.ts",
-        "tests": ["tests/vectors/core.test.ts", "tests/core.test.ts"]
+        "module": "packages/nostr/src/core/util.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
       },
       "rust": null,
       "vectors": ["vectors/core/url-normalize.json"]
@@ -27,7 +30,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/kind.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/kind.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/kind-classify.json"]
     },
@@ -36,7 +42,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/tag.ts", "tests": ["tests/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/tag.ts",
+        "tests": ["packages/nostr/tests/core.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -45,7 +54,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/tag.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/tag.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/tag-address.json"]
     },
@@ -54,7 +66,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/event.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/event.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/event-validate.json"]
     },
@@ -63,7 +78,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/event.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/event.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/event-serialize.json"]
     },
@@ -72,7 +90,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/event.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/event.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/event-serialize.json"]
     },
@@ -81,7 +102,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/event.ts", "tests": ["tests/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/event.ts",
+        "tests": ["packages/nostr/tests/core.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -90,7 +114,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/event.ts", "tests": ["tests/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/event.ts",
+        "tests": ["packages/nostr/tests/core.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -100,8 +127,11 @@
       "status": "ts-only",
       "milestone": "NK1",
       "ts": {
-        "module": "src/core/key.ts",
-        "tests": ["tests/core.test.ts", "tests/vectors/bip340.test.ts"]
+        "module": "packages/nostr/src/core/key.ts",
+        "tests": [
+          "packages/nostr/tests/core.test.ts",
+          "packages/nostr/tests/vectors/bip340.test.ts"
+        ]
       },
       "rust": null,
       "vectors": ["vectors/bip340/official.csv"]
@@ -112,8 +142,11 @@
       "status": "ts-only",
       "milestone": "NK1",
       "ts": {
-        "module": "src/core/key.ts",
-        "tests": ["tests/vectors/core.test.ts", "tests/vectors/bip340.test.ts"]
+        "module": "packages/nostr/src/core/key.ts",
+        "tests": [
+          "packages/nostr/tests/vectors/core.test.ts",
+          "packages/nostr/tests/vectors/bip340.test.ts"
+        ]
       },
       "rust": null,
       "vectors": ["vectors/core/event-sign.json", "vectors/bip340/official.csv"]
@@ -124,8 +157,11 @@
       "status": "ts-only",
       "milestone": "NK1",
       "ts": {
-        "module": "src/core/verifier.ts",
-        "tests": ["tests/verifier.test.ts", "tests/vectors/bip340.test.ts"]
+        "module": "packages/nostr/src/core/verifier.ts",
+        "tests": [
+          "packages/nostr/tests/verifier.test.ts",
+          "packages/nostr/tests/vectors/bip340.test.ts"
+        ]
       },
       "rust": null,
       "vectors": ["vectors/bip340/official.csv"]
@@ -135,7 +171,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/filter.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/filter.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/filter-match.json"]
     },
@@ -144,7 +183,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/filter.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/filter.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/filter-limit.json"]
     },
@@ -153,7 +195,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/filter.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/filter.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/filter-canonicalize.json"]
     },
@@ -162,7 +207,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/filter.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/filter.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/filter-fingerprint.json"]
     },
@@ -171,7 +219,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/message.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/message.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/message-client.json"]
     },
@@ -180,7 +231,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/message.ts", "tests": ["tests/vectors/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/message.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/core/message-relay.json"]
     },
@@ -189,7 +243,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/message.ts", "tests": ["tests/core.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/message.ts",
+        "tests": ["packages/nostr/tests/core.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -199,8 +256,8 @@
       "status": "ts-only",
       "milestone": "NK1",
       "ts": {
-        "module": "src/core/message.ts",
-        "tests": ["tests/vectors/core.test.ts", "tests/count.test.ts"]
+        "module": "packages/nostr/src/core/message.ts",
+        "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/count.test.ts"]
       },
       "rust": null,
       "vectors": ["vectors/core/count-hll.json"]
@@ -210,7 +267,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK1",
-      "ts": { "module": "src/core/builder.ts", "tests": ["tests/builder-signer.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/core/builder.ts",
+        "tests": ["packages/nostr/tests/builder-signer.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -219,7 +279,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip19.ts", "tests": ["tests/nip19.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip19.ts",
+        "tests": ["packages/nostr/tests/nip19.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -228,7 +291,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip21.ts", "tests": ["tests/nip10-21-27.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip21.ts",
+        "tests": ["packages/nostr/tests/nip10-21-27.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -237,7 +303,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip44.ts", "tests": ["tests/nip44.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip44.ts",
+        "tests": ["packages/nostr/tests/nip44.test.ts"]
+      },
       "rust": null,
       "vectors": ["vectors/nip44/official.json"]
     },
@@ -246,7 +315,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip04.ts", "tests": ["tests/reconnect-nip04.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip04.ts",
+        "tests": ["packages/nostr/tests/reconnect-nip04.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -255,7 +327,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip49.ts", "tests": ["tests/nip49.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip49.ts",
+        "tests": ["packages/nostr/tests/nip49.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -264,7 +339,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip13.ts", "tests": ["tests/nip13.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip13.ts",
+        "tests": ["packages/nostr/tests/nip13.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -273,7 +351,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip42.ts", "tests": ["tests/nip42-65-storage.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip42.ts",
+        "tests": ["packages/nostr/tests/nip42-65-storage.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -282,7 +363,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip98.ts", "tests": ["tests/nip98.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip98.ts",
+        "tests": ["packages/nostr/tests/nip98.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -291,7 +375,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip59.ts", "tests": ["tests/nip59.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip59.ts",
+        "tests": ["packages/nostr/tests/nip59.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -300,7 +387,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK2",
-      "ts": { "module": "src/nips/nip17.ts", "tests": ["tests/nip17.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip17.ts",
+        "tests": ["packages/nostr/tests/nip17.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -309,7 +399,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/nip10.ts", "tests": ["tests/nip10-21-27.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip10.ts",
+        "tests": ["packages/nostr/tests/nip10-21-27.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -318,7 +411,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/nip27.ts", "tests": ["tests/nip27.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip27.ts",
+        "tests": ["packages/nostr/tests/nip27.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -327,7 +423,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/nip51.ts", "tests": ["tests/nip51.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip51.ts",
+        "tests": ["packages/nostr/tests/nip51.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -336,7 +435,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/nip57.ts", "tests": ["tests/nip57.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip57.ts",
+        "tests": ["packages/nostr/tests/nip57.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -345,7 +447,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/nip65.ts", "tests": ["tests/nip42-65-storage.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip65.ts",
+        "tests": ["packages/nostr/tests/nip42-65-storage.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -354,7 +459,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/nip77.ts", "tests": ["tests/nip77.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip77.ts",
+        "tests": ["packages/nostr/tests/nip77.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -363,7 +471,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/nip46.ts", "tests": ["tests/nip46.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip46.ts",
+        "tests": ["packages/nostr/tests/nip46.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -372,7 +483,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/nip05.ts", "tests": ["tests/nip05.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip05.ts",
+        "tests": ["packages/nostr/tests/nip05.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -381,7 +495,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/nip11.ts", "tests": ["tests/nip11.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/nip11.ts",
+        "tests": ["packages/nostr/tests/nip11.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -390,7 +507,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK3",
-      "ts": { "module": "src/nips/blossom.ts", "tests": ["tests/blossom.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/nips/blossom.ts",
+        "tests": ["packages/nostr/tests/blossom.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -399,7 +519,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK4",
-      "ts": { "module": "src/signer/keys.ts", "tests": ["tests/signing-backend.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/signer/keys.ts",
+        "tests": ["packages/nostr/tests/signing-backend.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -408,7 +531,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK4",
-      "ts": { "module": "src/signer/nip46.ts", "tests": ["tests/nip46.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/signer/nip46.ts",
+        "tests": ["packages/nostr/tests/nip46.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -417,7 +543,10 @@
       "tier": "C",
       "status": "n/a",
       "milestone": "NK4",
-      "ts": { "module": "src/signer/nip07.ts", "tests": ["tests/nip07.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/signer/nip07.ts",
+        "tests": ["packages/nostr/tests/nip07.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -426,7 +555,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK4",
-      "ts": { "module": "src/gossip/gossip.ts", "tests": ["tests/loaders-gossip.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/gossip/gossip.ts",
+        "tests": ["packages/nostr/tests/loaders-gossip.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -435,7 +567,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK5",
-      "ts": { "module": "src/relay/url.ts", "tests": ["tests/relay.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/relay/url.ts",
+        "tests": ["packages/nostr/tests/relay.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -444,7 +579,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK5",
-      "ts": { "module": "src/relay/relay.ts", "tests": ["tests/relay.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/relay/relay.ts",
+        "tests": ["packages/nostr/tests/relay.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -453,7 +591,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK5",
-      "ts": { "module": "src/relay/subscription.ts", "tests": ["tests/relay.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/relay/subscription.ts",
+        "tests": ["packages/nostr/tests/relay.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -463,8 +604,11 @@
       "status": "ts-only",
       "milestone": "NK5",
       "ts": {
-        "module": "src/relay/relay.ts",
-        "tests": ["tests/integration-fake-relay.test.ts", "tests/relay.test.ts"]
+        "module": "packages/nostr/src/relay/relay.ts",
+        "tests": [
+          "packages/nostr/tests/integration-fake-relay.test.ts",
+          "packages/nostr/tests/relay.test.ts"
+        ]
       },
       "rust": null,
       "vectors": []
@@ -474,7 +618,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK5",
-      "ts": { "module": "src/relay/auth.ts", "tests": ["tests/lazy-auth.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/relay/auth.ts",
+        "tests": ["packages/nostr/tests/lazy-auth.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -483,7 +630,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK5",
-      "ts": { "module": "src/relay/count-tracker.ts", "tests": ["tests/count.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/relay/count-tracker.ts",
+        "tests": ["packages/nostr/tests/count.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -492,7 +642,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK5",
-      "ts": { "module": "src/relay/neg-session.ts", "tests": ["tests/relay.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/relay/neg-session.ts",
+        "tests": ["packages/nostr/tests/relay.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -502,8 +655,11 @@
       "status": "ts-only",
       "milestone": "NK5",
       "ts": {
-        "module": "src/relay/pool.ts",
-        "tests": ["tests/fan-in.test.ts", "tests/invalid-event-policy.test.ts"]
+        "module": "packages/nostr/src/relay/pool.ts",
+        "tests": [
+          "packages/nostr/tests/fan-in.test.ts",
+          "packages/nostr/tests/invalid-event-policy.test.ts"
+        ]
       },
       "rust": null,
       "vectors": []
@@ -514,8 +670,11 @@
       "status": "ts-only",
       "milestone": "NK5",
       "ts": {
-        "module": "src/testing/relay-core.ts",
-        "tests": ["tests/testing.test.ts", "tests/integration-fake-relay.test.ts"]
+        "module": "packages/nostr/src/testing/relay-core.ts",
+        "tests": [
+          "packages/nostr/tests/testing.test.ts",
+          "packages/nostr/tests/integration-fake-relay.test.ts"
+        ]
       },
       "rust": null,
       "vectors": []
@@ -526,8 +685,8 @@
       "status": "ts-only",
       "milestone": "NK6",
       "ts": {
-        "module": "src/storage/memory.ts",
-        "tests": ["tests/event-store-conformance.test.ts"]
+        "module": "packages/nostr/src/storage/memory.ts",
+        "tests": ["packages/nostr/tests/event-store-conformance.test.ts"]
       },
       "rust": null,
       "vectors": []
@@ -537,7 +696,10 @@
       "tier": "A",
       "status": "ts-only",
       "milestone": "NK6",
-      "ts": { "module": "src/storage/sqlite.ts", "tests": ["tests/sqlite-store.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/storage/sqlite.ts",
+        "tests": ["packages/nostr/tests/sqlite-store.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -547,8 +709,8 @@
       "status": "n/a",
       "milestone": "NK6",
       "ts": {
-        "module": "src/storage/indexeddb.ts",
-        "tests": ["tests/indexeddb-store.test.ts"]
+        "module": "packages/nostr/src/storage/indexeddb.ts",
+        "tests": ["packages/nostr/tests/indexeddb-store.test.ts"]
       },
       "rust": null,
       "vectors": []
@@ -558,7 +720,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK6",
-      "ts": { "module": "src/store/reactive.ts", "tests": ["tests/reactive-store.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/store/reactive.ts",
+        "tests": ["packages/nostr/tests/reactive-store.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -567,7 +732,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK7",
-      "ts": { "module": "src/loaders/replaceable.ts", "tests": ["tests/event-loader.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/loaders/replaceable.ts",
+        "tests": ["packages/nostr/tests/event-loader.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -576,7 +744,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK7",
-      "ts": { "module": "src/loaders/event.ts", "tests": ["tests/event-loader.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/loaders/event.ts",
+        "tests": ["packages/nostr/tests/event-loader.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -585,7 +756,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK7",
-      "ts": { "module": "src/loaders/profile.ts", "tests": ["tests/loaders-gossip.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/loaders/profile.ts",
+        "tests": ["packages/nostr/tests/loaders-gossip.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -594,7 +768,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK7",
-      "ts": { "module": "src/loaders/lists.ts", "tests": ["tests/loaders-gossip.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/loaders/lists.ts",
+        "tests": ["packages/nostr/tests/loaders-gossip.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -603,7 +780,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK7",
-      "ts": { "module": "src/loaders/outbox.ts", "tests": ["tests/outbox.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/loaders/outbox.ts",
+        "tests": ["packages/nostr/tests/outbox.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -612,7 +792,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK8",
-      "ts": { "module": "src/client/client.ts", "tests": ["tests/client.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/client/client.ts",
+        "tests": ["packages/nostr/tests/client.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -621,7 +804,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK8",
-      "ts": { "module": "src/client/dm.ts", "tests": ["tests/client-nip17.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/client/dm.ts",
+        "tests": ["packages/nostr/tests/client-nip17.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -630,7 +816,10 @@
       "tier": "B",
       "status": "ts-only",
       "milestone": "NK8",
-      "ts": { "module": "src/client/sync.ts", "tests": ["tests/client.test.ts"] },
+      "ts": {
+        "module": "packages/nostr/src/client/sync.ts",
+        "tests": ["packages/nostr/tests/client.test.ts"]
+      },
       "rust": null,
       "vectors": []
     },
@@ -640,8 +829,12 @@
       "status": "ts-only",
       "milestone": "NK1",
       "ts": {
-        "module": "src/wasm/load.ts",
-        "tests": ["wasm-tests/verify.ts", "wasm-tests/sign.ts", "wasm-tests/node-load.ts"]
+        "module": "packages/nostr-wasm/src/load.ts",
+        "tests": [
+          "packages/nostr-wasm/tests/verify.test.ts",
+          "packages/nostr-wasm/tests/sign.test.ts",
+          "packages/nostr-wasm/tests/node-load.test.ts"
+        ]
       },
       "rust": null,
       "vectors": []
@@ -651,7 +844,10 @@
       "tier": "C",
       "status": "n/a",
       "milestone": "NK1",
-      "ts": { "module": "src/wasm/load.ts", "tests": ["wasm-tests/node-load.ts"] },
+      "ts": {
+        "module": "packages/nostr-wasm/src/load.ts",
+        "tests": ["packages/nostr-wasm/tests/node-load.test.ts"]
+      },
       "rust": null,
       "vectors": []
     }

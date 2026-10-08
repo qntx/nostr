@@ -1,11 +1,6 @@
-<!-- markdownlint-disable MD033 MD041 -->
-
 # nostr
 
-Nostr protocol implementation and SDK. One repo, two languages:
-
-- `@qntx/nostr` — layered TypeScript library: events, keys, filters, signers, relays, storage, gossip, and a `Client` facade in one ESM package.
-- `nk-*` — Rust crates mirroring the TypeScript layers (`crates/`), starting with `nk-core`.
+Nostr protocol implementation and SDK.
 
 Changes are tracked in [CHANGELOG.md](CHANGELOG.md); layering rules and invariants for contributors live in [AGENTS.md](AGENTS.md).
 

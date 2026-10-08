@@ -15,5 +15,5 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["scripts", "vite.config.ts", "bump.config.ts"]
+  "include": ["src", "tests", "bench", "scripts", "vite.config.ts"]
 }

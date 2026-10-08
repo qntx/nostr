@@ -5,9 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-A `vX.Y.Z` tag runs `publish.yml`: Ubuntu `build:wasm`, then `npm publish --provenance`. `pack:local` stays JS-only.
+A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and `packages/nostr-wasm` via npm trusted publishing (OIDC).
 
 ## [Unreleased]
+
+### Changed
+
+- **Breaking:** the WASM acceleration layer moved out of `@qntx/nostr` into a dedicated `@qntx/nostr-wasm` package — replace `import { loadNostrWasm } from "@qntx/nostr/wasm"` with `import { loadNostrWasm } from "@qntx/nostr-wasm"`. `@qntx/nostr` no longer ships a `.wasm` file and no longer needs a Rust toolchain to build or publish. `WasmPoisonedError` stays exported from `@qntx/nostr/core`.
+- The TypeScript side is now a `packages/*` monorepo: `@qntx/nostr` at `packages/nostr`, `@qntx/nostr-wasm` at `packages/nostr-wasm`; versioning stays lockstep across both packages and the Cargo workspace.
 
 ## [0.9.0] - 2026-10-03
 

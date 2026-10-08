@@ -18,8 +18,8 @@ jobs:
     uses: qntx/workflows/.github/workflows/ci-bun.yml@v2
     permissions:
       contents: read
-    # bun run build → vp pack (no Rust)
-    # bun test → tests/**/*.test.ts only (wasm-tests/*.ts is not *.test.ts)
+    # bun run build → vp run -r build (no Rust)
+    # bun run test → vp run -r test + repo-level scripts/*.test.ts
 
   wasm:
     uses: qntx/workflows/.github/workflows/ci-wasm.yml@v2
@@ -27,6 +27,11 @@ jobs:
       contents: read
     with:
       package-manager: bun
+      # The workspace root owns Cargo.lock and node_modules.
+      working-directory: packages/nostr-wasm
+      install-directory: .
+      cargo-directory: .
+      dist-export: .
       bench: true
       # Rust gates live in the rust/rust-minimal jobs.
       rust-checks: false
