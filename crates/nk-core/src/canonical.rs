@@ -10,7 +10,7 @@ use alloc::string::String;
 
 use sha2::{Digest, Sha256};
 
-use crate::event::UnsignedEvent;
+use crate::event::{Event, UnsignedEvent};
 
 /// Output target for canonical serialization.
 pub(crate) trait Sink {
@@ -121,6 +121,18 @@ fn push_tag(tag: &crate::tag::Tag, out: &mut impl Sink) {
     out.push_char(']');
 }
 
+/// Writes a tag list as a JSON array of string arrays.
+pub(crate) fn push_tags(tags: &crate::tag::Tags, out: &mut impl Sink) {
+    out.push_char('[');
+    for (i, tag) in tags.iter().enumerate() {
+        if i > 0 {
+            out.push_char(',');
+        }
+        push_tag(tag, out);
+    }
+    out.push_char(']');
+}
+
 /// Writes the canonical event serialization.
 pub(crate) fn write_event(event: &UnsignedEvent, out: &mut impl Sink) {
     out.push_str("[0,\"");
@@ -130,14 +142,29 @@ pub(crate) fn write_event(event: &UnsignedEvent, out: &mut impl Sink) {
     out.push_char(',');
     push_u64(u64::from(event.kind().as_u16()), out);
     out.push_char(',');
-    out.push_char('[');
-    for (i, tag) in event.tags().iter().enumerate() {
-        if i > 0 {
-            out.push_char(',');
-        }
-        push_tag(tag, out);
-    }
-    out.push_str("],");
+    push_tags(event.tags(), out);
+    out.push_char(',');
     push_json_string(event.content(), out);
     out.push_char(']');
+}
+
+/// Writes the signed event wire object — `JSON.stringify(event)` in
+/// field order `id`, `pubkey`, `created_at`, `kind`, `tags`,
+/// `content`, `sig` (NIP-18 repost content).
+pub(crate) fn write_signed(event: &Event, out: &mut impl Sink) {
+    out.push_str("{\"id\":\"");
+    push_hex(event.id().as_bytes(), out);
+    out.push_str("\",\"pubkey\":\"");
+    push_hex(event.pubkey().as_bytes(), out);
+    out.push_str("\",\"created_at\":");
+    push_u64(event.created_at().as_secs(), out);
+    out.push_str(",\"kind\":");
+    push_u64(u64::from(event.kind().as_u16()), out);
+    out.push_str(",\"tags\":");
+    push_tags(event.tags(), out);
+    out.push_str(",\"content\":");
+    push_json_string(event.content(), out);
+    out.push_str(",\"sig\":\"");
+    push_hex(event.sig().as_bytes(), out);
+    out.push_str("\"}");
 }

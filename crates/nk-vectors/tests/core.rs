@@ -15,8 +15,9 @@
 )]
 
 use nk_core::{
-    ErrorKind, Event, EventAddress, EventId, Filter, Keys, Kind, KindClass, PublicKey, RelayUrl,
-    SecretKey, UnsignedEvent, fingerprint,
+    DeletionTarget, ErrorKind, Event, EventAddress, EventBuilder, EventId, Filter, Keys, Kind,
+    KindClass, ProfileMetadata, PublicKey, RelayUrl, SecretKey, Tag, Timestamp, UnsignedEvent,
+    fingerprint,
 };
 use serde::Deserialize;
 
@@ -557,4 +558,186 @@ fn quoted(input: &str) -> String {
     out.push_str(input);
     out.push('"');
     out
+}
+
+const BUILDER: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/builder.json"
+));
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum DeletionTargetCase {
+    Id(String),
+    Object { id: String, kind: Option<u16> },
+    Address { address: String },
+}
+
+#[derive(Debug, Deserialize)]
+struct BuilderCase {
+    op: String,
+    content: Option<String>,
+    kind: Option<u16>,
+    tags: Option<Vec<Vec<String>>>,
+    meta: Option<ProfileMetadata>,
+    pubkeys: Option<Vec<String>>,
+    targets: Option<Vec<DeletionTargetCase>>,
+    reason: Option<String>,
+    target: Option<Event>,
+    relay: Option<String>,
+    p_pubkey: Option<String>,
+    #[serde(rename = "unsignedJson")]
+    unsigned_json: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BuilderVector {
+    cases: Vec<BuilderCase>,
+}
+
+#[allow(
+    clippy::panic_in_result_fn,
+    reason = "fixture-shape violations are generator bugs, not case results"
+)]
+fn build_case(case: &BuilderCase, index: usize) -> nk_core::Result<EventBuilder> {
+    match case.op.as_str() {
+        "text_note" => Ok(EventBuilder::text_note(
+            case.content.clone().unwrap_or_default(),
+        )),
+        "new" => {
+            let tags = case
+                .tags
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|items| {
+                    Tag::new(items)
+                        .unwrap_or_else(|_| panic!("case {index}: tag must be non-empty"))
+                });
+            Ok(EventBuilder::new(
+                Kind::new(case.kind.unwrap_or_default()),
+                case.content.clone().unwrap_or_default(),
+            )
+            .tags(tags))
+        }
+        "metadata" => Ok(EventBuilder::metadata(
+            case.meta
+                .as_ref()
+                .unwrap_or_else(|| panic!("case {index}: meta missing")),
+        )),
+        "contacts" => Ok(EventBuilder::contacts(
+            case.pubkeys.clone().unwrap_or_default().iter().map(|hex| {
+                PublicKey::from_hex(hex)
+                    .unwrap_or_else(|_| panic!("case {index}: pubkey {hex:?} must parse"))
+            }),
+        )),
+        "deletion" => {
+            let targets = case
+                .targets
+                .iter()
+                .flatten()
+                .map(|target| match target {
+                    DeletionTargetCase::Id(id) => DeletionTarget::Event {
+                        id: EventId::from_hex(id)
+                            .unwrap_or_else(|_| panic!("case {index}: id {id:?} must parse")),
+                        kind: None,
+                    },
+                    DeletionTargetCase::Object { id, kind } => DeletionTarget::Event {
+                        id: EventId::from_hex(id)
+                            .unwrap_or_else(|_| panic!("case {index}: id {id:?} must parse")),
+                        kind: kind.map(Kind::new),
+                    },
+                    DeletionTargetCase::Address { address } => {
+                        DeletionTarget::Address(address.parse::<EventAddress>().unwrap_or_else(
+                            |_| panic!("case {index}: address {address:?} must parse"),
+                        ))
+                    }
+                })
+                .collect::<Vec<_>>();
+            Ok(EventBuilder::deletion(
+                targets,
+                case.reason.clone().unwrap_or_default(),
+            ))
+        }
+        "reaction" => {
+            let target = case
+                .target
+                .as_ref()
+                .unwrap_or_else(|| panic!("case {index}: target missing"));
+            let hint = case.relay.as_deref().map(|raw| {
+                RelayUrl::parse(raw)
+                    .unwrap_or_else(|_| panic!("case {index}: relay {raw:?} must parse"))
+            });
+            EventBuilder::reaction(
+                target,
+                case.content.clone().unwrap_or_else(|| "+".to_owned()),
+                hint.as_ref(),
+            )
+        }
+        "repost" => {
+            let target = case
+                .target
+                .as_ref()
+                .unwrap_or_else(|| panic!("case {index}: target missing"));
+            let hint = RelayUrl::parse(
+                case.relay
+                    .as_deref()
+                    .unwrap_or_else(|| panic!("case {index}: relay missing")),
+            )
+            .unwrap_or_else(|_| panic!("case {index}: relay must parse"));
+            EventBuilder::repost(target, &hint)
+        }
+        "generic_repost" => {
+            let target = case
+                .target
+                .as_ref()
+                .unwrap_or_else(|| panic!("case {index}: target missing"));
+            let hint = RelayUrl::parse(
+                case.relay
+                    .as_deref()
+                    .unwrap_or_else(|| panic!("case {index}: relay missing")),
+            )
+            .unwrap_or_else(|_| panic!("case {index}: relay must parse"));
+            let p_pubkey = case.p_pubkey.as_deref().map(|hex| {
+                PublicKey::from_hex(hex)
+                    .unwrap_or_else(|_| panic!("case {index}: p_pubkey must parse"))
+            });
+            EventBuilder::generic_repost(target, &hint, p_pubkey)
+        }
+        op => panic!("case {index}: unknown op {op:?}"),
+    }
+}
+
+#[test]
+fn builder() {
+    let vector: BuilderVector = serde_json::from_str(BUILDER).expect("builder.json must parse");
+    assert!(!vector.cases.is_empty(), "builder.json has no cases");
+    let pubkey =
+        PublicKey::from_hex("90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23")
+            .expect("builder pubkey must parse");
+    let created_at = Timestamp::from_secs(1_700_000_000);
+    for (index, case) in vector.cases.iter().enumerate() {
+        match (build_case(case, index), &case.error) {
+            (Ok(builder), None) => {
+                let unsigned = builder.build_at(pubkey, created_at);
+                let wire = serde_json::to_string(&unsigned).expect("unsigned serializes");
+                assert_eq!(
+                    wire.as_str(),
+                    case.unsigned_json
+                        .as_deref()
+                        .unwrap_or_else(|| panic!("case {index}: unsignedJson missing")),
+                    "case {index}: unsigned wire JSON mismatch"
+                );
+            }
+            (Err(error), Some(class)) => {
+                assert_eq!(class.as_str(), "EventValidationError", "case {index}");
+                assert_eq!(error.kind(), ErrorKind::EventValidation, "case {index}");
+            }
+            (Ok(_), Some(class)) => {
+                panic!("case {index}: expected {class}, built successfully")
+            }
+            (Err(error), None) => panic!("case {index}: unexpected error {error:?}"),
+        }
+    }
 }

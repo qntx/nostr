@@ -5,6 +5,7 @@ import type { Keys, SecretKeyInput } from "./key.ts";
 import { Kind, isAddressableKind, isReplaceableKind } from "./kind.ts";
 import { Tag, formatEventAddress, getDTag, parseEventAddress } from "./tag.ts";
 import { normalizeURL, nowSeconds } from "./util.ts";
+import type { Mutable } from "./util.ts";
 
 /** NIP-18 e third entry MUST be a relay URL; empty string is not one. */
 function requireRelayUrl(relayHint: string | undefined): string {
@@ -27,6 +28,19 @@ export type ProfileMetadata = {
   readonly lud16?: string | undefined;
 };
 
+/** ProfileMetadata keys in declaration order (NIP-01 kind 0 content). */
+const PROFILE_METADATA_KEYS = [
+  "name",
+  "display_name",
+  "about",
+  "picture",
+  "banner",
+  "website",
+  "nip05",
+  "lud06",
+  "lud16",
+] as const satisfies ReadonlyArray<keyof ProfileMetadata>;
+
 /**
  * Fluent builder for event templates. Decouples intent (kind/content/tags) from signing (Keys /
  * NostrSigner).
@@ -47,7 +61,17 @@ export class EventBuilder {
   }
 
   static metadata(meta: ProfileMetadata): EventBuilder {
-    return new EventBuilder(Kind.Metadata, JSON.stringify(meta));
+    // Emit keys in the ProfileMetadata declaration order so the content is
+    // stable regardless of the caller's object insertion order (NIP-01; the
+    // Rust EventBuilder::metadata matches byte-for-byte).
+    const ordered: Mutable<ProfileMetadata> = {};
+    for (const key of PROFILE_METADATA_KEYS) {
+      const value = meta[key];
+      if (value !== undefined) {
+        ordered[key] = value;
+      }
+    }
+    return new EventBuilder(Kind.Metadata, JSON.stringify(ordered));
   }
 
   static contacts(pubkeys: ReadonlyArray<string>): EventBuilder {

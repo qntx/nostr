@@ -10,6 +10,8 @@ import { join } from "node:path";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
+import { EventBuilder } from "../../../src/core/builder.ts";
+import type { ProfileMetadata } from "../../../src/core/builder.ts";
 import { serializeEvent, getEventHash } from "../../../src/core/event.ts";
 import type { Event, UnsignedEvent } from "../../../src/core/event.ts";
 import {
@@ -699,8 +701,188 @@ const hexCases = hexInputs.map((c) => {
     : { op: c.op, input: c.input, output };
 });
 
+// --- core.builder --------------------------------------------------------
+// Every constructor is frozen at a fixed pubkey/created_at; outputs are the
+// UnsignedEvent wire JSON (Rust serde field order: pubkey, created_at, kind,
+// tags, content).
+const BUILD_PK = PK;
+const BUILD_AT = 1_700_000_000;
+const BUILD_RELAY = "wss://r.example/nostr";
+
+function unsignedJson(u: UnsignedEvent): string {
+  return JSON.stringify({
+    pubkey: u.pubkey,
+    created_at: u.created_at,
+    kind: u.kind,
+    tags: u.tags,
+    content: u.content,
+  });
+}
+
+const builderTargets = {
+  kind1: sign(
+    { pubkey: SK_PK, created_at: 1, kind: 1, tags: [["t", "nostr"]], content: 'esc " \\ \n 😀' },
+    SK,
+    AUX,
+  ),
+  protectedKind1: sign(
+    { pubkey: SK_PK, created_at: 1, kind: 1, tags: [["-"]], content: "p" },
+    SK,
+    AUX,
+  ),
+  kind0: sign(
+    {
+      pubkey: SK_PK,
+      created_at: 1,
+      kind: 0,
+      tags: [],
+      content: JSON.stringify({ name: "alice" }),
+    },
+    SK,
+    AUX,
+  ),
+  kind20: sign({ pubkey: SK_PK, created_at: 1, kind: 20, tags: [], content: "img" }, SK, AUX),
+  protectedKind20: sign(
+    { pubkey: SK_PK, created_at: 1, kind: 20, tags: [["-"]], content: "secret" },
+    SK,
+    AUX,
+  ),
+  addressable: sign(
+    { pubkey: SK_PK, created_at: 1, kind: 34235, tags: [["d", "ep1"]], content: "v" },
+    SK,
+    AUX,
+  ),
+  addressableNoD: sign(
+    { pubkey: SK_PK, created_at: 1, kind: 34235, tags: [], content: "v" },
+    SK,
+    AUX,
+  ),
+};
+
+type BuilderInput =
+  | { op: "text_note"; content: string }
+  | { op: "new"; kind: number; content: string; tags: string[][] }
+  | { op: "metadata"; meta: ProfileMetadata }
+  | { op: "contacts"; pubkeys: string[] }
+  | {
+      op: "deletion";
+      reason: string;
+      targets: ReadonlyArray<string | { id: string; kind?: number } | { address: string }>;
+    }
+  | { op: "reaction"; target: Event; content: string; relay?: string }
+  | { op: "repost"; target: Event; relay: string }
+  | { op: "generic_repost"; target: Event; relay: string; p_pubkey?: string };
+
+const builderInputs: BuilderInput[] = [
+  { op: "text_note", content: "hello nostr" },
+  { op: "text_note", content: `${ALL_CONTROLS}"\\😀` },
+  {
+    op: "new",
+    kind: 42,
+    content: "chained",
+    tags: [
+      ["t", "nostr"],
+      ["e", "ab".repeat(32)],
+    ],
+  },
+  {
+    op: "metadata",
+    meta: { name: "alice", about: "dev 😀", nip05: "a@b.example", website: "https://a.example" },
+  },
+  // Shuffled input order still emits declaration order.
+  {
+    op: "metadata",
+    meta: { lud16: "x@y", name: "shuffled", about: "z", display_name: "D" },
+  },
+  { op: "metadata", meta: {} },
+  { op: "contacts", pubkeys: [PK.toUpperCase(), SK_PK] },
+  {
+    op: "deletion",
+    reason: "spam",
+    targets: [
+      "cd".repeat(32).toUpperCase(),
+      { id: "ab".repeat(32), kind: 1 },
+      { address: `30023:${PK}:d1` },
+      { id: "ef".repeat(32) },
+      { id: "ab".repeat(32), kind: 1 },
+      { address: `0:${SK_PK}:` },
+    ],
+  },
+  { op: "reaction", target: builderTargets.kind1, content: "+" },
+  { op: "reaction", target: builderTargets.kind1, content: "🔥", relay: BUILD_RELAY },
+  { op: "reaction", target: builderTargets.addressable, content: "+" },
+  { op: "reaction", target: builderTargets.addressable, content: "+", relay: BUILD_RELAY },
+  { op: "reaction", target: builderTargets.addressableNoD, content: "+" },
+  { op: "reaction", target: builderTargets.kind0, content: "+" },
+  { op: "repost", target: builderTargets.kind1, relay: BUILD_RELAY },
+  { op: "repost", target: builderTargets.protectedKind1, relay: BUILD_RELAY },
+  { op: "repost", target: builderTargets.kind20, relay: BUILD_RELAY },
+  { op: "generic_repost", target: builderTargets.kind20, relay: BUILD_RELAY },
+  { op: "generic_repost", target: builderTargets.kind0, relay: BUILD_RELAY },
+  { op: "generic_repost", target: builderTargets.addressable, relay: BUILD_RELAY },
+  { op: "generic_repost", target: builderTargets.addressableNoD, relay: BUILD_RELAY },
+  { op: "generic_repost", target: builderTargets.protectedKind20, relay: BUILD_RELAY },
+  {
+    op: "generic_repost",
+    target: builderTargets.kind20,
+    relay: BUILD_RELAY,
+    p_pubkey: "11".repeat(32),
+  },
+  { op: "generic_repost", target: builderTargets.kind1, relay: BUILD_RELAY },
+];
+
+const builderCases = builderInputs.map((input) => {
+  try {
+    let builder: EventBuilder;
+    switch (input.op) {
+      case "text_note":
+        builder = EventBuilder.textNote(input.content);
+        break;
+      case "new":
+        builder = new EventBuilder(input.kind, input.content);
+        builder.tags(input.tags);
+        break;
+      case "metadata":
+        builder = EventBuilder.metadata(input.meta);
+        break;
+      case "contacts":
+        builder = EventBuilder.contacts(input.pubkeys);
+        break;
+      case "deletion":
+        builder = EventBuilder.deletion(input.targets, input.reason);
+        break;
+      case "reaction":
+        builder = EventBuilder.reaction(
+          input.target,
+          input.content,
+          input.relay === undefined ? undefined : { relayHint: input.relay },
+        );
+        break;
+      case "repost":
+        builder = EventBuilder.repost(input.target, { relayHint: input.relay });
+        break;
+      case "generic_repost": {
+        const opts: { relayHint: string; pPubkey?: string } = { relayHint: input.relay };
+        if (input.p_pubkey !== undefined) {
+          opts.pPubkey = input.p_pubkey;
+        }
+        builder = EventBuilder.genericRepost(input.target, opts);
+        break;
+      }
+    }
+    return Object.assign(input, {
+      unsignedJson: unsignedJson(builder.createdAt(BUILD_AT).buildUnsigned(BUILD_PK)),
+    });
+  } catch (error) {
+    return Object.assign(input, {
+      error: error instanceof Error ? error.constructor.name : "Error",
+    });
+  }
+});
+
 emit("core.kind.classify", "kind-classify.json", kinds);
 emit("core.tag.address", "tag-address.json", [...addressCases, ...addressFormats]);
 emit("core.hex", "hex.json", hexCases);
 emit("core.url.normalize", "url-normalize.json", normalizeUrlCases);
+emit("core.builder", "builder.json", builderCases);
 console.log("wrote vectors/core/*.json");

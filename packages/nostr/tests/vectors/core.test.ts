@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { describe, expect, test } from "vite-plus/test";
 
-import { HexError, MessageError, UrlError } from "../../src/core/error.ts";
+import { EventBuilder } from "../../src/core/builder.ts";
+import type { ProfileMetadata } from "../../src/core/builder.ts";
+import { EventValidationError, HexError, MessageError, UrlError } from "../../src/core/error.ts";
 import { serializeEvent, getEventHash, validateSignedEvent } from "../../src/core/event.ts";
 import type { Event, UnsignedEvent } from "../../src/core/event.ts";
 import {
@@ -107,6 +109,72 @@ const hexCases = readVector<{
   output?: string;
   error?: string;
 }>("hex.json");
+
+type BuilderCase = {
+  op: string;
+  content?: string;
+  kind?: number;
+  tags?: string[][];
+  meta?: ProfileMetadata;
+  pubkeys?: string[];
+  targets?: ReadonlyArray<string | { id: string; kind?: number } | { address: string }>;
+  reason?: string;
+  target?: Event;
+  relay?: string;
+  p_pubkey?: string;
+  unsignedJson?: string;
+  error?: string;
+};
+const builderCases = readVector<BuilderCase>("builder.json");
+const builderValid = builderCases.filter((c) => c.error === undefined);
+const builderInvalid = builderCases.filter((c) => c.error !== undefined);
+
+const BUILD_PK = "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23";
+
+function runBuilderCase(c: BuilderCase): EventBuilder {
+  switch (c.op) {
+    case "text_note":
+      return EventBuilder.textNote(c.content ?? "");
+    case "new": {
+      const builder = new EventBuilder(c.kind ?? 0, c.content ?? "");
+      builder.tags(c.tags ?? []);
+      return builder;
+    }
+    case "metadata":
+      return EventBuilder.metadata(c.meta ?? {});
+    case "contacts":
+      return EventBuilder.contacts(c.pubkeys ?? []);
+    case "deletion":
+      return EventBuilder.deletion(c.targets ?? [], c.reason ?? "");
+    case "reaction":
+      if (c.target === undefined) {
+        throw new Error("reaction case missing target");
+      }
+      return EventBuilder.reaction(
+        c.target,
+        c.content ?? "+",
+        c.relay === undefined ? undefined : { relayHint: c.relay },
+      );
+    case "repost":
+      if (c.target === undefined) {
+        throw new Error("repost case missing target");
+      }
+      return EventBuilder.repost(c.target, { relayHint: c.relay ?? "" });
+    case "generic_repost":
+      if (c.target === undefined) {
+        throw new Error("generic_repost case missing target");
+      }
+      if (c.p_pubkey === undefined) {
+        return EventBuilder.genericRepost(c.target, { relayHint: c.relay ?? "" });
+      }
+      return EventBuilder.genericRepost(c.target, {
+        relayHint: c.relay ?? "",
+        pPubkey: c.p_pubkey,
+      });
+    default:
+      throw new Error(`unknown builder op ${c.op}`);
+  }
+}
 
 // Derived vectors kept out of the test bodies: `??`, `||` and ternaries inside
 // `test` callbacks are rejected by the no-conditional-in-test lint.
@@ -270,6 +338,27 @@ describe("vectors/core", () => {
     for (const c of normalizeUrlInvalid) {
       expect(c.error).toBe("UrlError");
       expect(() => normalizeURL(c.input)).toThrow(UrlError);
+    }
+  });
+
+  test("builder: unsigned wire JSON", () => {
+    for (const c of builderValid) {
+      const unsigned = runBuilderCase(c).createdAt(1_700_000_000).buildUnsigned(BUILD_PK);
+      const wire = JSON.stringify({
+        pubkey: unsigned.pubkey,
+        created_at: unsigned.created_at,
+        kind: unsigned.kind,
+        tags: unsigned.tags,
+        content: unsigned.content,
+      });
+      expect(wire).toBe(c.unsignedJson);
+    }
+  });
+
+  test("builder: invalid inputs raise EventValidationError", () => {
+    for (const c of builderInvalid) {
+      expect(c.error).toBe("EventValidationError");
+      expect(() => runBuilderCase(c)).toThrow(EventValidationError);
     }
   });
 });
