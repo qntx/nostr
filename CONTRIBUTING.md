@@ -76,7 +76,14 @@ and `docs/meta.json` stubs.
 npm and crates versions are lockstep. `bump.config.ts` bumps both
 `packages/*/package.json` files and `Cargo.toml` together and runs
 `bun scripts/sync-versions.ts` (internal `@qntx/*` ranges) and
-`cargo update --workspace`; `release` runs `bumpp` (commit + tag + push).
+`cargo update --workspace`; `release` runs `bumpp`, which pushes a
+`release/vX.Y.Z` branch and opens the release pull request via `gh`.
+After the release PR merges, tag the merge commit and push the tag:
+
+```sh
+git tag -a vX.Y.Z <merge-sha> -m vX.Y.Z && git push origin vX.Y.Z
+```
+
 `scripts/check-version.ts` fails the lint gate when they drift.
 
 ## License
