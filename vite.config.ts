@@ -110,12 +110,7 @@ const config: UserConfig = defineConfig({
   },
   lint: merge(lintConfig, {
     // merge() concatenates arrays onto the preset's own ignorePatterns.
-    ignorePatterns: [
-      "3rdparty/**",
-      "target/**",
-      "packages/nostr-wasm/src/generated/**",
-      "packages/nostr/.hermes-smoke.iife.js",
-    ],
+    ignorePatterns: ["3rdparty/**", "target/**", "packages/nostr/.hermes-smoke.iife.js"],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
     rules: {
       "vite-plus/prefer-vite-plus-imports": "error",
@@ -230,7 +225,6 @@ const config: UserConfig = defineConfig({
       ...fmt.ignorePatterns,
       "3rdparty/**",
       "target/**",
-      "packages/nostr-wasm/src/generated/**",
       "bun.lock",
       // TOML is owned by taplo (.taplo.toml, align_entries); generated vectors
       // stay byte-frozen.

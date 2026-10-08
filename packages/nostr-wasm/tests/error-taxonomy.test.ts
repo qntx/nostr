@@ -68,7 +68,7 @@ describe("wasm HTTP load", () => {
   });
 
   test("fetch 404 throws CryptoError", async () => {
-    const href = "https://wasm-404.qntx.test/nk_wasm_bg.wasm";
+    const href = "https://wasm-404.qntx.test/nk_wasm.wasm";
     const prev = globalThis.fetch;
     let fetchCalls = 0;
     Reflect.set(
@@ -89,7 +89,7 @@ describe("wasm HTTP load", () => {
   });
 
   test("browser loader rejects file: URLs", async () => {
-    const href = "file:///wasm-404.qntx.test/nk_wasm_bg.wasm";
+    const href = "file:///wasm-404.qntx.test/nk_wasm.wasm";
     const err = await captureError(loadNostrWasmBrowser({ module: new URL(href) }));
     expect(err).toBeInstanceOf(CryptoError);
     expect((err as CryptoError).message).toBe(`cannot fetch wasm from ${href}`);

@@ -33,6 +33,8 @@ declare namespace WebAssembly {
     importObject?: Imports,
   ): Promise<{ module: Module; instance: Instance }>;
 
+  function instantiate(module: Module, importObject?: Imports): Promise<Instance>;
+
   function compile(bytes: ArrayBufferLike | ArrayBufferView): Promise<Module>;
 }
 

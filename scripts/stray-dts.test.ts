@@ -8,8 +8,7 @@ const root = join(import.meta.dirname, "..");
 
 // Package sources are .ts; a stray .d.ts under src/ means a tool (tsgo dts with
 // a `paths` mapping, a bare tsc emit) wrote declarations next to the sibling
-// sources. Tracked declarations (wasm shims) are allowed; the gitignored
-// wasm-bindgen `generated/` directories are excluded.
+// sources. Tracked declarations (wasm shims) are allowed.
 describe("no stray declarations in packages/*/src", () => {
   test("every .d.ts under packages/*/src is git-tracked", () => {
     const tracked = new Set(
@@ -26,7 +25,6 @@ describe("no stray declarations in packages/*/src", () => {
         }).map((file) => join("packages", entry.name, "src", file)),
       )
       .filter((file) => file.endsWith(".d.ts"))
-      .filter((file) => !file.includes("generated/"))
       .filter((file) => !tracked.has(file));
     expect(strays).toStrictEqual([]);
   });

@@ -54,7 +54,7 @@ function wasmUrlAsset() {
       const file = id.slice("\0wasm-url:".length);
       const ref = this.emitFile({
         type: "asset",
-        fileName: "nk_wasm_bg.wasm",
+        fileName: "nk_wasm.wasm",
         source: new Uint8Array(readFileSync(file)),
       });
       return `export default import.meta.ROLLUP_FILE_URL_${ref};`;

@@ -1,81 +1,33 @@
-/** Wasm-bindgen 0.2.122 bundler-produced exports used by interned TS glue. */
+import { CryptoError } from "@qntx/nostr/core";
+
+/**
+ * Byte-ABI version 1 surface exported by `nk_wasm.wasm` (`crates/nk-wasm/src/abi.rs`). All inputs
+ * are caller-written regions of a single scratch buffer; status codes are 0 ok/verified, 1
+ * verification failed, 2 invalid input.
+ */
 export type CryptoWasmExports = {
   memory: WebAssembly.Memory;
-  verify: (
-    idPtr: number,
-    idLen: number,
-    pkPtr: number,
-    pkLen: number,
-    sigPtr: number,
-    sigLen: number,
-  ) => number;
-  verify_serialized: (
-    serPtr: number,
+  nk_abi_version: () => number;
+  nk_buffer: (len: number) => number;
+  nk_verify: (id: number, pubkey: number, sig: number) => number;
+  nk_verify_serialized: (
+    ser: number,
     serLen: number,
-    idPtr: number,
-    idLen: number,
-    pkPtr: number,
-    pkLen: number,
-    sigPtr: number,
-    sigLen: number,
+    id: number,
+    pubkey: number,
+    sig: number,
   ) => number;
-  sign: (
-    retptr: number,
-    idPtr: number,
-    idLen: number,
-    skPtr: number,
-    skLen: number,
-    auxPtr: number,
-    auxLen: number,
-  ) => void;
-  public_key: (retptr: number, skPtr: number, skLen: number) => void;
-  /** 0.2.122 name for `__wbindgen_malloc(size, align)`. */
-  __wbindgen_export: (size: number, align: number) => number;
-  /** 0.2.122 name for `__wbindgen_free(ptr, size, align)` after malloc claimed `__wbindgen_export`. */
-  __wbindgen_export2: (ptr: number, size: number, align: number) => void;
-  __wbindgen_add_to_stack_pointer: (delta: number) => number;
-  __wbindgen_start?: () => void;
+  nk_sign: (id: number, seckey: number, aux: number, outSig: number) => number;
+  nk_public_key: (seckey: number, outPubkey: number) => number;
 };
 
-/** Imports 0.2.122 may request. Instantiation fails if anything else appears. */
-export const ALLOWED_WASM_IMPORTS: ReadonlyArray<{ module: string; name: string }> = [
-  { module: "wbg", name: "__wbindgen_throw" },
-  { module: "./nk_wasm_bg.js", name: "__wbindgen_throw" },
-];
+export const NK_ABI_VERSION = 1;
 
-const utf8 = new TextDecoder();
-
-function decodeUtf8(memory: WebAssembly.Memory, ptr: number, len: number): string {
-  return utf8.decode(new Uint8Array(memory.buffer, ptr, len));
-}
-
-function makeWbgImports(holder: { exports?: CryptoWasmExports }): WebAssembly.Imports {
-  const throwRuntime = (ptr: number, len: number): never => {
-    const mem = holder.exports?.memory;
-    const msg = mem ? decodeUtf8(mem, ptr, len) : "wasm panic";
-    throw new WebAssembly.RuntimeError(msg);
-  };
-  const wbg = {
-    __wbindgen_throw: throwRuntime,
-  };
-  return {
-    wbg,
-    "./nk_wasm_bg.js": wbg,
-  };
-}
-
-/** Fail if the module imports anything outside {@link ALLOWED_WASM_IMPORTS}. */
-export function assertAllowedWasmImports(mod: WebAssembly.Module): void {
-  const allowed = new Set(ALLOWED_WASM_IMPORTS.map((item) => `${item.module}\0${item.name}`));
-  for (const imp of WebAssembly.Module.imports(mod)) {
-    if (imp.kind !== "function") {
-      throw new TypeError(`unexpected wasm import kind ${imp.kind}: ${imp.module}.${imp.name}`);
-    }
-    if (!allowed.has(`${imp.module}\0${imp.name}`)) {
-      throw new TypeError(`unexpected wasm import ${imp.module}.${imp.name}`);
-    }
-  }
-}
+const ID_LEN = 32;
+const PUBKEY_LEN = 32;
+const SIG_LEN = 64;
+const SECKEY_LEN = 32;
+const AUX_LEN = 32;
 
 function requireMemory(value: WebAssembly.ExportValue | undefined): WebAssembly.Memory {
   if (!(value instanceof WebAssembly.Memory)) {
@@ -97,31 +49,31 @@ function requireFn<T extends (...args: number[]) => unknown>(
 }
 
 function asExports(raw: WebAssembly.Exports): CryptoWasmExports {
-  const exports: CryptoWasmExports = {
+  return {
     memory: requireMemory(raw["memory"]),
-    verify: requireFn(raw["verify"], "verify"),
-    verify_serialized: requireFn(raw["verify_serialized"], "verify_serialized"),
-    sign: requireFn(raw["sign"], "sign"),
-    public_key: requireFn(raw["public_key"], "public_key"),
-    __wbindgen_export: requireFn(raw["__wbindgen_export"], "__wbindgen_export"),
-    __wbindgen_export2: requireFn(raw["__wbindgen_export2"], "__wbindgen_export2"),
-    __wbindgen_add_to_stack_pointer: requireFn(
-      raw["__wbindgen_add_to_stack_pointer"],
-      "__wbindgen_add_to_stack_pointer",
-    ),
+    nk_abi_version: requireFn(raw["nk_abi_version"], "nk_abi_version"),
+    nk_buffer: requireFn(raw["nk_buffer"], "nk_buffer"),
+    nk_verify: requireFn(raw["nk_verify"], "nk_verify"),
+    nk_verify_serialized: requireFn(raw["nk_verify_serialized"], "nk_verify_serialized"),
+    nk_sign: requireFn(raw["nk_sign"], "nk_sign"),
+    nk_public_key: requireFn(raw["nk_public_key"], "nk_public_key"),
   };
-  const start = raw["__wbindgen_start"];
-  if (typeof start === "function") {
-    exports.__wbindgen_start = requireFn<() => void>(start, "__wbindgen_start");
-  }
-  return exports;
 }
 
-function passBytes(exports: CryptoWasmExports, bytes: Uint8Array): { ptr: number; len: number } {
-  const len = bytes.length;
-  const ptr = exports.__wbindgen_export(len, 1) >>> 0;
-  new Uint8Array(exports.memory.buffer, ptr, len).set(bytes);
-  return { ptr, len };
+/**
+ * Reserve `total` bytes in the wasm scratch region and return a fresh view. The view is taken after
+ * `nk_buffer` ran, so a growth inside it cannot leave a detached view in the caller's hands.
+ */
+function scratch(exports: CryptoWasmExports, total: number): { ptr: number; view: Uint8Array } {
+  const ptr = exports.nk_buffer(total) >>> 0;
+  return { ptr, view: new Uint8Array(exports.memory.buffer, ptr, total) };
+}
+
+/** Copies `len` scratch bytes out; the view is re-acquired after the call. */
+function takeOut(exports: CryptoWasmExports, ptr: number, len: number): Uint8Array {
+  const out = new Uint8Array(len);
+  out.set(new Uint8Array(exports.memory.buffer, ptr, len));
+  return out;
 }
 
 export function wasmVerify(
@@ -130,10 +82,14 @@ export function wasmVerify(
   pubkey: Uint8Array,
   sig: Uint8Array,
 ): boolean {
-  const idP = passBytes(exports, id);
-  const pkP = passBytes(exports, pubkey);
-  const sigP = passBytes(exports, sig);
-  return exports.verify(idP.ptr, idP.len, pkP.ptr, pkP.len, sigP.ptr, sigP.len) !== 0;
+  if (id.length !== ID_LEN || pubkey.length !== PUBKEY_LEN || sig.length !== SIG_LEN) {
+    return false; // fixed-size ABI: a wrong-length input simply cannot verify
+  }
+  const { ptr, view } = scratch(exports, ID_LEN + PUBKEY_LEN + SIG_LEN);
+  view.set(id, 0);
+  view.set(pubkey, ID_LEN);
+  view.set(sig, ID_LEN + PUBKEY_LEN);
+  return exports.nk_verify(ptr, ptr + ID_LEN, ptr + ID_LEN + PUBKEY_LEN) === 0;
 }
 
 export function wasmVerifySerialized(
@@ -143,77 +99,81 @@ export function wasmVerifySerialized(
   pubkey: Uint8Array,
   sig: Uint8Array,
 ): boolean {
-  const serP = passBytes(exports, serialized);
-  const idP = passBytes(exports, id);
-  const pkP = passBytes(exports, pubkey);
-  const sigP = passBytes(exports, sig);
+  if (id.length !== ID_LEN || pubkey.length !== PUBKEY_LEN || sig.length !== SIG_LEN) {
+    return false;
+  }
+  const serLen = serialized.length;
+  const { ptr, view } = scratch(exports, serLen + ID_LEN + PUBKEY_LEN + SIG_LEN);
+  view.set(serialized, 0);
+  view.set(id, serLen);
+  view.set(pubkey, serLen + ID_LEN);
+  view.set(sig, serLen + ID_LEN + PUBKEY_LEN);
   return (
-    exports.verify_serialized(
-      serP.ptr,
-      serP.len,
-      idP.ptr,
-      idP.len,
-      pkP.ptr,
-      pkP.len,
-      sigP.ptr,
-      sigP.len,
-    ) !== 0
+    exports.nk_verify_serialized(
+      ptr,
+      serLen,
+      ptr + serLen,
+      ptr + serLen + ID_LEN,
+      ptr + serLen + ID_LEN + PUBKEY_LEN,
+    ) === 0
   );
 }
 
-function takeBytes(exports: CryptoWasmExports, ptr: number, len: number): Uint8Array {
-  const out = new Uint8Array(len);
-  if (len > 0) {
-    out.set(new Uint8Array(exports.memory.buffer, ptr, len));
-    exports.__wbindgen_export2(ptr, len, 1);
-  }
-  return out;
-}
-
-function callReturningBytes(
-  exports: CryptoWasmExports,
-  invoke: (retptr: number) => void,
-): Uint8Array {
-  const retptr = exports.__wbindgen_add_to_stack_pointer(-16);
-  try {
-    invoke(retptr);
-    const view = new DataView(exports.memory.buffer);
-    const ptr = view.getUint32(retptr, true);
-    const len = view.getUint32(retptr + 4, true);
-    return takeBytes(exports, ptr, len);
-  } finally {
-    exports.__wbindgen_add_to_stack_pointer(16);
-  }
-}
-
+/**
+ * Returns the 64-byte signature, or an empty array on failure (invalid input). The Rust side zeroes
+ * the scratch copy of `seckey` before returning.
+ */
 export function wasmSign(
   exports: CryptoWasmExports,
   id: Uint8Array,
   seckey: Uint8Array,
   aux: Uint8Array,
 ): Uint8Array {
-  const idP = passBytes(exports, id);
-  const skP = passBytes(exports, seckey);
-  const auxP = passBytes(exports, aux);
-  return callReturningBytes(exports, (retptr) => {
-    exports.sign(retptr, idP.ptr, idP.len, skP.ptr, skP.len, auxP.ptr, auxP.len);
-  });
+  const outOffset = ID_LEN + SECKEY_LEN + AUX_LEN;
+  const { ptr, view } = scratch(exports, outOffset + SIG_LEN);
+  view.set(id, 0);
+  view.set(seckey, ID_LEN);
+  view.set(aux, ID_LEN + SECKEY_LEN);
+  const status = exports.nk_sign(ptr, ptr + ID_LEN, ptr + ID_LEN + SECKEY_LEN, ptr + outOffset);
+  if (status !== 0) {
+    return new Uint8Array(0);
+  }
+  return takeOut(exports, ptr + outOffset, SIG_LEN);
 }
 
+/**
+ * Returns the 32-byte x-only public key, or an empty array on failure. The Rust side zeroes the
+ * scratch copy of `seckey` before returning.
+ */
 export function wasmPublicKey(exports: CryptoWasmExports, seckey: Uint8Array): Uint8Array {
-  const skP = passBytes(exports, seckey);
-  return callReturningBytes(exports, (retptr) => {
-    exports.public_key(retptr, skP.ptr, skP.len);
-  });
+  const { ptr, view } = scratch(exports, SECKEY_LEN + PUBKEY_LEN);
+  view.set(seckey, 0);
+  const status = exports.nk_public_key(ptr, ptr + SECKEY_LEN);
+  if (status !== 0) {
+    return new Uint8Array(0);
+  }
+  return takeOut(exports, ptr + SECKEY_LEN, PUBKEY_LEN);
 }
 
+/**
+ * Compile and instantiate `nk_wasm.wasm`. The module must declare no imports and must implement ABI
+ * version {@link NK_ABI_VERSION} — a mismatch means the artifact predates or postdates this loader
+ * and instantiation fails.
+ */
 export async function instantiateCryptoWasm(
   bytes: ArrayBuffer | ArrayBufferView,
 ): Promise<CryptoWasmExports> {
-  const holder: { exports?: CryptoWasmExports } = {};
-  const { module, instance } = await WebAssembly.instantiate(bytes, makeWbgImports(holder));
-  assertAllowedWasmImports(module);
-  holder.exports = asExports(instance.exports);
-  holder.exports.__wbindgen_start?.();
-  return holder.exports;
+  const module = await WebAssembly.compile(bytes);
+  const imports = WebAssembly.Module.imports(module);
+  if (imports.length > 0) {
+    throw new TypeError(`nk_wasm module must not import anything, got ${imports.length} imports`);
+  }
+  const instance = await WebAssembly.instantiate(module, {});
+  const version = requireFn(instance.exports["nk_abi_version"], "nk_abi_version")();
+  if (version !== NK_ABI_VERSION) {
+    throw new CryptoError(
+      `unsupported nk_wasm ABI version ${String(version)}, expected ${NK_ABI_VERSION}`,
+    );
+  }
+  return asExports(instance.exports);
 }

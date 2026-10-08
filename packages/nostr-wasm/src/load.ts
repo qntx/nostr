@@ -5,7 +5,7 @@ export { WasmPoisonedError } from "./adapter.ts";
 export type { LoadNostrWasmOptions, NostrWasm } from "./instance.ts";
 
 async function defaultWasmHref(): Promise<string> {
-  const mod = await import("./nk_wasm_bg.wasm?url");
+  const mod = await import("./nk_wasm.wasm?url");
   return mod.default;
 }
 

@@ -895,18 +895,26 @@
     {
       "id": "wasm.backend",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK1",
       "ts": {
         "module": "packages/nostr-wasm/src/load.ts",
         "tests": [
+          "packages/nostr-wasm/tests/abi.test.ts",
           "packages/nostr-wasm/tests/verify.test.ts",
           "packages/nostr-wasm/tests/sign.test.ts",
           "packages/nostr-wasm/tests/node-load.test.ts"
         ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-wasm/src/abi.rs",
+        "tests": ["crates/nk-wasm/tests/abi.rs"]
+      },
+      "vectors": [
+        "vectors/bip340/official.csv",
+        "vectors/core/event-sign.json",
+        "vectors/core/event-serialize.json"
+      ]
     },
     {
       "id": "wasm.loader",

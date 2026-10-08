@@ -33,6 +33,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml`, which publishes both `packages/nostr` and
 - `encodeClientMessage` canonicalizes the filters of `REQ`, `COUNT`, and `NEG-OPEN` before encoding; `parseClientMessage` validates wire filters per NIP-01 (64-hex `ids`/`authors` normalized lowercase, `kinds` in 0..=65535, non-negative `since`/`until`/`limit`, string `search` and `#<letter>` value arrays), lowercases `ids`/`authors`/`#e`/`#p`, and drops multi-letter `#` keys — malformed filters raise `MessageError` (NIP-01).
 - `EventBuilder.metadata` emits `ProfileMetadata` keys in declaration order (name, display_name, about, picture, banner, website, nip05, lud06, lud16) regardless of the input object's key order, matching `nk-core`'s `ProfileMetadata` serialization (NIP-01).
 - Rust toolchain and workspace MSRV (`rust-version`) moved to 1.99.
+- `@qntx/nostr-wasm` now ships `nk_wasm.wasm` built on `nk-core` with its own versioned byte ABI (`nk_*` exports, zero imports, single scratch buffer); `wasm-bindgen` and its CLI are gone. The public API (`loadNostrWasm`, `NostrWasm`, `WasmPoisonedError`, sync call model, browser export) is unchanged.
 
 ### Fixed
 
