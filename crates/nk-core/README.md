@@ -4,6 +4,19 @@ The leaf crate of the `nk-*` workspace: the platform-neutral (`no_std` + `alloc`
 
 Current scope: the opaque `Error`/`ErrorKind`, protocol limits, `Timestamp`, `RelayUrl` (WHATWG relay-URL normalization, byte-identical to the TS `normalizeURL`), `Kind`/`KindClass`, `PublicKey`, `Tag`/`Tags`/`EventAddress`, the `UnsignedEvent`/`Event` model with canonical NIP-01 serialization and SHA-256 event ids, `SecretKey`/`Keys` (BIP-340 Schnorr signing over `secp256k1`), `Signature::verify`/`Event::verify`, `SingleLetterTag`/`Filter`/`fingerprint` (NIP-01 filter matching, limits, and canonical serialization), `EventBuilder` with `ProfileMetadata`/`DeletionTarget` (NIP-09 deletion, NIP-18 reposts, NIP-25 reactions — tag shapes byte-identical to the TS `EventBuilder`), and `SubscriptionId`/`CountHll`/`CountResult`/`ClientMessage`/`RelayMessage` (NIP-01/NIP-42/NIP-45/NIP-77 wire messages, byte-identical encoding and strict parsing).
 
+## Usage
+
+```rust,ignore
+use nk_core::{EventBuilder, Keys, SecretKey};
+
+let keys = Keys::new(SecretKey::generate()); // os-rng feature
+let event = keys.sign_event(EventBuilder::text_note("hello nostr").build_at(
+    keys.public_key(),
+    1_700_000_000.into(),
+))?;
+event.verify()?;
+```
+
 ## Features
 
 | feature  | default | effect                                                                   |

@@ -58,7 +58,7 @@ jobs:
       # Per-package -p runs: Cargo feature unification across members must
       # not mask the minimal configuration. Extend the list per new crate.
       packages: nk-core nk-vectors nk-wasm
-      # package-check stays off until nk-core makes the workspace publishable.
+      package-check: true
 
   portable:
     uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
