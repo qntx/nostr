@@ -11,6 +11,7 @@
 //! | `clock`  | yes     | wall-clock helpers where a NIP needs them                   |
 //! | `os-rng` | yes     | OS entropy where a NIP needs it                             |
 //! | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) |
+//! | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`)                   |
 //!
 //! ```
 //! use nk_nips::ErrorKind;
@@ -29,6 +30,8 @@ pub mod error;
 
 #[cfg(feature = "nip19")]
 pub mod nip19;
+#[cfg(feature = "nip21")]
+pub mod nip21;
 
 pub use error::{Error, ErrorKind, Result};
 
@@ -48,4 +51,6 @@ const _: () = {
         assert_send_sync::<nip19::EventPointer>();
         assert_send_sync::<nip19::ProfilePointer>();
     }
+    #[cfg(feature = "nip21")]
+    assert_send_sync::<nip21::NostrUri>();
 };

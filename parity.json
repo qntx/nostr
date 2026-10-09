@@ -364,14 +364,20 @@
     {
       "id": "nip21.uri",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip21.ts",
-        "tests": ["packages/nostr/tests/nip10-21-27.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip10-21-27.test.ts",
+          "packages/nostr/tests/vectors/nip21.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip21.rs",
+        "tests": ["crates/nk-vectors/tests/nip21.rs"]
+      },
+      "vectors": ["vectors/nip21/uri.json"]
     },
     {
       "id": "nip44.v2",

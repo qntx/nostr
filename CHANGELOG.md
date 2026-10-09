@@ -13,6 +13,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 
 - `DelegatedSigner`: a `NostrSigner` backed by a `NostrKeyOperations` key holder (`getPublicKey`, `signEventId`, optional `sharedSecret`) for wallets, NFC cards, and secure stores that never expose the secret. Signatures are BIP-340-verified before returning; NIP-44 conversation keys are derived via the new `nip44.getConversationKeyFromSharedSecret` and cached per peer; NIP-04 uses the new `nip04.encryptWithSharedSecret`/`nip04.decryptWithSharedSecret` with no cache; shared secrets are wiped after each use, and `dispose()` zero-fills the cache and makes later calls reject with `SignerDisposedError` (#223).
 - `KeysSigner.dispose()`: zeroizes the wrapped secret key and every cached NIP-44 conversation key; all later signer calls reject with the new `SignerDisposedError`. `KeysSigner` also now wipes the per-call secret-key copies used by NIP-04 and conversation-key derivation (#211).
+- `nk-nips` `nip21` feature: `NostrUri` (`parse`/`as_str`/`entity`/`into_entity`, `Display`, `FromStr`) and `is_nostr_uri` — the NIP-21 `nostr:` URI scheme over the NIP-19 codec, verified against the new `vectors/nip21/uri.json` cases by both languages. NIP-19 also gains a seeded differential stream (`nip19.codec` in `scripts/parity/diff.ts` and `nk-vectors`' diff replay) covering random pointers, corrupted bech32, and mutated inputs.
 
 ### Changed
 

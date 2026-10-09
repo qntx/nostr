@@ -27,8 +27,13 @@
 
 use std::path::PathBuf;
 
+mod common;
+
 use nk_core::{ClientMessage, Event, Filter, RelayMessage, UnsignedEvent};
+use nk_nips::nip19;
 use serde::Deserialize;
+
+use common::{EntityJson, encode_entity, entity_json};
 
 /// The generator's meta line; `seed` is reported on every mismatch.
 #[derive(Deserialize)]
@@ -226,6 +231,32 @@ fn diff_message_relay() {
             RelayMessage::parse(input)
                 .ok()
                 .map(|message| json_str(message.encode()))
+        });
+    }
+}
+
+/// One `nip19.codec` input: `{"op":"encode","entity":…}` or
+/// `{"op":"decode","input":"…"}`.
+#[derive(Deserialize)]
+struct Nip19Case {
+    op: String,
+    entity: Option<EntityJson>,
+    input: Option<String>,
+}
+
+#[test]
+#[ignore = "requires NK_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
+fn diff_nip19_codec() {
+    let fixture = load("nip19.codec");
+    for case in &fixture.cases {
+        check("nip19.codec", fixture.seed, case, |input| {
+            let req: Nip19Case = serde_json::from_str(input).ok()?;
+            if req.op == "encode" {
+                return encode_entity(&req.entity?).ok().map(json_str);
+            }
+            nip19::decode(&req.input?).ok().map(|entity| {
+                serde_json::to_value(entity_json(&entity)).expect("entity serializes")
+            })
         });
     }
 }

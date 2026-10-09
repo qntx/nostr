@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "capability": "nip21.uri",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.11.0"
+  },
+  "cases": [
+    {
+      "input": "nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "is_uri": true,
+      "value": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "uri": "nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "decoded": {
+        "type": "npub",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      }
+    },
+    {
+      "input": "nostr:note1qkl5eru9a8rutr20tdw9e5dp25k558vm3fxh3kwy7k54hg7y7zjqtu9knk",
+      "is_uri": true,
+      "value": "note1qkl5eru9a8rutr20tdw9e5dp25k558vm3fxh3kwy7k54hg7y7zjqtu9knk",
+      "uri": "nostr:note1qkl5eru9a8rutr20tdw9e5dp25k558vm3fxh3kwy7k54hg7y7zjqtu9knk",
+      "decoded": {
+        "type": "note",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4"
+      }
+    },
+    {
+      "input": "nostr:nprofile1qythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqyghwumn8ghj7u3wujlghcup3qhx5uqqyqalp33lewf5vdq847t6te0wvnags0gs0mu72kz8938tn24wlfze6scv56p",
+      "is_uri": true,
+      "value": "nprofile1qythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqyghwumn8ghj7u3wujlghcup3qhx5uqqyqalp33lewf5vdq847t6te0wvnags0gs0mu72kz8938tn24wlfze6scv56p",
+      "uri": "nostr:nprofile1qythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqyghwumn8ghj7u3wujlghcup3qhx5uqqyqalp33lewf5vdq847t6te0wvnags0gs0mu72kz8938tn24wlfze6scv56p",
+      "decoded": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://relay.example.com",
+          "wss://r.例え.jp"
+        ]
+      }
+    },
+    {
+      "input": "nostr:nevent1qvzqqqqqqypzpy9gpkmwk22tn64skn5dm737leexx3vvutg82eklfek93p50amerqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqqsqt06v37z7n3793484khzu6xs42t22rkdc5ntcm8z0t22m50z0pfq0cxe56",
+      "is_uri": true,
+      "value": "nevent1qvzqqqqqqypzpy9gpkmwk22tn64skn5dm737leexx3vvutg82eklfek93p50amerqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqqsqt06v37z7n3793484khzu6xs42t22rkdc5ntcm8z0t22m50z0pfq0cxe56",
+      "uri": "nostr:nevent1qvzqqqqqqypzpy9gpkmwk22tn64skn5dm737leexx3vvutg82eklfek93p50amerqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqqsqt06v37z7n3793484khzu6xs42t22rkdc5ntcm8z0t22m50z0pfq0cxe56",
+      "decoded": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [
+          "wss://relay.example.com"
+        ],
+        "author": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "kind": 1
+      }
+    },
+    {
+      "input": "nostr:naddr1qvzqqqqqqqpzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqyv8wumn8ghj7u3wujlghcup3qhx5up0uwpercuzhyqqwurjdanxjmr9fpmhqf",
+      "is_uri": true,
+      "value": "naddr1qvzqqqqqqqpzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqyv8wumn8ghj7u3wujlghcup3qhx5up0uwpercuzhyqqwurjdanxjmr9fpmhqf",
+      "uri": "nostr:naddr1qvzqqqqqqqpzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqyv8wumn8ghj7u3wujlghcup3qhx5up0uwpercuzhyqqwurjdanxjmr9fpmhqf",
+      "decoded": {
+        "type": "naddr",
+        "identifier": "profile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 0,
+        "relays": [
+          "wss://r.例え.jp/パス"
+        ]
+      }
+    },
+    {
+      "input": "NOSTR:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "is_uri": true,
+      "value": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "uri": "nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "decoded": {
+        "type": "npub",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      }
+    },
+    {
+      "input": "NoStR:NPUB180CVV07TJDRRGPA0J7J7TMNYL2YR6YR7L8J4S3EVF6U64TH6GKWSYJH6W6",
+      "is_uri": true,
+      "value": "NPUB180CVV07TJDRRGPA0J7J7TMNYL2YR6YR7L8J4S3EVF6U64TH6GKWSYJH6W6",
+      "uri": "nostr:NPUB180CVV07TJDRRGPA0J7J7TMNYL2YR6YR7L8J4S3EVF6U64TH6GKWSYJH6W6",
+      "decoded": {
+        "type": "npub",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      }
+    },
+    {
+      "input": "nostr:NPUB180CVV07TJDRRGPA0J7J7TMNYL2YR6YR7L8J4S3EVF6U64TH6GKWSYJH6W6",
+      "is_uri": true,
+      "value": "NPUB180CVV07TJDRRGPA0J7J7TMNYL2YR6YR7L8J4S3EVF6U64TH6GKWSYJH6W6",
+      "uri": "nostr:NPUB180CVV07TJDRRGPA0J7J7TMNYL2YR6YR7L8J4S3EVF6U64TH6GKWSYJH6W6",
+      "decoded": {
+        "type": "npub",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      }
+    },
+    {
+      "input": "nostr:nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:NSEC1VL029MGPSPEDVA04G90VLTKH6FVH240ZQTV9K0T9AF8935KE9LAQSNLFE5",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:npub",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "https:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6!",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6 ",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:npub1b80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6b",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6⚡",
+      "is_uri": false,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:nPub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "is_uri": true,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6wx",
+      "is_uri": true,
+      "error": "Nip21Error"
+    },
+    {
+      "input": "nostr:nfoo1qkl5eru9a8rutr20tdw9e5dp25k558vm3fxh3kwy7k54hg7y7zjqtu9knk",
+      "is_uri": true,
+      "error": "Nip21Error"
+    }
+  ]
+}

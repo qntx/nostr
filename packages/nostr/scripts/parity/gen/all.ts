@@ -5,4 +5,5 @@
 
 await import("./core.ts");
 await import("./nip19.ts");
+await import("./nip21.ts");
 await import("./nip49.ts");

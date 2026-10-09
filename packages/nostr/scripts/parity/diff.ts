@@ -11,10 +11,13 @@
 // crates/nk-vectors/tests/diff.rs replays them through nk-core (NK_DIFF_DIR).
 //
 // Capabilities: core.event.serialize, core.event.id, core.filter.match,
-// core.filter.canonicalize, core.message.client, core.message.relay.
+// core.filter.canonicalize, core.message.client, core.message.relay,
+// nip19.codec.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 
 import { getEventHash, serializeEvent } from "../../src/core/event.ts";
 import type { Event, UnsignedEvent } from "../../src/core/event.ts";
@@ -26,6 +29,10 @@ import {
   parseClientMessage,
   parseRelayMessage,
 } from "../../src/core/message.ts";
+import { hexToBytes } from "../../src/core/util.ts";
+import { decode as nip19Decode } from "../../src/nips/nip19.ts";
+import type { EntityJson } from "./gen/entities.ts";
+import { encodeEntity, toJson } from "./gen/entities.ts";
 
 /* oxlint-disable no-bitwise -- a PRNG is bit arithmetic by design */
 function mulberry32(seed: number): () => number {
@@ -511,6 +518,156 @@ function matchInputText(): string {
   return `{"filter":${filter},"event":${event}}`;
 }
 
+// NIP-19 stream. `input` is `{"op":"encode","entity":<EntityJson>}` or
+// `{"op":"decode","input":"<bech32>"}`; outputs are the encoded string or the
+// normalized entity JSON on success, the error class on failure.
+
+// A 64-char hex field for pointers: mostly canonical, occasionally corrupted.
+// Any-case hex stays in the domain — TS `assertHex32` lowercases first and
+// nk-core's `from_hex` accepts mixed case, so both accept the same inputs.
+function randHex32(corrupt: boolean): string {
+  if (corrupt) {
+    return pick([randHex(62), randHex(66), `${randHex(60)}zzzz`, randString(64), ""]);
+  }
+  return randHex(64, { anyCase: chance(0.2) });
+}
+
+// A 32-byte secret for `nsec` encode entities. Well-formed secrets must be
+// valid scalars: nk-core's `SecretKey` type cannot express an invalid scalar,
+// so encode-side scalar rejection has no TS counterpart. Invalid scalars are
+// exercised on the decode side instead (both decoders reject them).
+function randSecretHex(): string {
+  if (chance(0.12)) {
+    return pick([randHex(62), randHex(66), `${randHex(60)}zz`]);
+  }
+  let hex = randHex(64);
+  while (!secp256k1.utils.isValidSecretKey(hexToBytes(hex))) {
+    hex = randHex(64);
+  }
+  return hex;
+}
+
+function randNip19Kind(corrupt: boolean): number {
+  if (corrupt) {
+    return pick([0, 1, 4, 42, 30023, 65534, 65535, 65536, 65537, 70000, int(131_072)]);
+  }
+  return pick([0, 1, 4, 42, 30023, 65534, 65535, int(65536)]);
+}
+
+function randRelays(corrupt: boolean): string[] {
+  const relays: string[] = [];
+  const count = int(4);
+  for (let i = 0; i < count; i++) {
+    if (corrupt && chance(0.06)) {
+      relays.push("r".repeat(200 + int(80))); // over 255 bytes: encode error
+      continue;
+    }
+    relays.push(
+      pick([
+        "wss://relay.example.com",
+        "wss://nostr.例え.jp",
+        `wss://${randString(16)}`,
+        randString(20),
+        "",
+      ]),
+    );
+  }
+  return relays;
+}
+
+// `encode` inputs may carry corrupt hex fields, out-of-range kinds, and
+// over-length relays. `forDecode` entities are always encodable in TS (their
+// strings feed decode inputs); an nsec secret may still hold an invalid
+// scalar — encodable, and both decoders reject it.
+function randEntityJson(corrupt: boolean): EntityJson {
+  switch (int(6)) {
+    case 0:
+      return {
+        type: "nprofile",
+        pubkey: randHex32(corrupt && chance(0.15)),
+        relays: randRelays(corrupt),
+      };
+    case 1:
+      return {
+        type: "nevent",
+        id: randHex32(corrupt && chance(0.15)),
+        relays: randRelays(corrupt),
+        ...(chance(0.7) ? { author: chance(0.08) ? "" : randHex32(corrupt && chance(0.15)) } : {}),
+        ...(chance(0.7) ? { kind: randNip19Kind(corrupt) } : {}),
+      };
+    case 2:
+      return {
+        type: "naddr",
+        identifier: randString(24),
+        pubkey: randHex32(corrupt && chance(0.15)),
+        kind: randNip19Kind(corrupt),
+        relays: randRelays(corrupt),
+      };
+    case 3:
+      return {
+        type: "nsec",
+        secret: corrupt ? randSecretHex() : randHex(64, { anyCase: chance(0.3) }),
+      };
+    case 4:
+      return { type: "npub", pubkey: randHex32(corrupt && chance(0.15)) };
+    default:
+      return { type: "note", id: randHex32(corrupt && chance(0.15)) };
+  }
+}
+
+const BECH32_CHARS = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+
+// Mutations that may keep the string valid (all-uppercase is legal bech32) —
+// both decoders must agree on whatever comes out.
+function mutateBech32(s: string): string {
+  switch (int(10)) {
+    case 0:
+      return s.toUpperCase();
+    case 1: {
+      const i = int(s.length);
+      const c = s.charAt(i);
+      const flipped = c.toLowerCase() === c ? c.toUpperCase() : c.toLowerCase();
+      return s.slice(0, i) + flipped + s.slice(i + 1);
+    }
+    case 2: {
+      const i = int(s.length);
+      return s.slice(0, i) + BECH32_CHARS.charAt(int(32)) + s.slice(i + 1);
+    }
+    case 3:
+      return s.slice(0, Math.max(1, s.length - 1 - int(8)));
+    case 4:
+      return s + BECH32_CHARS.charAt(int(32));
+    case 5:
+      return s + pick(["!", " ", "b", "i", "o", "1", "😀"]);
+    case 6:
+      return `nostr:${s}`;
+    case 7:
+      return `nfoo${s.slice(s.indexOf("1"))}`;
+    case 8:
+      return s.slice(1);
+    default:
+      return `${s} `;
+  }
+}
+
+function nip19CaseText(): string {
+  const roll = int(20);
+  if (roll < 8) {
+    return JSON.stringify({ op: "encode", entity: randEntityJson(true) });
+  }
+  if (roll < 19) {
+    const encoded = encodeEntity(randEntityJson(false));
+    return JSON.stringify({
+      op: "decode",
+      input: chance(0.45) ? mutateBech32(encoded) : encoded,
+    });
+  }
+  return JSON.stringify({
+    op: "decode",
+    input: pick([randString(24), "", `nostr:${randHex(20)}`, randHex(64)]),
+  });
+}
+
 type CaseRecord = { i: number; input: string; out?: unknown; err?: string };
 
 function capture(run: () => unknown): { out?: unknown; err?: string } {
@@ -590,6 +747,26 @@ const CAPABILITIES: ReadonlyArray<Capability> = [
         i: 0,
         input,
         ...capture(() => encodeRelayMessage(parseRelayMessage(input))),
+      };
+    },
+  },
+  {
+    name: "nip19.codec",
+    make: () => {
+      const input = nip19CaseText();
+      return {
+        i: 0,
+        input,
+        ...capture(() => {
+          const req = parseJson<{ op: string; entity?: EntityJson; input?: string }>(input);
+          if (req.op === "encode" && req.entity !== undefined) {
+            return encodeEntity(req.entity);
+          }
+          if (req.input === undefined) {
+            throw new Error("decode case without input");
+          }
+          return toJson(nip19Decode(req.input));
+        }),
       };
     },
   },

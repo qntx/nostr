@@ -83,8 +83,8 @@ jobs:
       packages: nk-core
       features: --features std,clock,os-rng
 
-  # nk-nips without std: same P-level targets as `portable`, only the nip19
-  # feature enabled so the no_std+alloc configuration is what gets checked.
+  # nk-nips without std: same P-level targets as `portable`, only the NIP
+  # features enabled so the no_std+alloc configuration is what gets checked.
   portable-nips:
     uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
     permissions:
@@ -92,12 +92,12 @@ jobs:
     with:
       targets: wasm32-unknown-unknown aarch64-linux-android x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
       packages: nk-nips
-      features: --no-default-features --features nip19
+      features: --no-default-features --features nip19,nip21
       forbid-deps: getrandom
 
-  # nk-nips' default set (std, clock, os-rng) plus nip19 on the portable-std
-  # targets; a separate job because cross calls cannot mix per-package
-  # features.
+  # nk-nips' default set (std, clock, os-rng) plus the NIP features on the
+  # portable-std targets; a separate job because cross calls cannot mix
+  # per-package features.
   portable-std-nips:
     uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
     permissions:
@@ -105,4 +105,4 @@ jobs:
     with:
       targets: aarch64-linux-android armv7-linux-androideabi x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
       packages: nk-nips
-      features: --features std,clock,os-rng,nip19
+      features: --features std,clock,os-rng,nip19,nip21
