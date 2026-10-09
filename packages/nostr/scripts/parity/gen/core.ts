@@ -282,6 +282,19 @@ const validWireEvents: Array<[string, string]> = [
   // Duplicate keys: the last value wins (ECMAScript JSON.parse semantics).
   ["dup kind 7 then 1", evText([...baseFields, ["kind", "1"]])],
   ["dup kind bad then good", evText([...evFieldPatched("kind", "99999"), ["kind", "1"]])],
+  // An invalid earlier duplicate is discarded when a later one is valid
+  // (ruling 7 lenient capture: the first value must not abort the map).
+  [
+    "dup id invalid then valid",
+    evText([...evFieldPatched("id", "123"), ["id", JSON.stringify(baseEvent.id)]]),
+  ],
+  [
+    "dup created_at invalid then valid",
+    evText([...evFieldPatched("created_at", '"x"'), ["created_at", String(baseEvent.created_at)]]),
+  ],
+  ["dup tags invalid then valid", evText([...evFieldPatched("tags", '"x"'), ["tags", "[]"]])],
+  // An escaped id cannot borrow the input; it still decodes (owned path).
+  ["id escaped hex", evPatched("id", String.raw`"${"a".repeat(63)}\u0061"`)],
   // Integer spellings normalize to plain integers.
   ["created_at 1e3", evPatched("created_at", "1e3")],
   ["created_at float .0", evPatched("created_at", "1700000000.0")],
@@ -319,6 +332,20 @@ const invalidWireEvents: Array<{ reason: string; raw: string }> = [
     reason: "tag value lone surrogate",
     raw: evPatched("tags", String.raw`[["t","x\udfff"]]`),
   },
+  // Wrong JSON types are captured per field and fail validation.
+  { reason: "id non-string", raw: evPatched("id", "123") },
+  { reason: "id object", raw: evPatched("id", "{}") },
+  { reason: "pubkey array", raw: evPatched("pubkey", "[]") },
+  { reason: "created_at array", raw: evPatched("created_at", "[]") },
+  { reason: "created_at null", raw: evPatched("created_at", "null") },
+  { reason: "kind bool", raw: evPatched("kind", "true") },
+  { reason: "tags object", raw: evPatched("tags", "{}") },
+  { reason: "tags non-array", raw: evPatched("tags", '"x"') },
+  { reason: "tags non-array element", raw: evPatched("tags", "[5]") },
+  { reason: "tags non-string element", raw: evPatched("tags", '[["e",5]]') },
+  { reason: "tags later elements drained", raw: evPatched("tags", '[[5],["a"]]') },
+  { reason: "content number", raw: evPatched("content", "123") },
+  { reason: "sig null", raw: evPatched("sig", "null") },
 ];
 
 // Events for filter matching (canonical order).
@@ -525,6 +552,23 @@ const clientMessages = [
     encoded: '["REQ","s",{"kinds":[1],"limit":100}]',
   },
   {
+    // An invalid earlier duplicate is discarded when a later one is valid.
+    raw: '["REQ","s",{"since":"x","since":5}]',
+    encoded: '["REQ","s",{"since":5}]',
+  },
+  {
+    raw: '["REQ","s",{"kinds":[{}],"kinds":[7]}]',
+    encoded: '["REQ","s",{"kinds":[7]}]',
+  },
+  {
+    raw: `["REQ","s",{"ids":[123],"ids":["${"e".repeat(64)}"]}]`,
+    encoded: `["REQ","s",{"ids":["${"e".repeat(64)}"]}]`,
+  },
+  {
+    raw: '["REQ","s",{"limit":null,"limit":3}]',
+    encoded: '["REQ","s",{"limit":3}]',
+  },
+  {
     raw: '["REQ","s",{"since":1e3,"until":2.0,"limit":-0}]',
     encoded: '["REQ","s",{"limit":0,"since":1000,"until":2}]',
   },
@@ -629,6 +673,22 @@ const invalidClientMessages = [
   '["REQ","s",{"search":1}]',
   '["REQ","s",{"#e":"x"}]',
   '["REQ","s",{"#t":[1]}]',
+  '["REQ","s",{"since":[]}]',
+  '["REQ","s",{"since":null}]',
+  '["REQ","s",{"until":{}}]',
+  '["REQ","s",{"limit":true}]',
+  '["REQ","s",{"kinds":[1,"x"]}]',
+  '["REQ","s",{"kinds":[{}]}]',
+  // Elements after the first invalid one are still drained (ruling 7).
+  '["REQ","s",{"kinds":[{},"x"]}]',
+  '["REQ","s",{"ids":[{}]}]',
+  '["REQ","s",{"ids":[123,"x"]}]',
+  '["REQ","s",{"#t":[1,"x"]}]',
+  `["REQ","s",{"ids":["${"a".repeat(63)}"]}]`,
+  '["REQ","s",{"search":[]}]',
+  // A later invalid duplicate still wins and fails the filter.
+  '["REQ","s",{"since":5,"since":"x"}]',
+  '["REQ","s",{"kinds":[7],"kinds":"x"}]',
   '["COUNT","s",{"authors":[1]}]',
   '["NEG-OPEN","s",{"limit":"x"},"aabb"]',
   '["EVENT"]',
@@ -644,9 +704,12 @@ const invalidClientMessages = [
   '["NEG-OPEN","s",{"kinds":[1]},"abc"]',
   '["NEG-OPEN","s",{"kinds":[1]},"zz"]',
   '["NEG-OPEN","s",42,"aabb"]',
+  '["NEG-OPEN","s",{"kinds":[1]},42]',
   '["NEG-MSG","s"]',
   '["NEG-MSG","s",""]',
   '["NEG-MSG","s","a"]',
+  '["NEG-MSG","s",42]',
+  '["CLOSE",42]',
   '["NEG-CLOSE"]',
   '["NEG-CLOSE","s","x"]',
   '["UNKNOWN","s"]',
@@ -665,18 +728,26 @@ const invalidRelayMessages = [
   `["EVENT",1,${JSON.stringify(baseEvent)}]`,
   '["OK","id","true",""]',
   '["OK","id",true]',
+  `["OK","${"a".repeat(64)}","yes",""]`,
+  `["OK","${"a".repeat(64)}",true,5]`,
   '["EOSE"]',
   '["EOSE","s","x"]',
+  '["EOSE",42]',
   '["CLOSED","s"]',
+  '["CLOSED","s",5]',
   '["NOTICE"]',
   '["NOTICE","a","b"]',
+  '["NOTICE",42]',
   '["AUTH"]',
+  '["AUTH",[1]]',
   '["COUNT","s",{"count":-1}]',
   '["COUNT","s",{"count":1.5}]',
   '["COUNT","s",{"count":-0.5}]',
   '["COUNT","s",{"count":1e20}]',
   '["COUNT","s","x"]',
+  '["COUNT","s",[]]',
   '["COUNT","s"]',
+  '["NEG-MSG","s",42]',
   '["NEG-MSG","s","abc"]',
   '["NEG-MSG","s",""]',
   '["NEG-ERR","s"]',

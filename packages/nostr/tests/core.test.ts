@@ -1,6 +1,7 @@
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { expect, test, describe } from "vite-plus/test";
 
+import { normalizeRelayUrls } from "../src/core/util.ts";
 import {
   Kind,
   Keys,
@@ -616,5 +617,21 @@ describe("normalizeURL", () => {
     expect(normalizeURL("http://Relay.Example")).toBe("ws://relay.example/");
     expect(normalizeURL("wss://Relay.Example/")).toBe("wss://relay.example/");
     expect(normalizeURL("Relay.Example")).toBe("wss://relay.example/");
+  });
+});
+
+describe("normalizeRelayUrls", () => {
+  test("skips empty/invalid entries and dedupes in first-seen order", () => {
+    expect(
+      normalizeRelayUrls([
+        "",
+        "wss://a.example",
+        "not a url",
+        "wss://a.example/",
+        "ftp://x",
+        "relay.example",
+        "wss://b.example/",
+      ]),
+    ).toStrictEqual(["wss://a.example/", "wss://relay.example/", "wss://b.example/"]);
   });
 });

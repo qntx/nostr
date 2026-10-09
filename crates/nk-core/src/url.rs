@@ -211,4 +211,45 @@ mod tests {
             "serde error must carry the cause"
         );
     }
+
+    #[test]
+    fn normalize_all_skips_dedupes_and_keeps_first_seen_order() {
+        // Mirrors the TS `normalizeRelayUrls` test in core.test.ts.
+        let urls = RelayUrl::normalize_all([
+            "",
+            "wss://a.example",
+            "not a url",
+            "wss://a.example/",
+            "ftp://x",
+            "relay.example",
+            "wss://b.example/",
+        ]);
+        assert_eq!(
+            urls.iter().map(RelayUrl::as_str).collect::<Vec<_>>(),
+            [
+                "wss://a.example/",
+                "wss://relay.example/",
+                "wss://b.example/"
+            ]
+        );
+        // String items work too (`AsRef<str>`).
+        assert_eq!(RelayUrl::normalize_all([String::from(" ")]), Vec::new());
+    }
+
+    #[test]
+    fn trait_glue() {
+        let url = "relay.example".parse::<RelayUrl>().expect("from_str");
+        assert_eq!(url.as_str(), "wss://relay.example/");
+        let tried = RelayUrl::try_from("relay.example").expect("try_from");
+        assert_eq!(tried, url);
+        assert_eq!(url.to_string(), "wss://relay.example/");
+        let text: &str = url.as_ref();
+        assert_eq!(text, "wss://relay.example/");
+        assert_eq!(
+            serde_json::to_string(&url).expect("ser"),
+            "\"wss://relay.example/\""
+        );
+        assert!("gopher://a.example".parse::<RelayUrl>().is_err());
+        assert!(RelayUrl::try_from("gopher://a.example").is_err());
+    }
 }

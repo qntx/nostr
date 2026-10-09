@@ -470,4 +470,17 @@ mod tests {
         let empty: EventAddress = alloc::format!("0:{PK}:").parse().unwrap();
         assert_eq!(empty.identifier(), "");
     }
+
+    #[test]
+    fn tags_glue() {
+        let mut tags = Tags::new();
+        tags.extend([Tag::hashtag("a"), Tag::hashtag("b")]);
+        let values: Vec<Option<&str>> = (&tags).into_iter().map(Tag::value).collect();
+        assert_eq!(values, [Some("a"), Some("b")]);
+        assert_eq!(tags.clone().into_iter().count(), 2);
+        let json = serde_json::to_string(&tags).unwrap();
+        assert_eq!(serde_json::from_str::<Tags>(&json).unwrap(), tags);
+        // A tag must be a non-empty string array.
+        assert!(serde_json::from_str::<Tag>("[]").is_err());
+    }
 }

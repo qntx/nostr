@@ -61,3 +61,43 @@ impl fmt::Display for Timestamp {
         self.0.fmt(f)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::panic, reason = "tests fail by panicking")]
+
+    use alloc::string::ToString;
+
+    use super::*;
+
+    #[test]
+    fn conversion_display_and_serde() {
+        let ts = Timestamp::from(1_700_000_000);
+        assert_eq!(ts.as_secs(), 1_700_000_000);
+        assert_eq!(ts.to_string(), "1700000000");
+        assert_eq!(serde_json::to_string(&ts).expect("ser"), "1700000000");
+        // Rulings 8–9: every integer spelling up to 2^53-1 parses.
+        for (raw, secs) in [
+            ("1000", 1000),
+            ("1e3", 1000),
+            ("1.0", 1),
+            ("-0", 0),
+            ("9007199254740991.0", 9_007_199_254_740_991),
+        ] {
+            assert_eq!(
+                serde_json::from_str::<Timestamp>(raw).expect(raw),
+                Timestamp::from_secs(secs),
+                "{raw}"
+            );
+        }
+        for bad in ["-1", "1.5", "9007199254740992", "\"x\"", "null"] {
+            assert!(serde_json::from_str::<Timestamp>(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "clock")]
+    fn now_is_sane() {
+        assert!(Timestamp::now().as_secs() > 1_700_000_000);
+    }
+}
