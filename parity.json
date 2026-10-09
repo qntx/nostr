@@ -495,14 +495,20 @@
     {
       "id": "nip59.wrap",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip59.ts",
-        "tests": ["packages/nostr/tests/nip59.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip59.test.ts",
+          "packages/nostr/tests/vectors/nip59.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip59.rs",
+        "tests": ["crates/nk-vectors/tests/nip59.rs"]
+      },
+      "vectors": ["vectors/nip59/codec.json"]
     },
     {
       "id": "nip17.dm",

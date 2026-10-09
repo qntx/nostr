@@ -26,6 +26,8 @@ let entity = nip19::decode(&nsec)?;
 | `nip42`  | no      | relay authentication (`auth_event`, `is_auth_required`)                               |
 | `nip44`  | no      | NIP-44 v2 payload encryption (`ConversationKey`, `encrypt`/`decrypt`)                 |
 | `nip49`  | no      | `ncryptsec` secret-key encryption (`encrypt_with`/`encrypt`/`decrypt`); needs `nip19` |
+| `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`               |
+| `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)              |
 
 Each NIP is a separate default-off feature and compiles independently. `nsec` secrets move through `SecretKey::with_secret_bytes` and decoded scratch buffers are zeroized before the key is returned.
 
