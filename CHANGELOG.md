@@ -21,6 +21,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 
 ### Changed
 
+- `nk-core`: `SecretKey::to_secret_bytes` is replaced by the scoped accessor `SecretKey::with_secret_bytes`, which hands a zeroized-on-drop copy to a closure so no unwiped secret bytes escape the crate — a pre-release API change ahead of the first crates.io tag (#209).
 - `assertSubscriptionId` counts Unicode scalar values (`[...id].length`), so astral characters count once per NIP-01's "chars" wording.
 - `parseClientMessage` and `parseRelayMessage` now validate subscription ids (1..=64 scalar values) in both directions for every message type carrying one (NIP-01).
 - `parseRelayMessage` requires the `OK` event id to be 64-char lowercase hex (NIP-01).
