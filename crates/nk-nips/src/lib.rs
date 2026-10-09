@@ -10,6 +10,7 @@
 //! | `std`    | yes     | OS facilities; base for `clock`/`os-rng`                    |
 //! | `clock`  | yes     | wall-clock helpers where a NIP needs them                   |
 //! | `os-rng` | yes     | OS entropy where a NIP needs it                             |
+//! | `nip04`  | no      | legacy encrypted DMs (`SharedSecret`, `encrypt`/`decrypt`)       |
 //! | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) |
 //! | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`)                   |
 //! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
@@ -29,6 +30,11 @@ extern crate std;
 
 pub mod error;
 
+#[cfg(any(feature = "nip04", feature = "nip44"))]
+mod ecdh;
+
+#[cfg(feature = "nip04")]
+pub mod nip04;
 #[cfg(feature = "nip19")]
 pub mod nip19;
 #[cfg(feature = "nip21")]
@@ -56,6 +62,8 @@ const _: () = {
         assert_send_sync::<nip19::EventPointer>();
         assert_send_sync::<nip19::ProfilePointer>();
     }
+    #[cfg(feature = "nip04")]
+    assert_send_sync::<nip04::SharedSecret>();
     #[cfg(feature = "nip21")]
     assert_send_sync::<nip21::NostrUri>();
     #[cfg(feature = "nip44")]

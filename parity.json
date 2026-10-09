@@ -401,14 +401,20 @@
     {
       "id": "nip04.codec",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip04.ts",
-        "tests": ["packages/nostr/tests/reconnect-nip04.test.ts"]
+        "tests": [
+          "packages/nostr/tests/reconnect-nip04.test.ts",
+          "packages/nostr/tests/vectors/nip04.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip04.rs",
+        "tests": ["crates/nk-vectors/tests/nip04.rs"]
+      },
+      "vectors": ["vectors/nip04/codec.json"]
     },
     {
       "id": "nip49.ncryptsec",

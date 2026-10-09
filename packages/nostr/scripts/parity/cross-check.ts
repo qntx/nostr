@@ -314,6 +314,50 @@ console.log(
   `nip19 codec: ${nip19Agree} agree, ${nip19Diffs} differ (N1/N2 rulings, reported not fixed)`,
 );
 
+// nip04 codec: nostr-tools uses the same noble primitives, so valid payloads
+// must decrypt identically. Failure shapes differ legitimately — nostr-tools
+// does not check the `?iv=` split (extra parts are dropped, not rejected) and
+// has no shared-secret entry point.
+type NtNip04 = {
+  decrypt: (secretKey: Uint8Array, pubkey: string, data: string) => string;
+};
+const nip04Module: unknown = await import(`${ntRoot}/nip04.ts`);
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the checkout's public API is pinned by the Nt* shapes above
+const { decrypt: ntNip04Decrypt } = nip04Module as NtNip04;
+
+type Nip04Case = {
+  sec1: string;
+  pub2: string;
+  plaintext: string;
+  payload: string;
+};
+const nip04Doc: unknown = JSON.parse(
+  readFileSync(join(import.meta.dirname, "../../../../vectors/nip04/codec.json"), "utf8"),
+);
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- generated vectors are frozen by their capability shape
+const nip04Cases = (nip04Doc as { cases: Nip04Case[] }).cases;
+let nip04Agree = 0;
+let nip04Diffs = 0;
+for (const c of nip04Cases) {
+  try {
+    const out = ntNip04Decrypt(hexToBytes(c.sec1), c.pub2, c.payload);
+    if (out === c.plaintext) {
+      nip04Agree += 1;
+    } else {
+      nip04Diffs += 1;
+      fail(
+        `nip04 decrypt: nostr-tools plaintext ${JSON.stringify(out)} != ${JSON.stringify(c.plaintext)}`,
+      );
+    }
+  } catch (error) {
+    nip04Diffs += 1;
+    fail(`nip04 decrypt: nostr-tools threw: ${String(error)}`);
+  }
+}
+console.log(
+  `nip04 codec: ${nip04Agree}/${nip04Cases.length} valid payloads agree with nostr-tools`,
+);
+
 console.log(`nostr-tools ${ntVersion} cross-check: ${failures} unexpected mismatches`);
 if (failures > 0) {
   process.exitCode = 1;

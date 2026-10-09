@@ -1,0 +1,238 @@
+{
+  "schema": 1,
+  "capability": "nip04.codec",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.11.0",
+    "cross_check": "nostr-tools 2.24.1 @7fa1ef4: 13/13 valid payloads decrypt identically; failure shapes legitimately differ (nostr-tools has no `?iv=` split check and no shared-secret entry point)"
+  },
+  "cases": [
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "000102030405060708090a0b0c0d0e0f",
+      "plaintext": "",
+      "payload": "FBcOBdVOrSZCvx8l6/hzpw==?iv=AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "plaintext": "hi",
+      "payload": "GaqpqgDySizH9H4RBmRQ2g==?iv=qqqqqqqqqqqqqqqqqqqqqg=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "000102030405060708090a0b0c0d0e0f",
+      "plaintext": "The quick brown fox jumps over the lazy dog",
+      "payload": "dC355tNVeXv6AboC+/qki0Szkh0LFJ2/Gjpn3mkYc0Y4FNWz4poYyh1TZ8FHy6sk?iv=AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "plaintext": "⚡🚀💜",
+      "payload": "SylairFazDGbp/Ofv41xYg==?iv=qqqqqqqqqqqqqqqqqqqqqg=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "000102030405060708090a0b0c0d0e0f",
+      "plaintext": "你好世界",
+      "payload": "58UKSNBwFyCO30XwT3aRRA==?iv=AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "plaintext": "\u0000\u0001\u0002\t\n",
+      "payload": "iB14oXRAEqsCnuoquGzjPw==?iv=qqqqqqqqqqqqqqqqqqqqqg=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "000102030405060708090a0b0c0d0e0f",
+      "plaintext": "aaaaaaaaaaaaaaa",
+      "payload": "MTqBPDa8ls+tvAN/JNcwKg==?iv=AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "plaintext": "aaaaaaaaaaaaaaaa",
+      "payload": "K/w8cLSXGv63G+vY2pfcDW+x7eBHvciJeGZKMmLrGUE=?iv=qqqqqqqqqqqqqqqqqqqqqg=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "000102030405060708090a0b0c0d0e0f",
+      "plaintext": "aaaaaaaaaaaaaaaaa",
+      "payload": "J++rzFvhJYrGcoDN848iwrTu0+7Bgg78DBGBgsaQAio=?iv=AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "plaintext": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "payload": "K/w8cLSXGv63G+vY2pfcDROZenEOCC1Z0Qu3SDT88cjal2Bx4nCCUAnFuVVacC/J?iv=qqqqqqqqqqqqqqqqqqqqqg=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "000102030405060708090a0b0c0d0e0f",
+      "plaintext": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "payload": "J++rzFvhJYrGcoDN848iwuE2CVdx2zeOKpV9BbzEVA8iX87AAescfpmj2dY+l8fztT1WuIoEvyVq7p6wrUR8Qw==?iv=AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "plaintext": "nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr nostr",
+      "payload": "h97d0izWAwQZNSYo1eHNcTvPYzw1NOudTqXfwrjAqHuMcJyI0gnmV/2GuZJYKcW9WUMUlPqxL9najjJXws3e5S8QiIFbondwPA9j22j2FLgyAi4hEqiuxXIj8MC975zrwY3cHMwSJKO4WZlhm9AQ2UsPdplZVuReX7ezXIp2syaROmvj2DXMSUr7T3wpAoFAIjf5iDnk4Eh4tTPrdIjYjya5O9rb13h9c7nCokMT64CRYaY3gF8/w3JJpRfZjDbzfNH0pCyL0v9ZEpSmiMc0owR7MuVOqyxiQx0gtEiTFsG8O7VOtBrYS2UmCD/jGnfJtj74lLZEXJHro2DmsGMB5TwcLBdWM7Ri/eQw7xKkAipgefb4MpyTd7Y8couyG3IWIAJKtaa9/Zbh5tZ2wo2laZBqHHAstPHCqGKfvLDc9y9U6qeGslYAet8rVwF0AlZZDnKhaUqDxr3f0I2i0aKBv8GPXlok+N38X7Li455mvOn1+8it0S0TuXQYrc4/YgfCJDAbj44ueHZCeZsJ10bBMLIRbDEG1GzIdeuCZRELaDSbTcxF/GfL/xa0yf8QAeYVx49HTBDA+7Lbv38efknySu4yi93OdsPjqERGFclMIgk1PC3mJGwERqXaRy4YzUqbJo0W5vG8BZn1zQwnZWRMwm2F45iB4uzLko7OwLYba2S1Yk3Soht2LxeF+ADnKufyU1mms0zjRcmK0HDvYuhzWKwacGy+oLQS9iEgWkifkJjCG2gA2a5S/d5nZ2ntvccqxBjSXP81uHNuB1+cg+CjEQet1gwqDTQlIi7gvqvAIzDqyPyStHFa1EMr0fd1jOpR6wKW+nQNCczZRyntl/4qm8VE0uzAPEXfuL+0SJr9w0WDM8lK67DFLL/Jypg0ukHZD5laXJ4+9J78NhbzUauR8Y3SMv5JSqZyJFpA2LXMJZGpPhEyiK26agEmAcAtG23LtNO4Z/xRsr5SUtWAoY4f6HRAJa0uPua178J2TYPJVFjYbBVUWO4ezO0GIhUwEoM7eECSb1zWb42D6/VXF+GrClo5HvZ2x0cN3IIeTVO026/zbs2vMNrcC+63RHvvhvacZ0lyIXYy3XguK1Q7fndqgFKmAwAPse1grLV6TPRa8wgnzrM08UYLfLmetoWKoK+0TOaovBx3yJZ+6caiz949dejBQNz2uKQO2T3NtOshILzq7yfQyo3jfZ+5X1DRB11TJwOiX+RLCtnuxiJG7Wkn4kwaguSlIhYE/qv8yHdqRawixI1nSnX2EhiDIDA55Tbz7GGcMjxTFSp2OuBH5ZfGkJrOrvU/1VP2QDIImPcucJZwXExBYp96tD1K7LZMbWnj0tUruMNrINcM3tSxCkCrpw/SzIYZqBXmHNi5d8RyOtl0maI7ZKaRmJ6/Csbp68SzSiERxl49s+jC//ErRRSsS5Q3n956ui0Qd4k2ICLZaGNunEM7MFGSFoUV+ILb42y9iA4oGjexkB8+KZpTU2ZfTw6ysA7lnbBtNcCiroaqg3og8qa4tn7UeMaWZy1vEf+CgrPbZfrohFm3UBqbK0lNWlIcg10ypUtST7BaGcTW1ymuFGFfF7Ncui/KNuFm538X?iv=qqqqqqqqqqqqqqqqqqqqqg=="
+    },
+    {
+      "sec1": "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa",
+      "pub2": "6f7a47f239d292295f75afa6d672082ef722a114ddaf18fd682e8d3bde7aa227",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "iv": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "plaintext": "reply",
+      "payload": "cKwXAkg+7y9mDL5qQc83Lg==?iv=qqqqqqqqqqqqqqqqqqqqqg=="
+    }
+  ],
+  "invalid": [
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "abc",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "?iv=abc",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "abc?iv=",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "abc?iv=def?iv=ghi",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "!!!?iv=AAECAwQFBgcICQoLDA0ODw==",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "AAECAwQFBgcICQoLDA0ODw==?iv=!!!",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "AAECAwQFBgcICQoLDA0ODw=?iv=AAECAwQFBgcICQoLDA0ODw==",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "aGVsbG8=?iv=AAAAAAAAAAA=",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "aGVsbG8=?iv=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "aGVsbG8=?iv=AAECAwQFBgcICQoLDA0ODw==",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "?iv=AAECAwQFBgcICQoLDA0ODw==",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2201",
+      "pub2": "6f7a47f239d292295f75afa6d672082ef722a114ddaf18fd682e8d3bde7aa227",
+      "shared_secret": "cda5f4cca9f54842b9ff58e1f1db4ee332abdb46c6ec30621a15920a7d4e9551",
+      "payload": "J++rzFvhJYrGcoDN848iwuE2CVdx2zeOKpV9BbzEVA8iX87AAescfpmj2dY+l8fzijwScuXfjDO7rYnyMDW1wvH6AP4PMuWHST2Exc9tzcQ=?iv=AAECAwQFBgcICQoLDA0ODw==",
+      "error": "CryptoError"
+    },
+    {
+      "op": "decrypt",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
+      "shared_secret": "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669",
+      "payload": "SylairFazDGbp/Ofv41x/w==?iv=qqqqqqqqqqqqqqqqqqqqqg==",
+      "error": "CryptoError"
+    },
+    {
+      "op": "derive",
+      "sec1": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "pub2": "0000000000000000000000000000000000000000000000000000000000000000",
+      "shared_secret": "0000000000000000000000000000000000000000000000000000000000000000",
+      "payload": "AAECAwQFBgcICQoLDA0ODw==?iv=AAECAwQFBgcICQoLDA0ODw==",
+      "error": "CryptoError"
+    }
+  ]
+}

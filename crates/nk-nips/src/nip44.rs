@@ -95,24 +95,8 @@ impl ConversationKey {
     ///
     /// [`ErrorKind::Crypto`] when `peer`'s bytes do not lift to a curve point.
     pub fn derive(secret: &SecretKey, peer: &PublicKey) -> Result<Self> {
-        secret.with_secret_bytes(|bytes| {
-            // nk-core's `SecretKey` already validated the scalar.
-            let Ok(mut sec) = secp256k1::SecretKey::from_secret_bytes(*bytes) else {
-                return Err(crypto_error("invalid secret key"));
-            };
-            let Ok(peer_x) = secp256k1::XOnlyPublicKey::from_byte_array(*peer.as_bytes()) else {
-                sec.non_secure_erase();
-                return Err(crypto_error("invalid public key"));
-            };
-            let peer_point =
-                secp256k1::PublicKey::from_x_only_public_key(peer_x, secp256k1::Parity::Even);
-            let mut point = secp256k1::ecdh::shared_secret_point(&peer_point, &sec);
-            sec.non_secure_erase();
-            let mut shared_x = Zeroizing::new([0u8; 32]);
-            shared_x.copy_from_slice(point.split_at(32).0);
-            point.zeroize();
-            Ok(Self::from_shared_secret(&shared_x))
-        })
+        crate::ecdh::shared_secret_x(secret, peer)
+            .map(|shared_x| Self::from_shared_secret(&shared_x))
     }
 
     /// HKDF-extracts a conversation key from a raw ECDH x coordinate (TS
