@@ -15,12 +15,15 @@ default = ["std", "clock", "os-rng"]
 std     = ["nk-core/std"]
 clock   = ["std", "nk-core/clock"]
 os-rng  = ["std", "nk-core/os-rng"]
-nip19   = ["dep:bech32"]
+nip19   = ["dep:bech32", "dep:zeroize"]
 
+# Rule: every external dependency is optional and enabled by the NIP
+# features that use it, so --no-default-features pulls nothing beyond
+# nk-core.
 [dependencies]
 bech32  = { workspace = true, optional = true }
 nk-core = { workspace = true }
-zeroize = { workspace = true }
+zeroize = { workspace = true, optional = true }
 
 [lints]
 workspace = true

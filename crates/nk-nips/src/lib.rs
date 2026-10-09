@@ -32,10 +32,9 @@ pub mod nip19;
 
 pub use error::{Error, ErrorKind, Result};
 
-// Dependencies consumed only by feature-gated NIP modules; the underscore
-// imports keep `unused_crate_dependencies` quiet under minimal features.
+// Consumed only by feature-gated NIP modules and tests; the underscore
+// import keeps `unused_crate_dependencies` quiet under minimal features.
 use nk_core as _;
-use zeroize as _;
 
 const _: () = {
     const fn assert_send_sync<T: Send + Sync>() {}

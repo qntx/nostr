@@ -438,6 +438,14 @@ mod tests {
     }
 
     #[test]
+    fn nip19_checksum_matches_stock_bech32() {
+        // The Nip19Bech32 constants are the Bech32 ones with CODE_LENGTH
+        // lifted to 5000: short payloads must encode identically.
+        let stock = bech32::encode::<bech32::Bech32>(HRP_NPUB, &PK).unwrap();
+        assert_eq!(encode_npub(&pubkey()), stock);
+    }
+
+    #[test]
     fn npub_round_trip() {
         let code = encode_npub(&pubkey());
         assert!(code.starts_with("npub1"));
