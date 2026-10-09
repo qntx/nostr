@@ -105,6 +105,7 @@ export {
   Nip07Signer,
   Nip46Signer,
   NoSignerError,
+  SignerDisposedError,
   getWindowNostr,
   isNip07Available,
   type NostrSigner,

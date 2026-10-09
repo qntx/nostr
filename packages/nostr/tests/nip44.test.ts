@@ -219,14 +219,16 @@ describe("nip44", () => {
       const first = await a.nip44Encrypt(peerA, "one");
       const second = await a.nip44Encrypt(peerA, "two");
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0]).toStrictEqual([a.keys.secretKey.bytes, peerA]);
+      expect(spy.mock.calls[0]?.[0]).toStrictEqual(new Uint8Array(32));
+      expect(spy.mock.calls[0]?.[1]).toBe(peerA);
       expect(first).not.toBe(second);
       await expect(a.nip44Decrypt(peerA, first)).resolves.toBe("one");
       await expect(a.nip44Decrypt(peerA, second)).resolves.toBe("two");
 
       const third = await a.nip44Encrypt(peerB, "three");
       expect(spy).toHaveBeenCalledTimes(2);
-      expect(spy.mock.calls[1]).toStrictEqual([a.keys.secretKey.bytes, peerB]);
+      expect(spy.mock.calls[1]?.[0]).toStrictEqual(new Uint8Array(32));
+      expect(spy.mock.calls[1]?.[1]).toBe(peerB);
       await expect(a.nip44Decrypt(peerB, third)).resolves.toBe("three");
 
       await expect(a.nip44Decrypt(peerA, first)).resolves.toBe("one");
@@ -251,7 +253,8 @@ describe("nip44", () => {
       expect(signer.nip44Decrypt).toBeTypeOf("function");
       const warm = await signer.nip44Encrypt(peer, "warm");
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0]).toStrictEqual([signer.keys.secretKey.bytes, peer]);
+      expect(spy.mock.calls[0]?.[0]).toStrictEqual(new Uint8Array(32));
+      expect(spy.mock.calls[0]?.[1]).toBe(peer);
       await expect(signer.nip44Decrypt(peer, warm)).resolves.toBe("warm");
       await expect(signer.nip44Decrypt(peer, payload)).resolves.toBe(plaintext);
       expect(spy).toHaveBeenCalledTimes(1);
@@ -265,7 +268,8 @@ describe("nip44", () => {
       const cipher = await a.nip44Encrypt(peer.toUpperCase(), "cased");
       await expect(a.nip44Decrypt(peer, cipher)).resolves.toBe("cased");
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0]).toStrictEqual([a.keys.secretKey.bytes, peer]);
+      expect(spy.mock.calls[0]?.[0]).toStrictEqual(new Uint8Array(32));
+      expect(spy.mock.calls[0]?.[1]).toBe(peer);
     });
 
     test("failed derivation is not cached", async () => {

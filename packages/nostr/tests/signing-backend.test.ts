@@ -1,5 +1,5 @@
 import { schnorr } from "@noble/curves/secp256k1.js";
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 
 import { CryptoError } from "../src/core/error.ts";
 import type { EventTemplate } from "../src/core/event.ts";
@@ -12,8 +12,11 @@ import {
   KeysSigner,
   Kind,
   SecretKey,
+  SignerDisposedError,
   verifyEvent,
 } from "../src/index.ts";
+import * as nip04 from "../src/nips/nip04.ts";
+import * as nip44 from "../src/nips/nip44.ts";
 
 const SK_HEX = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
@@ -146,5 +149,55 @@ describe("SigningBackend", () => {
       expect(verifyEvent({ ...event })).toBe(true);
       expect(event.pubkey).toBe(bytesToHex(schnorr.getPublicKey(hexToBytes(SK_HEX))));
     }
+  });
+});
+
+describe("KeysSigner.dispose", () => {
+  const PEER_SK = "0000000000000000000000000000000000000000000000000000000000000002";
+  const peer = bytesToHex(schnorr.getPublicKey(hexToBytes(PEER_SK)));
+
+  test("every method rejects with SignerDisposedError after dispose", async () => {
+    const signer = new KeysSigner(SK_HEX);
+    signer.dispose();
+    await expect(signer.getPublicKey()).rejects.toBeInstanceOf(SignerDisposedError);
+    await expect(signer.signEvent({ ...TEMPLATE, pubkey: peer })).rejects.toBeInstanceOf(
+      SignerDisposedError,
+    );
+    await expect(signer.nip04Encrypt(peer, "x")).rejects.toBeInstanceOf(SignerDisposedError);
+    await expect(signer.nip04Decrypt(peer, "x")).rejects.toBeInstanceOf(SignerDisposedError);
+    await expect(signer.nip44Encrypt(peer, "x")).rejects.toBeInstanceOf(SignerDisposedError);
+    await expect(signer.nip44Decrypt(peer, "x")).rejects.toBeInstanceOf(SignerDisposedError);
+  });
+
+  test("dispose is idempotent", async () => {
+    const signer = new KeysSigner(SK_HEX);
+    signer.dispose();
+    signer.dispose();
+    await expect(signer.getPublicKey()).rejects.toBeInstanceOf(SignerDisposedError);
+  });
+
+  test("dispose zeroizes the secret and every cached conversation key", async () => {
+    const signer = new KeysSigner(SK_HEX);
+    const { keys } = signer;
+    const convSpy = vi.spyOn(nip44, "getConversationKey");
+    await signer.nip44Encrypt(peer, "hi");
+    const convKey = convSpy.mock.results[0]?.value as Uint8Array;
+    const derivationCopy = convSpy.mock.calls[0]?.[0];
+    expect(derivationCopy).toStrictEqual(new Uint8Array(32));
+
+    signer.dispose();
+    expect(convKey).toStrictEqual(new Uint8Array(32));
+    expect(() => keys.secretKey.bytes).toThrow(CryptoError);
+  });
+
+  test("the per-call secret copies are wiped", async () => {
+    const signer = new KeysSigner(SK_HEX);
+    const encSpy = vi.spyOn(nip04, "encrypt");
+    const decSpy = vi.spyOn(nip04, "decrypt");
+    const ciphertext = await signer.nip04Encrypt(peer, "secret-copy");
+    await signer.nip04Decrypt(peer, ciphertext);
+    expect(encSpy.mock.calls[0]?.[0]).toStrictEqual(new Uint8Array(32));
+    expect(decSpy.mock.calls[0]?.[0]).toStrictEqual(new Uint8Array(32));
+    signer.dispose();
   });
 });

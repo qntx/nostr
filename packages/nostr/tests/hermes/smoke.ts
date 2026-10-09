@@ -120,7 +120,11 @@ export async function main(): Promise<void> {
   // NIP-49 round trip, logn 4.
   const ncryptsec = await nip49.encrypt(keys.secretKey.bytes, "test-pass", { logn: 4 });
   assert(ncryptsec.startsWith("ncryptsec1"), "nip49 prefix");
-  eq(bytesToHex(await nip49.decrypt(ncryptsec, "test-pass")), SK, "nip49 round trip");
+  eq(
+    bytesToHex(await nip49.decrypt(ncryptsec, "test-pass", { maxLogN: 4 })),
+    SK,
+    "nip49 round trip",
+  );
 
   // NIP-19 round trips.
   const nsec = nsecEncode(keys.secretKey.bytes);

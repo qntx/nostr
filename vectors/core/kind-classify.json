@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.10.1",
+    "version": "0.11.0",
     "cross_check": "nostr-tools 2.24.1 @7fa1ef4: is*Kind booleans agree inside the NIP-01 ranges; kind 45/999 isRegularKind and 40000+ classifyKind differ by definition (nostr-tools uses `<10000 except 0/3` and reports `unknown`/`parameterized`)"
   },
   "cases": [
