@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -61,6 +62,17 @@ if (import.meta.main) {
       }
       syncInternalDeps(pkg, version, internalNames);
       writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+    }
+
+    // Cargo.lock must record the new workspace version. bumpp runs the
+    // `execute` hook without a shell — `&&` would reach bun as arguments —
+    // so the refresh is spawned here instead of chained in bump.config.ts.
+    const update = spawnSync("cargo", ["update", "--workspace"], { stdio: "inherit" });
+    if (update.status !== 0) {
+      const why =
+        update.error === undefined ? `exit code ${String(update.status)}` : update.error.message;
+      console.error(`sync-versions: cargo update --workspace failed: ${why}`);
+      process.exitCode = 1;
     }
   } else {
     console.error('sync-versions: packages/nostr/package.json has no string "version"');

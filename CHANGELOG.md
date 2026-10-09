@@ -9,6 +9,10 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 
 ## [Unreleased]
 
+### Fixed
+
+- The version bump refreshes `Cargo.lock` again: bumpp runs `execute` without a shell, so the `&&`-chained `cargo update --workspace` never ran and the lockfile kept the pre-bump version. `sync-versions` now spawns the update itself and `check-version` fails lint when a workspace member's lockfile entry drifts.
+
 ## [0.11.0] - 2026-10-09
 
 ### Added
