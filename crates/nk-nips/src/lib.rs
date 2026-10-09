@@ -12,6 +12,7 @@
 //! | `os-rng` | yes     | OS entropy where a NIP needs it                             |
 //! | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) |
 //! | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`)                   |
+//! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
 //!
 //! ```
 //! use nk_nips::ErrorKind;
@@ -32,11 +33,15 @@ pub mod error;
 pub mod nip19;
 #[cfg(feature = "nip21")]
 pub mod nip21;
+#[cfg(feature = "nip44")]
+pub mod nip44;
 
 pub use error::{Error, ErrorKind, Result};
 
 // Consumed only by feature-gated NIP modules and tests; the underscore
-// import keeps `unused_crate_dependencies` quiet under minimal features.
+// imports keep `unused_crate_dependencies` quiet under minimal features.
+#[cfg(feature = "os-rng")]
+use getrandom as _;
 use nk_core as _;
 
 const _: () = {
@@ -53,4 +58,9 @@ const _: () = {
     }
     #[cfg(feature = "nip21")]
     assert_send_sync::<nip21::NostrUri>();
+    #[cfg(feature = "nip44")]
+    {
+        assert_send_sync::<nip44::ConversationKey>();
+        assert_send_sync::<nip44::MessageKeys>();
+    }
 };
