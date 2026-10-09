@@ -25,7 +25,7 @@ event.verify()?;
 | `clock`  | yes     | `Timestamp::now` (wall clock)                                            |
 | `os-rng` | yes     | `SecretKey::generate`, `Keys::generate`, `Keys::sign_event` (OS entropy) |
 
-Without `os-rng` the caller supplies randomness (`generate_with_rng`, `sign_event_with_rng`, `sign_id_with_aux`); without `std` secp256k1 uses a per-call self-contained context. Secret material is zeroized on drop.
+Without `os-rng` the caller supplies randomness (`generate_with_rng`, `sign_event_with_rng`, `sign_id_with_aux`); without `std` secp256k1 uses a per-call self-contained context. Secret material is zeroized on drop, and raw secret bytes only leave the crate through the scoped `SecretKey::with_secret_bytes` accessor, whose copy is wiped before it returns.
 
 All public types are `Send + Sync`; no third-party types appear in the public API.
 

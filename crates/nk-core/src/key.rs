@@ -193,10 +193,26 @@ impl SecretKey {
         Self::generate_with_rng(&mut rand_core::UnwrapErr(getrandom::SysRng))
     }
 
-    /// The raw secret bytes.
-    #[must_use]
-    pub fn to_secret_bytes(&self) -> [u8; 32] {
-        self.0.to_secret_bytes()
+    /// Passes a scoped copy of the raw secret bytes to `f` and returns its
+    /// result.
+    ///
+    /// The copy lives inside a drop guard that wipes it with `zeroize`
+    /// before this method returns — including when `f` unwinds — so no
+    /// unwiped secret copy escapes nk-core (#209). Any copies `f` itself
+    /// makes are the caller's responsibility.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use nk_core::SecretKey;
+    ///
+    /// let key = SecretKey::from_bytes([3; 32]).expect("3 is a valid scalar");
+    /// let first_byte = key.with_secret_bytes(|bytes| bytes[0]);
+    /// assert_eq!(first_byte, 3);
+    /// ```
+    pub fn with_secret_bytes<R>(&self, f: impl FnOnce(&[u8; 32]) -> R) -> R {
+        let copy = zeroize::Zeroizing::new(self.0.to_secret_bytes());
+        f(&copy)
     }
 
     /// The x-only BIP-340 public key.
@@ -445,7 +461,7 @@ mod tests {
             next: 0,
         };
         let key = SecretKey::generate_with_rng(&mut rng);
-        assert_eq!(key.to_secret_bytes(), [0x03; 32]);
+        assert_eq!(key.with_secret_bytes(|bytes| *bytes), [0x03; 32]);
         assert_eq!(rng.next, 2);
     }
 
@@ -536,12 +552,8 @@ mod tests {
     #[test]
     fn secret_key_bytes_roundtrip() {
         let key = SecretKey::from_hex(SECRET).unwrap();
-        assert_eq!(
-            SecretKey::from_bytes(key.to_secret_bytes())
-                .unwrap()
-                .public_key(),
-            key.public_key()
-        );
+        let roundtripped = key.with_secret_bytes(|bytes| SecretKey::from_bytes(*bytes).unwrap());
+        assert_eq!(roundtripped.public_key(), key.public_key());
     }
 
     #[test]
@@ -564,7 +576,7 @@ mod tests {
     fn keys_new_derives_the_public_key() {
         let keys = Keys::new(SecretKey::from_hex(SECRET).unwrap());
         assert_eq!(keys.public_key().to_hex(), SECRET_PUB);
-        assert_eq!(keys.secret_key().to_secret_bytes()[31], 3);
+        assert_eq!(keys.secret_key().with_secret_bytes(|b| b[31]), 3);
     }
 
     #[test]
@@ -618,7 +630,7 @@ mod tests {
     #[test]
     fn generate_and_sign_event_use_os_entropy() {
         let key = SecretKey::generate();
-        assert_eq!(key.to_secret_bytes().len(), 32);
+        key.with_secret_bytes(|bytes| assert_eq!(bytes.len(), 32));
         let keys = Keys::generate();
         let unsigned = UnsignedEvent::new(
             keys.public_key(),
