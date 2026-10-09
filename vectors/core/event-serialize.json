@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.10.1",
+    "version": "0.11.0",
     "cross_check": "nostr-tools 2.24.1 @7fa1ef4: getEventHash/serializeEvent ids match (5/5)"
   },
   "cases": [

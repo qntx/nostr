@@ -404,10 +404,13 @@
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip49.ts",
-        "tests": ["packages/nostr/tests/nip49.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip49.test.ts",
+          "packages/nostr/tests/vectors/nip49.test.ts"
+        ]
       },
       "rust": null,
-      "vectors": []
+      "vectors": ["vectors/nip49/max-logn.json"]
     },
     {
       "id": "nip13.pow",

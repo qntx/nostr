@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.10.1",
+    "version": "0.11.0",
     "cross_check": "nostr-tools 2.24.1 @7fa1ef4: 47/63 agree; the 16 diffs are nostr-tools laxness, not vector bugs — it has no kind bound (N1: 65536 encodes/decodes), no nsec scalar check (N2), no 255-byte TLV limit, no 32-byte payload check on npub/note/nsec, and no hex validation on encoders"
   },
   "cases": [

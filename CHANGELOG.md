@@ -9,6 +9,15 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 
 ## [Unreleased]
 
+### Added
+
+- `KeysSigner.dispose()`: zeroizes the wrapped secret key and every cached NIP-44 conversation key; all later signer calls reject with the new `SignerDisposedError`. `KeysSigner` also now wipes the per-call secret-key copies used by NIP-04 and conversation-key derivation (#211).
+
+### Changed
+
+- **BREAKING:** `nip49.decrypt` now requires `opts.maxLogN` — an integer in `1..=22`. A payload whose `logn` exceeds the ceiling throws `Nip49Error` before scrypt runs, bounding memory use at `128 * r * 2^logn` bytes (#211).
+- `nip49.decrypt` rejects key-security bytes other than `0x00`, `0x01`, or `0x02` and zero-fills the scrypt-derived key after use (NIP-49).
+
 ### Fixed
 
 - The version bump refreshes `Cargo.lock` again: bumpp runs `execute` without a shell, so the `&&`-chained `cargo update --workspace` never ran and the lockfile kept the pre-bump version. `sync-versions` now spawns the update itself and `check-version` fails lint when a workspace member's lockfile entry drifts.

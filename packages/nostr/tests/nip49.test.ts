@@ -1,7 +1,9 @@
 import { scryptAsync } from "@noble/hashes/scrypt.js";
+import { bech32 } from "@scure/base";
 import { describe, expect, test } from "vite-plus/test";
 
 import { hexToBytes, nsecEncode } from "../src/index.ts";
+import { Bech32MaxSize, encodeBytes } from "../src/nips/nip19.ts";
 import { decrypt, encrypt, Nip49Error } from "../src/nips/nip49.ts";
 import type { KeySecurityByte, Scrypt, ScryptParams } from "../src/nips/nip49.ts";
 
@@ -11,8 +13,8 @@ describe("nip49", () => {
       vectors.map(async ([password, secret, logn, ksb, ncryptsec]) => {
         const sec = hexToBytes(secret);
         const there = await encrypt(sec, password, { logn, ksb });
-        const back = await decrypt(there, password);
-        const again = await decrypt(ncryptsec, password);
+        const back = await decrypt(there, password, { maxLogN: logn });
+        const again = await decrypt(ncryptsec, password, { maxLogN: logn });
         expect(back).toStrictEqual(again);
         expect(again).toStrictEqual(sec);
       }),
@@ -23,25 +25,27 @@ describe("nip49", () => {
     const ncryptsec =
       "ncryptsec1qgg9947rlpvqu76pj5ecreduf9jxhselq2nae2kghhvd5g7dgjtcxfqtd67p9m0w57lspw8gsq6yphnm8623nsl8xn9j4jdzz84zm3frztj3z7s35vpzmqf6ksu8r89qk5z2zxfmu5gv8th8wclt0h4p";
     const sec = hexToBytes("3501454135014541350145413501453fefb02227e449e57cf4d3a3ce05378683");
-    await expect(decrypt(ncryptsec, "nostr")).resolves.toStrictEqual(sec);
+    await expect(decrypt(ncryptsec, "nostr", { maxLogN: 16 })).resolves.toStrictEqual(sec);
   });
 
   test("wrong password throws", async () => {
     const [password, secret, logn, ksb, ncryptsec] = vectors[0]!;
     const sec = hexToBytes(secret);
-    await expect(decrypt(ncryptsec, "wrong-password")).rejects.toThrow(Nip49Error);
-    await expect(decrypt(ncryptsec, "wrong-password")).rejects.toThrow("failed to decrypt");
+    await expect(decrypt(ncryptsec, "wrong-password", { maxLogN: 22 })).rejects.toThrow(Nip49Error);
+    await expect(decrypt(ncryptsec, "wrong-password", { maxLogN: 22 })).rejects.toThrow(
+      "failed to decrypt",
+    );
     const there = await encrypt(sec, password, { logn, ksb });
-    await expect(decrypt(there, "wrong")).rejects.toThrow(Nip49Error);
+    await expect(decrypt(there, "wrong", { maxLogN: 22 })).rejects.toThrow(Nip49Error);
   });
 
   test("wrong prefix throws", async () => {
     const sec = hexToBytes(vectors[0]![1]);
-    await expect(decrypt(nsecEncode(sec), "x")).rejects.toThrow(Nip49Error);
+    await expect(decrypt(nsecEncode(sec), "x", { maxLogN: 22 })).rejects.toThrow(Nip49Error);
   });
 
   test("excess bech32 padding throws Nip49Error", async () => {
-    await expect(decrypt("ncryptsec1pcnlmyt", "x")).rejects.toThrow(Nip49Error);
+    await expect(decrypt("ncryptsec1pcnlmyt", "x", { maxLogN: 22 })).rejects.toThrow(Nip49Error);
   });
 
   test("invalid logn throws Nip49Error", async () => {
@@ -69,7 +73,7 @@ describe("nip49", () => {
     expect(call.salt).toHaveLength(16);
     expect(call.params).toStrictEqual({ N: 2 ** 4, r: 8, p: 1, dkLen: 32 });
 
-    await decrypt(ncryptsec, "\u00C5", { scrypt: recording });
+    await decrypt(ncryptsec, "\u00C5", { maxLogN: 4, scrypt: recording });
     expect(seen).toHaveLength(2);
     expect(seen[1]!.password).toStrictEqual(call.password);
     expect(seen[1]!.salt).toStrictEqual(call.salt);
@@ -84,7 +88,7 @@ describe("nip49", () => {
         maxmem: 128 * params.r * (params.N + params.p + 1),
       });
     const ncryptsec = await encrypt(sec, "pw", { logn: 4, scrypt: delegating });
-    await expect(decrypt(ncryptsec, "pw")).resolves.toStrictEqual(sec);
+    await expect(decrypt(ncryptsec, "pw", { maxLogN: 22 })).resolves.toStrictEqual(sec);
   });
 
   test("a rejecting scrypt throws scrypt failed with cause", async () => {
@@ -105,6 +109,69 @@ describe("nip49", () => {
     await expect(encrypt(sec, "pw", { logn: 4, scrypt: short })).rejects.toThrow(
       "scrypt returned 31 bytes, expected 32",
     );
+  });
+
+  test("a payload logn above maxLogN rejects before scrypt runs", async () => {
+    const v = vectors[3]!; // logn 7
+    let calls = 0;
+    const spy: Scrypt = async () => {
+      calls += 1;
+      return Promise.resolve(new Uint8Array(32));
+    };
+    const thrown = await decrypt(v[4], "x", { maxLogN: v[2] - 1, scrypt: spy }).catch(
+      (error: unknown) => error,
+    );
+    expect(thrown).toBeInstanceOf(Nip49Error);
+    expect((thrown as Error).message).toBe(`logn ${v[2]} exceeds maxLogN ${v[2] - 1}`);
+    expect(calls).toBe(0);
+  });
+
+  test("a payload logn equal to maxLogN decrypts", async () => {
+    const [password, secret, logn, , ncryptsec] = vectors[3]!;
+    await expect(decrypt(ncryptsec, password, { maxLogN: logn })).resolves.toStrictEqual(
+      hexToBytes(secret),
+    );
+  });
+
+  test("an out-of-range maxLogN rejects before decoding the payload", async () => {
+    const v = vectors[0]!;
+    await Promise.all(
+      [0, 23, 1.5].map(async (maxLogN) => {
+        const thrown = await decrypt(v[4], "x", { maxLogN }).catch((error: unknown) => error);
+        expect(thrown).toBeInstanceOf(Nip49Error);
+        expect((thrown as Error).message).toContain(`invalid maxLogN ${maxLogN}`);
+      }),
+    );
+  });
+
+  test("a key security byte outside 0x00..0x02 rejects before scrypt runs", async () => {
+    const v = vectors[3]!; // logn 7
+    const { words } = bech32.decode(v[4], Bech32MaxSize);
+    const bytes = new Uint8Array(bech32.fromWords(words));
+    bytes[42] = 0x03;
+    const crafted = encodeBytes("ncryptsec", bytes);
+    let calls = 0;
+    const spy: Scrypt = async () => {
+      calls += 1;
+      return Promise.resolve(new Uint8Array(32));
+    };
+    const thrown = await decrypt(crafted, "x", { maxLogN: v[2], scrypt: spy }).catch(
+      (error: unknown) => error,
+    );
+    expect(thrown).toBeInstanceOf(Nip49Error);
+    expect((thrown as Error).message).toContain("key security byte");
+    expect(calls).toBe(0);
+  });
+
+  test("the scrypt-derived key is zero-filled after use", async () => {
+    const v = vectors[3]!; // logn 7
+    const derived = new Uint8Array(32).fill(7);
+    const kdf: Scrypt = async () => Promise.resolve(derived);
+    // The derived buffer is not a valid key, so xchacha fails; the wipe must still run.
+    await expect(decrypt(v[4], "x", { maxLogN: v[2], scrypt: kdf })).rejects.toThrow(
+      "failed to decrypt",
+    );
+    expect(derived).toStrictEqual(new Uint8Array(32));
   });
 });
 

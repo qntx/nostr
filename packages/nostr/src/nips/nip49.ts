@@ -39,6 +39,12 @@ export type Nip49EncryptOptions = {
 };
 
 export type Nip49DecryptOptions = {
+  /**
+   * Scrypt log2(N) ceiling, an integer in 1..22. Required: scrypt needs `128 * r * 2^logn` bytes of
+   * memory (4 GiB at logn 22), so a crafted `ncryptsec` could exhaust the caller's memory. Payloads
+   * above the ceiling are rejected with {@link Nip49Error} before scrypt runs.
+   */
+  maxLogN: number;
   /** Scrypt implementation. Defaults to noble `scryptAsync`. */
   scrypt?: Scrypt | undefined;
 };
@@ -123,8 +129,12 @@ export async function encrypt(
 export async function decrypt(
   ncryptsec: string,
   password: string,
-  opts?: Nip49DecryptOptions,
+  opts: Nip49DecryptOptions,
 ): Promise<Uint8Array> {
+  const { maxLogN } = opts;
+  if (!Number.isInteger(maxLogN) || maxLogN < LOGN_MIN || maxLogN > LOGN_MAX) {
+    throw new Nip49Error(`invalid maxLogN ${maxLogN}, expected integer ${LOGN_MIN}..${LOGN_MAX}`);
+  }
   let prefix: string;
   let b: Uint8Array;
   try {
@@ -153,17 +163,28 @@ export async function decrypt(
   if (logn === undefined) {
     throw new Nip49Error("invalid ncryptsec length");
   }
+  if (logn > maxLogN) {
+    throw new Nip49Error(`logn ${logn} exceeds maxLogN ${maxLogN}`);
+  }
   const salt = b.subarray(2, 2 + SALT_LEN);
   const nonce = b.subarray(2 + SALT_LEN, 2 + SALT_LEN + NONCE_LEN);
   const ksb = b.at(2 + SALT_LEN + NONCE_LEN);
   if (ksb === undefined) {
     throw new Nip49Error("invalid ncryptsec length");
   }
+  // NIP-49 defines 0x00, 0x01, and 0x02 as the key security byte.
+  if (ksb !== 0x00 && ksb !== 0x01 && ksb !== 0x02) {
+    throw new Nip49Error(`invalid key security byte ${ksb}, expected 0x00, 0x01, or 0x02`);
+  }
   const aad = Uint8Array.from([ksb]);
   const ciphertext = b.subarray(2 + SALT_LEN + NONCE_LEN + 1);
   try {
-    const key = await deriveKey(password, salt, logn, opts?.scrypt ?? nobleScrypt);
-    return xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
+    const key = await deriveKey(password, salt, logn, opts.scrypt ?? nobleScrypt);
+    try {
+      return xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
+    } finally {
+      key.fill(0);
+    }
   } catch (error) {
     if (error instanceof Nip49Error) {
       throw error;

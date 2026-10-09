@@ -8,3 +8,8 @@ import { NostrError } from "../core/error.ts";
 export class NoSignerError extends NostrError {
   override name = "NoSignerError";
 }
+
+/** Thrown when a method is called on a signer after {@link NostrSigner dispose}. */
+export class SignerDisposedError extends NostrError {
+  override name = "SignerDisposedError";
+}
