@@ -687,4 +687,11 @@ mod tests {
         let b = a.clone();
         assert_eq!(a, b);
     }
+
+    #[cfg(feature = "clock")]
+    #[test]
+    fn build_uses_the_wall_clock() {
+        let unsigned = EventBuilder::text_note("x").build(keys().public_key());
+        assert!(unsigned.created_at().as_secs() > 1_700_000_000);
+    }
 }

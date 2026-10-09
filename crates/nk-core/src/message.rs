@@ -1117,6 +1117,113 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "os-rng")]
+    fn subscription_id_generate_is_16_lower_hex() {
+        let id = SubscriptionId::generate();
+        assert_eq!(id.as_str().len(), 16);
+        assert!(
+            id.as_str()
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        );
+    }
+
+    #[test]
+    fn count_hll_serde_round_trip() {
+        let hll = CountHll::from_str(&"ab".repeat(256)).expect("hll");
+        let json = serde_json::to_string(&hll).expect("ser");
+        assert_eq!(json, alloc::format!("\"{}\"", "ab".repeat(256)));
+        let back: CountHll = serde_json::from_str(&json).expect("de");
+        assert_eq!(back, hll);
+        // Any case parses; wrong lengths, non-hex, and non-strings fail.
+        let upper: CountHll =
+            serde_json::from_str(&alloc::format!("\"{}\"", "AB".repeat(256))).expect("uppercase");
+        assert_eq!(upper, hll);
+        assert!(serde_json::from_str::<CountHll>("\"ab\"").is_err());
+        assert!(
+            serde_json::from_str::<CountHll>(&alloc::format!("\"{}\"", "zz".repeat(256))).is_err()
+        );
+        assert!(serde_json::from_str::<CountHll>("5").is_err());
+    }
+
+    #[test]
+    fn into_owned_covers_every_variant() {
+        let id = SubscriptionId::new("sub").expect("id");
+        let filter = Filter::new().kinds([Kind::TEXT_NOTE]);
+        let event = signed_event();
+        let event_id = event.id();
+        let clients: [ClientMessage<'_>; 8] = [
+            ClientMessage::Event(Cow::Borrowed(&event)),
+            ClientMessage::Req {
+                subscription_id: Cow::Borrowed(&id),
+                filters: Cow::Borrowed(core::slice::from_ref(&filter)),
+            },
+            ClientMessage::Count {
+                subscription_id: Cow::Borrowed(&id),
+                filters: Cow::Borrowed(core::slice::from_ref(&filter)),
+            },
+            ClientMessage::Close(Cow::Borrowed(&id)),
+            ClientMessage::Auth(Cow::Borrowed(&event)),
+            ClientMessage::NegOpen {
+                subscription_id: Cow::Borrowed(&id),
+                filter: Cow::Borrowed(&filter),
+                message: Cow::Borrowed("aabb"),
+            },
+            ClientMessage::NegMsg {
+                subscription_id: Cow::Borrowed(&id),
+                message: Cow::Borrowed("aabb"),
+            },
+            ClientMessage::NegClose(Cow::Borrowed(&id)),
+        ];
+        for message in clients {
+            let encoded = message.encode();
+            let owned: ClientMessage<'static> = message.into_owned();
+            assert_eq!(owned.encode(), encoded);
+        }
+        let relays: [RelayMessage<'_>; 9] = [
+            RelayMessage::Event {
+                subscription_id: Cow::Borrowed(&id),
+                event: Cow::Borrowed(&event),
+            },
+            RelayMessage::Ok {
+                event_id,
+                accepted: true,
+                message: Cow::Borrowed("m"),
+            },
+            RelayMessage::Eose(Cow::Borrowed(&id)),
+            RelayMessage::Closed {
+                subscription_id: Cow::Borrowed(&id),
+                message: Cow::Borrowed("m"),
+            },
+            RelayMessage::Notice(Cow::Borrowed("n")),
+            RelayMessage::Auth {
+                challenge: Cow::Borrowed("c"),
+            },
+            RelayMessage::Count {
+                subscription_id: Cow::Borrowed(&id),
+                result: CountResult {
+                    count: 1,
+                    approximate: Some(true),
+                    hll: Some(CountHll::zero()),
+                },
+            },
+            RelayMessage::NegMsg {
+                subscription_id: Cow::Borrowed(&id),
+                message: Cow::Borrowed("aabb"),
+            },
+            RelayMessage::NegErr {
+                subscription_id: Cow::Borrowed(&id),
+                message: Cow::Borrowed("aabb"),
+            },
+        ];
+        for message in relays {
+            let encoded = message.encode();
+            let owned: RelayMessage<'static> = message.into_owned();
+            assert_eq!(owned.encode(), encoded);
+        }
+    }
+
+    #[test]
     fn types_are_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<SubscriptionId>();

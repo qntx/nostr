@@ -400,6 +400,55 @@ mod tests {
 
     impl rand_core::TryCryptoRng for CounterRng {}
 
+    /// Emits fixed 32-byte candidates in order.
+    struct ScriptedRng {
+        chunks: &'static [[u8; 32]],
+        next: usize,
+    }
+
+    impl rand_core::TryRng for ScriptedRng {
+        type Error = core::convert::Infallible;
+
+        fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+            Ok(0)
+        }
+
+        fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+            Ok(0)
+        }
+
+        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+            let chunk = *self.chunks.get(self.next).expect("scripted rng exhausted");
+            dest.copy_from_slice(&chunk);
+            self.next += 1;
+            Ok(())
+        }
+    }
+
+    impl rand_core::TryCryptoRng for ScriptedRng {}
+
+    #[test]
+    fn from_str_parses_public_keys() {
+        assert_eq!(HEX.parse::<PublicKey>().unwrap().to_hex(), HEX);
+        assert_eq!(
+            HEX.to_uppercase().parse::<PublicKey>().unwrap().to_hex(),
+            HEX
+        );
+        assert!("zz".parse::<PublicKey>().is_err());
+    }
+
+    #[test]
+    fn generate_with_rng_retries_invalid_scalars() {
+        // An out-of-range candidate is zeroized and discarded before the next draw.
+        let mut rng = ScriptedRng {
+            chunks: &[[0xff; 32], [0x03; 32]],
+            next: 0,
+        };
+        let key = SecretKey::generate_with_rng(&mut rng);
+        assert_eq!(key.to_secret_bytes(), [0x03; 32]);
+        assert_eq!(rng.next, 2);
+    }
+
     #[test]
     fn from_hex_accepts_mixed_case() {
         let key = PublicKey::from_hex(&HEX.to_uppercase()).unwrap();
@@ -568,6 +617,8 @@ mod tests {
     #[cfg(feature = "os-rng")]
     #[test]
     fn generate_and_sign_event_use_os_entropy() {
+        let key = SecretKey::generate();
+        assert_eq!(key.to_secret_bytes().len(), 32);
         let keys = Keys::generate();
         let unsigned = UnsignedEvent::new(
             keys.public_key(),

@@ -94,3 +94,35 @@ impl core::error::Error for Error {
 
 /// Result type alias used across the workspace.
 pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::panic, reason = "tests fail by panicking")]
+
+    use alloc::string::ToString;
+
+    use core::error::Error as _;
+
+    use super::*;
+
+    #[test]
+    fn error_kind_display_names() {
+        assert_eq!(ErrorKind::Hex.to_string(), "hex");
+        assert_eq!(ErrorKind::Url.to_string(), "url");
+        assert_eq!(ErrorKind::EventValidation.to_string(), "event validation");
+        assert_eq!(ErrorKind::Crypto.to_string(), "crypto");
+        assert_eq!(ErrorKind::Message.to_string(), "message");
+    }
+
+    #[test]
+    fn source_is_present_only_for_wrapped_errors() {
+        let flat = Error::new(ErrorKind::Url, "bad url");
+        assert_eq!(flat.to_string(), "url: bad url");
+        assert!(flat.source().is_none());
+
+        // A malformed EVENT wraps the event deserialization error as source.
+        let wrapped = crate::message::ClientMessage::parse("[\"EVENT\",\"x\"]").unwrap_err();
+        assert_eq!(wrapped.kind(), ErrorKind::Message);
+        assert!(wrapped.source().is_some());
+    }
+}

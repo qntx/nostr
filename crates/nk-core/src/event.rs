@@ -830,6 +830,12 @@ mod tests {
         assert!(serde_json::from_str::<Event>(&base("")).is_ok());
         // Unknown fields are ignored.
         assert!(serde_json::from_str::<Event>(&base(",\"extra\":1")).is_ok());
+        // Visitor `expecting` text reaches the deserialization error message.
+        let error = serde_json::from_str::<UnsignedEvent>("[]").unwrap_err();
+        assert!(
+            error.to_string().contains("unsigned NIP-01 event"),
+            "{error}"
+        );
     }
 
     /// `vectors/core/event-sign.json` case 0 — sk=3, aux=1.
@@ -895,5 +901,54 @@ mod tests {
                 .kind(),
             ErrorKind::Crypto
         );
+    }
+
+    #[test]
+    fn event_id_glue() {
+        let id = EventId::from_bytes([0xab; 32]);
+        assert_eq!(EventId::from_slice(id.as_bytes()).unwrap(), id);
+        assert_eq!(
+            EventId::from_slice(&[0u8; 31]).unwrap_err().kind(),
+            ErrorKind::Hex
+        );
+        assert_eq!(id.to_string(), "ab".repeat(32));
+        assert_eq!(
+            alloc::format!("{id:?}"),
+            alloc::format!("EventId({})", "ab".repeat(32))
+        );
+        // `FromStr` accepts any case (caller input); wire decoding stays strict.
+        assert_eq!("AB".repeat(32).parse::<EventId>().unwrap(), id);
+        assert!("ab".parse::<EventId>().is_err());
+        let wire: EventId = serde_json::from_str(&serde_json::to_string(&id).unwrap()).unwrap();
+        assert_eq!(wire, id);
+        assert!(
+            serde_json::from_str::<EventId>(&alloc::format!("\"{}\"", "AB".repeat(32))).is_err()
+        );
+    }
+
+    #[test]
+    fn signature_glue_and_wire_rejects() {
+        let sig = Signature::from_bytes([0xcd; 64]);
+        assert_eq!(Signature::from_slice(sig.as_bytes()).unwrap(), sig);
+        assert_eq!(
+            Signature::from_slice(&[0u8; 63]).unwrap_err().kind(),
+            ErrorKind::Hex
+        );
+        assert_eq!(sig.to_string(), "cd".repeat(64));
+        assert_eq!(
+            alloc::format!("{sig:?}"),
+            alloc::format!("Signature({})", "cd".repeat(64))
+        );
+        assert_eq!("CD".repeat(64).parse::<Signature>().unwrap(), sig);
+        assert!("cd".parse::<Signature>().is_err());
+        let wire: Signature = serde_json::from_str(&serde_json::to_string(&sig).unwrap()).unwrap();
+        assert_eq!(wire, sig);
+        // Strict wire decoding: uppercase, short, and non-strings fail.
+        assert!(
+            serde_json::from_str::<Signature>(&alloc::format!("\"{}\"", "CD".repeat(64))).is_err()
+        );
+        assert!(serde_json::from_str::<Signature>("\"cd\"").is_err());
+        assert!(serde_json::from_str::<Signature>("5").is_err());
+        assert!(serde_json::from_str::<Signature>("null").is_err());
     }
 }

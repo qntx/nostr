@@ -510,3 +510,162 @@ pub(crate) fn de_u16<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u16, 
         Captured::Invalid(reason) => Err(D::Error::custom(reason)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::panic, reason = "tests fail by panicking")]
+
+    use alloc::format;
+    use alloc::string::ToString;
+
+    use serde::de::value::{
+        Error as ValueError, MapDeserializer, SeqDeserializer, StrDeserializer,
+    };
+
+    use super::*;
+
+    /// Renders a visitor's `expecting` text.
+    fn expected<V>(visitor: V) -> String
+    where
+        V: for<'de> Visitor<'de>,
+    {
+        struct Expecting<V>(V);
+        impl<V> fmt::Display for Expecting<V>
+        where
+            V: for<'de> Visitor<'de>,
+        {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.expecting(f)
+            }
+        }
+        format!("{}", Expecting(visitor))
+    }
+
+    #[test]
+    fn visit_some_forwards_to_the_inner_deserializer() {
+        // serde_json never asks for Option here, but formats that do must get
+        // the wrapped value's visitor, not a rejection.
+        let captured = StrVisitor
+            .visit_some(StrDeserializer::<ValueError>::new("x"))
+            .expect("visit_some");
+        assert!(matches!(captured, Captured::Valid(ref v) if v == "x"));
+    }
+
+    #[test]
+    fn drain_helpers_consume_rejected_containers() {
+        // `SeqDeserializer`/`MapDeserializer` double as SeqAccess/MapAccess,
+        // so drain_* can be exercised without a JSON input.
+        drain_seq(SeqDeserializer::<_, ValueError>::new(
+            alloc::vec![1_i32, 2].into_iter(),
+        ))
+        .expect("drain seq");
+        drain_map(MapDeserializer::<_, ValueError>::new(
+            alloc::vec![(1_i32, 2_i32)].into_iter(),
+        ))
+        .expect("drain map");
+    }
+
+    #[test]
+    fn reject_arms_capture_instead_of_erroring() {
+        for captured in [
+            StrVisitor.visit_bool::<ValueError>(true).expect("bool"),
+            StrVisitor.visit_none::<ValueError>().expect("none"),
+            StrVisitor.visit_unit::<ValueError>().expect("unit"),
+            StrVisitor.visit_f64::<ValueError>(1.5).expect("f64"),
+            StrVisitor.visit_char::<ValueError>('x').expect("char"),
+            StrVisitor.visit_i64::<ValueError>(-1).expect("i64"),
+            StrVisitor.visit_u64::<ValueError>(1).expect("u64"),
+            StrVisitor.visit_bytes::<ValueError>(b"x").expect("bytes"),
+            StrVisitor
+                .visit_byte_buf::<ValueError>(alloc::vec![b'x'])
+                .expect("byte buf"),
+            StrVisitor
+                .visit_seq(SeqDeserializer::<_, ValueError>::new(
+                    alloc::vec![1_i32].into_iter(),
+                ))
+                .expect("seq"),
+            StrVisitor
+                .visit_map(MapDeserializer::<_, ValueError>::new(
+                    alloc::vec![(1_i32, 2_i32)].into_iter(),
+                ))
+                .expect("map"),
+        ] {
+            assert!(matches!(captured, Captured::Invalid("not a string")));
+        }
+        let captured = StrVisitor
+            .visit_string::<ValueError>(String::from("s"))
+            .expect("string");
+        assert!(matches!(captured, Captured::Valid(ref v) if v == "s"));
+    }
+
+    #[test]
+    fn visitors_describe_their_expected_shape() {
+        assert_eq!(expected(StrVisitor), "a string");
+        assert_eq!(expected(CowVisitor), "a string");
+        assert_eq!(
+            expected(IntVisitor {
+                max: MAX_SAFE_INTEGER
+            }),
+            "a non-negative integer of at most 9007199254740991"
+        );
+        assert_eq!(expected(StrListVisitor), "an array of strings");
+        assert_eq!(
+            expected(HexVisitor::<32, true>),
+            "a 64-character hex string"
+        );
+        assert_eq!(
+            expected(HexListVisitor::<32, true>),
+            "an array of 64-character hex strings"
+        );
+        assert_eq!(expected(U16ListVisitor), "an array of kinds");
+        assert_eq!(expected(TagsVisitor), "an array of tag arrays");
+    }
+
+    #[test]
+    fn de_u64_accepts_every_integer_spelling() {
+        fn de(raw: &str) -> Result<u64, serde_json::Error> {
+            de_u64(&mut serde_json::Deserializer::from_str(raw))
+        }
+        assert_eq!(de("5").expect("int"), 5);
+        assert_eq!(de("1e3").expect("exponent"), 1000);
+        assert_eq!(de("1.0").expect("float"), 1);
+        assert_eq!(de("-0").expect("negative zero"), 0);
+        assert_eq!(
+            de(&MAX_SAFE_INTEGER.to_string()).expect("max"),
+            MAX_SAFE_INTEGER
+        );
+        assert!(de("-1").is_err());
+        assert!(de("1.5").is_err());
+        assert!(de("9007199254740992").is_err());
+        assert!(de("\"x\"").is_err());
+        assert!(de("[]").is_err());
+        assert!(de("{}").is_err());
+        assert!(de("null").is_err());
+        assert!(de("true").is_err());
+    }
+
+    #[test]
+    fn de_u16_bounds_kinds() {
+        fn de(raw: &str) -> Result<u16, serde_json::Error> {
+            de_u16(&mut serde_json::Deserializer::from_str(raw))
+        }
+        assert_eq!(de("0").expect("zero"), 0);
+        assert_eq!(de("65535").expect("max"), 65535);
+        assert_eq!(de("65535.0").expect("float max"), 65535);
+        assert!(de("65536").is_err());
+        assert!(de("-1").is_err());
+        assert!(de("\"x\"").is_err());
+    }
+
+    #[test]
+    fn push_kind_records_out_of_range() {
+        // Unreachable through WireInt<65535>, but the total helper still
+        // reports overflow instead of panicking.
+        let mut items = Vec::new();
+        let mut bad = None;
+        push_kind(&mut items, &mut bad, 65_535);
+        push_kind(&mut items, &mut bad, 65_536);
+        assert_eq!(items, alloc::vec![65_535_u16]);
+        assert_eq!(bad, Some("kind out of range"));
+    }
+}

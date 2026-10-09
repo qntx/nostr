@@ -796,6 +796,7 @@ mod tests {
 
     #[test]
     fn matches_tag_conditions() {
+        let bare = event(&[&["t"]], 1, 1);
         let event = event(&[&["t", "nostr"], &["d", "post"]], 1, 1);
         assert!(Filter::new().tag(letter('t'), ["nostr"]).matches(&event));
         assert!(!Filter::new().tag(letter('t'), ["other"]).matches(&event));
@@ -805,6 +806,8 @@ mod tests {
                 .matches(&event)
         );
         assert!(!Filter::new().tag(letter('x'), ["nostr"]).matches(&event));
+        // A valueless tag never satisfies a # condition.
+        assert!(!Filter::new().tag(letter('t'), ["nostr"]).matches(&bare));
     }
 
     #[test]
@@ -1035,5 +1038,31 @@ mod tests {
             fingerprint(&[lower]),
             "[{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]"
         );
+    }
+
+    #[test]
+    fn hash_covers_every_field() {
+        // `BTreeMap` has no `Hash`; the impl hashes the ordered entries.
+        struct Len(u64);
+        impl Hasher for Len {
+            fn write(&mut self, bytes: &[u8]) {
+                self.0 = self.0.wrapping_add(bytes.len() as u64);
+            }
+            fn finish(&self) -> u64 {
+                self.0
+            }
+        }
+        let filter = Filter::new()
+            .kinds([Kind::TEXT_NOTE])
+            .tag(letter('t'), ["gm"])
+            .search("gm");
+        let mut a = Len(0);
+        filter.hash(&mut a);
+        let mut b = Len(0);
+        filter.clone().hash(&mut b);
+        assert_eq!(a.finish(), b.finish());
+        let mut different = Len(0);
+        Filter::new().hash(&mut different);
+        assert_ne!(a.finish(), different.finish());
     }
 }
