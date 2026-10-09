@@ -12,7 +12,7 @@ authors.workspace      = true
 
 [dev-dependencies]
 nk-core    = { workspace = true }
-nk-nips    = { workspace = true, features = ["nip04", "nip13", "nip19", "nip21", "nip42", "nip44", "nip49"] }
+nk-nips    = { workspace = true, features = ["nip04", "nip13", "nip19", "nip21", "nip42", "nip44", "nip49", "nip98"] }
 proptest   = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }

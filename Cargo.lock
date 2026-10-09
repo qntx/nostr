@@ -631,6 +631,7 @@ dependencies = [
  "rand_core 0.10.1",
  "scrypt",
  "secp256k1",
+ "serde_json",
  "sha2",
  "unicode-normalization",
  "zeroize",
