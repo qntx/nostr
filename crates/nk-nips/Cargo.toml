@@ -16,6 +16,7 @@ std     = ["nk-core/std"]
 clock   = ["std", "nk-core/clock"]
 os-rng  = ["std", "nk-core/os-rng"]
 nip19   = ["dep:bech32", "dep:zeroize"]
+nip21   = ["nip19"]
 
 # Rule: every external dependency is optional and enabled by the NIP
 # features that use it, so --no-default-features pulls nothing beyond
