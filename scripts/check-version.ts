@@ -28,12 +28,15 @@ export type PackageEntry = { path: string; pkg: unknown };
  * `[workspace.package].version`, every internal `crates/` path dependency must pin `=<version>`,
  * the version string may appear nowhere else in Cargo.toml (bumpp rewrites every occurrence), and
  * internal `@qntx/*` dependencies must use `^<version>` in peerDependencies and `<version>` in
- * devDependencies. The private workspace root is not passed in and takes no part.
+ * devDependencies, and every `[[package]]` in Cargo.lock without a `source` (a workspace member)
+ * must record the workspace version. The private workspace root is not passed in and takes no
+ * part.
  */
 export function checkVersion(
   packages: PackageEntry[],
   cargoToml: unknown,
   cargoText: string,
+  lockToml: unknown,
 ): string[] {
   const errors: string[] = [];
   const workspace = asRecord(asRecord(cargoToml)["workspace"]);
@@ -107,6 +110,23 @@ export function checkVersion(
         `Cargo.toml: "${cargoVersion}" appears ${occurrences} times, expected ${expected} ([workspace.package] plus internal path dependencies)`,
       );
     }
+
+    // Workspace members appear in Cargo.lock as [[package]] entries without
+    // a `source`; their recorded version must be the workspace version
+    // (sync-versions runs `cargo update --workspace` during the bump).
+    const lockPackages = asRecord(lockToml)["package"];
+    for (const entry of Array.isArray(lockPackages) ? lockPackages : []) {
+      const member = asRecord(entry);
+      if ("source" in member) {
+        continue;
+      }
+      const { name, version } = member;
+      if (typeof name === "string" && version !== cargoVersion) {
+        errors.push(
+          `Cargo.lock: workspace member "${name}" has version ${JSON.stringify(version)}, expected "${cargoVersion}"`,
+        );
+      }
+    }
   }
 
   return errors;
@@ -120,7 +140,13 @@ if (import.meta.main) {
       return { path, pkg: JSON.parse(readFileSync(path, "utf8")) as unknown };
     });
   const cargoText = readFileSync("Cargo.toml", "utf8");
-  const errors = checkVersion(packages, Bun.TOML.parse(cargoText), cargoText);
+  const lockText = readFileSync("Cargo.lock", "utf8");
+  const errors = checkVersion(
+    packages,
+    Bun.TOML.parse(cargoText),
+    cargoText,
+    Bun.TOML.parse(lockText),
+  );
   for (const error of errors) {
     console.error(`check-version: ${error}`);
   }
