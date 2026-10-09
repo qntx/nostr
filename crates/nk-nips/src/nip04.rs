@@ -90,7 +90,8 @@ pub fn encrypt_with_iv(key: &SharedSecret, text: &str, iv: &[u8; IV_LEN]) -> Str
     let plaintext = text.as_bytes();
     // PKCS#7: append 1..=16 bytes, each holding the pad length.
     let pad_len = u8::try_from(BLOCK - plaintext.len() % BLOCK).unwrap_or_default();
-    let mut buf = Vec::with_capacity(plaintext.len() + usize::from(pad_len));
+    // `buf` holds the plaintext until encryption overwrites it in place.
+    let mut buf = Zeroizing::new(Vec::with_capacity(plaintext.len() + usize::from(pad_len)));
     buf.extend_from_slice(plaintext);
     buf.resize(plaintext.len() + usize::from(pad_len), pad_len);
     let mut cipher = Aes256CbcEnc::new((&key.0).into(), iv.into());

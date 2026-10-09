@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 use bech32::primitives::decode::CheckedHrpstring;
 use bech32::{ByteIterExt, Checksum, Fe32, Fe32IterExt, Fe1024, Hrp};
 use nk_core::{EventId, Kind, PublicKey, SecretKey};
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 use crate::error::{Error, ErrorKind, Result};
 
@@ -24,8 +24,9 @@ use crate::error::{Error, ErrorKind, Result};
 pub const BECH32_MAX_LEN: usize = 5000;
 
 /// `bech32::Bech32` with the NIP-19 length limit: the stock checksum type
-/// caps codes at 1023 characters, NIP-19 allows 5000.
-enum Nip19Bech32 {}
+/// caps codes at 1023 characters, NIP-19 allows 5000. Shared with `nip49`
+/// (`ncryptsec` uses the same long checksum).
+pub(crate) enum Nip19Bech32 {}
 
 impl Checksum for Nip19Bech32 {
     type MidstateRepr = u32;
@@ -61,7 +62,7 @@ fn nip19(message: impl Into<alloc::borrow::Cow<'static, str>>) -> Error {
 }
 
 /// Encodes `data` under `hrp` as a lowercase bech32 string.
-fn encode_bech32(hrp: Hrp, data: &[u8]) -> String {
+pub(crate) fn encode_bech32(hrp: Hrp, data: &[u8]) -> String {
     data.iter()
         .copied()
         .bytes_to_fes()
@@ -80,19 +81,24 @@ fn encode_bech32_tlv(hrp: Hrp, data: &[u8]) -> Result<String> {
     Ok(code)
 }
 
-/// Parses and checksum-verifies `code`, returning the hrp and payload bytes.
-fn decode_bech32(code: &str) -> Result<(Hrp, Vec<u8>)> {
-    let checked = CheckedHrpstring::new::<Nip19Bech32>(code)
-        .map_err(|e| nip19(format!("invalid bech32: {e}")))?;
+/// Parses and checksum-verifies `code`, returning the hrp and payload bytes,
+/// or `None` on any format, checksum, or canonical-padding failure.
+pub(crate) fn decode_bech32(code: &str) -> Option<(Hrp, Vec<u8>)> {
+    let checked = CheckedHrpstring::new::<Nip19Bech32>(code).ok()?;
     let fes: Vec<Fe32> = checked.fe32_iter().collect();
     // `@scure/base`'s canonical-padding rule: the trailing partial byte must
     // be shorter than one field element and carry only zero bits.
     let leftover = (fes.len() * 5) % 8;
     let last = fes.last().map_or(0, |fe| fe.to_u8());
     if leftover >= 5 || (leftover > 0 && last & ((1u8 << leftover) - 1) != 0) {
-        return Err(nip19("invalid bech32: non-canonical padding"));
+        return None;
     }
-    Ok((checked.hrp(), fes.iter().copied().fes_to_bytes().collect()))
+    Some((checked.hrp(), fes.iter().copied().fes_to_bytes().collect()))
+}
+
+/// [`decode_bech32`] with NIP-19 error reporting.
+fn decode_nip19_bech32(code: &str) -> Result<(Hrp, Vec<u8>)> {
+    decode_bech32(code).ok_or_else(|| nip19("invalid bech32"))
 }
 
 /// A profile pointer (`nprofile`): a pubkey plus relay hints.
@@ -336,7 +342,10 @@ pub fn encode_note(id: &EventId) -> String {
 /// payload length, malformed TLVs, an out-of-range kind, or an invalid
 /// secret scalar (with the [`nk_core`] error as `source`).
 pub fn decode(code: &str) -> Result<Entity> {
-    let (hrp, data) = decode_bech32(code)?;
+    // The drop guard wipes the decoded buffer on every path — `nsec`
+    // payloads are secret key material (#210).
+    let (hrp, data) = decode_nip19_bech32(code)?;
+    let data = Zeroizing::new(data);
 
     if hrp == HRP_NPROFILE {
         let tlvs = parse_tlv(&data)?;
@@ -378,16 +387,14 @@ pub fn decode(code: &str) -> Result<Entity> {
             relays: tlv_relays(&tlvs),
         }))
     } else if hrp == HRP_NSEC {
-        // The decoded buffer is wiped once the scalar is validated and the
-        // `SecretKey` built (#210); a bad scalar wraps the nk-core error.
-        let mut data = data;
+        // A bad scalar wraps the nk-core error; the `data` guard wipes the
+        // decoded bytes whether or not the `SecretKey` was built.
         let secret = if data.len() == 32 {
             SecretKey::from_slice(&data)
                 .map_err(|e| Error::with_source(ErrorKind::Nip19, "invalid nsec scalar", e))
         } else {
             Err(nip19("nsec must be 32 bytes"))
         };
-        data.zeroize();
         Ok(Entity::Secret(secret?))
     } else if hrp == HRP_NPUB {
         let bytes: [u8; 32] = data
@@ -552,7 +559,7 @@ mod tests {
             author: Some(pubkey()),
             kind: Some(Kind::new(1)),
         };
-        let (_, data) = decode_bech32(&pointer.to_bech32().unwrap()).unwrap();
+        let (_, data) = decode_nip19_bech32(&pointer.to_bech32().unwrap()).unwrap();
         // Kind(3), author(2), relay(1), id(0).
         assert_eq!(data.first(), Some(&TLV_KIND));
         assert_eq!(data.get(6), Some(&TLV_AUTHOR));

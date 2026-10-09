@@ -419,7 +419,7 @@
     {
       "id": "nip49.ncryptsec",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip49.ts",
@@ -428,8 +428,15 @@
           "packages/nostr/tests/vectors/nip49.test.ts"
         ]
       },
-      "rust": null,
-      "vectors": ["vectors/nip49/max-logn.json"]
+      "rust": {
+        "module": "crates/nk-nips/src/nip49.rs",
+        "tests": ["crates/nk-vectors/tests/nip49.rs"]
+      },
+      "vectors": [
+        "vectors/nip49/official.json",
+        "vectors/nip49/codec.json",
+        "vectors/nip49/max-logn.json"
+      ]
     },
     {
       "id": "nip13.pow",

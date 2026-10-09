@@ -14,6 +14,7 @@
 //! | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) |
 //! | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`)                   |
 //! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
+//! | `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptOptions`, `encrypt`/`decrypt`) |
 //!
 //! ```
 //! use nk_nips::ErrorKind;
@@ -41,6 +42,8 @@ pub mod nip19;
 pub mod nip21;
 #[cfg(feature = "nip44")]
 pub mod nip44;
+#[cfg(feature = "nip49")]
+pub mod nip49;
 
 pub use error::{Error, ErrorKind, Result};
 
@@ -64,6 +67,12 @@ const _: () = {
     }
     #[cfg(feature = "nip04")]
     assert_send_sync::<nip04::SharedSecret>();
+    #[cfg(feature = "nip49")]
+    {
+        assert_send_sync::<nip49::EncryptOptions>();
+        assert_send_sync::<nip49::KeySecurity>();
+        assert_send_sync::<nip49::Decrypted>();
+    }
     #[cfg(feature = "nip21")]
     assert_send_sync::<nip21::NostrUri>();
     #[cfg(feature = "nip44")]

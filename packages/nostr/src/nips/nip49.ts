@@ -4,6 +4,7 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/49.md
  */
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { scryptAsync } from "@noble/hashes/scrypt.js";
 import { concatBytes, randomBytes } from "@noble/hashes/utils.js";
 import { bech32 } from "@scure/base";
@@ -181,7 +182,13 @@ export async function decrypt(
   try {
     const key = await deriveKey(password, salt, logn, opts.scrypt ?? nobleScrypt);
     try {
-      return xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
+      const secret = xchacha20poly1305(key, nonce, aad).decrypt(ciphertext);
+      // Ruling N3: the decrypted bytes must form a valid secp256k1 scalar.
+      if (!secp256k1.utils.isValidSecretKey(secret)) {
+        secret.fill(0);
+        throw new Nip49Error("invalid secret key");
+      }
+      return secret;
     } finally {
       key.fill(0);
     }
