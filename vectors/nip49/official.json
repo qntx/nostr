@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "capability": "nip49.ncryptsec",
+  "source": {
+    "kind": "official",
+    "generator": "https://github.com/nostr-protocol/nips/blob/master/49.md",
+    "version": null,
+    "cross_check": null,
+    "note": "The `ncryptsec` decryption example transcribed from the NIP-49 specification text (log_n=16, ksb=0x00, password 'nostr')."
+  },
+  "cases": [
+    {
+      "ncryptsec": "ncryptsec1qgg9947rlpvqu76pj5ecreduf9jxhselq2nae2kghhvd5g7dgjtcxfqtd67p9m0w57lspw8gsq6yphnm8623nsl8xn9j4jdzz84zm3frztj3z7s35vpzmqf6ksu8r89qk5z2zxfmu5gv8th8wclt0h4p",
+      "password": "nostr",
+      "max_log_n": 22,
+      "secret": "3501454135014541350145413501453fefb02227e449e57cf4d3a3ce05378683",
+      "key_security": 0
+    }
+  ]
+}

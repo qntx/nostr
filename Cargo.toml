@@ -14,26 +14,29 @@ keywords     = ["nostr", "protocol", "sdk"]
 categories   = ["cryptography", "network-programming"]
 
 [workspace.dependencies]
-nk-core    = { path = "crates/nk-core", version = "=0.11.0", default-features = false }
-nk-nips    = { path = "crates/nk-nips", version = "=0.11.0", default-features = false }
-aes        = { version = "0.9", default-features = false }
-base16ct   = { version = "1.0", default-features = false, features = ["alloc"] }
-base64ct   = { version = "1.8", default-features = false, features = ["alloc"] }
-bech32     = { version = "0.12", default-features = false, features = ["alloc"] }
-cbc        = { version = "0.2", default-features = false }
-chacha20   = { version = "0.10", default-features = false }
-criterion  = { version = "0.8", default-features = false }
-getrandom  = { version = "0.4", default-features = false }
-hkdf       = { version = "0.13", default-features = false }
-hmac       = { version = "0.13", default-features = false }
-proptest   = { version = "1.11" }
-rand_core  = { version = "0.10", default-features = false }
-secp256k1  = { version = "0.33", default-features = false }
-serde      = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
-serde_json = { version = "1.0.151", default-features = false, features = ["alloc"] }
-sha2       = { version = "0.11", default-features = false }
-url        = { version = "2.5.8", default-features = false }
-zeroize    = { version = "1.9.0", default-features = false, features = ["alloc"] }
+nk-core               = { path = "crates/nk-core", version = "=0.11.0", default-features = false }
+nk-nips               = { path = "crates/nk-nips", version = "=0.11.0", default-features = false }
+aes                   = { version = "0.9", default-features = false }
+base16ct              = { version = "1.0", default-features = false, features = ["alloc"] }
+base64ct              = { version = "1.8", default-features = false, features = ["alloc"] }
+bech32                = { version = "0.12", default-features = false, features = ["alloc"] }
+cbc                   = { version = "0.2", default-features = false }
+chacha20              = { version = "0.10", default-features = false }
+chacha20poly1305      = { version = "0.11", default-features = false }
+criterion             = { version = "0.8", default-features = false }
+getrandom             = { version = "0.4", default-features = false }
+hkdf                  = { version = "0.13", default-features = false }
+hmac                  = { version = "0.13", default-features = false }
+proptest              = { version = "1.11" }
+rand_core             = { version = "0.10", default-features = false }
+scrypt                = { version = "0.12", default-features = false }
+secp256k1             = { version = "0.33", default-features = false }
+serde                 = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
+serde_json            = { version = "1.0.151", default-features = false, features = ["alloc"] }
+sha2                  = { version = "0.11", default-features = false }
+unicode-normalization = { version = "0.1", default-features = false }
+url                   = { version = "2.5.8", default-features = false }
+zeroize               = { version = "1.9.0", default-features = false, features = ["alloc"] }
 
 [profile.release]
 codegen-units = 1

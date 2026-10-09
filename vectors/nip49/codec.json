@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "capability": "nip49.ncryptsec",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.11.0",
+    "cross_check": null
+  },
+  "cases": [
+    {
+      "secret": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "password": "hunter2",
+      "log_n": 2,
+      "key_security": 0,
+      "salt": "000102030405060708090a0b0c0d0e0f",
+      "nonce": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7",
+      "ncryptsec": "ncryptsec1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6mspcz49svw9368gdec9vp5ef2s5x35rqw9dhkx3u7f6t006w755j7qr2x4s3q9wusk3v22y5gygxc5l5n50mne"
+    },
+    {
+      "secret": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "password": "hunter2",
+      "log_n": 3,
+      "key_security": 1,
+      "salt": "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+      "nonce": "505152535455565758595a5b5c5d5e5f6061626364656667",
+      "ncryptsec": "ncryptsec1qgplpu0j7060tahhlrul47lulhl075z32ff4g42k2av9jkjmt3w4uhmqv93xxer9vensztvnmhs2jtu3elyv2pjur2g9lxt8kfdyng74789yehdpp97k6wa43zyvumuuhrxyz78fya8l3qe4evc5saz0"
+    },
+    {
+      "secret": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "password": "hunter2",
+      "log_n": 4,
+      "key_security": 2,
+      "salt": "000102030405060708090a0b0c0d0e0f",
+      "nonce": "505152535455565758595a5b5c5d5e5f6061626364656667",
+      "ncryptsec": "ncryptsec1qgzqqqgzqvzq2ps8pqys5zcvp58q75z32ff4g42k2av9jkjmt3w4uhmqv93xxer9vens9qg0y8zre3jjw0f2ya7sfa60lxpax9q36khkrkhm9l6x0kuwf88uc087eucfpv8rg02f94vuk2cnscdkua83"
+    },
+    {
+      "secret": "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa",
+      "password": "correct horse battery staple",
+      "log_n": 1,
+      "key_security": 0,
+      "salt": "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+      "nonce": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7",
+      "ncryptsec": "ncryptsec1qgqlpu0j7060tahhlrul47lulhl0lg9p5236ffdx5752n24t4jk6ataskxet8d94k6msp5375gge4whl0ka5sagmskrx4s8t3x47g0edh9yal372v5jmzf6j79l68pu4lfrpq8xz3398mws80cz0eajn"
+    },
+    {
+      "secret": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "password": "ÅΩẛ̣",
+      "log_n": 2,
+      "key_security": 2,
+      "salt": "000102030405060708090a0b0c0d0e0f",
+      "nonce": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7",
+      "ncryptsec": "ncryptsec1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6msyke9w7xstzuwryd6g9sfaqjj8hf854yqp338f9ah5c2twmanq9ux5chq0rfsg8wmlqfr7uvlg7qv7cemuvjr"
+    },
+    {
+      "secret": "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268",
+      "password": "ÅΩṩ",
+      "log_n": 2,
+      "key_security": 2,
+      "salt": "000102030405060708090a0b0c0d0e0f",
+      "nonce": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7",
+      "ncryptsec": "ncryptsec1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6msyke9w7xstzuwryd6g9sfaqjj8hf854yqp338f9ah5c2twmanq9ux5chq0rfsg8wmlqfr7uvlg7qv7cemuvjr"
+    },
+    {
+      "secret": "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa",
+      "password": "密碼🔐 密碼🔐 密碼🔐 密碼🔐 密碼🔐 密碼🔐 密碼🔐 密碼🔐",
+      "log_n": 3,
+      "key_security": 2,
+      "salt": "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+      "nonce": "505152535455565758595a5b5c5d5e5f6061626364656667",
+      "ncryptsec": "ncryptsec1qgplpu0j7060tahhlrul47lulhl075z32ff4g42k2av9jkjmt3w4uhmqv93xxer9vensyxsme8yxwp0dzn05vx3e3klj7anwkztd3je5hwx2wq6gxgfjnmaudz48pkshgv9ssqhm0ptt7ashdcedxl2x"
+    }
+  ],
+  "invalid": [
+    {
+      "ncryptsec": "ncryptsec1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6mspcz49svw9368gdec9vp5ef2s5x35rqw9dhkx3u7f6t006w755j7qr2x4s3q9wusk3v22y5gygxc5l5n50mne",
+      "password": "hunter2 wrong",
+      "max_log_n": 22,
+      "error": "Nip49Error"
+    },
+    {
+      "ncryptsec": "ncryptsec1qypqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6mspcz49svw9368gdec9vp5ef2s5x35rqw9dhkx3u7f6t006w755j7qr2x4s3q9wusk3v22y5gygxc5l55ayqyr",
+      "password": "hunter2",
+      "max_log_n": 22,
+      "error": "Nip49Error"
+    },
+    {
+      "ncryptsec": "ncryptsec1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6ms8cz49svw9368gdec9vp5ef2s5x35rqw9dhkx3u7f6t006w755j7qr2x4s3q9wusk3v22y5gygxc5l5z2wh5a",
+      "password": "hunter2",
+      "max_log_n": 22,
+      "error": "Nip49Error"
+    },
+    {
+      "ncryptsec": "ncryptsec1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6mspcz49svw9368gdec9vp5ef2s5x35rqw9dhkx3u7f6t006w755j7qr2x4s3q9wusk3v22y5gygxc5vq7yja",
+      "password": "hunter2",
+      "max_log_n": 22,
+      "error": "Nip49Error"
+    },
+    {
+      "ncryptsec": "npub1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6mspcz49svw9368gdec9vp5ef2s5x35rqw9dhkx3u7f6t006w755j7qr2x4s3q9wusk3v22y5gygxc5l5des7n5",
+      "password": "hunter2",
+      "max_log_n": 22,
+      "error": "Nip49Error"
+    },
+    {
+      "ncryptsec": "ncryptsec1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6mspcz49svw9368gdec9vp5ef2s5x35rqw9dhkx3u7f6t006w755j7qr2x4s3q9wusk3v22y5gygxc5ludqthdy",
+      "password": "hunter2",
+      "max_log_n": 22,
+      "error": "Nip49Error"
+    },
+    {
+      "ncryptsec": "ncryptsec1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6ms95gtwhnmxrx4fgzsu3lwfgkp0357l4mfl2vc84nlpslauuq3w6dgg28mf4qxmualnfg9w2ch7fvh6uvetrya",
+      "password": "hunter2",
+      "max_log_n": 22,
+      "error": "Nip49Error"
+    },
+    {
+      "ncryptsec": "ncryptsec1qgpqqqgzqvzq2ps8pqys5zcvp58qlg9p5236ffdx5752n24t4jk6ataskxet8d94k6mspcz49svw9368gdec9vp5ef2s5x35rqw9dhkx3u7f6t006w755j7qr2x4s3q9wusk3v22y5gygxc5l5n50mne",
+      "password": "hunter2",
+      "max_log_n": 1,
+      "error": "Nip49Error"
+    }
+  ]
+}

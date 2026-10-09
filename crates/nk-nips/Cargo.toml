@@ -21,24 +21,28 @@ nip04  = ["dep:aes", "dep:base64ct", "dep:cbc", "dep:rand_core", "dep:secp256k1"
 nip19  = ["dep:bech32", "dep:zeroize"]
 nip21  = ["nip19"]
 nip44  = ["dep:base64ct", "dep:chacha20", "dep:hkdf", "dep:hmac", "dep:rand_core", "dep:secp256k1", "dep:sha2", "dep:zeroize"]
+nip49  = ["nip19", "dep:chacha20poly1305", "dep:rand_core", "dep:scrypt", "dep:unicode-normalization", "dep:zeroize"]
 
 # Rule: every external dependency is optional and enabled by the NIP
 # features that use it, so --no-default-features pulls nothing beyond
 # nk-core.
 [dependencies]
-aes       = { workspace = true, optional = true }
-base64ct  = { workspace = true, optional = true }
-bech32    = { workspace = true, optional = true }
-cbc       = { workspace = true, optional = true, features = ["block-padding"] }
-chacha20  = { workspace = true, optional = true, features = ["cipher"] }
-getrandom = { workspace = true, optional = true, features = ["sys_rng"] }
-hkdf      = { workspace = true, optional = true }
-hmac      = { workspace = true, optional = true }
-nk-core   = { workspace = true }
-rand_core = { workspace = true, optional = true }
-secp256k1 = { workspace = true, optional = true }
-sha2      = { workspace = true, optional = true }
-zeroize   = { workspace = true, optional = true }
+aes                   = { workspace = true, optional = true }
+base64ct              = { workspace = true, optional = true }
+bech32                = { workspace = true, optional = true }
+cbc                   = { workspace = true, optional = true, features = ["block-padding"] }
+chacha20              = { workspace = true, optional = true, features = ["cipher"] }
+chacha20poly1305      = { workspace = true, optional = true }
+getrandom             = { workspace = true, optional = true, features = ["sys_rng"] }
+hkdf                  = { workspace = true, optional = true }
+hmac                  = { workspace = true, optional = true }
+nk-core               = { workspace = true }
+rand_core             = { workspace = true, optional = true }
+scrypt                = { workspace = true, optional = true }
+secp256k1             = { workspace = true, optional = true }
+sha2                  = { workspace = true, optional = true }
+unicode-normalization = { workspace = true, optional = true }
+zeroize               = { workspace = true, optional = true }
 
 [lints]
 workspace = true
