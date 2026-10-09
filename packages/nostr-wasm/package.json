@@ -1,6 +1,6 @@
 {
   "name": "@qntx/nostr-wasm",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "WebAssembly-accelerated cryptography backend for @qntx/nostr",
   "keywords": [
     "nostr",
@@ -55,7 +55,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@noble/curves": "2.4.0",
-    "@qntx/nostr": "0.10.1",
+    "@qntx/nostr": "0.11.0",
     "@qntx/tsconfig": "1.0.1",
     "@types/node": "26.6.3",
     "binaryen": "132.0.0",
@@ -64,7 +64,7 @@
     "vite-plus": "1.0.0"
   },
   "peerDependencies": {
-    "@qntx/nostr": "^0.10.1"
+    "@qntx/nostr": "^0.11.0"
   },
   "devEngines": {
     "packageManager": {
