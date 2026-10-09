@@ -6,6 +6,7 @@ import { base64 } from "@scure/base";
 
 import { CryptoError } from "../core/error.ts";
 import {
+  assertByteLength,
   assertHex32,
   assertSecretKeyBytes,
   hexToBytes,
@@ -35,30 +36,63 @@ function resolveSecret(secretKey: string | Uint8Array): Uint8Array {
 export function encrypt(secretKey: string | Uint8Array, pubkey: string, text: string): string {
   const privkey = resolveSecret(secretKey);
   const normalizedKey = normalizeSharedSecret(privkey, pubkey);
+  try {
+    return encryptWithSharedSecret(normalizedKey, text);
+  } finally {
+    normalizedKey.fill(0);
+  }
+}
+
+/**
+ * Encrypt with the raw 32-byte ECDH x-coordinate instead of a secret key, for key holders that only
+ * expose ECDH ({@link NostrKeyOperations}).
+ */
+export function encryptWithSharedSecret(sharedX: Uint8Array, text: string): string {
+  assertByteLength(sharedX, 32, "shared secret");
   const iv = randomBytes(16);
   const plaintext = utf8Encoder.encode(text);
-  const ciphertext = cbc(normalizedKey, iv).encrypt(plaintext);
+  const ciphertext = cbc(sharedX, iv).encrypt(plaintext);
   return `${base64.encode(ciphertext)}?iv=${base64.encode(iv)}`;
 }
 
 /** Decrypt a NIP-04 payload from a peer pubkey. */
 export function decrypt(secretKey: string | Uint8Array, pubkey: string, data: string): string {
   const privkey = resolveSecret(secretKey);
+  splitPayload(data);
+  const normalizedKey = normalizeSharedSecret(privkey, pubkey);
+  try {
+    return decryptWithSharedSecret(normalizedKey, data);
+  } finally {
+    normalizedKey.fill(0);
+  }
+}
+
+function splitPayload(data: string): [ciphertext: string, iv: string] {
   const parts = data.split("?iv=");
+  const [ciphertext, iv] = parts;
   if (
     parts.length !== 2 ||
-    parts[0] === undefined ||
-    parts[0] === "" ||
-    parts[1] === undefined ||
-    parts[1] === ""
+    ciphertext === undefined ||
+    ciphertext === "" ||
+    iv === undefined ||
+    iv === ""
   ) {
     throw new CryptoError("invalid NIP-04 payload: missing iv");
   }
-  const normalizedKey = normalizeSharedSecret(privkey, pubkey);
+  return [ciphertext, iv];
+}
+
+/**
+ * Decrypt a NIP-04 payload with the raw 32-byte ECDH x-coordinate instead of a secret key, for key
+ * holders that only expose ECDH ({@link NostrKeyOperations}).
+ */
+export function decryptWithSharedSecret(sharedX: Uint8Array, data: string): string {
+  assertByteLength(sharedX, 32, "shared secret");
+  const [ciphertextPart, ivPart] = splitPayload(data);
   try {
-    const iv = base64.decode(parts[1]);
-    const ciphertext = base64.decode(parts[0]);
-    const plaintext = cbc(normalizedKey, iv).decrypt(ciphertext);
+    const iv = base64.decode(ivPart);
+    const ciphertext = base64.decode(ciphertextPart);
+    const plaintext = cbc(sharedX, iv).decrypt(ciphertext);
     return utf8Decoder.decode(plaintext);
   } catch (error) {
     throw new CryptoError("invalid NIP-04 payload", { cause: error });
