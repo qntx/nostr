@@ -513,14 +513,20 @@
     {
       "id": "nip17.dm",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip17.ts",
-        "tests": ["packages/nostr/tests/nip17.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip17.test.ts",
+          "packages/nostr/tests/vectors/nip17.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip17.rs",
+        "tests": ["crates/nk-vectors/tests/nip17.rs"]
+      },
+      "vectors": ["vectors/nip17/codec.json"]
     },
     {
       "id": "nip10.thread",

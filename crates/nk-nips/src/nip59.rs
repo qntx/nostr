@@ -207,6 +207,20 @@ impl WrapOptions {
         self
     }
 
+    /// Per-recipient gift-wrap options for `nip17::wrap_direct_message_*`:
+    /// same timestamps, expiration, and ephemeral flag, the target's relay
+    /// hint, and no extra tags — TS `wrapDirectMessage` forwards only those.
+    #[cfg(feature = "nip17")]
+    pub(crate) const fn dm_wrap(&self, relay_hint: Option<RelayUrl>) -> Self {
+        Self {
+            timestamps: self.timestamps,
+            relay_hint,
+            extra_tags: Tags::new(),
+            expiration: self.expiration,
+            ephemeral: self.ephemeral,
+        }
+    }
+
     fn seal_created_at<R: rand_core::CryptoRng + ?Sized>(
         &self,
         rumor: &Rumor,
