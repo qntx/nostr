@@ -55,6 +55,9 @@ jobs:
     with:
       features: --no-default-features
       doc: true
+      # Per-package -p runs: Cargo feature unification across members must
+      # not mask the minimal configuration. Extend the list per new crate.
+      packages: nk-core nk-vectors nk-wasm
       # package-check stays off until nk-core makes the workspace publishable.
 
   portable:
