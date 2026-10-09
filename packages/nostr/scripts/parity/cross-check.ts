@@ -17,16 +17,20 @@
 import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
-// nostr-tools' sources import @noble/* packages, but the checkout has no
-// installed dependencies and bun resolves bare specifiers from the importing
-// file's directory upward. Link the workspace's @noble copies into the
+import { hexToBytes } from "@noble/hashes/utils.js";
+
+// nostr-tools' sources import @noble/* and @scure packages, but the checkout
+// has no installed dependencies and bun resolves bare specifiers from the
+// importing file's directory upward. Link the workspace's copies into the
 // checkout (3rdparty/ is git-ignored, so this stays local).
 const ntRoot = join(import.meta.dirname, "../../../../3rdparty/nostr-tools");
 const ntNodeModules = join(ntRoot, "node_modules");
-const nobleTarget = join(import.meta.dirname, "../../node_modules/@noble");
-if (!existsSync(join(ntNodeModules, "@noble"))) {
-  mkdirSync(ntNodeModules, { recursive: true });
-  symlinkSync(nobleTarget, join(ntNodeModules, "@noble"), "dir");
+const nostrNodeModules = join(import.meta.dirname, "../../node_modules");
+for (const scope of ["@noble", "@scure"]) {
+  if (!existsSync(join(ntNodeModules, scope))) {
+    mkdirSync(ntNodeModules, { recursive: true });
+    symlinkSync(join(nostrNodeModules, scope), join(ntNodeModules, scope), "dir");
+  }
 }
 
 // Minimal signatures of the nostr-tools functions used below; typing the
@@ -188,6 +192,127 @@ for (const c of urls) {
   );
 }
 console.log(`url-normalize: ${urlAgree} agree, ${urlDiffs} differ (reported, not vector bugs)`);
+
+// nip19 codec: nostr-tools is the codebase our decoder was ported from, so
+// only the N1 (kind 0..=65535) and N2 (valid nsec scalar) rulings legitimately
+// differ — nostr-tools accepts those inputs; everything else must agree.
+type NtNip19 = {
+  decode: (code: string) => unknown;
+  npubEncode: (hex: string) => string;
+  nsecEncode: (key: Uint8Array) => string;
+  noteEncode: (hex: string) => string;
+  nprofileEncode: (profile: { pubkey: string; relays?: string[] }) => string;
+  neventEncode: (event: {
+    id: string;
+    relays?: string[];
+    author?: string;
+    kind?: number;
+  }) => string;
+  naddrEncode: (addr: {
+    identifier: string;
+    pubkey: string;
+    kind: number;
+    relays?: string[];
+  }) => string;
+};
+const nip19Module: unknown = await import(`${ntRoot}/nip19.ts`);
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the checkout's public API is pinned by the Nt* shapes above
+const nt = nip19Module as NtNip19;
+
+type Nip19Entity =
+  | { type: "nprofile"; pubkey: string; relays: string[] }
+  | { type: "nevent"; id: string; relays: string[]; author?: string; kind?: number }
+  | { type: "naddr"; identifier: string; pubkey: string; kind: number; relays: string[] }
+  | { type: "nsec"; secret: string }
+  | { type: "npub"; pubkey: string }
+  | { type: "note"; id: string };
+type Nip19Case = {
+  input?: string;
+  encode?: Nip19Entity;
+  decoded?: Nip19Entity;
+  encoded?: string;
+  error?: string;
+};
+
+const nip19Vectors = join(import.meta.dirname, "../../../../vectors/nip19");
+const nip19Doc: unknown = JSON.parse(readFileSync(join(nip19Vectors, "codec.json"), "utf8"));
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- generated vectors are frozen by their capability shape
+const nip19Cases = (nip19Doc as { cases: Nip19Case[] }).cases;
+
+function ntEncode(entity: Nip19Entity): string {
+  let encoded: string;
+  switch (entity.type) {
+    case "nprofile":
+      encoded = nt.nprofileEncode({ pubkey: entity.pubkey, relays: entity.relays });
+      break;
+    case "nevent":
+      encoded = nt.neventEncode({
+        id: entity.id,
+        relays: entity.relays,
+        ...(entity.author === undefined ? {} : { author: entity.author }),
+        ...(entity.kind === undefined ? {} : { kind: entity.kind }),
+      });
+      break;
+    case "naddr":
+      encoded = nt.naddrEncode({
+        identifier: entity.identifier,
+        pubkey: entity.pubkey,
+        kind: entity.kind,
+        relays: entity.relays,
+      });
+      break;
+    case "nsec":
+      encoded = nt.nsecEncode(hexToBytes(entity.secret));
+      break;
+    case "npub":
+      encoded = nt.npubEncode(entity.pubkey);
+      break;
+    case "note":
+      encoded = nt.noteEncode(entity.id);
+      break;
+  }
+  return encoded;
+}
+
+let nip19Agree = 0;
+let nip19Diffs = 0;
+for (const c of nip19Cases) {
+  if (c.input !== undefined) {
+    let ntOk: boolean;
+    try {
+      nt.decode(c.input);
+      ntOk = true;
+    } catch {
+      ntOk = false;
+    }
+    if (ntOk === (c.error === undefined)) {
+      nip19Agree += 1;
+      continue;
+    }
+    nip19Diffs += 1;
+    console.log(
+      `nip19 codec: ${c.input.slice(0, 32)}…: ours ${c.error ?? "decode"} vs nostr-tools ${ntOk ? "decode" : "error"}`,
+    );
+  } else if (c.encode !== undefined) {
+    let ntOut: string | undefined;
+    try {
+      ntOut = ntEncode(c.encode);
+    } catch {
+      ntOut = undefined;
+    }
+    if (ntOut === c.encoded || (ntOut === undefined && c.error !== undefined)) {
+      nip19Agree += 1;
+      continue;
+    }
+    nip19Diffs += 1;
+    console.log(
+      `nip19 encode: ${c.encode.type}: ours ${c.encoded ?? c.error ?? "decode"} vs nostr-tools ${ntOut ?? "error"}`,
+    );
+  }
+}
+console.log(
+  `nip19 codec: ${nip19Agree} agree, ${nip19Diffs} differ (N1/N2 rulings, reported not fixed)`,
+);
 
 console.log(`nostr-tools ${ntVersion} cross-check: ${failures} unexpected mismatches`);
 if (failures > 0) {

@@ -1,3 +1,4 @@
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bech32 } from "@scure/base";
 
 import { NostrError, errorMessage } from "../core/error.ts";
@@ -94,8 +95,10 @@ function parseTLV(data: Uint8Array): TLV {
   return result;
 }
 
+// NIP-01 kinds are u16, so the 4-byte wire TLV is limited to 0..=65535 on
+// both encode and decode.
 function assertNip19Kind(kind: number): void {
-  if (!Number.isInteger(kind) || kind < 0 || kind > 0xffffffff) {
+  if (!Number.isInteger(kind) || kind < 0 || kind > 0xffff) {
     throw new Nip19Error(`invalid kind: ${kind}`);
   }
 }
@@ -257,6 +260,7 @@ export function decode(code: string): DecodedResult {
       const kind = tlv[3]?.[0];
       if (kind !== undefined) {
         pointer.kind = readUint32(kind);
+        assertNip19Kind(pointer.kind);
       }
       return { type: "nevent", data: pointer };
     }
@@ -277,12 +281,14 @@ export function decode(code: string): DecodedResult {
       if (tlv[3][0].length !== 4) {
         throw new Nip19Error("TLV 3 should be 4 bytes");
       }
+      const naddrKind = readUint32(tlv[3][0]);
+      assertNip19Kind(naddrKind);
       return {
         type: "naddr",
         data: {
           identifier: utf8Decoder.decode(tlv[0][0]),
           pubkey: bytesToHex(tlv[2][0]),
-          kind: readUint32(tlv[3][0]),
+          kind: naddrKind,
           relays: tlv[1] ? tlv[1].map((d) => utf8Decoder.decode(d)) : [],
         },
       };
@@ -290,6 +296,9 @@ export function decode(code: string): DecodedResult {
     case "nsec":
       if (data.length !== 32) {
         throw new Nip19Error("nsec must be 32 bytes");
+      }
+      if (!secp256k1.utils.isValidSecretKey(data)) {
+        throw new Nip19Error("invalid nsec secret key");
       }
       return { type: "nsec", data };
     case "npub":

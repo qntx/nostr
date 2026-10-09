@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "capability": "nip19.codec",
+  "source": {
+    "kind": "official",
+    "generator": "https://github.com/nostr-protocol/nips/blob/master/19.md",
+    "version": null,
+    "cross_check": null
+  },
+  "cases": [
+    {
+      "input": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "decoded": {
+        "type": "npub",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      },
+      "encoded": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6"
+    },
+    {
+      "input": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+      "decoded": {
+        "type": "npub",
+        "pubkey": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e"
+      },
+      "encoded": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+    },
+    {
+      "input": "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5",
+      "decoded": {
+        "type": "nsec",
+        "secret": "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa"
+      },
+      "encoded": "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5"
+    },
+    {
+      "input": "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8gpp4mhxue69uhhytnc9e3k7mgpz4mhxue69uhkg6nzv9ejuumpv34kytnrdaksjlyr9p",
+      "decoded": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": ["wss://r.x.com", "wss://djbas.sadkb.com"]
+      },
+      "encoded": "nprofile1qyxhwumn8ghj7u3w0qhxxmmdqy2hwumn8ghj7er2vfshxtnnv9jxkc3wvdhk6qpq80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwscgnzhf"
+    }
+  ]
+}
