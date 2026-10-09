@@ -1,0 +1,230 @@
+{
+  "schema": 1,
+  "capability": "nip42.auth-event",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.11.0"
+  },
+  "auth": [
+    {
+      "relay": "wss://relay.example/",
+      "challenge": "challenge-string",
+      "tags": [
+        [
+          "relay",
+          "wss://relay.example/"
+        ],
+        [
+          "challenge",
+          "challenge-string"
+        ]
+      ],
+      "content": ""
+    },
+    {
+      "relay": "wss://relay.example/path",
+      "challenge": "challenge-string",
+      "tags": [
+        [
+          "relay",
+          "wss://relay.example/path"
+        ],
+        [
+          "challenge",
+          "challenge-string"
+        ]
+      ],
+      "content": ""
+    },
+    {
+      "relay": "ws://localhost:7777/",
+      "challenge": "challenge-string",
+      "tags": [
+        [
+          "relay",
+          "ws://localhost:7777/"
+        ],
+        [
+          "challenge",
+          "challenge-string"
+        ]
+      ],
+      "content": ""
+    },
+    {
+      "relay": "wss://nostr.example.com:444/sub?x=1&y=2",
+      "challenge": "challenge-string",
+      "tags": [
+        [
+          "relay",
+          "wss://nostr.example.com:444/sub?x=1&y=2"
+        ],
+        [
+          "challenge",
+          "challenge-string"
+        ]
+      ],
+      "content": ""
+    },
+    {
+      "relay": "wss://relay.example/",
+      "challenge": "",
+      "tags": [
+        [
+          "relay",
+          "wss://relay.example/"
+        ],
+        [
+          "challenge",
+          ""
+        ]
+      ],
+      "content": ""
+    },
+    {
+      "relay": "wss://relay.example/",
+      "challenge": "émoji ⚡ challenge",
+      "tags": [
+        [
+          "relay",
+          "wss://relay.example/"
+        ],
+        [
+          "challenge",
+          "émoji ⚡ challenge"
+        ]
+      ],
+      "content": ""
+    },
+    {
+      "relay": "wss://relay.example/",
+      "challenge": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "tags": [
+        [
+          "relay",
+          "wss://relay.example/"
+        ],
+        [
+          "challenge",
+          "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
+        ]
+      ],
+      "content": ""
+    },
+    {
+      "relay": "RELAY.EXAMPLE",
+      "challenge": "upper",
+      "tags": [
+        [
+          "relay",
+          "RELAY.EXAMPLE"
+        ],
+        [
+          "challenge",
+          "upper"
+        ]
+      ],
+      "content": "",
+      "rust": false
+    },
+    {
+      "relay": "relay.example/path?q=2&q=1",
+      "challenge": "query reorder",
+      "tags": [
+        [
+          "relay",
+          "relay.example/path?q=2&q=1"
+        ],
+        [
+          "challenge",
+          "query reorder"
+        ]
+      ],
+      "content": "",
+      "rust": false
+    },
+    {
+      "relay": "wss://relay.example/#frag",
+      "challenge": "fragment dropped",
+      "tags": [
+        [
+          "relay",
+          "wss://relay.example/#frag"
+        ],
+        [
+          "challenge",
+          "fragment dropped"
+        ]
+      ],
+      "content": "",
+      "rust": false
+    },
+    {
+      "relay": "not a url",
+      "challenge": "invalid",
+      "tags": [
+        [
+          "relay",
+          "not a url"
+        ],
+        [
+          "challenge",
+          "invalid"
+        ]
+      ],
+      "content": "",
+      "rust": false
+    },
+    {
+      "relay": "",
+      "challenge": "empty relay",
+      "tags": [
+        [
+          "relay",
+          ""
+        ],
+        [
+          "challenge",
+          "empty relay"
+        ]
+      ],
+      "content": "",
+      "rust": false
+    }
+  ],
+  "auth_required": [
+    {
+      "reason": "auth-required: take a ticket",
+      "result": true
+    },
+    {
+      "reason": "auth-required:",
+      "result": true
+    },
+    {
+      "reason": "auth-required: ",
+      "result": true
+    },
+    {
+      "reason": "auth-required",
+      "result": false
+    },
+    {
+      "reason": " auth-required: leading space",
+      "result": false
+    },
+    {
+      "reason": "AUTH-REQUIRED: upper",
+      "result": false
+    },
+    {
+      "reason": "restricted: nope",
+      "result": false
+    },
+    {
+      "reason": "",
+      "result": false
+    }
+  ]
+}

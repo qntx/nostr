@@ -441,26 +441,38 @@
     {
       "id": "nip13.pow",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip13.ts",
-        "tests": ["packages/nostr/tests/nip13.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip13.test.ts",
+          "packages/nostr/tests/vectors/nip13.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip13.rs",
+        "tests": ["crates/nk-vectors/tests/nip13.rs"]
+      },
+      "vectors": ["vectors/nip13/codec.json"]
     },
     {
       "id": "nip42.auth-event",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip42.ts",
-        "tests": ["packages/nostr/tests/nip42-65-storage.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip42-65-storage.test.ts",
+          "packages/nostr/tests/vectors/nip42.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip42.rs",
+        "tests": ["crates/nk-vectors/tests/nip42.rs"]
+      },
+      "vectors": ["vectors/nip42/codec.json"]
     },
     {
       "id": "nip98.http-auth",

@@ -1,0 +1,283 @@
+{
+  "schema": 1,
+  "capability": "nip13.pow",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.11.0"
+  },
+  "pow": [
+    {
+      "id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 0
+    },
+    {
+      "id": "40ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 1
+    },
+    {
+      "id": "20ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 2
+    },
+    {
+      "id": "10ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 3
+    },
+    {
+      "id": "08ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 4
+    },
+    {
+      "id": "04ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 5
+    },
+    {
+      "id": "02ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 6
+    },
+    {
+      "id": "01ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 7
+    },
+    {
+      "id": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 8
+    },
+    {
+      "id": "0040ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 9
+    },
+    {
+      "id": "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 10
+    },
+    {
+      "id": "0001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 15
+    },
+    {
+      "id": "0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 16
+    },
+    {
+      "id": "000040ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 17
+    },
+    {
+      "id": "000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 23
+    },
+    {
+      "id": "000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 24
+    },
+    {
+      "id": "00000040ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 25
+    },
+    {
+      "id": "00000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 31
+    },
+    {
+      "id": "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 32
+    },
+    {
+      "id": "0000000040ffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 33
+    },
+    {
+      "id": "0000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 40
+    },
+    {
+      "id": "0000000000000001ffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 63
+    },
+    {
+      "id": "0000000000000000ffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 64
+    },
+    {
+      "id": "000000000000000040ffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 65
+    },
+    {
+      "id": "00000000000000000000000000000001ffffffffffffffffffffffffffffffff",
+      "bits": 127
+    },
+    {
+      "id": "00000000000000000000000000000000ffffffffffffffffffffffffffffffff",
+      "bits": 128
+    },
+    {
+      "id": "0000000000000000000000000000000040ffffffffffffffffffffffffffffff",
+      "bits": 129
+    },
+    {
+      "id": "00000000000000000000000000000000000000000000000000ffffffffffffff",
+      "bits": 200
+    },
+    {
+      "id": "0000000000000000000000000000000000000000000000000000000000000001",
+      "bits": 255
+    },
+    {
+      "id": "0000000000000000000000000000000000000000000000000000000000000000",
+      "bits": 256
+    },
+    {
+      "id": "000006d8c378af1779d2feebc7603a125d99eca0ccf1085959b307f64e5dd358",
+      "bits": 21
+    },
+    {
+      "input": "0020FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+      "bits": 10,
+      "rust": false
+    },
+    {
+      "input": "0008FFFFffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "bits": 12,
+      "rust": false
+    },
+    {
+      "input": "not-hex",
+      "error": "Nip13Error",
+      "rust": false
+    },
+    {
+      "input": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "error": "Nip13Error",
+      "rust": false
+    },
+    {
+      "input": "ababababababababababababababababababababababababababababababab",
+      "error": "Nip13Error",
+      "rust": false
+    },
+    {
+      "input": "",
+      "error": "Nip13Error",
+      "rust": false
+    },
+    {
+      "input": "00000000000000000000000000000000000000000000000000000000000000000",
+      "error": "Nip13Error",
+      "rust": false
+    }
+  ],
+  "mine": [
+    {
+      "unsigned": {
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "pow"
+          ]
+        ],
+        "content": "It's just me mining my own business",
+        "created_at": 0,
+        "pubkey": "79c2cae114ea28a981e7559b4fe7854a473521a8d22a66bbab9fa248eb820ff6"
+      },
+      "difficulty": 0,
+      "now": 0,
+      "nonce": "1",
+      "id": "165cf9c7ae18740080de9f9c17dbd5d7053ed3d1ebbe8f5ab4ec2d8b493a292e"
+    },
+    {
+      "unsigned": {
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "pow"
+          ]
+        ],
+        "content": "It's just me mining my own business",
+        "created_at": 0,
+        "pubkey": "79c2cae114ea28a981e7559b4fe7854a473521a8d22a66bbab9fa248eb820ff6"
+      },
+      "difficulty": 4,
+      "now": 1700000000,
+      "nonce": "3",
+      "id": "092d1a0743c588723a326a10b59f3a69609c0984b7a0713956f0abbfbdd40dfb"
+    },
+    {
+      "unsigned": {
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "pow"
+          ]
+        ],
+        "content": "It's just me mining my own business",
+        "created_at": 0,
+        "pubkey": "79c2cae114ea28a981e7559b4fe7854a473521a8d22a66bbab9fa248eb820ff6"
+      },
+      "difficulty": 8,
+      "now": 1700000000,
+      "nonce": "30",
+      "id": "0023ee2d918bd494a76203544ff28af4899b8cc60939795c3b85737cd44c4f76"
+    },
+    {
+      "unsigned": {
+        "kind": 1,
+        "tags": [
+          [
+            "t",
+            "pow"
+          ]
+        ],
+        "content": "It's just me mining my own business",
+        "created_at": 0,
+        "pubkey": "79c2cae114ea28a981e7559b4fe7854a473521a8d22a66bbab9fa248eb820ff6"
+      },
+      "difficulty": 12,
+      "now": 1700000042,
+      "nonce": "4431",
+      "id": "000da6e4441d53ac600a03a7ddbd3fd83ef90df32038ce5d6f6dfa69b6147370"
+    },
+    {
+      "unsigned": {
+        "kind": 30023,
+        "tags": [
+          [
+            "d",
+            "article-ñ"
+          ],
+          [
+            "t",
+            "émoji ⚡"
+          ],
+          [
+            "e",
+            "abababababababababababababababababababababababababababababababab"
+          ]
+        ],
+        "content": "line\nbreak \"quotes\" \\ 控制字符\u0001 and emoji 🚀",
+        "created_at": 1600000000,
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      },
+      "difficulty": 10,
+      "now": 1600000001,
+      "nonce": "767",
+      "id": "001fbb91e122f7ca677a4eee50ecb34b4246d25eae7e56b13f707cbcd71dbac4"
+    },
+    {
+      "unsigned": {
+        "kind": 0,
+        "tags": [],
+        "content": "",
+        "created_at": 42,
+        "pubkey": "79c2cae114ea28a981e7559b4fe7854a473521a8d22a66bbab9fa248eb820ff6"
+      },
+      "difficulty": 8,
+      "now": 43,
+      "nonce": "39",
+      "id": "00402e08201d9485b57ed150f87f7909b49ea64eb17c3f1c1312132d77bf50ea"
+    }
+  ]
+}

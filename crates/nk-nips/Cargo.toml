@@ -18,8 +18,10 @@ clock   = ["std", "nk-core/clock"]
 # nonces; portable --no-default-features builds never see it.
 os-rng = ["std", "nk-core/os-rng", "dep:getrandom"]
 nip04  = ["dep:aes", "dep:base64ct", "dep:cbc", "dep:rand_core", "dep:secp256k1", "dep:zeroize"]
+nip13  = ["dep:sha2"]
 nip19  = ["dep:bech32", "dep:zeroize"]
 nip21  = ["nip19"]
+nip42  = []
 nip44  = ["dep:base64ct", "dep:chacha20", "dep:hkdf", "dep:hmac", "dep:rand_core", "dep:secp256k1", "dep:sha2", "dep:zeroize"]
 nip49  = ["nip19", "dep:chacha20poly1305", "dep:rand_core", "dep:scrypt", "dep:unicode-normalization", "dep:zeroize"]
 
@@ -43,6 +45,14 @@ secp256k1             = { workspace = true, optional = true }
 sha2                  = { workspace = true, optional = true }
 unicode-normalization = { workspace = true, optional = true }
 zeroize               = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true, features = ["html_reports"] }
+
+[[bench]]
+name              = "pow"
+harness           = false
+required-features = ["nip13"]
 
 [lints]
 workspace = true

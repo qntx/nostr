@@ -55,11 +55,30 @@ impl Tag {
         Ok(Self(items))
     }
 
-    /// Infallible constructor for crate-internal callers that build `items`
-    /// from known non-empty literals; the caller guarantees non-emptiness by
-    /// construction.
-    pub(crate) const fn from_parts(items: Vec<String>) -> Self {
-        Self(items)
+    /// Builds a tag `["name", ...values]` — the required name element keeps
+    /// the tag non-empty, so construction is infallible. Prefer the typed
+    /// constructors ([`Tag::event`], [`Tag::public_key`], …) where they fit,
+    /// and [`Tag::new`] when the tag shape itself comes from untrusted input.
+    ///
+    /// ```
+    /// use nk_core::Tag;
+    ///
+    /// let tag = Tag::custom("nonce", ["17", "8"]);
+    /// assert_eq!(tag.as_slice(), ["nonce", "17", "8"]);
+    /// assert_eq!(tag.name(), "nonce");
+    /// ```
+    #[must_use]
+    pub fn custom<N, I, S>(name: N, values: I) -> Self
+    where
+        N: Into<String>,
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        Self(
+            core::iter::once(name.into())
+                .chain(values.into_iter().map(Into::into))
+                .collect(),
+        )
     }
 
     /// NIP-10 `e` tag: `["e", id, relay, marker, pubkey]`.
@@ -408,6 +427,20 @@ mod tests {
             ["p", PK, "", "alice"]
         );
         assert_eq!(Tag::public_key(pubkey(), None, None).as_slice(), ["p", PK]);
+    }
+
+    #[test]
+    fn custom_builds_named_tag() {
+        assert_eq!(
+            Tag::custom("nonce", ["17", "8"]).as_slice(),
+            ["nonce", "17", "8"]
+        );
+        assert_eq!(
+            Tag::custom("name", Vec::<String>::new()).as_slice(),
+            ["name"]
+        );
+        assert_eq!(Tag::custom("nonce", ["1"]).name(), "nonce");
+        assert_eq!(Tag::custom("nonce", ["1"]).value(), Some("1"));
     }
 
     #[test]
