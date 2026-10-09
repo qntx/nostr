@@ -382,14 +382,21 @@
     {
       "id": "nip44.v2",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip44.ts",
         "tests": ["packages/nostr/tests/nip44.test.ts"]
       },
-      "rust": null,
-      "vectors": ["vectors/nip44/official.json"]
+      "rust": {
+        "module": "crates/nk-nips/src/nip44.rs",
+        "tests": ["crates/nk-vectors/tests/nip44.rs"]
+      },
+      "vectors": [
+        "vectors/nip44/official.json",
+        "vectors/nip44/extended.json",
+        "vectors/nip44/shared-secret.json"
+      ]
     },
     {
       "id": "nip04.codec",

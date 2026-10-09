@@ -14,6 +14,7 @@ import {
   decrypt as nip44Decrypt,
   encrypt as nip44Encrypt,
   getConversationKey,
+  getConversationKeyFromSharedSecret,
   getMessageKeys,
 } from "../src/nips/nip44.ts";
 
@@ -65,10 +66,47 @@ const vectors = JSON.parse(
   };
 };
 
+// vectors/nip44/extended.json — NIP-44 spec-text boundary cases for the
+// extended u32 length prefix (payloads recorded as SHA-256 checksums).
+const extended = JSON.parse(
+  readFileSync(join(dir, "../../../vectors/nip44/extended.json"), "utf8"),
+) as {
+  cases: Array<{
+    pattern: string;
+    repeat: number;
+    conversation_key: string;
+    nonce: string;
+    plaintext_sha256: string;
+    payload_sha256: string;
+  }>;
+};
+
+// vectors/nip44/shared-secret.json — generated: the ECDH x-coordinate for
+// every official get_conversation_key case.
+const sharedSecret = JSON.parse(
+  readFileSync(join(dir, "../../../vectors/nip44/shared-secret.json"), "utf8"),
+) as {
+  cases: Array<{
+    sec1: string;
+    pub2: string;
+    shared_secret: string;
+    conversation_key: string;
+  }>;
+};
+
 describe("nip44", () => {
   test("get_conversation_key vectors", () => {
     for (const row of vectors.v2.valid.get_conversation_key) {
       const key = getConversationKey(hexToBytes(row.sec1), row.pub2);
+      expect(bytesToHex(key)).toBe(row.conversation_key);
+    }
+  });
+
+  // Proves the delegated-signer path: getConversationKeyFromSharedSecret on the
+  // recorded ECDH x-coordinate yields the same conversation key.
+  test("shared-secret vectors", () => {
+    for (const row of sharedSecret.cases) {
+      const key = getConversationKeyFromSharedSecret(hexToBytes(row.shared_secret));
       expect(bytesToHex(key)).toBe(row.conversation_key);
     }
   });
@@ -113,30 +151,13 @@ describe("nip44", () => {
   // NIP-44 extended-prefix boundary vectors from the spec text (44.md): the
   // u16/u32 prefix switch happens at a plaintext length of 65536.
   test("extended length prefix boundary vectors", () => {
-    const ck = hexToBytes("c41c775356fd92eadc63ff5a0dc1da211b268cbea22316767095b2871ea1412d");
-    const nonce = hexToBytes("0000000000000000000000000000000000000000000000000000000000000001");
-    const cases: Array<[number, string, string]> = [
-      [
-        65535,
-        "6e1bebca6a8229364a162a72ef064826c4cd7457bf54f190ef782bd9deff3e42",
-        "6d8c2810d1e870fbaa1f0a0937126cca837a15f9260e27060c331d70a3c0bc84",
-      ],
-      [
-        65536,
-        "bf718b6f653bebc184e1479f1935b8da974d701b893afcf49e701f3e2f9f9c5a",
-        "b7b4edb36ba92e267d322d56d9aebc22e7fa96ff52e3c12adc07f07a43cbc616",
-      ],
-      [
-        65537,
-        "008ffc88d3c96a9f307524eb361e47c5222a887fc45fa0c1fb8d429c5c23b430",
-        "eeb7c7c5373894ea2c1547cfd3ccb15d5a0b2d619da852e5c79df792dcc9e435",
-      ],
-    ];
-    for (const [len, plaintextSha, payloadSha] of cases) {
-      const plaintext = "a".repeat(len);
-      expect(bytesToHexNoble(sha256(utf8Encoder.encode(plaintext)))).toBe(plaintextSha);
+    for (const row of extended.cases) {
+      const plaintext = row.pattern.repeat(row.repeat);
+      const ck = hexToBytes(row.conversation_key);
+      const nonce = hexToBytes(row.nonce);
+      expect(bytesToHexNoble(sha256(utf8Encoder.encode(plaintext)))).toBe(row.plaintext_sha256);
       const payload = nip44Encrypt(plaintext, ck, nonce);
-      expect(bytesToHexNoble(sha256(utf8Encoder.encode(payload)))).toBe(payloadSha);
+      expect(bytesToHexNoble(sha256(utf8Encoder.encode(payload)))).toBe(row.payload_sha256);
       expect(nip44Decrypt(payload, ck)).toBe(plaintext);
     }
   });

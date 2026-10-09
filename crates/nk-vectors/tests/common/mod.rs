@@ -50,6 +50,19 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
     })
 }
 
+/// Decodes a hex string of either case; `None` on odd length or bad digits.
+/// nk-core's typed `from_hex` constructors cover fixed-width keys — this is
+/// for vector fields that need the raw byte length checked by the caller.
+pub(crate) fn unhex(s: &str) -> Option<Vec<u8>> {
+    if !s.len().is_multiple_of(2) || !s.is_ascii() {
+        return None;
+    }
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
+        .collect()
+}
+
 /// Converts a decoded `Entity` into the normalized vector shape.
 pub(crate) fn entity_json(entity: &Entity) -> EntityJson {
     match entity {

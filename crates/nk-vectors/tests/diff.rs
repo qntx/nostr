@@ -30,10 +30,10 @@ use std::path::PathBuf;
 mod common;
 
 use nk_core::{ClientMessage, Event, Filter, RelayMessage, UnsignedEvent};
-use nk_nips::nip19;
+use nk_nips::{nip19, nip44};
 use serde::Deserialize;
 
-use common::{EntityJson, encode_entity, entity_json};
+use common::{EntityJson, encode_entity, entity_json, unhex};
 
 /// The generator's meta line; `seed` is reported on every mismatch.
 #[derive(Deserialize)]
@@ -257,6 +257,111 @@ fn diff_nip19_codec() {
             nip19::decode(&req.input?).ok().map(|entity| {
                 serde_json::to_value(entity_json(&entity)).expect("entity serializes")
             })
+        });
+    }
+}
+
+/// Like [`check`], but `run` reports the error class (the thrown error's
+/// `constructor.name` on the TS side) so a HexError/CryptoError split is
+/// compared, not just success/failure.
+fn check_classed<F>(capability: &str, seed: u64, case: &Case, run: F)
+where
+    F: FnOnce(&str) -> Result<serde_json::Value, &'static str>,
+{
+    match (run(&case.input), &case.out, &case.err) {
+        (Ok(got), Some(expected), _) if &got == expected => {}
+        (Ok(got), Some(expected), _) => fail(
+            capability,
+            seed,
+            case,
+            &format!("output mismatch: expected {expected}, got {got}"),
+        ),
+        (Ok(got), None, err) => fail(
+            capability,
+            seed,
+            case,
+            &format!(
+                "TS threw {} but Rust produced {got}",
+                err.as_deref().unwrap_or("<none>")
+            ),
+        ),
+        (Err(kind), Some(expected), _) => fail(
+            capability,
+            seed,
+            case,
+            &format!("Rust rejected ({kind}); TS produced {expected}"),
+        ),
+        (Err(kind), None, Some(expected)) if kind == expected.as_str() => {}
+        (Err(kind), None, err) => fail(
+            capability,
+            seed,
+            case,
+            &format!(
+                "error class mismatch: TS recorded {}, Rust rejected with {kind}",
+                err.as_deref().unwrap_or("<none>")
+            ),
+        ),
+    }
+}
+
+/// One `nip44.v2` input: `{"op":"encrypt","conversation_key","nonce",
+/// "plaintext"}` or `{"op":"decrypt","conversation_key","payload"}`.
+#[derive(Deserialize)]
+struct Nip44Case {
+    op: String,
+    conversation_key: Option<String>,
+    nonce: Option<String>,
+    plaintext: Option<String>,
+    payload: Option<String>,
+}
+
+fn crypto_err<E>(_: E) -> &'static str {
+    "CryptoError"
+}
+
+/// Parses a hex field the way TS `hexToBytes` does: malformed hex is a
+/// `HexError`; the width check is the caller's (`assert32` → `CryptoError`).
+fn unhexed(field: Option<&str>) -> Result<Vec<u8>, &'static str> {
+    unhex(field.unwrap_or("")).ok_or("HexError")
+}
+
+#[test]
+#[ignore = "requires NK_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
+fn diff_nip44_v2() {
+    let fixture = load("nip44.v2");
+    for case in &fixture.cases {
+        check_classed("nip44.v2", fixture.seed, case, |input| {
+            let req: Nip44Case = serde_json::from_str(input).expect("generator emits valid JSON");
+            match req.op.as_str() {
+                // TS evaluates `hexToBytes` on both arguments before encrypt
+                // asserts their widths, so all hex errors precede all length
+                // errors.
+                "encrypt" => {
+                    let key = unhexed(req.conversation_key.as_deref())?;
+                    let nonce = unhexed(req.nonce.as_deref())?;
+                    let key: [u8; 32] = key.try_into().map_err(|_| "CryptoError")?;
+                    let nonce: [u8; 32] = nonce.try_into().map_err(|_| "CryptoError")?;
+                    nip44::encrypt_with_nonce(
+                        req.plaintext.as_deref().unwrap_or(""),
+                        &nip44::ConversationKey::from_bytes(key),
+                        &nonce,
+                    )
+                    .map(json_str)
+                    .map_err(crypto_err)
+                }
+                "decrypt" => {
+                    let key: [u8; 32] = unhexed(req.conversation_key.as_deref())?
+                        .try_into()
+                        .map_err(|_| "CryptoError")?;
+                    nip44::decrypt(
+                        req.payload.as_deref().unwrap_or(""),
+                        &nip44::ConversationKey::from_bytes(key),
+                    )
+                    .map(json_str)
+                    .map_err(crypto_err)
+                }
+                _ => Err("Error"),
+            }
         });
     }
 }

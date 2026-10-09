@@ -12,7 +12,7 @@
 //
 // Capabilities: core.event.serialize, core.event.id, core.filter.match,
 // core.filter.canonicalize, core.message.client, core.message.relay,
-// nip19.codec.
+// nip19.codec, nip44.v2.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,6 +31,7 @@ import {
 } from "../../src/core/message.ts";
 import { hexToBytes } from "../../src/core/util.ts";
 import { decode as nip19Decode } from "../../src/nips/nip19.ts";
+import { decrypt as nip44Decrypt, encrypt as nip44Encrypt } from "../../src/nips/nip44.ts";
 import type { EntityJson } from "./gen/entities.ts";
 import { encodeEntity, toJson } from "./gen/entities.ts";
 
@@ -668,6 +669,123 @@ function nip19CaseText(): string {
   });
 }
 
+// NIP-44 v2 stream. `input` is `{"op":"encrypt","conversation_key","nonce",
+// "plaintext"}` or `{"op":"decrypt","conversation_key","payload"}`; outputs are
+// the payload/plaintext on success, the error class on failure.
+
+const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// A hex field that is usually a well-formed 64-char lowercase string but is
+// occasionally corrupt (bad digits, wrong length) or a valid hex string of
+// the wrong width — each reaches a different error class.
+function randKeyHex(): string {
+  if (chance(0.1)) {
+    return pick([randHex(62), randHex(66), `${randHex(60)}zz`, randHex(2 * (int(20) + 1))]);
+  }
+  return randHex(64);
+}
+
+// Plaintext lengths spread across the padding buckets (32 / 64 / power-of-two
+// eighths) plus random sizes and astral/control characters.
+function randPlaintext(): string {
+  const len = pick([
+    0,
+    1,
+    2,
+    8,
+    16,
+    31,
+    32,
+    33,
+    47,
+    63,
+    64,
+    65,
+    96,
+    100,
+    128,
+    200,
+    255,
+    256,
+    257,
+    320,
+    384,
+    512,
+    515,
+    640,
+    768,
+    1024,
+    int(2000) + 1,
+  ]);
+  const chars: string[] = [];
+  for (let i = 0; i < len; i++) {
+    chars.push(chance(0.35) ? pick(EDGE_CHARS) : ASCII.charAt(int(ASCII.length)));
+  }
+  return chars.join("");
+}
+
+// Mutations of a base64 payload: truncation, appends (valid char, padding,
+// invalid char), a flipped character anywhere, or a '#'-prefixed version tag.
+// Mutations operate on code points — a UTF-16 slice could split a surrogate
+// pair and serde_json rejects lone surrogates in the input JSON. Corruption
+// past the fixed head lands in ciphertext or MAC, so a successful decrypt
+// after mutation is impossible — both sides must reject.
+function mutatePayload(payload: string): string {
+  // oxlint-disable-next-line typescript/no-misused-spread -- code-point iteration is exactly the point: a UTF-16 slice could split a surrogate pair
+  const codePoints = [...payload];
+  switch (int(8)) {
+    case 0:
+      return codePoints.slice(0, Math.max(0, codePoints.length - 1 - int(8))).join("");
+    case 1:
+      return payload + pick([BASE64_CHARS.charAt(int(64)), "=", "!", "-", "_", " ", "😀"]);
+    case 2:
+      return `#${payload}`;
+    case 3:
+      return payload.replace("=", "");
+    case 4:
+      return codePoints.toSpliced(Math.min(40, codePoints.length), 0, "=").join("");
+    case 5:
+      return payload.replace("+", "-").replace("/", "_");
+    default: {
+      const i = int(codePoints.length);
+      codePoints[i] = chance(0.8) ? BASE64_CHARS.charAt(int(64)) : pick(["!", " ", "="]);
+      return codePoints.join("");
+    }
+  }
+}
+
+function nip44CaseText(): string {
+  const conversationKey = randKeyHex();
+  if (chance(0.5)) {
+    return JSON.stringify({
+      op: "encrypt",
+      conversation_key: conversationKey,
+      nonce: randKeyHex(),
+      plaintext: randPlaintext(),
+    });
+  }
+  // Decrypt: a real payload (mutated half the time) under a random or the
+  // matching conversation key, or a totally foreign string.
+  const plaintext = randPlaintext();
+  let payload: string;
+  let decryptKey = conversationKey;
+  try {
+    payload = nip44Encrypt(plaintext, hexToBytes(conversationKey), hexToBytes(randHex(64)));
+  } catch {
+    // A corrupt conversation key cannot encrypt; feed a random payload
+    // instead so the decrypt op still runs.
+    payload = randString(140);
+    decryptKey = randHex(64);
+  }
+  if (chance(0.5)) {
+    payload = mutatePayload(payload);
+  }
+  if (chance(0.08)) {
+    decryptKey = randKeyHex();
+  }
+  return JSON.stringify({ op: "decrypt", conversation_key: decryptKey, payload });
+}
+
 type CaseRecord = { i: number; input: string; out?: unknown; err?: string };
 
 function capture(run: () => unknown): { out?: unknown; err?: string } {
@@ -766,6 +884,36 @@ const CAPABILITIES: ReadonlyArray<Capability> = [
             throw new Error("decode case without input");
           }
           return toJson(nip19Decode(req.input));
+        }),
+      };
+    },
+  },
+  {
+    name: "nip44.v2",
+    make: () => {
+      const input = nip44CaseText();
+      return {
+        i: 0,
+        input,
+        ...capture(() => {
+          const req = parseJson<{
+            op: string;
+            conversation_key?: string;
+            nonce?: string;
+            plaintext?: string;
+            payload?: string;
+          }>(input);
+          if (req.op === "encrypt") {
+            return nip44Encrypt(
+              req.plaintext ?? "",
+              hexToBytes(req.conversation_key ?? ""),
+              hexToBytes(req.nonce ?? ""),
+            );
+          }
+          if (req.op === "decrypt") {
+            return nip44Decrypt(req.payload ?? "", hexToBytes(req.conversation_key ?? ""));
+          }
+          throw new Error(`unknown nip44 op ${req.op}`);
         }),
       };
     },
