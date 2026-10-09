@@ -12,11 +12,13 @@
 //! | `os-rng` | yes     | OS entropy where a NIP needs it                             |
 //! | `nip04`  | no      | legacy encrypted DMs (`SharedSecret`, `encrypt`/`decrypt`)       |
 //! | `nip13`  | no      | proof of work (`pow`, `PowMiner`)                                 |
+//! | `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`); needs `nip59` |
 //! | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) |
 //! | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`)                   |
 //! | `nip42`  | no      | relay auth (`auth_event`, `is_auth_required`)                     |
 //! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
 //! | `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptOptions`, `encrypt`/`decrypt`) |
+//! | `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`  |
 //! | `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)    |
 //!
 //! ```
