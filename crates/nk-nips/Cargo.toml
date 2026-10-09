@@ -13,6 +13,10 @@ categories.workspace   = true
 readme                 = "README.md"
 documentation          = "https://docs.rs/nk-nips"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 default = ["std", "clock", "os-rng"]
 std     = ["nk-core/std"]
