@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-09
+
 ### Added
 
 - `nk-core` is published to crates.io from this release on. The crate is a from-scratch implementation inside this repository and is unrelated to the old `nk` 0.3.x crates on crates.io.
