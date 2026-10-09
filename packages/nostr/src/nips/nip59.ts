@@ -4,18 +4,20 @@
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/59.md
  */
+import { schnorr, secp256k1 } from "@noble/curves/secp256k1.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 
 import { NostrError } from "../core/error.ts";
 import type { Event, UnsignedEvent } from "../core/event.ts";
 import { getEventHash, validateEvent, validateSignedEvent } from "../core/event.ts";
-import { Keys, finalizeEvent } from "../core/key.ts";
+import type { SigningBackend } from "../core/key.ts";
+import { Keys, signEvent } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
 import { assertHex32, isRecord, nowSeconds } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
-import { encryptToPubkey } from "./nip44.ts";
+import { encrypt, getConversationKey } from "./nip44.ts";
 
 /** Unsigned event with a computed id. Never has `sig`. */
 export type Rumor = UnsignedEvent & {
@@ -48,9 +50,17 @@ export type TimestampRandomize = "wrap" | "seal+wrap";
 export type WrapOptions = {
   /** Unix seconds used as the randomization window end. Default: floor(Date.now()/1000). */
   readonly now?: number | undefined;
-  /** Uniform integer in [0, maxExclusive). Default: CSPRNG via @noble/hashes randomBytes. */
-  readonly randomInt?: ((maxExclusive: number) => number) | undefined;
-  /** When set, used as-is. Overrides now/randomInt for this call. */
+  /**
+   * Entropy source replacing @noble/hashes `randomBytes` for everything `wrap`/`createGiftWrap`
+   * draws — in stream order: the ephemeral secret key (32-byte draws, redrawn while not a valid
+   * scalar), the timestamp offset (4-byte big-endian u32 draws under the [0, 2 days) rejection
+   * bound), the NIP-44 nonce (32 bytes), and the BIP-340 auxiliary randomness (32 bytes). In
+   * `createSeal` only the timestamp offset is drawn here; the seal's nonce and aux belong to the
+   * injected {@link Nip59Crypto}. `wrap` = seal draws then gift-wrap draws. Default: noble
+   * `randomBytes`.
+   */
+  readonly randomBytes?: ((n: number) => Uint8Array) | undefined;
+  /** When set, used as-is. Overrides now/randomBytes for this call. */
   readonly timestamps?: GiftWrapTimestamps | undefined;
   readonly relayHint?: string | undefined;
   /** Appended after the required wrap `p` tag. Never applied to the seal. */
@@ -71,7 +81,7 @@ export type WrapOptions = {
 
 export type SealOptions = Pick<
   WrapOptions,
-  "now" | "randomInt" | "timestamps" | "expiration" | "randomize"
+  "now" | "randomBytes" | "timestamps" | "expiration" | "randomize"
 >;
 
 export class Nip59Error extends NostrError {
@@ -148,14 +158,14 @@ function assertExpiration(ts: number): number {
   return ts;
 }
 
-function defaultRandomInt(maxExclusive: number): number {
+function defaultRandomInt(maxExclusive: number, drawBytes: (n: number) => Uint8Array): number {
   if (!Number.isSafeInteger(maxExclusive) || maxExclusive <= 0 || maxExclusive > 0x100000000) {
-    throw new Nip59Error("randomInt bound must be a positive integer within uint32 range");
+    throw new Nip59Error("random bound must be a positive integer within uint32 range");
   }
   // rejection sampling: discard draws ≥ the largest multiple of maxExclusive that fits uint32
   const limit = Math.floor(0x100000000 / maxExclusive) * maxExclusive;
   for (;;) {
-    const bytes = randomBytes(4);
+    const bytes = drawBytes(4);
     const n = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
     if (n < limit) {
       return n % maxExclusive;
@@ -165,10 +175,10 @@ function defaultRandomInt(maxExclusive: number): number {
 
 export function randomPastTimestamp(opts?: {
   now?: number | undefined;
-  randomInt?: ((maxExclusive: number) => number) | undefined;
+  randomBytes?: ((n: number) => Uint8Array) | undefined;
 }): number {
   const now = opts?.now ?? nowSeconds();
-  const offset = (opts?.randomInt ?? defaultRandomInt)(TWO_DAYS_SECS);
+  const offset = defaultRandomInt(TWO_DAYS_SECS, opts?.randomBytes ?? randomBytes);
   return now - offset;
 }
 
@@ -198,15 +208,17 @@ export async function createSeal(
   opts?: SealOptions,
 ): Promise<Event> {
   const recipientPk = assertHex32(recipient, "public key");
+  // The timestamp offset is drawn from `opts.randomBytes` before the crypto's nonce and aux so
+  // the shared stream matches nk-nips: offset → nonce → aux.
+  const created_at =
+    opts?.timestamps?.seal ??
+    (opts?.randomize === "wrap" ? rumor.created_at : randomPastTimestamp(opts));
   let content: string;
   try {
     content = await crypto.nip44Encrypt(recipientPk, rumorToJson(rumor));
   } catch (error) {
     throw new Nip59Error("failed to encrypt", { cause: error });
   }
-  const created_at =
-    opts?.timestamps?.seal ??
-    (opts?.randomize === "wrap" ? rumor.created_at : randomPastTimestamp(opts));
   const tags: Tag[] = [];
   if (opts?.expiration !== undefined) {
     tags.push(["expiration", String(assertExpiration(opts.expiration))]);
@@ -223,22 +235,43 @@ export async function createSeal(
 
 export function createGiftWrap(seal: Event, recipient: string, opts?: WrapOptions): Event {
   const recipientPk = assertHex32(recipient, "public key");
-  const ephemeral = Keys.generate();
-  const content = encryptToPubkey(eventToJson(seal), ephemeral.secretKey.bytes, recipientPk);
-  const created_at = opts?.timestamps?.wrap ?? randomPastTimestamp(opts);
+  const drawBytes = opts?.randomBytes ?? randomBytes;
+  // Ephemeral key: redraw 32-byte candidates until a valid scalar, like
+  // nk-core's `SecretKey::generate_with_rng`. Signing goes through `signEvent` with a backend that
+  // draws the BIP-340 aux from the same stream — order: key → offset → nonce → aux.
+  const backend: SigningBackend = {
+    publicKey: (secretKey) => schnorr.getPublicKey(secretKey),
+    sign: (id, secretKey) => schnorr.sign(id, secretKey, drawBytes(32)),
+  };
+  let ephemeral: Keys;
+  for (;;) {
+    const candidate = drawBytes(32);
+    if (secp256k1.utils.isValidSecretKey(candidate)) {
+      ephemeral = Keys.fromSecretKey(candidate, backend);
+      break;
+    }
+  }
+  const created_at =
+    opts?.timestamps?.wrap ?? randomPastTimestamp({ ...opts, randomBytes: drawBytes });
+  const content = encrypt(
+    eventToJson(seal),
+    getConversationKey(ephemeral.secretKey.bytes, recipientPk),
+    drawBytes(32),
+  );
   const tags: Tag[] = [TagBuilder.p(recipientPk, opts?.relayHint)];
   if (opts?.expiration !== undefined) {
     tags.push(["expiration", String(assertExpiration(opts.expiration))]);
   }
   tags.push(...(opts?.extraTags ?? []));
-  return finalizeEvent(
+  return signEvent(
     {
       kind: opts?.ephemeral === true ? Kind.GiftWrapEphemeral : Kind.GiftWrap,
       content,
       created_at,
       tags,
+      pubkey: ephemeral.publicKey,
     },
-    ephemeral.secretKey,
+    ephemeral,
   );
 }
 

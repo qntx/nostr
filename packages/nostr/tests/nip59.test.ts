@@ -89,9 +89,30 @@ describe("nip59", () => {
     expect(seal.created_at).toBe(timestamps.seal);
   });
 
+  const be32 = (n: number) => {
+    const b = new Uint8Array(4);
+    new DataView(b.buffer).setUint32(0, n);
+    return b;
+  };
+
+  // Stub entropy stream: 4-byte draws yield the fixed u32 offset, longer draws yield a
+  // deterministic nonzero pattern (valid as a secret key and as a nonce/aux).
+  const stubRandomBytes = (offset: number) => {
+    let tick = 0;
+    return (n: number): Uint8Array => {
+      if (n === 4) {
+        return be32(offset);
+      }
+      const b = new Uint8Array(n);
+      tick += 1;
+      b.fill(tick);
+      return b;
+    };
+  };
+
   test("randomPastTimestamp is deterministic with stub rng", () => {
-    expect(randomPastTimestamp({ now: 1000, randomInt: () => 0 })).toBe(1000);
-    expect(randomPastTimestamp({ now: 1000, randomInt: () => TWO_DAYS_SECS - 1 })).toBe(
+    expect(randomPastTimestamp({ now: 1000, randomBytes: () => be32(0) })).toBe(1000);
+    expect(randomPastTimestamp({ now: 1000, randomBytes: () => be32(TWO_DAYS_SECS - 1) })).toBe(
       1000 - (TWO_DAYS_SECS - 1),
     );
   });
@@ -379,7 +400,7 @@ describe("nip59", () => {
     const gift = await wrap(alice, bobKeys.publicKey, rumor, {
       now,
       randomize: "wrap",
-      randomInt: () => 42,
+      randomBytes: stubRandomBytes(42),
     });
     expect(gift.created_at).toBe(now - 42);
     expect(gift.created_at).toBeGreaterThanOrEqual(now - TWO_DAYS_SECS);
@@ -404,7 +425,7 @@ describe("nip59", () => {
     const offset = 42;
     const gift = await wrap(alice, bobKeys.publicKey, rumor, {
       now,
-      randomInt: () => offset,
+      randomBytes: stubRandomBytes(offset),
       ...extra,
     });
     expect(gift.created_at).toBe(now - offset);

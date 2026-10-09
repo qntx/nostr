@@ -147,7 +147,7 @@ export async function wrapDirectMessage(
   rumor: Rumor,
   opts?: Pick<
     WrapOptions,
-    "now" | "randomInt" | "timestamps" | "expiration" | "ephemeral" | "randomize"
+    "now" | "randomBytes" | "timestamps" | "expiration" | "ephemeral" | "randomize"
   >,
 ): Promise<ReadonlyArray<{ recipient: string; wrap: Event }>> {
   if (recipients.length === 0) {
@@ -158,7 +158,7 @@ export async function wrapDirectMessage(
   const timeOpts = opts
     ? {
         now: opts.now,
-        randomInt: opts.randomInt,
+        randomBytes: opts.randomBytes,
         timestamps: opts.timestamps,
         expiration: opts.expiration,
         randomize: opts.randomize,
