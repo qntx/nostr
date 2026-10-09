@@ -41,6 +41,8 @@ mod ecdh;
 pub mod nip04;
 #[cfg(feature = "nip13")]
 pub mod nip13;
+#[cfg(feature = "nip17")]
+pub mod nip17;
 #[cfg(feature = "nip19")]
 pub mod nip19;
 #[cfg(feature = "nip21")]
