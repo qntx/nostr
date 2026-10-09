@@ -41,6 +41,15 @@ export function getConversationKey(privkeyA: Uint8Array, pubkeyB: string): Uint8
   const sharedX = secp256k1
     .getSharedSecret(privkeyA, hexToBytes(`02${pubkeyB.toLowerCase()}`))
     .subarray(1, 33);
+  return getConversationKeyFromSharedSecret(sharedX);
+}
+
+/**
+ * NIP-44 conversation key from the raw 32-byte ECDH x-coordinate instead of a secret key, for key
+ * holders that only expose ECDH ({@link NostrKeyOperations}).
+ */
+export function getConversationKeyFromSharedSecret(sharedX: Uint8Array): Uint8Array {
+  assert32(sharedX, "shared secret");
   return hkdf_extract(sha256, sharedX, utf8Encoder.encode("nip44-v2"));
 }
 

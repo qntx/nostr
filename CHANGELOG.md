@@ -11,6 +11,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 
 ### Added
 
+- `DelegatedSigner`: a `NostrSigner` backed by a `NostrKeyOperations` key holder (`getPublicKey`, `signEventId`, optional `sharedSecret`) for wallets, NFC cards, and secure stores that never expose the secret. Signatures are BIP-340-verified before returning; NIP-44 conversation keys are derived via the new `nip44.getConversationKeyFromSharedSecret` and cached per peer; NIP-04 uses the new `nip04.encryptWithSharedSecret`/`nip04.decryptWithSharedSecret` with no cache; shared secrets are wiped after each use, and `dispose()` zero-fills the cache and makes later calls reject with `SignerDisposedError` (#223).
 - `KeysSigner.dispose()`: zeroizes the wrapped secret key and every cached NIP-44 conversation key; all later signer calls reject with the new `SignerDisposedError`. `KeysSigner` also now wipes the per-call secret-key copies used by NIP-04 and conversation-key derivation (#211).
 
 ### Changed

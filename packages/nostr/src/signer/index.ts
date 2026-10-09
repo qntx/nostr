@@ -1,5 +1,6 @@
 export { NoSignerError, SignerDisposedError } from "./error.ts";
 export type { NostrSigner } from "./types.ts";
+export { DelegatedSigner, type NostrKeyOperations } from "./delegated.ts";
 export { KeysSigner } from "./keys.ts";
 export { Nip07Signer, getWindowNostr, isNip07Available, type WindowNostr } from "./nip07.ts";
 export {

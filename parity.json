@@ -605,6 +605,18 @@
       "vectors": []
     },
     {
+      "id": "signer.delegated",
+      "tier": "B",
+      "status": "ts-only",
+      "milestone": "NK4",
+      "ts": {
+        "module": "packages/nostr/src/signer/delegated.ts",
+        "tests": ["packages/nostr/tests/delegated-signer.test.ts"]
+      },
+      "rust": null,
+      "vectors": []
+    },
+    {
       "id": "signer.nip46",
       "tier": "B",
       "status": "ts-only",

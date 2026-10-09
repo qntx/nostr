@@ -101,6 +101,7 @@ export {
 } from "./core/index.ts";
 
 export {
+  DelegatedSigner,
   KeysSigner,
   Nip07Signer,
   Nip46Signer,
@@ -108,6 +109,7 @@ export {
   SignerDisposedError,
   getWindowNostr,
   isNip07Available,
+  type NostrKeyOperations,
   type NostrSigner,
   type WindowNostr,
   type Nip46SignerOptions,
