@@ -17,6 +17,7 @@ clock   = ["std", "nk-core/clock"]
 # os-rng owns the optional getrandom so NIP modules (nip44::encrypt) can draw
 # nonces; portable --no-default-features builds never see it.
 os-rng = ["std", "nk-core/os-rng", "dep:getrandom"]
+nip04  = ["dep:aes", "dep:base64ct", "dep:cbc", "dep:rand_core", "dep:secp256k1", "dep:zeroize"]
 nip19  = ["dep:bech32", "dep:zeroize"]
 nip21  = ["nip19"]
 nip44  = ["dep:base64ct", "dep:chacha20", "dep:hkdf", "dep:hmac", "dep:rand_core", "dep:secp256k1", "dep:sha2", "dep:zeroize"]
@@ -25,8 +26,10 @@ nip44  = ["dep:base64ct", "dep:chacha20", "dep:hkdf", "dep:hmac", "dep:rand_core
 # features that use it, so --no-default-features pulls nothing beyond
 # nk-core.
 [dependencies]
+aes       = { workspace = true, optional = true }
 base64ct  = { workspace = true, optional = true }
 bech32    = { workspace = true, optional = true }
+cbc       = { workspace = true, optional = true, features = ["block-padding"] }
 chacha20  = { workspace = true, optional = true, features = ["cipher"] }
 getrandom = { workspace = true, optional = true, features = ["sys_rng"] }
 hkdf      = { workspace = true, optional = true }

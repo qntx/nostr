@@ -4,6 +4,7 @@
 // run must be byte-identical.
 
 await import("./core.ts");
+await import("./nip04.ts");
 await import("./nip19.ts");
 await import("./nip21.ts");
 await import("./nip44.ts");
