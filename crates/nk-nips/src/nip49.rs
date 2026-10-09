@@ -25,7 +25,7 @@ use chacha20poly1305::aead::AeadInOut;
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use nk_core::SecretKey;
 use unicode_normalization::UnicodeNormalization;
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 use crate::error::{Error, ErrorKind, Result};
 
@@ -151,7 +151,10 @@ pub fn encrypt_with(
     let cipher =
         XChaCha20Poly1305::new_from_slice(&*key).map_err(|_| nip49("invalid cipher key"))?;
     let ksb = options.key_security as u8;
-    let mut payload = [0u8; PAYLOAD_LEN];
+    // The plaintext section holds `secret`'s bytes until encryption
+    // overwrites them in place — the guard wipes the whole record.
+    let mut payload_guard = Zeroizing::new([0u8; PAYLOAD_LEN]);
+    let payload = &mut *payload_guard;
     payload[0] = VERSION;
     payload[1] = log_n;
     payload[2..2 + SALT_LEN].copy_from_slice(salt);
@@ -170,9 +173,7 @@ pub fn encrypt_with(
         )
         .map_err(|_| nip49("encryption failed"))?;
     payload[PAYLOAD_LEN - TAG_LEN..].copy_from_slice(tag.as_slice());
-    let code = crate::nip19::encode_bech32(HRP_NCRYPTSEC, &payload);
-    payload.zeroize();
-    Ok(code)
+    Ok(crate::nip19::encode_bech32(HRP_NCRYPTSEC, &*payload_guard))
 }
 
 /// Encrypts `secret`, drawing a 16-byte salt and 24-byte nonce from
@@ -243,29 +244,29 @@ pub fn decrypt(ncryptsec: &str, password: &str, max_log_n: u8) -> Result<Decrypt
             "invalid maxLogN {max_log_n}, expected integer {LOG_N_MIN}..{LOG_N_MAX}"
         )));
     }
-    let (hrp, mut payload) =
+    // Drop guards wipe every copy of key material on every path: the
+    // decoded payload, the fixed-size record, and the decrypted secret.
+    let (hrp, payload) =
         crate::nip19::decode_bech32(ncryptsec).ok_or_else(|| nip49("invalid ncryptsec"))?;
+    let payload = Zeroizing::new(payload);
     if hrp != HRP_NCRYPTSEC {
-        payload.zeroize();
         return Err(nip49(format!("invalid prefix {hrp}, expected 'ncryptsec'")));
     }
     if payload.len() != PAYLOAD_LEN {
-        payload.zeroize();
         return Err(nip49("invalid ncryptsec length"));
     }
     // The length is fixed from here on: parse a stack record the compiler
     // can bounds-check statically.
-    let mut record = [0u8; PAYLOAD_LEN];
-    record.copy_from_slice(&payload);
-    payload.zeroize();
+    let mut record_guard = Zeroizing::new([0u8; PAYLOAD_LEN]);
+    record_guard.copy_from_slice(payload.as_slice());
+    drop(payload);
+    let record = &mut *record_guard;
     let version = record[0];
     if version != VERSION {
-        record.zeroize();
         return Err(nip49(format!("invalid version {version}, expected 0x02")));
     }
     let log_n = record[1];
     if log_n > max_log_n {
-        record.zeroize();
         return Err(nip49(format!("logn {log_n} exceeds maxLogN {max_log_n}")));
     }
     let ksb = record[KSB_INDEX];
@@ -274,7 +275,6 @@ pub fn decrypt(ncryptsec: &str, password: &str, max_log_n: u8) -> Result<Decrypt
         0x01 => KeySecurity::Secure,
         0x02 => KeySecurity::Unknown,
         other => {
-            record.zeroize();
             return Err(nip49(format!(
                 "invalid key security byte {other}, expected 0x00, 0x01, or 0x02"
             )));
@@ -287,11 +287,12 @@ pub fn decrypt(ncryptsec: &str, password: &str, max_log_n: u8) -> Result<Decrypt
     let key = derive_key(password, &salt, log_n)?;
     let cipher =
         XChaCha20Poly1305::new_from_slice(&*key).map_err(|_| nip49("invalid cipher key"))?;
-    let mut secret = [0u8; SECRET_LEN];
-    secret.copy_from_slice(&record[CIPHERTEXT_INDEX..CIPHERTEXT_INDEX + SECRET_LEN]);
+    let mut secret_guard = Zeroizing::new([0u8; SECRET_LEN]);
+    secret_guard.copy_from_slice(&record[CIPHERTEXT_INDEX..CIPHERTEXT_INDEX + SECRET_LEN]);
     let mut tag = [0u8; TAG_LEN];
     tag.copy_from_slice(&record[PAYLOAD_LEN - TAG_LEN..]);
-    record.zeroize();
+    drop(record_guard);
+    let secret = &mut *secret_guard;
     if cipher
         .decrypt_inout_detached(
             &XNonce::from(nonce),
@@ -301,10 +302,10 @@ pub fn decrypt(ncryptsec: &str, password: &str, max_log_n: u8) -> Result<Decrypt
         )
         .is_err()
     {
-        secret.zeroize();
         return Err(nip49("failed to decrypt"));
     }
-    let secret_key = SecretKey::from_bytes(secret)
+    // `from_bytes` gets its own copy; the guard wipes the local on drop.
+    let secret_key = SecretKey::from_bytes(*secret)
         .map_err(|e| Error::with_source(ErrorKind::Nip49, "invalid secret key", e))?;
     Ok(Decrypted {
         secret_key,
@@ -322,6 +323,8 @@ mod tests {
     )]
 
     use core::error::Error as _;
+
+    use zeroize::Zeroize;
 
     use super::*;
 

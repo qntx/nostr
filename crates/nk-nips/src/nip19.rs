@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 use bech32::primitives::decode::CheckedHrpstring;
 use bech32::{ByteIterExt, Checksum, Fe32, Fe32IterExt, Fe1024, Hrp};
 use nk_core::{EventId, Kind, PublicKey, SecretKey};
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 use crate::error::{Error, ErrorKind, Result};
 
@@ -342,7 +342,10 @@ pub fn encode_note(id: &EventId) -> String {
 /// payload length, malformed TLVs, an out-of-range kind, or an invalid
 /// secret scalar (with the [`nk_core`] error as `source`).
 pub fn decode(code: &str) -> Result<Entity> {
+    // The drop guard wipes the decoded buffer on every path — `nsec`
+    // payloads are secret key material (#210).
     let (hrp, data) = decode_nip19_bech32(code)?;
+    let data = Zeroizing::new(data);
 
     if hrp == HRP_NPROFILE {
         let tlvs = parse_tlv(&data)?;
@@ -384,16 +387,14 @@ pub fn decode(code: &str) -> Result<Entity> {
             relays: tlv_relays(&tlvs),
         }))
     } else if hrp == HRP_NSEC {
-        // The decoded buffer is wiped once the scalar is validated and the
-        // `SecretKey` built (#210); a bad scalar wraps the nk-core error.
-        let mut data = data;
+        // A bad scalar wraps the nk-core error; the `data` guard wipes the
+        // decoded bytes whether or not the `SecretKey` was built.
         let secret = if data.len() == 32 {
             SecretKey::from_slice(&data)
                 .map_err(|e| Error::with_source(ErrorKind::Nip19, "invalid nsec scalar", e))
         } else {
             Err(nip19("nsec must be 32 bytes"))
         };
-        data.zeroize();
         Ok(Entity::Secret(secret?))
     } else if hrp == HRP_NPUB {
         let bytes: [u8; 32] = data

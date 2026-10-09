@@ -53,9 +53,9 @@ fn crypto_error(message: impl Into<alloc::borrow::Cow<'static, str>>) -> Error {
 /// `new_from_slice` produces internally for a sub-block key, and it cannot
 /// fail.
 fn hmac_sha256(key: &[u8; 32]) -> HmacSha256 {
-    let mut block = [0u8; 64];
+    let mut block = Zeroizing::new([0u8; 64]);
     block.split_at_mut(32).0.copy_from_slice(key);
-    HmacSha256::new(&block.into())
+    HmacSha256::new((&*block).into())
 }
 
 fn hmac_sha256_tag(key: &[u8; 32], parts: &[&[u8]]) -> [u8; 32] {
@@ -103,9 +103,13 @@ impl ConversationKey {
     /// `getConversationKeyFromSharedSecret`).
     #[must_use]
     pub fn from_shared_secret(shared_x: &[u8; 32]) -> Self {
-        let (prk, _hkdf) = Hkdf::<Sha256>::extract(Some(b"nip44-v2"), shared_x);
+        let (mut prk, hkdf) = Hkdf::<Sha256>::extract(Some(b"nip44-v2"), shared_x);
         let mut key = [0u8; 32];
         key.copy_from_slice(&prk);
+        // `prk` and the `Hkdf` struct both retain the pseudorandom key —
+        // wipe what is reachable.
+        prk.as_mut_slice().zeroize();
+        drop(hkdf);
         Self(key)
     }
 
@@ -156,8 +160,8 @@ impl MessageKeys {
             hmac_sha256_tag(&key.0, &[prev, nonce, &[counter]])
         };
         let t1 = block(&[], 1);
-        let t2 = block(&t1, 2);
-        let t3 = block(&t2, 3);
+        let t2 = Zeroizing::new(block(&t1, 2));
+        let t3 = Zeroizing::new(block(&*t2, 3));
         let (t2_head, t2_tail) = t2.split_at(12);
         let (t3_head, _) = t3.split_at(12);
         let mut chacha_nonce = [0u8; 12];
