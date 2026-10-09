@@ -229,26 +229,38 @@ impl ZeroizeOnDrop for MessageKeys {}
 ///
 /// # Errors
 ///
-/// [`ErrorKind::Crypto`] when `len` is zero (TS also rejects non-integers and
-/// negatives — unrepresentable in `usize`).
+/// [`ErrorKind::Crypto`] when `len` is zero or exceeds the `u32` maximum
+/// (TS also rejects non-integers and negatives — unrepresentable in
+/// `usize`), or when the padded length does not fit `usize` (32-bit
+/// targets: NIP-44 padded lengths reach `2^32`).
 pub fn calc_padded_len(len: usize) -> Result<usize> {
-    if len < MIN_PLAINTEXT_LEN {
-        return Err(crypto_error("expected positive integer"));
+    let len = u64::try_from(len).map_err(|_| crypto_error("invalid plaintext size"))?;
+    usize::try_from(padded_len(len)?)
+        .map_err(|_| crypto_error("padded length exceeds the platform's address space"))
+}
+
+/// `calc_padded_len` computed in `u64` so the `2^32` padded-length ceiling
+/// exists on 32-bit targets instead of overflowing `usize`.
+fn padded_len(len: u64) -> Result<u64> {
+    if !(1..=u64::from(u32::MAX)).contains(&len) {
+        return Err(crypto_error(
+            "invalid plaintext size: must be between 1 and 4294967295 bytes",
+        ));
     }
     if len <= 32 {
         return Ok(32);
     }
     // TS computes `2 ** (floor(log2(len - 1)) + 1)` — the smallest power of
     // two strictly greater than `len - 1`, which is `next_power_of_two(len)`.
-    let next_power = len.checked_next_power_of_two().unwrap_or(0);
+    let next_power = len.next_power_of_two();
     let chunk = if next_power <= 256 {
         32
     } else {
         next_power / 8
     };
-    // `chunk` is a power of two ≥ 32, so the product only overflows when
-    // `len` approaches `usize::MAX`; saturating keeps this panic-free.
-    Ok(chunk.saturating_mul((len - 1) / chunk + 1))
+    // `len <= u32::MAX` and `chunk` is a power of two, so the product is at
+    // most `2^32 + 2^28` and cannot overflow `u64`.
+    Ok(chunk * ((len - 1) / chunk + 1))
 }
 
 fn pad(plaintext: &str) -> Result<Zeroizing<Vec<u8>>> {
@@ -260,11 +272,16 @@ fn pad(plaintext: &str) -> Result<Zeroizing<Vec<u8>>> {
         ));
     }
     let padded_len = calc_padded_len(len)?;
-    let total = if len >= EXTENDED_PREFIX_THRESHOLD {
+    let prefix_len = if len >= EXTENDED_PREFIX_THRESHOLD {
         EXTENDED_PREFIX_LEN
     } else {
         SHORT_PREFIX_LEN
-    } + padded_len;
+    };
+    let Some(total) = prefix_len.checked_add(padded_len) else {
+        return Err(crypto_error(
+            "padded length exceeds the platform's address space",
+        ));
+    };
     let mut padded = Zeroizing::new(Vec::with_capacity(total));
     if len >= EXTENDED_PREFIX_THRESHOLD {
         // `len <= u32::MAX` is guaranteed by the range check above.
@@ -308,7 +325,10 @@ fn unpad(padded: &[u8]) -> Result<String> {
     if !(MIN_PLAINTEXT_LEN..=MAX_PLAINTEXT_LEN).contains(&unpadded_len) {
         return invalid();
     }
-    let Some(unpadded) = padded.get(prefix_len..prefix_len + unpadded_len) else {
+    let Some(end) = prefix_len.checked_add(unpadded_len) else {
+        return invalid();
+    };
+    let Some(unpadded) = padded.get(prefix_len..end) else {
         return invalid();
     };
     if padded.len() != prefix_len + calc_padded_len(unpadded_len)? {
@@ -540,6 +560,26 @@ mod tests {
         assert_eq!(calc_padded_len(65536).unwrap(), 65536);
         // len - 1 is exactly 2^16: the bucket switches to the 2^17 table.
         assert_eq!(calc_padded_len(65537).unwrap(), 81920);
+    }
+
+    #[test]
+    fn calc_padded_len_uses_64_bit_math() {
+        // The spec ceiling: the u32 length prefix allows plaintexts up to
+        // 0xFFFF_FFFF, whose padded length is exactly 2^32 — past `usize::MAX`
+        // on 32-bit targets, so the helper is exercised directly.
+        assert_eq!(padded_len(u64::from(u32::MAX)).unwrap(), 0x1_0000_0000);
+        assert_eq!(
+            padded_len(u64::from(u32::MAX) + 1).unwrap_err().kind(),
+            ErrorKind::Crypto
+        );
+        #[cfg(target_pointer_width = "64")]
+        {
+            assert_eq!(calc_padded_len(u32::MAX as usize).unwrap(), 0x1_0000_0000);
+            assert_eq!(
+                calc_padded_len(u32::MAX as usize + 1).unwrap_err().kind(),
+                ErrorKind::Crypto
+            );
+        }
     }
 
     #[test]
