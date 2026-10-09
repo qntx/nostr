@@ -1,0 +1,26 @@
+[package]
+name                   = "nk-nips"
+publish                = false
+description            = "Platform-neutral NIP implementations for the nk-* workspace. Rust counterpart of @qntx/nostr's nips layer."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+authors.workspace      = true
+
+[features]
+default = ["std", "clock", "os-rng"]
+std     = ["nk-core/std"]
+clock   = ["std", "nk-core/clock"]
+os-rng  = ["std", "nk-core/os-rng"]
+nip19   = ["dep:bech32"]
+
+[dependencies]
+bech32  = { workspace = true, optional = true }
+nk-core = { workspace = true }
+zeroize = { workspace = true }
+
+[lints]
+workspace = true

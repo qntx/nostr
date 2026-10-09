@@ -346,14 +346,20 @@
     {
       "id": "nip19.codec",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip19.ts",
-        "tests": ["packages/nostr/tests/nip19.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip19.test.ts",
+          "packages/nostr/tests/vectors/nip19.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip19.rs",
+        "tests": ["crates/nk-vectors/tests/nip19.rs"]
+      },
+      "vectors": ["vectors/nip19/codec.json", "vectors/nip19/official.json"]
     },
     {
       "id": "nip21.uri",

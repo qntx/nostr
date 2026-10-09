@@ -1,0 +1,585 @@
+{
+  "schema": 1,
+  "capability": "nip19.codec",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.10.1",
+    "cross_check": "nostr-tools 2.24.1 @7fa1ef4: 47/63 agree; the 16 diffs are nostr-tools laxness, not vector bugs — it has no kind bound (N1: 65536 encodes/decodes), no nsec scalar check (N2), no 255-byte TLV limit, no 32-byte payload check on npub/note/nsec, and no hex validation on encoders"
+  },
+  "cases": [
+    {
+      "encode": {
+        "type": "npub",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      },
+      "decoded": {
+        "type": "npub",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      },
+      "encoded": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6"
+    },
+    {
+      "encode": {
+        "type": "note",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4"
+      },
+      "decoded": {
+        "type": "note",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4"
+      },
+      "encoded": "note1qkl5eru9a8rutr20tdw9e5dp25k558vm3fxh3kwy7k54hg7y7zjqtu9knk"
+    },
+    {
+      "encode": {
+        "type": "nsec",
+        "secret": "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa"
+      },
+      "decoded": {
+        "type": "nsec",
+        "secret": "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa"
+      },
+      "encoded": "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5"
+    },
+    {
+      "encode": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ]
+      },
+      "decoded": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ]
+      },
+      "encoded": "nprofile1qythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqy2hwumn8ghj7mn0wd68ythyh6978qvg9e48qqpq80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsnms73r"
+    },
+    {
+      "encode": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ],
+        "author": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "kind": 1
+      },
+      "decoded": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ],
+        "author": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "kind": 1
+      },
+      "encoded": "nevent1qvzqqqqqqypzpy9gpkmwk22tn64skn5dm737leexx3vvutg82eklfek93p50amerqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqy2hwumn8ghj7mn0wd68ythyh6978qvg9e48qqpqqkl5eru9a8rutr20tdw9e5dp25k558vm3fxh3kwy7k54hg7y7zjqqvd3s9"
+    },
+    {
+      "encode": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": []
+      },
+      "decoded": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": []
+      },
+      "encoded": "nevent1qqsqt06v37z7n3793484khzu6xs42t22rkdc5ntcm8z0t22m50z0pfqyrqdwa"
+    },
+    {
+      "encode": {
+        "type": "naddr",
+        "identifier": "banana",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 30023,
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ]
+      },
+      "decoded": {
+        "type": "naddr",
+        "identifier": "banana",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 30023,
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ]
+      },
+      "encoded": "naddr1qvzqqqr4gupzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqy2hwumn8ghj7mn0wd68ythyh6978qvg9e48qqqxvfskuctwvy4ta2w5"
+    },
+    {
+      "encode": {
+        "type": "naddr",
+        "identifier": "",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 0,
+        "relays": []
+      },
+      "decoded": {
+        "type": "naddr",
+        "identifier": "",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 0,
+        "relays": []
+      },
+      "encoded": "naddr1qvzqqqqqqqpzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqqqqx9xmw9"
+    },
+    {
+      "encode": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [],
+        "author": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23"
+      },
+      "decoded": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [],
+        "author": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23"
+      },
+      "encoded": "nevent1qgsfp2qdkm4jjju74v95arwl50h7wf35tr8z6p6kdh6wd3vgdrlw7gcqyqzm7ny0sh5u03vdfad4chx3592j6jsanw9y67xecn66jkarcnc2ggwrcv4"
+    },
+    {
+      "encode": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [],
+        "kind": 0
+      },
+      "decoded": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [],
+        "kind": 0
+      },
+      "encoded": "nevent1qvzqqqqqqqqzqpdlfj8ct6w8ckx57k6utng6z4fdfgwehzjd0rvufadftw3ufu9yckcnu0"
+    },
+    {
+      "encode": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": []
+      },
+      "decoded": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": []
+      },
+      "encoded": "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8g2lcy6q"
+    },
+    {
+      "encode": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://r.例え.jp/パス"
+        ]
+      },
+      "decoded": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://r.例え.jp/パス"
+        ]
+      },
+      "encoded": "nprofile1qyv8wumn8ghj7u3wujlghcup3qhx5up0uwpercuzhyqzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vahlv2n3"
+    },
+    {
+      "input": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "decoded": {
+        "type": "npub",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      },
+      "encoded": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6"
+    },
+    {
+      "input": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg",
+      "decoded": {
+        "type": "npub",
+        "pubkey": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e"
+      },
+      "encoded": "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+    },
+    {
+      "input": "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5",
+      "decoded": {
+        "type": "nsec",
+        "secret": "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa"
+      },
+      "encoded": "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5"
+    },
+    {
+      "input": "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8gpp4mhxue69uhhytnc9e3k7mgpz4mhxue69uhkg6nzv9ejuumpv34kytnrdaksjlyr9p",
+      "decoded": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://r.x.com",
+          "wss://djbas.sadkb.com"
+        ]
+      },
+      "encoded": "nprofile1qyxhwumn8ghj7u3w0qhxxmmdqy2hwumn8ghj7er2vfshxtnnv9jxkc3wvdhk6qpq80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwscgnzhf"
+    },
+    {
+      "input": "NPUB180CVV07TJDRRGPA0J7J7TMNYL2YR6YR7L8J4S3EVF6U64TH6GKWSYJH6W6",
+      "decoded": {
+        "type": "npub",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      },
+      "encoded": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6"
+    },
+    {
+      "input": "npub180cVv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6wq",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8gpqamhxue69uhkzqg8waehxw309a3qeg42hk",
+      "decoded": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://a",
+          "wss://b"
+        ]
+      },
+      "encoded": "nprofile1qyrhwumn8ghj7cgpqamhxue69uhkyqpq80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsmhnvxq"
+    },
+    {
+      "input": "nevent1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8gqyzg2srdkav55h84tpd8gmharalnjvdzcecksw4nd7nnvtzrglmhjxqg8waehxw309asszpmhwden5te0vgpzpy9gpkmwk22tn64skn5dm737leexx3vvutg82eklfek93p50amerqgsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8grqsqqqqq8qvzqqqqqpycyxyvf",
+      "decoded": {
+        "type": "nevent",
+        "id": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://a",
+          "wss://b"
+        ],
+        "author": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "kind": 7
+      },
+      "encoded": "nevent1qvzqqqqqqupzpy9gpkmwk22tn64skn5dm737leexx3vvutg82eklfek93p50amerqyrhwumn8ghj7cgpqamhxue69uhkyqpq80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwspfdtxt"
+    },
+    {
+      "input": "nprofile19grk67tnw3jhy7gqyqalp33lewf5vdq847t6te0wvnags0gs0mu72kz8938tn24wlfze6ccrqypqx0cltha",
+      "decoded": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": []
+      },
+      "encoded": "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8g2lcy6q"
+    },
+    {
+      "input": "naddr1qqpxdqqpq8lsygpm7rrrljungc6q0tuh5hj7ue863q73qlheu4vywtzwhx42a7j9n5psgqqqqqqs0ta2z4",
+      "decoded": {
+        "type": "naddr",
+        "identifier": "f�",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 1,
+        "relays": [
+          "�"
+        ]
+      },
+      "encoded": "naddr1qvzqqqqqqypzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqyp7l0aaqqzxdmalh5fz3mmt"
+    },
+    {
+      "input": "nevent1qgqq8hech6",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nprofile1qy0633fd",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nprofile1qyyszqshv4975",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nprofile1p2zuer",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nevent1qyrhwumn8ghj7cg8w4pxf",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "naddr1qqqhsfzpcjy",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "naddr1qqqhsq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwst287r7",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nprofile1qqgqqqqqqqqqqqqqqqqqqqqqqqqqqvlac8x",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nevent1qqsqt06v37z7n3793484khzu6xs42t22rkdc5ntcm8z0t22m50z0pfqzzqqqqqqqqqqqqqqqqqqqqqqqqqqq5fy6sn",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nevent1qqsqt06v37z7n3793484khzu6xs42t22rkdc5ntcm8z0t22m50z0pfqrqgqqz0hmeed",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "naddr1qqqqyyqqqqqqqqqqqqqqqqqqqqqqqqqqqvzqqqqqqylr9pky",
+      "error": "Nip19Error"
+    },
+    {
+      "encode": {
+        "type": "naddr",
+        "identifier": "banana",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 65535,
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ]
+      },
+      "decoded": {
+        "type": "naddr",
+        "identifier": "banana",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 65535,
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ]
+      },
+      "encoded": "naddr1qvzqqq8llupzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqy2hwumn8ghj7mn0wd68ythyh6978qvg9e48qqqxvfskuctwvyzmnm5d"
+    },
+    {
+      "encode": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ],
+        "author": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "kind": 65535
+      },
+      "decoded": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ],
+        "author": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "kind": 65535
+      },
+      "encoded": "nevent1qvzqqq8llupzpy9gpkmwk22tn64skn5dm737leexx3vvutg82eklfek93p50amerqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqy2hwumn8ghj7mn0wd68ythyh6978qvg9e48qqpqqkl5eru9a8rutr20tdw9e5dp25k558vm3fxh3kwy7k54hg7y7zjqjnund0"
+    },
+    {
+      "encode": {
+        "type": "naddr",
+        "identifier": "banana",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 65536,
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ]
+      },
+      "error": "Nip19Error"
+    },
+    {
+      "encode": {
+        "type": "nevent",
+        "id": "05bf4c8f85e9c7c58d4f5b5c5cd1a1552d4a1d9b8a4d78d9c4f5a95ba3c4f0a4",
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ],
+        "author": "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+        "kind": 65536
+      },
+      "error": "Nip19Error"
+    },
+    {
+      "input": "naddr1qqqqygpm7rrrljungc6q0tuh5hj7ue863q73qlheu4vywtzwhx42a7j9n5psgqqpqqqqms2p90",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nevent1qqsqt06v37z7n3793484khzu6xs42t22rkdc5ntcm8z0t22m50z0pfqrqnllllllzeetam",
+      "error": "Nip19Error"
+    },
+    {
+      "encode": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      },
+      "error": "Nip19Error"
+    },
+    {
+      "encode": {
+        "type": "naddr",
+        "identifier": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 30023,
+        "relays": [
+          "wss://relay.example.com",
+          "wss://nostr.例え.jp"
+        ]
+      },
+      "error": "Nip19Error"
+    },
+    {
+      "encode": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      },
+      "decoded": {
+        "type": "nprofile",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      },
+      "encoded": "nprofile1q8l8wumn8ghj7ctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpvyqzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vatf8czr"
+    },
+    {
+      "input": "nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqwkhnav",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nsec1lllllllllllllllllllllllll6a2ah8x4ay2qwal6f0ge5pkg9qstu3zum",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nsec1lllllllllllllllllllllllll6a2ah8x4ay2qwal6f0ge5pkg9pq3qkqzw",
+      "error": "Nip19Error"
+    },
+    {
+      "encode": {
+        "type": "nsec",
+        "secret": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140"
+      },
+      "decoded": {
+        "type": "nsec",
+        "secret": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140"
+      },
+      "encoded": "nsec1lllllllllllllllllllllllll6a2ah8x4ay2qwal6f0ge5pkg9qq7ae6fg"
+    },
+    {
+      "input": "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqk7h3rf",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnenctv",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "note1qqqqqqqqqqqqqqqqqqqqqqqqqq4dxu8j",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "note1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3djvtd",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqxacnkl",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5v550t",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "nrelay1waehxw309aex2mrp0yhx27rpd4cxceg5v3wzn",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "naddr1qqqkgq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsxpqqqqqqzcll242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424v0l424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242k8l642424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424trla2424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424243l7424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242cll242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424v0l424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242k8l642424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424trla2424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424243l7424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242cll242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424v0642424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242sjhsg9z",
+      "decoded": {
+        "type": "naddr",
+        "identifier": "d",
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "kind": 1,
+        "relays": []
+      },
+      "encoded": "naddr1qvzqqqqqqypzqwlsccluhy6xxsr6l9a9uhhxf75g85g8a709tprjcn4e42h053vaqqqkgl2cj2a"
+    },
+    {
+      "input": "naddr1qqqkgq3q80cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsxpqqqqqqzcll242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424v0l424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242k8l642424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424trla2424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424243l7424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242cll242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424v0l424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242k8l642424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424trla2424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424243l7424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242cll242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424v0m9242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242424242m502rs",
+      "error": "Nip19Error"
+    },
+    {
+      "input": "npub1gfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfppdc043u",
+      "error": "Nip19Error"
+    },
+    {
+      "encode": {
+        "type": "npub",
+        "pubkey": "nothex"
+      },
+      "error": "HexError"
+    },
+    {
+      "encode": {
+        "type": "note",
+        "id": "ab"
+      },
+      "error": "HexError"
+    },
+    {
+      "encode": {
+        "type": "nprofile",
+        "pubkey": "zz",
+        "relays": []
+      },
+      "error": "HexError"
+    },
+    {
+      "encode": {
+        "type": "nevent",
+        "id": "xyz",
+        "relays": []
+      },
+      "error": "HexError"
+    },
+    {
+      "encode": {
+        "type": "naddr",
+        "identifier": "x",
+        "pubkey": "0",
+        "kind": 1,
+        "relays": []
+      },
+      "error": "HexError"
+    },
+    {
+      "encode": {
+        "type": "nsec",
+        "secret": "abababababababababababababababababababababababababababababababab"
+      },
+      "decoded": {
+        "type": "nsec",
+        "secret": "abababababababababababababababababababababababababababababababab"
+      },
+      "encoded": "nsec14w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s5l3rd9"
+    }
+  ]
+}

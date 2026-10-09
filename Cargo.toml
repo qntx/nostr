@@ -15,7 +15,9 @@ categories   = ["cryptography", "network-programming"]
 
 [workspace.dependencies]
 nk-core    = { path = "crates/nk-core", version = "=0.10.1", default-features = false }
+nk-nips    = { path = "crates/nk-nips", version = "=0.10.1", default-features = false }
 base16ct   = { version = "1.0", default-features = false, features = ["alloc"] }
+bech32     = { version = "0.12", default-features = false, features = ["alloc"] }
 criterion  = { version = "0.8", default-features = false }
 getrandom  = { version = "0.4", default-features = false }
 proptest   = { version = "1.11" }

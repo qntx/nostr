@@ -3,8 +3,9 @@ import { bech32 } from "@scure/base";
 import { describe, expect, test } from "vite-plus/test";
 
 import { HexError } from "../src/core/error.ts";
-import { bytesToHex } from "../src/core/util.ts";
+import { bytesToHex, utf8Encoder } from "../src/core/util.ts";
 import {
+  Bech32MaxSize,
   getPublicKey,
   Nip19Error,
   naddrEncode,
@@ -23,6 +24,11 @@ import type {
   ProfilePointer,
 } from "../src/nips/nip19.ts";
 import { isNostrURI, Nip21Error, parseNostrURI } from "../src/nips/nip21.ts";
+
+// secp256k1 group order and its neighbors, for nsec scalar checks.
+const NSEC_MAX_HEX = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140";
+const NSEC_ORDER_HEX = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
+const NSEC_ABOVE_ORDER_HEX = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364142";
 
 const nsecBytes = (r: DecodedResult): Uint8Array => {
   if (r.type !== "nsec") {
@@ -182,12 +188,46 @@ describe("issue #130 encoder validation", () => {
     expect(decoded.type).toBe("nsec");
   });
 
-  test("kind must be an integer in 0..2^32-1", () => {
+  test("kind must be a NIP-01 integer in 0..65535", () => {
     expect(() => naddrEncode({ kind: -1, identifier: "x", pubkey: pk })).toThrow(Nip19Error);
+    expect(() => naddrEncode({ kind: 65536, identifier: "x", pubkey: pk })).toThrow(Nip19Error);
     expect(() => naddrEncode({ kind: 2 ** 32, identifier: "x", pubkey: pk })).toThrow(Nip19Error);
     expect(() => naddrEncode({ kind: 1.5, identifier: "x", pubkey: pk })).toThrow(Nip19Error);
-    expect(() => neventEncode({ id: pk, kind: 2 ** 32 })).toThrow(Nip19Error);
-    expect(naddrEncode({ kind: 0xffffffff, identifier: "x", pubkey: pk })).toMatch(/^naddr1/);
+    expect(() => neventEncode({ id: pk, kind: 65536 })).toThrow(Nip19Error);
+    expect(naddrEncode({ kind: 0xffff, identifier: "x", pubkey: pk })).toMatch(/^naddr1/);
+    const tlv = (t: number, v: number[]) => [t, v.length, ...v];
+    // A decoded kind above 65535 is rejected on both nevent and naddr.
+    const badKind = [0x00, 0x01, 0x00, 0x00]; // 65536
+    const nevent = bech32.encode(
+      "nevent",
+      bech32.toWords(new Uint8Array([...tlv(0, [...hexToBytes(pk)]), ...tlv(3, badKind)])),
+      Bech32MaxSize,
+    );
+    expect(() => nip19Decode(nevent)).toThrow(Nip19Error);
+    const naddr = bech32.encode(
+      "naddr",
+      bech32.toWords(
+        new Uint8Array([
+          ...tlv(0, [...utf8Encoder.encode("x")]),
+          ...tlv(2, [...hexToBytes(pk)]),
+          ...tlv(3, badKind),
+        ]),
+      ),
+      Bech32MaxSize,
+    );
+    expect(() => nip19Decode(naddr)).toThrow(Nip19Error);
+  });
+
+  test("decoded nsec must be a valid secp256k1 scalar", () => {
+    const encode = (bytes: Uint8Array) =>
+      bech32.encode("nsec", bech32.toWords(bytes), Bech32MaxSize);
+    // All-zero scalar and the curve order itself are rejected.
+    expect(() => nip19Decode(encode(new Uint8Array(32)))).toThrow(Nip19Error);
+    expect(() => nip19Decode(encode(hexToBytes(NSEC_ORDER_HEX)))).toThrow(Nip19Error);
+    expect(() => nip19Decode(encode(hexToBytes(NSEC_ABOVE_ORDER_HEX)))).toThrow(Nip19Error);
+    // n - 1 still decodes.
+    const decoded = nip19Decode(encode(hexToBytes(NSEC_MAX_HEX)));
+    expect(decoded.type).toBe("nsec");
   });
 
   test("TLV values over 255 bytes throw Nip19Error", () => {

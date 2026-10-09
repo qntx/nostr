@@ -45,6 +45,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd307490d624467aa6f74b0eabb77633d1f758a7b25f12bceb0b22e08d9726f6"
 
 [[package]]
+name = "bech32"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efbd3e1070bbdf4cd88a75264e18e8a26f7cb5c6949eadf0ceb85fb159cf08f8"
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -473,10 +479,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "nk-nips"
+version = "0.10.1"
+dependencies = [
+ "bech32",
+ "nk-core",
+ "zeroize",
+]
+
+[[package]]
 name = "nk-vectors"
 version = "0.10.1"
 dependencies = [
  "nk-core",
+ "nk-nips",
  "proptest",
  "serde",
  "serde_json",
