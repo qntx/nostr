@@ -75,7 +75,22 @@ export async function getToken(
     content: opts?.content ?? "",
   });
 
-  const encoded = base64.encode(utf8Encoder.encode(JSON.stringify(signed)));
+  // Canonical NIP-01 wire field order: the token is deterministic regardless
+  // of the signer's object key order, and byte-identical to nk-nips'
+  // `token(&Event)`. Extra signer-provided properties are dropped.
+  const encoded = base64.encode(
+    utf8Encoder.encode(
+      JSON.stringify({
+        id: signed.id,
+        pubkey: signed.pubkey,
+        created_at: signed.created_at,
+        kind: signed.kind,
+        tags: signed.tags,
+        content: signed.content,
+        sig: signed.sig,
+      }),
+    ),
+  );
   return opts?.includeAuthorizationScheme === true ? AUTHORIZATION_SCHEME + encoded : encoded;
 }
 

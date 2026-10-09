@@ -477,14 +477,20 @@
     {
       "id": "nip98.http-auth",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK2",
       "ts": {
         "module": "packages/nostr/src/nips/nip98.ts",
-        "tests": ["packages/nostr/tests/nip98.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip98.test.ts",
+          "packages/nostr/tests/vectors/nip98.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip98.rs",
+        "tests": ["crates/nk-vectors/tests/nip98.rs"]
+      },
+      "vectors": ["vectors/nip98/codec.json"]
     },
     {
       "id": "nip59.wrap",

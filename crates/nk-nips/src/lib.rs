@@ -17,6 +17,7 @@
 //! | `nip42`  | no      | relay auth (`auth_event`, `is_auth_required`)                     |
 //! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
 //! | `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptOptions`, `encrypt`/`decrypt`) |
+//! | `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)    |
 //!
 //! ```
 //! use nk_nips::ErrorKind;
@@ -50,6 +51,8 @@ pub mod nip42;
 pub mod nip44;
 #[cfg(feature = "nip49")]
 pub mod nip49;
+#[cfg(feature = "nip98")]
+pub mod nip98;
 
 pub use error::{Error, ErrorKind, Result};
 

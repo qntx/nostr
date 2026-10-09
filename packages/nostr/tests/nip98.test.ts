@@ -1,6 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, test } from "vite-plus/test";
 
+import type { Event } from "../src/core/event.ts";
 import { bytesToHex, utf8Encoder } from "../src/core/util.ts";
 import { Kind, finalizeEvent } from "../src/index.ts";
 import {
@@ -116,6 +117,37 @@ describe("nip98", () => {
     const event = unpackEventFromToken(await getToken(URL, METHOD, sign));
     const badSig = { ...event, sig: "00".repeat(64) };
     expect(validateAuthEvent(badSig, URL, METHOD)).toBe(false);
+  });
+
+  test("token is canonical regardless of the signer's key order", async () => {
+    const event = sign({
+      kind: Kind.HttpAuth,
+      created_at: 1_700_000_000,
+      tags: [
+        ["u", URL],
+        ["method", METHOD],
+      ],
+      content: "",
+    });
+    const canonical = await getToken(URL, METHOD, () => event);
+    // A signer that scrambles the event keys and adds extra properties must
+    // produce the same token (NIP-01 wire order, non-event fields dropped).
+    const scrambled = await getToken(
+      URL,
+      METHOD,
+      () =>
+        ({
+          sig: event.sig,
+          extra: "dropped",
+          kind: event.kind,
+          content: event.content,
+          id: event.id,
+          tags: event.tags,
+          pubkey: event.pubkey,
+          created_at: event.created_at,
+        }) as Event,
+    );
+    expect(scrambled).toBe(canonical);
   });
 
   test("unpackEventFromToken throws Nip98Error on garbage", () => {
