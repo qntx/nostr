@@ -6,7 +6,6 @@
 //! shapes fixed by NIP-09, NIP-18, and NIP-25.
 
 use alloc::string::String;
-use alloc::vec;
 use alloc::vec::Vec;
 
 use serde::{Deserialize, Serialize};
@@ -228,12 +227,14 @@ impl EventBuilder {
         let mut builder = Self::new(Kind::REACTION, content);
         // NIP-25's four-slot e tag: `["e", id, relay_or_"", pubkey]`; an
         // absent hint leaves the relay slot empty.
-        builder.tags.push(Tag::from_parts(vec![
-            String::from("e"),
-            target.id().to_hex(),
-            relay_hint.map_or_else(String::new, |url| String::from(url.as_str())),
-            target.pubkey().to_hex(),
-        ]));
+        builder.tags.push(Tag::custom(
+            "e",
+            [
+                target.id().to_hex(),
+                relay_hint.map_or_else(String::new, |url| String::from(url.as_str())),
+                target.pubkey().to_hex(),
+            ],
+        ));
         builder
             .tags
             .push(Tag::public_key(target.pubkey(), relay_hint, None));

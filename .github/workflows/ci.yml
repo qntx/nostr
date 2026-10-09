@@ -92,7 +92,7 @@ jobs:
     with:
       targets: wasm32-unknown-unknown aarch64-linux-android x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
       packages: nk-nips
-      features: --no-default-features --features nip04,nip19,nip21,nip44,nip49
+      features: --no-default-features --features nip04,nip13,nip19,nip21,nip42,nip44,nip49
       forbid-deps: getrandom
 
   # nk-nips' default set (std, clock, os-rng) plus the NIP features on the
@@ -105,4 +105,4 @@ jobs:
     with:
       targets: aarch64-linux-android armv7-linux-androideabi x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
       packages: nk-nips
-      features: --features std,clock,os-rng,nip04,nip19,nip21,nip44,nip49
+      features: --features std,clock,os-rng,nip04,nip13,nip19,nip21,nip42,nip44,nip49

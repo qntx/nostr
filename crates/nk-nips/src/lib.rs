@@ -11,8 +11,10 @@
 //! | `clock`  | yes     | wall-clock helpers where a NIP needs them                   |
 //! | `os-rng` | yes     | OS entropy where a NIP needs it                             |
 //! | `nip04`  | no      | legacy encrypted DMs (`SharedSecret`, `encrypt`/`decrypt`)       |
+//! | `nip13`  | no      | proof of work (`pow`, `PowMiner`)                                 |
 //! | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) |
 //! | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`)                   |
+//! | `nip42`  | no      | relay auth (`auth_event`, `is_auth_required`)                     |
 //! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
 //! | `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptOptions`, `encrypt`/`decrypt`) |
 //!
@@ -36,10 +38,14 @@ mod ecdh;
 
 #[cfg(feature = "nip04")]
 pub mod nip04;
+#[cfg(feature = "nip13")]
+pub mod nip13;
 #[cfg(feature = "nip19")]
 pub mod nip19;
 #[cfg(feature = "nip21")]
 pub mod nip21;
+#[cfg(feature = "nip42")]
+pub mod nip42;
 #[cfg(feature = "nip44")]
 pub mod nip44;
 #[cfg(feature = "nip49")]
@@ -52,6 +58,10 @@ pub use error::{Error, ErrorKind, Result};
 #[cfg(feature = "os-rng")]
 use getrandom as _;
 use nk_core as _;
+// `criterion` is a dev-dependency consumed only by `benches/`; without this
+// import the lib-test target reports it unused.
+#[cfg(test)]
+use criterion as _;
 
 const _: () = {
     const fn assert_send_sync<T: Send + Sync>() {}
@@ -67,6 +77,8 @@ const _: () = {
     }
     #[cfg(feature = "nip04")]
     assert_send_sync::<nip04::SharedSecret>();
+    #[cfg(feature = "nip13")]
+    assert_send_sync::<nip13::PowMiner>();
     #[cfg(feature = "nip49")]
     {
         assert_send_sync::<nip49::EncryptOptions>();
