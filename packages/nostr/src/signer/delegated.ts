@@ -50,6 +50,7 @@ export class DelegatedSigner implements NostrSigner {
     let pubkey = this.#pubkey;
     if (pubkey === undefined) {
       pubkey = await this.#operations.getPublicKey();
+      this.#assertUsable();
       if (!isHex32(pubkey)) {
         throw new CryptoError("key holder returned an invalid public key");
       }
@@ -74,6 +75,7 @@ export class DelegatedSigner implements NostrSigner {
     }
     const id = getEventHash(unsigned);
     const sig = await this.#operations.signEventId(hexToBytes(id));
+    this.#assertUsable();
     if (sig.length !== 64) {
       throw new CryptoError("key holder returned an invalid signature length");
     }
@@ -95,6 +97,10 @@ export class DelegatedSigner implements NostrSigner {
       throw new CryptoError("key holder does not support ECDH shared secrets");
     }
     const shared = await sharedSecret(assertHex32(peer, "peer public key"));
+    if (this.#disposed) {
+      shared.fill(0);
+      throw new SignerDisposedError("signer has been disposed");
+    }
     if (shared.length !== 32) {
       shared.fill(0);
       throw new CryptoError("key holder returned an invalid shared secret");

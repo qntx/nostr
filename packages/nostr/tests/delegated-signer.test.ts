@@ -248,4 +248,59 @@ describe("DelegatedSigner", () => {
     );
     expect(calls.getPublicKey + calls.signEventId + calls.sharedSecret).toBe(totalCalls);
   });
+
+  test("dispose during a pending sharedSecret call wipes the secret and caches nothing", async () => {
+    const { ops } = testHolder(SK1);
+    let resolveShared: ((v: Uint8Array) => void) | undefined;
+    let entered: () => void = () => {};
+    const enteredPromise = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const signer = new DelegatedSigner({
+      ...ops,
+      sharedSecret: async () => {
+        entered();
+        return new Promise((resolve) => {
+          resolveShared = resolve;
+        });
+      },
+    });
+    const spy = vi.spyOn(nip44, "getConversationKeyFromSharedSecret");
+
+    const pending = signer.nip44Encrypt(PK2, "hi");
+    await enteredPromise; // the holder's op is now in flight
+    signer.dispose();
+    const shared = secp256k1.getSharedSecret(SK1, hexToBytes(`02${PK2}`)).slice(1, 33);
+    resolveShared?.(shared);
+
+    await expect(pending).rejects.toBeInstanceOf(SignerDisposedError);
+    expect(shared).toStrictEqual(new Uint8Array(32));
+    // The reply never reached derivation, so the cache never saw a key.
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("dispose during a pending signEventId call rejects without an event", async () => {
+    const { ops } = testHolder(SK1);
+    let resolveSig: ((v: Uint8Array) => void) | undefined;
+    let entered: () => void = () => {};
+    const enteredPromise = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const signer = new DelegatedSigner({
+      ...ops,
+      signEventId: async () => {
+        entered();
+        return new Promise((resolve) => {
+          resolveSig = resolve;
+        });
+      },
+    });
+    const pubkey = await signer.getPublicKey();
+    const pending = signer.signEvent(unsignedFor(pubkey));
+    await enteredPromise; // signEventId is now in flight
+    signer.dispose();
+    resolveSig?.(schnorr.sign(new Uint8Array(32), SK1, randomBytes(32)));
+
+    await expect(pending).rejects.toBeInstanceOf(SignerDisposedError);
+  });
 });
