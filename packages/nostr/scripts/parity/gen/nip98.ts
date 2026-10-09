@@ -8,10 +8,9 @@
 // Events are signed deterministically: a fixed secret key plus a fixed BIP-340
 // auxiliary rand injected through the `SigningBackend` (same aux path as
 // vectors/core), so Rust's `Keys::sign_event_with_aux` reproduces `id`/`sig`
-// byte-for-byte. Tokens are pinned to the wire-order JSON
-// (id, pubkey, created_at, kind, tags, content, sig) that nk-core's `Event`
-// serialization produces — `getToken`'s own output instead depends on the
-// signer's object key order.
+// byte-for-byte. `getToken` serializes in the canonical wire order
+// (id, pubkey, created_at, kind, tags, content, sig), so its output is the
+// token both languages produce.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -46,29 +45,8 @@ const backend: SigningBackend = {
 };
 const keys = Keys.fromSecretKey(SECRET_KEY, backend);
 
-/** Wire-order projection matching nk-core's `Event` serialization. */
-function wire(event: Event): Event {
-  return {
-    id: event.id,
-    pubkey: event.pubkey,
-    created_at: event.created_at,
-    kind: event.kind,
-    tags: event.tags,
-    content: event.content,
-    sig: event.sig,
-  };
-}
-
-function tokenOf(event: Event): string {
-  return base64.encode(utf8Encoder.encode(JSON.stringify(wire(event))));
-}
-
 function sign(template: EventTemplate): Event {
   return signEvent({ ...template, pubkey: keys.publicKey }, keys);
-}
-
-function raise(message: string): never {
-  throw new Error(message);
 }
 
 /** The raw bytes `hashPayload` feeds SHA-256 for a TS payload argument. */
@@ -126,23 +104,22 @@ async function authCase(
   content: string,
   created_at: number,
   rust: boolean,
-): Promise<Event> {
-  const signed: Event[] = [];
-  await getToken(
+): Promise<{ event: Event; token: string }> {
+  let signed: Event | undefined;
+  const token = await getToken(
     url,
     method,
     (template) => {
       const event = sign(template);
-      signed.push(event);
+      signed = event;
       return event;
     },
     { content, payload, now: created_at },
   );
-  if (signed.length !== 1) {
+  if (signed === undefined) {
     throw new Error("generator bug: signer was not called");
   }
-  const event = signed[0] ?? raise("generator bug: signer was not called");
-  const token = tokenOf(event);
+  const event = signed;
   authCases.push({
     url,
     method,
@@ -152,12 +129,12 @@ async function authCase(
       : {}),
     content,
     created_at,
-    event: wire(event),
+    event,
     token,
     header: `Nostr ${token}`,
     ...(rust ? {} : { rust: false as const }),
   });
-  return event;
+  return { event, token };
 }
 
 const primary = await authCase(
@@ -192,30 +169,30 @@ await authCase("https://api.example.com/", "POST", { name: "file.png", size: 12 
 
 // A token with real '=' padding, for the unpadded-acceptance case: the wire
 // JSON length must not be a multiple of 3 — vary the content length.
-let padEvent: Event | undefined;
-let padToken = "";
-for (let i = 0; padEvent === undefined && i < 16; i += 1) {
-  const signed = sign({
-    kind: 27235,
-    created_at: NOW,
-    tags: [
-      ["u", "https://api.example.com/"],
-      ["method", "GET"],
-    ],
-    content: "x".repeat(i),
-  });
-  const t = tokenOf(signed);
-  if (t.endsWith("=")) {
-    padEvent = signed;
-    padToken = t;
-  }
-}
-if (padEvent === undefined) {
+const padCandidates = await Promise.all(
+  Array.from({ length: 16 }, async (_, i) => {
+    let signed: Event | undefined;
+    const token = await getToken(
+      "https://api.example.com/",
+      "GET",
+      (t) => {
+        const event = sign(t);
+        signed = event;
+        return event;
+      },
+      { content: "x".repeat(i), now: NOW },
+    );
+    return { token, event: signed };
+  }),
+);
+const padded = padCandidates.find((c) => c.token.endsWith("="));
+if (padded?.event === undefined) {
   throw new Error("generator bug: could not produce a padded token");
 }
+const padToken = padded.token;
 
-const goodToken = tokenOf(primary);
-const goodEvent = wire(primary);
+const goodToken = primary.token;
+const goodEvent = primary.event;
 
 unpackCases.push(
   { token: goodToken, event: goodEvent },
@@ -226,7 +203,7 @@ unpackCases.push(
   // U+FEFF is JS regex `\s` → the scheme still strips.
   { token: `nostr\u{FEFF}${goodToken}`, event: goodEvent },
   // Missing `=` padding is accepted (the spec example is unpadded).
-  { token: padToken.replace(/=+$/, ""), event: wire(padEvent) },
+  { token: padToken.replace(/=+$/, ""), event: padded.event },
   { token: "", error: "missing token" },
   // "nostr" alone does not match /^nostr\s+/ → decoded as base64; length mod
   // 4 == 1 pads to `===`, which is non-canonical → encoding error.
@@ -251,13 +228,12 @@ unpackCases.push(
 
 // The unsigned form of a real event parses as JSON but is not signed.
 {
-  const w = wire(primary);
   const unsigned = {
-    pubkey: w.pubkey,
-    created_at: w.created_at,
-    kind: w.kind,
-    tags: w.tags,
-    content: w.content,
+    pubkey: primary.event.pubkey,
+    created_at: primary.event.created_at,
+    kind: primary.event.kind,
+    tags: primary.event.tags,
+    content: primary.event.content,
   };
   unpackCases.push({
     token: base64.encode(utf8Encoder.encode(JSON.stringify(unsigned))),
@@ -276,7 +252,7 @@ function validateCase(
   rust = true,
 ): void {
   validateCases.push({
-    event: wire(event),
+    event,
     url,
     method,
     ...(payload === undefined ? {} : { payload_hex: bytesToHex(payloadBytes(payload)) }),
@@ -292,24 +268,24 @@ function validateCase(
 
 const URL = "https://api.example.com/upload?x=1";
 
-validateCase(primary, URL, "POST", undefined, NOW, 60, true);
-validateCase(primary, URL, "post", undefined, NOW, 60, true);
-validateCase(primary, URL, "POST", undefined, NOW + 60, 60, true);
-validateCase(primary, URL, "POST", undefined, NOW + 61, 60, false);
-validateCase(primary, URL, "POST", undefined, NOW - 60, 60, true);
-validateCase(primary, URL, "POST", undefined, NOW - 61, 60, false);
-validateCase(primary, URL, "POST", undefined, NOW, 0, true);
-validateCase(primary, URL, "POST", undefined, NOW + 5, 4, false);
-validateCase(primary, "https://other.example.com/", "POST", undefined, NOW, 60, false);
-validateCase(primary, URL, "GET", undefined, NOW, 60, false);
+validateCase(primary.event, URL, "POST", undefined, NOW, 60, true);
+validateCase(primary.event, URL, "post", undefined, NOW, 60, true);
+validateCase(primary.event, URL, "POST", undefined, NOW + 60, 60, true);
+validateCase(primary.event, URL, "POST", undefined, NOW + 61, 60, false);
+validateCase(primary.event, URL, "POST", undefined, NOW - 60, 60, true);
+validateCase(primary.event, URL, "POST", undefined, NOW - 61, 60, false);
+validateCase(primary.event, URL, "POST", undefined, NOW, 0, true);
+validateCase(primary.event, URL, "POST", undefined, NOW + 5, 4, false);
+validateCase(primary.event, "https://other.example.com/", "POST", undefined, NOW, 60, false);
+validateCase(primary.event, URL, "GET", undefined, NOW, 60, false);
 // Payload tag present but the caller does not check it → passes.
-validateCase(payloadSigned, URL, "POST", undefined, NOW, 60, true);
-validateCase(payloadSigned, URL, "POST", new Uint8Array([1, 2, 3, 0, 255]), NOW, 60, true);
-validateCase(payloadSigned, URL, "POST", new Uint8Array([1, 2, 3]), NOW, 60, false);
+validateCase(payloadSigned.event, URL, "POST", undefined, NOW, 60, true);
+validateCase(payloadSigned.event, URL, "POST", new Uint8Array([1, 2, 3, 0, 255]), NOW, 60, true);
+validateCase(payloadSigned.event, URL, "POST", new Uint8Array([1, 2, 3]), NOW, 60, false);
 // An event without a payload tag fails a required payload check.
-validateCase(primary, URL, "POST", new Uint8Array([1]), NOW, 60, false);
+validateCase(primary.event, URL, "POST", new Uint8Array([1]), NOW, 60, false);
 // The object-payload path is TS-only.
-validateCase(payloadSigned, URL, "POST", { whatever: true }, NOW, 60, false, false);
+validateCase(payloadSigned.event, URL, "POST", { whatever: true }, NOW, 60, false, false);
 
 // The first `u`/`method` tag wins: hand-built tag orderings.
 {
@@ -354,10 +330,7 @@ validateCase(payloadSigned, URL, "POST", { whatever: true }, NOW, 60, false, fal
 }
 
 // Tampered content → the id/signature no longer verify.
-{
-  const tampered = { ...wire(primary), content: "tampered" };
-  validateCase(tampered, URL, "POST", undefined, NOW, 60, false);
-}
+validateCase({ ...primary.event, content: "tampered" }, URL, "POST", undefined, NOW, 60, false);
 
 // Missing method tag.
 {

@@ -27,6 +27,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 - **BREAKING:** `nip49.decrypt` now requires `opts.maxLogN` — an integer in `1..=22`. A payload whose `logn` exceeds the ceiling throws `Nip49Error` before scrypt runs, bounding memory use at `128 * r * 2^logn` bytes (#211).
 - `nip49.decrypt` rejects key-security bytes other than `0x00`, `0x01`, or `0x02` and zero-fills the scrypt-derived key after use (NIP-49).
 - `nip49.decrypt` rejects a decrypted secret that is not a valid secp256k1 scalar with `Nip49Error` (NIP-49 ruling N3 — a key that decrypts to `0` or `≥ n` can never sign or derive a conversation key).
+- `nip98.getToken` encodes the signed event in canonical NIP-01 field order (`id`, `pubkey`, `created_at`, `kind`, `tags`, `content`, `sig`) and drops non-event properties from the signer's return value, so tokens are deterministic and byte-identical to nk-nips.
 
 ### Fixed
 

@@ -2,13 +2,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { schnorr } from "@noble/curves/secp256k1.js";
-import { base64 } from "@scure/base";
 import { afterEach, describe, expect, test } from "vite-plus/test";
 
 import type { Event, EventTemplate } from "../../src/core/event.ts";
 import { Keys, signEvent } from "../../src/core/key.ts";
 import type { SigningBackend } from "../../src/core/key.ts";
-import { hexToBytes, utf8Encoder } from "../../src/core/util.ts";
+import { hexToBytes } from "../../src/core/util.ts";
 import {
   Nip98Error,
   getToken,
@@ -68,19 +67,6 @@ function sign(template: EventTemplate): Event {
   return signEvent({ ...template, pubkey: keys.publicKey }, keys);
 }
 
-/** Wire-order serialization matching Rust's `Event` JSON. */
-function wire(event: Event): string {
-  return JSON.stringify({
-    id: event.id,
-    pubkey: event.pubkey,
-    created_at: event.created_at,
-    kind: event.kind,
-    tags: event.tags,
-    content: event.content,
-    sig: event.sig,
-  });
-}
-
 function payloadOf(c: { payload_hex?: string; payload_json?: unknown }): unknown {
   if (c.payload_json !== undefined) {
     return c.payload_json;
@@ -102,7 +88,7 @@ afterEach(() => {
 describe("vectors/nip98 auth_event + token", () => {
   test.each(vector.auth)("case %#", async (c) => {
     const signed: Event[] = [];
-    await getToken(
+    const token = await getToken(
       c.url,
       c.method,
       (t) => {
@@ -114,10 +100,9 @@ describe("vectors/nip98 auth_event + token", () => {
     );
     expect(signed).toHaveLength(1);
     expect(signed[0]).toStrictEqual(c.event);
-    // The pinned token is base64 of the wire-order JSON — the exact bytes
-    // Rust's `token` produces. `getToken`'s own output order depends on the
-    // signer's object keys; the wire form is the cross-language contract.
-    expect(base64.encode(utf8Encoder.encode(wire(signed[0]!)))).toBe(c.token);
+    // `getToken` emits canonical wire order — byte-identical to the pinned
+    // token and to Rust's `token`.
+    expect(token).toBe(c.token);
     expect(c.header).toBe(`Nostr ${c.token}`);
   });
 });
