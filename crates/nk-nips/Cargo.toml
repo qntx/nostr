@@ -1,6 +1,5 @@
 [package]
 name                   = "nk-nips"
-publish                = false
 description            = "Platform-neutral NIP implementations for the nk-* workspace. Rust counterpart of @qntx/nostr's nips layer."
 version.workspace      = true
 edition.workspace      = true
@@ -9,6 +8,14 @@ license.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
 authors.workspace      = true
+keywords.workspace     = true
+categories.workspace   = true
+readme                 = "README.md"
+documentation          = "https://docs.rs/nk-nips"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["std", "clock", "os-rng"]

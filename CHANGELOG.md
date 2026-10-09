@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages/nostr-wasm` via npm trusted publishing / OIDC) and `publish-crates.yml` (publishing `nk-core` to crates.io).
+A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages/nostr-wasm` via npm trusted publishing / OIDC) and `publish-crates.yml` (publishing `nk-core` and `nk-nips` to crates.io).
 
 ## [Unreleased]
 
@@ -23,6 +23,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 - `nk-nips` `nip59` feature: NIP-59 gift wrap — `Rumor` (`createRumor`/`rumorToJson`/`parseRumor` counterparts), `Timestamps`/`RandomScope`/`WrapOptions`, the local-key flow `seal_with_rng`/`gift_wrap_with_rng`/`wrap_with_rng`/`unwrap` (OS-entropy `seal`/`gift_wrap`/`wrap` under `os-rng`), and the pure steps `seal_template`/`check_gift_wrap`/`parse_seal`/`open_rumor` for remote-signer composition. Random offsets use the same big-endian-u32 rejection sampling as TS, unwrap mirrors the TS check order and `Nip59Error` messages, and every draw (timestamp offset, ephemeral key, NIP-44 nonce, BIP-340 aux) comes from the caller's `CryptoRng` in the documented order.
 - `nk-nips` `nip17` feature: NIP-17 private direct messages — `Recipient`/`ReplyTo`/`ChatMessageOptions`, `chat_message_rumor` (kind-14 rumor with `p` tags, unmarked reply `e` tag, `subject`), `wrap_direct_message_with_rng`/`wrap_direct_message` (sender copy first, recipients deduplicated by public key, NIP-59 errors propagated per copy), `normalize_recipients`, and the kind-10050 DM relay list (`parse_dm_relay_list`, `dm_relay_list_tags`, `dm_relay_list`). Verified against `vectors/nip17/codec.json` replayed byte-for-byte under the recorded entropy stream.
 - `nk-nips` `nip44` feature: NIP-44 v2 payload encryption — `ConversationKey` (`derive`, `from_shared_secret`, `from_bytes`, `to_bytes`), `MessageKeys`, `calc_padded_len`, `encrypt_with_nonce`/`encrypt_with_rng`/`encrypt` (the last under `os-rng`), and `decrypt`/`decrypt_with_max_len` under `DEFAULT_MAX_PAYLOAD_CHARS`. The MAC is verified in constant time before decryption, the extended u32 length prefix is used at ≥65536 bytes, and all key material and scratch buffers are zeroized. Verified by both languages against `vectors/nip44/official.json` (every section), the new `vectors/nip44/extended.json` spec-text boundary cases, and generated `shared-secret.json` cases proving `from_shared_secret(ecdh_x) == conversation_key`; a `nip44.v2` differential stream covers random plaintexts, keys, nonces, and corrupted payloads.
+- `nk-nips` is now published to crates.io with the `nip04`, `nip13`, `nip17`, `nip19`, `nip21`, `nip42`, `nip44`, `nip49`, `nip59`, and `nip98` features (all default-off, each compiling independently).
 
 ### Changed
 
