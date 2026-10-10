@@ -74,6 +74,16 @@ if (import.meta.main) {
       console.error(`sync-versions: cargo update --workspace failed: ${why}`);
       process.exitCode = 1;
     }
+
+    // bun.lock mirrors the workspace versions under `workspaces`; refresh
+    // the lockfile without touching dependencies.
+    const lock = spawnSync("bun", ["install", "--lockfile-only"], { stdio: "inherit" });
+    if (lock.status !== 0) {
+      const why =
+        lock.error === undefined ? `exit code ${String(lock.status)}` : lock.error.message;
+      console.error(`sync-versions: bun install --lockfile-only failed: ${why}`);
+      process.exitCode = 1;
+    }
   } else {
     console.error('sync-versions: packages/nostr/package.json has no string "version"');
     process.exitCode = 1;

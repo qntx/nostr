@@ -5,6 +5,7 @@ import { join } from "node:path";
 // The repo does not depend on @types/bun; declare the used surface.
 declare const Bun: {
   TOML: { parse: (text: string) => unknown };
+  JSONC: { parse: (text: string) => unknown };
 };
 
 type JsonObject = Record<string, unknown>;
@@ -28,15 +29,17 @@ export type PackageEntry = { path: string; pkg: unknown };
  * `[workspace.package].version`, every internal `crates/` path dependency must pin `=<version>`,
  * the version string may appear nowhere else in Cargo.toml (bumpp rewrites every occurrence), and
  * internal `@qntx/*` dependencies must use `^<version>` in peerDependencies and `<version>` in
- * devDependencies, and every `[[package]]` in Cargo.lock without a `source` (a workspace member)
- * must record the workspace version. The private workspace root is not passed in and takes no
- * part.
+ * devDependencies, every `[[package]]` in Cargo.lock without a `source` (a workspace member) must
+ * record the workspace version, and every `workspaces` entry in bun.lock must record the
+ * package.json version of its workspace directory. The private workspace root is not passed in and
+ * takes no part.
  */
 export function checkVersion(
   packages: PackageEntry[],
   cargoToml: unknown,
   cargoText: string,
   lockToml: unknown,
+  bunLock: unknown,
 ): string[] {
   const errors: string[] = [];
   const workspace = asRecord(asRecord(cargoToml)["workspace"]);
@@ -129,6 +132,26 @@ export function checkVersion(
     }
   }
 
+  // bun.lock mirrors each workspace manifest's `version` under `workspaces`
+  // keyed by directory; drift means sync-versions' `bun install
+  // --lockfile-only` refresh was skipped.
+  const workspaces = asRecord(asRecord(bunLock)["workspaces"]);
+  for (const { path, pkg } of packages) {
+    const dir = path.slice(0, -"/package.json".length);
+    const { version } = asRecord(pkg);
+    const entry = workspaces[dir];
+    if (entry === undefined) {
+      errors.push(`bun.lock: missing workspaces["${dir}"] entry`);
+      continue;
+    }
+    const lockVersion = asRecord(entry)["version"];
+    if (lockVersion !== version) {
+      errors.push(
+        `bun.lock: workspaces["${dir}"] has version ${JSON.stringify(lockVersion)}, expected ${JSON.stringify(version)}`,
+      );
+    }
+  }
+
   return errors;
 }
 
@@ -146,6 +169,7 @@ if (import.meta.main) {
     Bun.TOML.parse(cargoText),
     cargoText,
     Bun.TOML.parse(lockText),
+    Bun.JSONC.parse(readFileSync("bun.lock", "utf8")),
   );
   for (const error of errors) {
     console.error(`check-version: ${error}`);
