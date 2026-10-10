@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { schnorr, secp256k1 } from "@noble/curves/secp256k1.js";
 import { randomBytes } from "@noble/hashes/utils.js";
-import { describe, expect, test, vi } from "vite-plus/test";
+import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { CryptoError } from "../src/core/error.ts";
 import type { UnsignedEvent } from "../src/core/event.ts";
@@ -87,6 +87,10 @@ function unsignedFor(pubkey: string): UnsignedEvent {
 }
 
 describe("DelegatedSigner", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   test("getPublicKey validates the holder value and caches it", async () => {
     const { ops, calls } = testHolder(SK1);
     const signer = new DelegatedSigner(ops);
@@ -206,15 +210,18 @@ describe("DelegatedSigner", () => {
     const { ops } = testHolder(SK1);
     const { sharedSecret: _, ...noEcdh } = ops;
     const signer = new DelegatedSigner(noEcdh);
+    // Thunks, not eager promises: each rejection must have its handler
+    // attached in the same tick the promise is created.
     await Promise.all(
       [
-        signer.nip04Encrypt(PK2, "x"),
-        signer.nip04Decrypt(PK2, "x"),
-        signer.nip44Encrypt(PK2, "x"),
-        signer.nip44Decrypt(PK2, "x"),
+        async () => signer.nip04Encrypt(PK2, "x"),
+        async () => signer.nip04Decrypt(PK2, "x"),
+        async () => signer.nip44Encrypt(PK2, "x"),
+        async () => signer.nip44Decrypt(PK2, "x"),
       ].map(async (call) => {
-        await expect(call).rejects.toThrow(CryptoError);
-        await expect(call).rejects.toThrow(/does not support/);
+        const rejected = call();
+        await expect(rejected).rejects.toThrow(CryptoError);
+        await expect(rejected).rejects.toThrow(/does not support/);
       }),
     );
   });
@@ -236,15 +243,13 @@ describe("DelegatedSigner", () => {
     const totalCalls = calls.getPublicKey + calls.signEventId + calls.sharedSecret;
     await Promise.all(
       [
-        signer.getPublicKey(),
-        signer.signEvent(unsigned),
-        signer.nip04Encrypt(PK2, "x"),
-        signer.nip04Decrypt(PK2, "x"),
-        signer.nip44Encrypt(PK2, "x"),
-        signer.nip44Decrypt(PK2, "x"),
-      ].map(async (call) => {
-        await expect(call).rejects.toBeInstanceOf(SignerDisposedError);
-      }),
+        async () => signer.getPublicKey(),
+        async () => signer.signEvent(unsigned),
+        async () => signer.nip04Encrypt(PK2, "x"),
+        async () => signer.nip04Decrypt(PK2, "x"),
+        async () => signer.nip44Encrypt(PK2, "x"),
+        async () => signer.nip44Decrypt(PK2, "x"),
+      ].map(async (call) => expect(call()).rejects.toBeInstanceOf(SignerDisposedError)),
     );
     expect(calls.getPublicKey + calls.signEventId + calls.sharedSecret).toBe(totalCalls);
   });
@@ -267,13 +272,14 @@ describe("DelegatedSigner", () => {
     });
     const spy = vi.spyOn(nip44, "getConversationKeyFromSharedSecret");
 
-    const pending = signer.nip44Encrypt(PK2, "hi");
+    // `.catch` attaches the rejection handler before the promise can reject.
+    const pending = signer.nip44Encrypt(PK2, "hi").catch((error: unknown) => error);
     await enteredPromise; // the holder's op is now in flight
     signer.dispose();
     const shared = secp256k1.getSharedSecret(SK1, hexToBytes(`02${PK2}`)).slice(1, 33);
     resolveShared?.(shared);
 
-    await expect(pending).rejects.toBeInstanceOf(SignerDisposedError);
+    await expect(pending).resolves.toBeInstanceOf(SignerDisposedError);
     expect(shared).toStrictEqual(new Uint8Array(32));
     // The reply never reached derivation, so the cache never saw a key.
     expect(spy).not.toHaveBeenCalled();
@@ -296,11 +302,12 @@ describe("DelegatedSigner", () => {
       },
     });
     const pubkey = await signer.getPublicKey();
-    const pending = signer.signEvent(unsignedFor(pubkey));
+    // `.catch` attaches the rejection handler before the promise can reject.
+    const pending = signer.signEvent(unsignedFor(pubkey)).catch((error: unknown) => error);
     await enteredPromise; // signEventId is now in flight
     signer.dispose();
     resolveSig?.(schnorr.sign(new Uint8Array(32), SK1, randomBytes(32)));
 
-    await expect(pending).rejects.toBeInstanceOf(SignerDisposedError);
+    await expect(pending).resolves.toBeInstanceOf(SignerDisposedError);
   });
 });
