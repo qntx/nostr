@@ -26,6 +26,8 @@ pub enum ErrorKind {
     Nip19,
     /// A NIP-21 `nostr:` URI failed parsing or was an `nsec`.
     Nip21,
+    /// A NIP-46 URI or RPC payload failed parsing or validation.
+    Nip46,
     /// A NIP-49 `ncryptsec` operation failed.
     Nip49,
     /// A NIP-59 seal/gift-wrap operation failed.
@@ -44,6 +46,7 @@ impl fmt::Display for ErrorKind {
             Self::Nip17 => f.write_str("nip17"),
             Self::Nip19 => f.write_str("nip19"),
             Self::Nip21 => f.write_str("nip21"),
+            Self::Nip46 => f.write_str("nip46"),
             Self::Nip49 => f.write_str("nip49"),
             Self::Nip59 => f.write_str("nip59"),
             Self::Nip98 => f.write_str("nip98"),
@@ -133,6 +136,7 @@ mod tests {
         assert_eq!(ErrorKind::Nip17.to_string(), "nip17");
         assert_eq!(ErrorKind::Nip19.to_string(), "nip19");
         assert_eq!(ErrorKind::Nip21.to_string(), "nip21");
+        assert_eq!(ErrorKind::Nip46.to_string(), "nip46");
         assert_eq!(ErrorKind::Nip49.to_string(), "nip49");
         assert_eq!(ErrorKind::Nip59.to_string(), "nip59");
         assert_eq!(ErrorKind::Nip98.to_string(), "nip98");

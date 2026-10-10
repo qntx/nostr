@@ -34,6 +34,12 @@ import { hexToBytes } from "../../src/core/util.ts";
 import { parseThreadTags } from "../../src/nips/nip10.ts";
 import { decode as nip19Decode } from "../../src/nips/nip19.ts";
 import { decrypt as nip44Decrypt, encrypt as nip44Encrypt } from "../../src/nips/nip44.ts";
+import {
+  createNostrConnectURI,
+  parseBunkerURL,
+  parseNostrConnectURI,
+  toBunkerURL,
+} from "../../src/nips/nip46.ts";
 import type { EntityJson } from "./gen/entities.ts";
 import { encodeEntity, toJson } from "./gen/entities.ts";
 import { threadJson } from "./thread-json.ts";
@@ -898,6 +904,98 @@ function nip10TagsText(): string {
   return JSON.stringify({ tags });
 }
 
+// `nip46.uri` exercises the two URI codecs as generate→parse round-trips:
+// relays, secrets, permissions, and metadata carry reserved and non-ASCII
+// characters through WHATWG form-urlencoding on both sides.
+const NIP46_DOMAINS = ["relay.example", "nos.lol", "x.test", "例え.jp"];
+const NIP46_PERMS = [
+  "sign_event",
+  "sign_event:1",
+  "sign_event:22242",
+  "nip44_encrypt",
+  "nip44_decrypt",
+  "nip04_encrypt",
+  "get_public_key",
+];
+
+function nip46Relay(): string {
+  if (chance(0.6)) {
+    // A plausible relay URL — host plus optional port, path, and query.
+    let relay = `wss://r${int(64)}.${pick(NIP46_DOMAINS)}`;
+    if (chance(0.3)) {
+      relay += `:${1000 + int(9000)}`;
+    }
+    if (chance(0.5)) {
+      relay += `/p${int(99)}`;
+    }
+    if (chance(0.25)) {
+      relay += `?q=${randString(6)}`;
+    }
+    return relay;
+  }
+  // The raw pool — reserved characters, unicode, and control characters
+  // reach the form-urlencoded layer untouched.
+  return randString(1 + int(24));
+}
+
+function nip46Pubkey(): string {
+  const roll = r();
+  if (roll < 0.55) {
+    return randHex(64);
+  }
+  if (roll < 0.65) {
+    return randHex(64, { anyCase: true });
+  }
+  if (roll < 0.75) {
+    return randHex(int(64));
+  }
+  return randString(1 + int(32));
+}
+
+type Nip46UriInput = {
+  // oxlint-disable-next-line no-restricted-types -- null covers the JSON-null arm
+  pubkey?: string | null;
+  client?: string;
+  relays: string[];
+  secret?: string | undefined;
+  perms?: string[] | undefined;
+  name?: string | undefined;
+  url?: string | undefined;
+  image?: string | undefined;
+};
+
+// `""` and `undefined` are both "absent" once a NIP-46 URI is encoded: the
+// encoders omit empty metadata fields, so expectations normalize both to
+// `undefined`.
+function emptyIsAbsent(value: string | undefined): string | undefined {
+  return value === undefined || value === "" ? undefined : value;
+}
+
+function nip46UriInputText(): string {
+  if (chance(0.5)) {
+    const input: Nip46UriInput = {
+      client: nip46Pubkey(),
+      relays: Array.from({ length: int(4) }, nip46Relay),
+      secret: chance(0.1) ? "" : randString(1 + int(24)),
+      perms: chance(0.7) ? Array.from({ length: int(4) }, () => pick(NIP46_PERMS)) : undefined,
+      name: chance(0.6) ? randString(1 + int(16)) : undefined,
+      url: chance(0.4)
+        ? chance(0.5)
+          ? `https://${pick(NIP46_DOMAINS)}/${randString(4)}`
+          : randString(1 + int(16))
+        : undefined,
+      image: chance(0.3) ? `https://${pick(NIP46_DOMAINS)}/i.png` : undefined,
+    };
+    return JSON.stringify(input);
+  }
+  const input: Nip46UriInput = {
+    pubkey: chance(0.05) ? null : nip46Pubkey(),
+    relays: Array.from({ length: int(4) }, nip46Relay),
+    secret: chance(0.6) ? randString(1 + int(24)) : undefined,
+  };
+  return JSON.stringify(input);
+}
+
 type CaseRecord = { i: number; input: string; out?: unknown; err?: string };
 
 function capture(run: () => unknown): { out?: unknown; err?: string } {
@@ -988,6 +1086,80 @@ const CAPABILITIES: ReadonlyArray<Capability> = [
         i: 0,
         input,
         ...capture(() => threadJson(parseThreadTags(parseJson<{ tags: Tag[] }>(input)))),
+      };
+    },
+  },
+  {
+    name: "nip46.uri",
+    make: () => {
+      const input = nip46UriInputText();
+      return {
+        i: 0,
+        input,
+        ...capture(() => {
+          const req = parseJson<Nip46UriInput>(input);
+          if (req.client !== undefined) {
+            const uri = createNostrConnectURI({
+              clientPubkey: req.client,
+              relays: req.relays,
+              secret: req.secret ?? "",
+              perms: req.perms,
+              name: req.name,
+              url: req.url,
+              image: req.image,
+            });
+            const parsed = parseNostrConnectURI(uri);
+            const expectedPerms = (req.perms?.length ?? 0) > 0 ? req.perms : undefined;
+            if (
+              parsed.clientPubkey !== req.client.toLowerCase() ||
+              parsed.secret !== (req.secret ?? "") ||
+              JSON.stringify(parsed.relays) !== JSON.stringify(req.relays) ||
+              JSON.stringify(parsed.perms) !== JSON.stringify(expectedPerms) ||
+              parsed.name !== emptyIsAbsent(req.name) ||
+              parsed.url !== emptyIsAbsent(req.url) ||
+              parsed.image !== emptyIsAbsent(req.image)
+            ) {
+              throw new Error("nostrconnect round-trip mismatch");
+            }
+            return {
+              uri,
+              parsed: {
+                clientPubkey: parsed.clientPubkey,
+                relays: parsed.relays,
+                secret: parsed.secret,
+                perms: parsed.perms ?? [],
+                name: parsed.name ?? null,
+                url: parsed.url ?? null,
+                image: parsed.image ?? null,
+              },
+            };
+          }
+          const pointer = {
+            pubkey: req.pubkey ?? "",
+            relays: req.relays,
+            secret: req.secret,
+          };
+          const uri = toBunkerURL(pointer);
+          const parsed = parseBunkerURL(uri);
+          if (parsed === undefined) {
+            throw new Error("bunker round-trip rejected");
+          }
+          if (
+            parsed.pubkey !== pointer.pubkey.toLowerCase() ||
+            JSON.stringify(parsed.relays) !== JSON.stringify(pointer.relays) ||
+            parsed.secret !== emptyIsAbsent(pointer.secret)
+          ) {
+            throw new Error("bunker round-trip mismatch");
+          }
+          return {
+            uri,
+            parsed: {
+              pubkey: parsed.pubkey,
+              relays: parsed.relays,
+              secret: parsed.secret ?? null,
+            },
+          };
+        }),
       };
     },
   },

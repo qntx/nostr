@@ -1,0 +1,757 @@
+{
+  "schema": 1,
+  "capability": "nip46.codec",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.12.1"
+  },
+  "bunker_parse": [
+    {
+      "name": "bare pubkey",
+      "uri": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [],
+        "secret": null
+      }
+    },
+    {
+      "name": "relays and secret",
+      "uri": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Frelay.one&relay=wss%3A%2F%2Frelay.two%2Fp&secret=s%20e",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://relay.one",
+          "wss://relay.two/p"
+        ],
+        "secret": "s e"
+      }
+    },
+    {
+      "name": "plus-decoded relay and encoded secret",
+      "uri": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Fa+b%2Fc&secret=x%26y%3Dz",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://a b/c"
+        ],
+        "secret": "x&y=z"
+      }
+    },
+    {
+      "name": "uppercase authority",
+      "uri": "bunker://3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [],
+        "secret": null
+      }
+    },
+    {
+      "name": "percent-encoded authority",
+      "uri": "bunker://%33bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "out": null
+    },
+    {
+      "name": "empty secret pair",
+      "uri": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?secret=",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [],
+        "secret": ""
+      }
+    },
+    {
+      "name": "whitespace-padded input",
+      "uri": "  bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d  ",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [],
+        "secret": null
+      }
+    },
+    {
+      "name": "opaque-path fallback",
+      "uri": "bunker:3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [],
+        "secret": null
+      }
+    },
+    {
+      "name": "nip-05 identifier",
+      "uri": "alice@example.com",
+      "out": null
+    },
+    {
+      "name": "non-bunker scheme",
+      "uri": "https://bunker.example",
+      "out": null
+    },
+    {
+      "name": "nostrconnect is not bunker",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Fr&secret=s",
+      "out": null
+    },
+    {
+      "name": "non-hex authority",
+      "uri": "bunker://xyz",
+      "out": null
+    },
+    {
+      "name": "short hex authority",
+      "uri": "bunker://3bf0c63fcb93463407af97a5e5ee64fa",
+      "out": null
+    },
+    {
+      "name": "userinfo shifts the authority",
+      "uri": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d@evil",
+      "out": null
+    },
+    {
+      "name": "unparsable url",
+      "uri": "bunker://[bad",
+      "out": null
+    }
+  ],
+  "bunker": [
+    {
+      "name": "pubkey only",
+      "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "relays": [],
+      "out": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+    },
+    {
+      "name": "relays and secret",
+      "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "relays": [
+        "wss://relay.one",
+        "wss://relay.two/p"
+      ],
+      "secret": "s e",
+      "out": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Frelay.one&relay=wss%3A%2F%2Frelay.two%2Fp&secret=s+e"
+    },
+    {
+      "name": "empty secret omitted",
+      "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "relays": [
+        "wss://r"
+      ],
+      "secret": "",
+      "out": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Fr"
+    },
+    {
+      "name": "reserved chars in secret",
+      "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "relays": [],
+      "secret": "s e&c=",
+      "out": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?secret=s+e%26c%3D"
+    },
+    {
+      "name": "unicode relay",
+      "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "relays": [
+        "wss://例え.jp/"
+      ],
+      "out": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2F%E4%BE%8B%E3%81%88.jp%2F"
+    }
+  ],
+  "connect_parse": [
+    {
+      "name": "full metadata",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Frelay.damus.io&relay=wss%3A%2F%2Frelay.two&secret=hunter2&perms=nip44_encrypt%2Csign_event&name=My+App&url=https%3A%2F%2Fmy.app%2F&image=https%3A%2F%2Fmy.app%2Fi.png",
+      "out": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://relay.damus.io",
+          "wss://relay.two"
+        ],
+        "secret": "hunter2",
+        "perms": [
+          "nip44_encrypt",
+          "sign_event"
+        ],
+        "name": "My App",
+        "url": "https://my.app/",
+        "image": "https://my.app/i.png"
+      }
+    },
+    {
+      "name": "minimal",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Fr&secret=s",
+      "out": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://r"
+        ],
+        "secret": "s",
+        "perms": [],
+        "name": null,
+        "url": null,
+        "image": null
+      }
+    },
+    {
+      "name": "uppercase authority lowercased",
+      "uri": "nostrconnect://3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D?relay=r&secret=s",
+      "out": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "r"
+        ],
+        "secret": "s",
+        "perms": [],
+        "name": null,
+        "url": null,
+        "image": null
+      }
+    },
+    {
+      "name": "empty perms list",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=r&secret=s&perms=",
+      "out": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "r"
+        ],
+        "secret": "s",
+        "perms": [],
+        "name": null,
+        "url": null,
+        "image": null
+      }
+    },
+    {
+      "name": "comma-only perms",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=r&secret=s&perms=%2C",
+      "out": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "r"
+        ],
+        "secret": "s",
+        "perms": [],
+        "name": null,
+        "url": null,
+        "image": null
+      }
+    },
+    {
+      "name": "perms drop empty entries",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=r&secret=s&perms=a%2C%2Cb",
+      "out": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "r"
+        ],
+        "secret": "s",
+        "perms": [
+          "a",
+          "b"
+        ],
+        "name": null,
+        "url": null,
+        "image": null
+      }
+    },
+    {
+      "name": "present-but-empty name kept",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=r&secret=s&name=",
+      "out": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "r"
+        ],
+        "secret": "s",
+        "perms": [],
+        "name": "",
+        "url": null,
+        "image": null
+      }
+    },
+    {
+      "name": "first secret wins",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=r&secret=a&secret=b",
+      "out": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "r"
+        ],
+        "secret": "a",
+        "perms": [],
+        "name": null,
+        "url": null,
+        "image": null
+      }
+    },
+    {
+      "name": "wrong scheme",
+      "uri": "bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?secret=s&relay=r",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "unparsable url",
+      "uri": "not a uri at all",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "non-hex pubkey",
+      "uri": "nostrconnect://xyz?secret=s&relay=r",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "empty authority",
+      "uri": "nostrconnect:?secret=s&relay=r",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "missing secret",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=r",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "empty secret",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=r&secret=",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "missing relays",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?secret=s",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "empty relay kept",
+      "uri": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=&secret=s",
+      "out": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          ""
+        ],
+        "secret": "s",
+        "perms": [],
+        "name": null,
+        "url": null,
+        "image": null
+      }
+    }
+  ],
+  "connect": [
+    {
+      "name": "full metadata",
+      "input": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://relay.damus.io",
+          "wss://relay.two"
+        ],
+        "secret": "hunter2",
+        "perms": [
+          "nip44_encrypt",
+          "sign_event"
+        ],
+        "name": "My App",
+        "url": "https://my.app/",
+        "image": "https://my.app/i.png"
+      },
+      "out": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Frelay.damus.io&relay=wss%3A%2F%2Frelay.two&secret=hunter2&perms=nip44_encrypt%2Csign_event&name=My+App&url=https%3A%2F%2Fmy.app%2F&image=https%3A%2F%2Fmy.app%2Fi.png"
+    },
+    {
+      "name": "minimal",
+      "input": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://r"
+        ],
+        "secret": "s"
+      },
+      "out": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Fr&secret=s"
+    },
+    {
+      "name": "empty perms omitted",
+      "input": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://r"
+        ],
+        "secret": "s",
+        "perms": []
+      },
+      "out": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Fr&secret=s"
+    },
+    {
+      "name": "empty metadata omitted",
+      "input": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://r"
+        ],
+        "secret": "s",
+        "name": "",
+        "url": "",
+        "image": ""
+      },
+      "out": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Fr&secret=s"
+    },
+    {
+      "name": "reserved chars encoded",
+      "input": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://a&b/?x=1 y"
+        ],
+        "secret": "s&e=c r",
+        "name": "A&B"
+      },
+      "out": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Fa%26b%2F%3Fx%3D1+y&secret=s%26e%3Dc+r&name=A%26B"
+    },
+    {
+      "name": "missing secret throws",
+      "input": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://r"
+        ],
+        "secret": ""
+      },
+      "err": "Nip46Error"
+    },
+    {
+      "name": "missing relays throws",
+      "input": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [],
+        "secret": "s"
+      },
+      "err": "Nip46Error"
+    },
+    {
+      "name": "uppercase client lowercased",
+      "input": {
+        "clientPubkey": "3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D",
+        "relays": [
+          "wss://r"
+        ],
+        "secret": "s"
+      },
+      "out": "nostrconnect://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss%3A%2F%2Fr&secret=s"
+    },
+    {
+      "name": "non-hex client throws",
+      "input": {
+        "clientPubkey": "xyz",
+        "relays": [
+          "wss://r"
+        ],
+        "secret": "s"
+      },
+      "err": "Nip46Error"
+    },
+    {
+      "name": "short client throws",
+      "input": {
+        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa",
+        "relays": [
+          "wss://r"
+        ],
+        "secret": "s"
+      },
+      "err": "Nip46Error"
+    }
+  ],
+  "request": [
+    {
+      "name": "connect",
+      "request": {
+        "id": "req-1",
+        "method": "connect",
+        "params": [
+          "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+          "secret-token"
+        ]
+      },
+      "json": "{\"id\":\"req-1\",\"method\":\"connect\",\"params\":[\"90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23\",\"secret-token\"]}"
+    },
+    {
+      "name": "sign_event with a json payload",
+      "request": {
+        "id": "2",
+        "method": "sign_event",
+        "params": [
+          "{\"kind\":1,\"content\":\"héllo\"}"
+        ]
+      },
+      "json": "{\"id\":\"2\",\"method\":\"sign_event\",\"params\":[\"{\\\"kind\\\":1,\\\"content\\\":\\\"héllo\\\"}\"]}"
+    },
+    {
+      "name": "empty params",
+      "request": {
+        "id": "3",
+        "method": "ping",
+        "params": []
+      },
+      "json": "{\"id\":\"3\",\"method\":\"ping\",\"params\":[]}"
+    },
+    {
+      "name": "unicode and escapes",
+      "request": {
+        "id": "r\t4",
+        "method": "get_relays",
+        "params": [
+          "héllo\nwörld",
+          "\"quoted\""
+        ]
+      },
+      "json": "{\"id\":\"r\\t4\",\"method\":\"get_relays\",\"params\":[\"héllo\\nwörld\",\"\\\"quoted\\\"\"]}"
+    }
+  ],
+  "request_parse": [
+    {
+      "name": "round-trip connect",
+      "json": "{\"id\":\"req-1\",\"method\":\"connect\",\"params\":[\"90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23\",\"secret-token\"]}",
+      "out": {
+        "id": "req-1",
+        "method": "connect",
+        "params": [
+          "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23",
+          "secret-token"
+        ]
+      }
+    },
+    {
+      "name": "round-trip sign_event with a json payload",
+      "json": "{\"id\":\"2\",\"method\":\"sign_event\",\"params\":[\"{\\\"kind\\\":1,\\\"content\\\":\\\"héllo\\\"}\"]}",
+      "out": {
+        "id": "2",
+        "method": "sign_event",
+        "params": [
+          "{\"kind\":1,\"content\":\"héllo\"}"
+        ]
+      }
+    },
+    {
+      "name": "round-trip empty params",
+      "json": "{\"id\":\"3\",\"method\":\"ping\",\"params\":[]}",
+      "out": {
+        "id": "3",
+        "method": "ping",
+        "params": []
+      }
+    },
+    {
+      "name": "round-trip unicode and escapes",
+      "json": "{\"id\":\"r\\t4\",\"method\":\"get_relays\",\"params\":[\"héllo\\nwörld\",\"\\\"quoted\\\"\"]}",
+      "out": {
+        "id": "r\t4",
+        "method": "get_relays",
+        "params": [
+          "héllo\nwörld",
+          "\"quoted\""
+        ]
+      }
+    },
+    {
+      "name": "malformed json",
+      "json": "{\"id\":\"x\",\"method\":\"m\",\"params\":[",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "non-object array",
+      "json": "[]",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "non-object number",
+      "json": "42",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "non-string id",
+      "json": "{\"id\":1,\"method\":\"m\",\"params\":[]}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "missing method",
+      "json": "{\"id\":\"x\",\"params\":[]}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "missing params",
+      "json": "{\"id\":\"x\",\"method\":\"m\"}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "non-array params",
+      "json": "{\"id\":\"x\",\"method\":\"m\",\"params\":\"p\"}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "non-string param",
+      "json": "{\"id\":\"x\",\"method\":\"m\",\"params\":[1]}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "lone surrogate in id",
+      "json": "{\"id\":\"\\ud800\",\"method\":\"m\",\"params\":[]}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "lone surrogate in params",
+      "json": "{\"id\":\"x\",\"method\":\"m\",\"params\":[\"\\udfff\"]}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "lone surrogate in a key",
+      "json": "{\"\\ud800\":\"x\",\"id\":\"i\",\"method\":\"m\",\"params\":[]}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "extra fields ignored",
+      "json": "{\"id\":\"x\",\"method\":\"m\",\"params\":[],\"extra\":1}",
+      "out": {
+        "id": "x",
+        "method": "m",
+        "params": []
+      }
+    }
+  ],
+  "response": [
+    {
+      "name": "result only",
+      "response": {
+        "id": "r1",
+        "result": "sig-value",
+        "error": null
+      },
+      "json": "{\"id\":\"r1\",\"result\":\"sig-value\"}"
+    },
+    {
+      "name": "error only",
+      "response": {
+        "id": "r2",
+        "result": null,
+        "error": "denied"
+      },
+      "json": "{\"id\":\"r2\",\"error\":\"denied\"}"
+    },
+    {
+      "name": "neither field",
+      "response": {
+        "id": "r3",
+        "result": null,
+        "error": null
+      },
+      "json": "{\"id\":\"r3\"}"
+    },
+    {
+      "name": "both fields",
+      "response": {
+        "id": "r4",
+        "result": "ok",
+        "error": "late"
+      },
+      "json": "{\"id\":\"r4\",\"result\":\"ok\",\"error\":\"late\"}"
+    }
+  ],
+  "response_parse": [
+    {
+      "name": "round-trip result only",
+      "json": "{\"id\":\"r1\",\"result\":\"sig-value\"}",
+      "out": {
+        "id": "r1",
+        "result": "sig-value",
+        "error": null
+      }
+    },
+    {
+      "name": "round-trip error only",
+      "json": "{\"id\":\"r2\",\"error\":\"denied\"}",
+      "out": {
+        "id": "r2",
+        "result": null,
+        "error": "denied"
+      }
+    },
+    {
+      "name": "round-trip neither field",
+      "json": "{\"id\":\"r3\"}",
+      "out": {
+        "id": "r3",
+        "result": null,
+        "error": null
+      }
+    },
+    {
+      "name": "round-trip both fields",
+      "json": "{\"id\":\"r4\",\"result\":\"ok\",\"error\":\"late\"}",
+      "out": {
+        "id": "r4",
+        "result": "ok",
+        "error": "late"
+      }
+    },
+    {
+      "name": "malformed json",
+      "json": "{\"id\":\"r\"",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "non-object",
+      "json": "\"text\"",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "missing id",
+      "json": "{\"result\":\"x\"}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "non-string id",
+      "json": "{\"id\":7}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "explicit nulls are absent",
+      "json": "{\"id\":\"r\",\"result\":null,\"error\":null}",
+      "out": {
+        "id": "r",
+        "result": null,
+        "error": null
+      }
+    },
+    {
+      "name": "non-string result",
+      "json": "{\"id\":\"r\",\"result\":123}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "non-string error",
+      "json": "{\"id\":\"r\",\"error\":{}}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "null error keeps result",
+      "json": "{\"id\":\"r\",\"result\":\"x\",\"error\":null}",
+      "out": {
+        "id": "r",
+        "result": "x",
+        "error": null
+      }
+    },
+    {
+      "name": "lone surrogate in result",
+      "json": "{\"id\":\"r\",\"result\":\"\\ud8ff\"}",
+      "err": "Nip46Error"
+    },
+    {
+      "name": "extra fields ignored",
+      "json": "{\"id\":\"r\",\"result\":\"x\",\"extra\":[1,2]}",
+      "out": {
+        "id": "r",
+        "result": "x",
+        "error": null
+      }
+    }
+  ]
+}

@@ -29,8 +29,9 @@ use std::path::PathBuf;
 
 mod common;
 
-use nk_core::{ClientMessage, Event, Filter, RelayMessage, Tag, Tags, UnsignedEvent};
+use nk_core::{ClientMessage, Event, Filter, PublicKey, RelayMessage, Tag, Tags, UnsignedEvent};
 use nk_nips::nip10::parse_thread_tags;
+use nk_nips::nip46::{BunkerUri, NostrConnectUri};
 use nk_nips::{nip19, nip44};
 use serde::Deserialize;
 
@@ -263,6 +264,75 @@ fn diff_nip10_thread() {
                 serde_json::to_value(thread_json(&parse_thread_tags(&tags)))
                     .expect("thread serializes"),
             )
+        });
+    }
+}
+
+/// `nip46.uri` inputs carry `{"client": …}` for the `nostrconnect://`
+/// round-trip or `{"pubkey": …}` for `bunker://`; `out` records the produced
+/// URI plus the fields the TS parse recovered from it.
+#[test]
+#[ignore = "requires NK_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
+fn diff_nip46_uri() {
+    let fixture = load("nip46.uri");
+    for case in &fixture.cases {
+        check("nip46.uri", fixture.seed, case, |input| {
+            #[derive(Deserialize)]
+            struct UriInput {
+                pubkey: Option<String>,
+                client: Option<String>,
+                relays: Vec<String>,
+                secret: Option<String>,
+                perms: Option<Vec<String>>,
+                name: Option<String>,
+                url: Option<String>,
+                image: Option<String>,
+            }
+            let input: UriInput = serde_json::from_str(input).ok()?;
+            if let Some(client) = &input.client {
+                let uri = NostrConnectUri {
+                    client_pubkey: PublicKey::from_hex(client).ok()?,
+                    relays: input.relays.clone(),
+                    secret: input.secret.clone().unwrap_or_default(),
+                    perms: input.perms.clone().unwrap_or_default(),
+                    name: input.name.clone(),
+                    url: input.url.clone(),
+                    image: input.image.clone(),
+                }
+                .to_uri()
+                .ok()?;
+                // Re-parse the URI like the TS side does: a serialization bug
+                // must not hide behind a shared encoder.
+                let parsed = NostrConnectUri::parse(&uri).ok()?;
+                Some(serde_json::json!({
+                    "uri": uri,
+                    "parsed": {
+                        "clientPubkey": parsed.client_pubkey.to_hex(),
+                        "relays": parsed.relays,
+                        "secret": parsed.secret,
+                        "perms": parsed.perms,
+                        "name": parsed.name,
+                        "url": parsed.url,
+                        "image": parsed.image,
+                    },
+                }))
+            } else {
+                let uri = BunkerUri {
+                    pubkey: PublicKey::from_hex(input.pubkey.as_deref()?).ok()?,
+                    relays: input.relays.clone(),
+                    secret: input.secret.clone(),
+                }
+                .to_string();
+                let parsed = BunkerUri::parse(&uri)?;
+                Some(serde_json::json!({
+                    "uri": uri,
+                    "parsed": {
+                        "pubkey": parsed.pubkey.to_hex(),
+                        "relays": parsed.relays,
+                        "secret": parsed.secret,
+                    },
+                }))
+            }
         });
     }
 }

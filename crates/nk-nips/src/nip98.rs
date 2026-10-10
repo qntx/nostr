@@ -17,6 +17,7 @@ use sha2::{Digest, Sha256};
 
 use crate::Result;
 use crate::error::{Error, ErrorKind};
+use crate::util::is_js_whitespace;
 
 /// Default `|now − created_at|` window for [`validate_auth_event`] (TS
 /// `DEFAULT_MAX_SKEW_SEC`).
@@ -31,12 +32,6 @@ fn payload_hash(payload: &[u8]) -> String {
     })
 }
 
-/// The whitespace class of the TS scheme regex `/^nostr\s+/i`: Unicode
-/// `White_Space` minus U+0085 (NEL, not in JS `\s`) plus U+FEFF (BOM, which is).
-const fn is_pattern_whitespace(c: char) -> bool {
-    c == '\u{feff}' || (c != '\u{85}' && c.is_whitespace())
-}
-
 /// `/^nostr\s+/i`: case-insensitive `nostr` followed by one or more JS `\s`.
 fn strip_scheme(token: &str) -> &str {
     let Some(head) = token.get(..5) else {
@@ -46,8 +41,8 @@ fn strip_scheme(token: &str) -> &str {
         return token;
     }
     let rest = &token[5..];
-    if rest.starts_with(is_pattern_whitespace) {
-        rest.trim_start_matches(is_pattern_whitespace)
+    if rest.starts_with(is_js_whitespace) {
+        rest.trim_start_matches(is_js_whitespace)
     } else {
         token
     }

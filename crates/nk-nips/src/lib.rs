@@ -18,6 +18,7 @@
 //! | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`)                   |
 //! | `nip42`  | no      | relay auth (`auth_event`, `is_auth_required`)                     |
 //! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
+//! | `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Request`/`Response`) |
 //! | `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptOptions`, `encrypt`/`decrypt`) |
 //! | `nip51`  | no      | lists (`parse_mute_list`, …, NIP-44 private tags); needs `nip44`           |
 //! | `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`  |
@@ -42,6 +43,8 @@ pub mod error;
 
 #[cfg(any(feature = "nip04", feature = "nip44"))]
 mod ecdh;
+#[cfg(any(feature = "nip46", feature = "nip98"))]
+mod util;
 
 #[cfg(feature = "nip04")]
 pub mod nip04;
@@ -59,6 +62,8 @@ pub mod nip21;
 pub mod nip42;
 #[cfg(feature = "nip44")]
 pub mod nip44;
+#[cfg(feature = "nip46")]
+pub mod nip46;
 #[cfg(feature = "nip49")]
 pub mod nip49;
 #[cfg(feature = "nip51")]
@@ -115,5 +120,12 @@ const _: () = {
     {
         assert_send_sync::<nip44::ConversationKey>();
         assert_send_sync::<nip44::MessageKeys>();
+    }
+    #[cfg(feature = "nip46")]
+    {
+        assert_send_sync::<nip46::BunkerUri>();
+        assert_send_sync::<nip46::NostrConnectUri>();
+        assert_send_sync::<nip46::Request>();
+        assert_send_sync::<nip46::Response>();
     }
 };

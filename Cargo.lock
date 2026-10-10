@@ -631,9 +631,11 @@ dependencies = [
  "rand_core 0.10.1",
  "scrypt",
  "secp256k1",
+ "serde",
  "serde_json",
  "sha2",
  "unicode-normalization",
+ "url",
  "zeroize",
 ]
 

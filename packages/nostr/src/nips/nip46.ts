@@ -6,7 +6,7 @@
  */
 import { NostrError } from "../core/error.ts";
 import type { Mutable } from "../core/util.ts";
-import { isHex32, isRecord } from "../core/util.ts";
+import { containsLoneSurrogate, isHex32, isRecord } from "../core/util.ts";
 
 export type BunkerPointer = {
   /** Remote signer / bunker public key (hex). */
@@ -119,10 +119,10 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
   let url: URL;
   try {
     url = new URL(uri);
-  } catch (error) {
-    throw new Nip46Error(`invalid nostrconnect URI: ${uri}`, {
-      cause: error,
-    });
+  } catch {
+    // No `cause`: Node's URL TypeError carries the rejected input, which may
+    // hold the handshake `secret` — the URI is never echoed (N11).
+    throw new Nip46Error("invalid nostrconnect URI");
   }
   if (url.protocol !== "nostrconnect:") {
     throw new Nip46Error(`expected nostrconnect: scheme, got ${url.protocol}`);
@@ -171,10 +171,13 @@ export function decodeNip46Request(json: string): Nip46Request {
   let data: unknown;
   try {
     data = JSON.parse(json);
-  } catch (error) {
-    throw new Nip46Error("invalid NIP-46 request JSON", {
-      cause: error,
-    });
+  } catch {
+    // No `cause`: some runtimes embed an input excerpt in the SyntaxError and
+    // RPC payloads may carry the handshake `secret` (N11).
+    throw new Nip46Error("invalid NIP-46 request JSON");
+  }
+  if (containsLoneSurrogate(data)) {
+    throw new Nip46Error("invalid NIP-46 request JSON");
   }
   if (!isRecord(data) || typeof data["id"] !== "string" || typeof data["method"] !== "string") {
     throw new Nip46Error("invalid NIP-46 request shape");
@@ -200,10 +203,12 @@ export function decodeNip46Response(json: string): Nip46Response {
   let data: unknown;
   try {
     data = JSON.parse(json);
-  } catch (error) {
-    throw new Nip46Error("invalid NIP-46 response JSON", {
-      cause: error,
-    });
+  } catch {
+    // No `cause`: same N11 reasoning as the request decoder.
+    throw new Nip46Error("invalid NIP-46 response JSON");
+  }
+  if (containsLoneSurrogate(data)) {
+    throw new Nip46Error("invalid NIP-46 response JSON");
   }
   if (!isRecord(data) || typeof data["id"] !== "string") {
     throw new Nip46Error("invalid NIP-46 response shape");

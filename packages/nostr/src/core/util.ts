@@ -83,6 +83,27 @@ export function hasLoneSurrogate(value: string): boolean {
   return false;
 }
 
+/**
+ * Deep form of {@link hasLoneSurrogate}: true when any string in `value` — including record keys —
+ * carries an unpaired surrogate. `JSON.parse` accepts `\ud800`-style escapes that serde_json
+ * rejects, so JSON codecs validate the parsed value with this before the shape checks to keep both
+ * languages agreeing on the invalid-JSON error (N10).
+ */
+export function containsLoneSurrogate(value: unknown): boolean {
+  if (typeof value === "string") {
+    return hasLoneSurrogate(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsLoneSurrogate);
+  }
+  if (isRecord(value)) {
+    return Object.entries(value).some(
+      ([key, entry]) => hasLoneSurrogate(key) || containsLoneSurrogate(entry),
+    );
+  }
+  return false;
+}
+
 /** Mutable view of a readonly exported type, for local construction. */
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
