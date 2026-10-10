@@ -18,6 +18,7 @@ import {
   encrypt as nip44Encrypt,
 } from "../src/nips/nip44.ts";
 import {
+  Nip46Error,
   createNostrConnectURI,
   decodeNip46Request,
   decodeNip46Response,
@@ -46,7 +47,11 @@ function testPool() {
 
 // Some remote signers serialize absent fields as explicit nulls.
 const nullsEncoder = (res: Nip46Response): string =>
-  JSON.stringify({ id: res.id, result: res.result ?? null, error: res.error ?? null });
+  JSON.stringify({
+    id: res.id,
+    result: res.result ?? null,
+    error: res.error ?? null,
+  });
 
 beforeEach(() => {
   net = createFakeRelayNetwork();
@@ -148,6 +153,43 @@ describe("nip46 protocol", () => {
       id: "a",
       error: "boom",
     });
+  });
+
+  // N10: `JSON.parse` accepts `\ud800`-style lone surrogates while serde_json
+  // (nk-nips) rejects them — the codec rejects them as invalid JSON so both
+  // sides agree.
+  test("decodeNip46Request rejects lone surrogates in strings and keys", () => {
+    const surrogate = String.raw`\ud800`;
+    for (const json of [
+      `{"id":"${surrogate}","method":"m","params":[]}`,
+      `{"id":"i","method":"m","params":["${surrogate}"]}`,
+      `{"${surrogate}":"x","id":"i","method":"m","params":[]}`,
+    ]) {
+      expect(() => decodeNip46Request(json)).toThrow(new Nip46Error("invalid NIP-46 request JSON"));
+    }
+  });
+
+  test("decodeNip46Response rejects lone surrogates", () => {
+    const surrogate = String.raw`\ud800`;
+    for (const json of [`{"id":"r","result":"${surrogate}"}`, `{"id":"${surrogate}"}`]) {
+      expect(() => decodeNip46Response(json)).toThrow(
+        new Nip46Error("invalid NIP-46 response JSON"),
+      );
+    }
+  });
+
+  // N11: the URI may carry the `secret` — errors must never echo it.
+  test("parseNostrConnectURI errors do not echo the URI", () => {
+    const secretUri = "not%20a%20uri%20with%20secret";
+    const attempt = () => parseNostrConnectURI(secretUri);
+    expect(attempt).toThrow(Nip46Error);
+    expect(attempt).toThrow("invalid nostrconnect URI");
+    // The thrown message must not contain any part of the rejected URI.
+    expect(attempt).toThrow(/^(?!.*not%20a%20uri%20with%20secret)[\s\S]*$/);
+    const secretRelay = `https://${getPublicKey(CLIENT_SK)}.example?secret=shh-secret`;
+    const wrongScheme = () => parseNostrConnectURI(secretRelay);
+    expect(wrongScheme).toThrow("expected nostrconnect: scheme, got https:");
+    expect(wrongScheme).toThrow(/^(?!.*shh-secret)[\s\S]*$/);
   });
 });
 
@@ -446,7 +488,11 @@ describe("Nip46Signer", () => {
     try {
       await expect(
         Nip46Signer.connect(
-          { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: undefined },
+          {
+            pubkey: bunkerPk,
+            relays: ["wss://bunker.example"],
+            secret: undefined,
+          },
           { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
         ),
       ).rejects.toThrow(/connect result is not ack or secret: tok/);
@@ -545,7 +591,11 @@ describe("Nip46Signer", () => {
     });
     try {
       const signer = await Nip46Signer.connect(
-        toBunkerURL({ pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: "tok" }),
+        toBunkerURL({
+          pubkey: bunkerPk,
+          relays: ["wss://bunker.example"],
+          secret: "tok",
+        }),
         {
           clientSecretKey: CLIENT_SK,
           createPool: testPool,
@@ -581,7 +631,11 @@ describe("Nip46Signer", () => {
     remote.attach("wss://new.example");
     try {
       const signer = await Nip46Signer.connect(
-        toBunkerURL({ pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: "tok" }),
+        toBunkerURL({
+          pubkey: bunkerPk,
+          relays: ["wss://bunker.example"],
+          secret: "tok",
+        }),
         { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
       );
       expect(signer.bunker.relays).toStrictEqual(["wss://new.example"]);

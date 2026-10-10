@@ -621,14 +621,20 @@
     {
       "id": "nip46.codec",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK3",
       "ts": {
         "module": "packages/nostr/src/nips/nip46.ts",
-        "tests": ["packages/nostr/tests/nip46.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip46.test.ts",
+          "packages/nostr/tests/vectors/nip46.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip46.rs",
+        "tests": ["crates/nk-vectors/tests/nip46.rs"]
+      },
+      "vectors": ["vectors/nip46/codec.json"]
     },
     {
       "id": "nip05.identifier",

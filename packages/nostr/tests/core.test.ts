@@ -2,7 +2,7 @@ import { schnorr } from "@noble/curves/secp256k1.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { expect, test, describe } from "vite-plus/test";
 
-import { normalizeRelayUrls } from "../src/core/util.ts";
+import { containsLoneSurrogate, normalizeRelayUrls } from "../src/core/util.ts";
 import {
   Kind,
   Keys,
@@ -682,5 +682,23 @@ describe("normalizeRelayUrls", () => {
         "wss://b.example/",
       ]),
     ).toStrictEqual(["wss://a.example/", "wss://relay.example/", "wss://b.example/"]);
+  });
+});
+
+describe("containsLoneSurrogate", () => {
+  test("detects lone surrogates in nested strings and record keys", () => {
+    const lone = "\uD800";
+    expect(containsLoneSurrogate(lone)).toBe(true);
+    expect(containsLoneSurrogate(["ok", [lone]])).toBe(true);
+    expect(containsLoneSurrogate({ [lone]: "value" })).toBe(true);
+    expect(containsLoneSurrogate({ key: { nested: lone } })).toBe(true);
+  });
+
+  test("accepts paired surrogates and non-string values", () => {
+    expect(containsLoneSurrogate("paired 𐐷 ok")).toBe(false);
+    expect(containsLoneSurrogate(["a", { b: [1, 2] }, null, true, undefined])).toBe(false);
+    expect(containsLoneSurrogate({})).toBe(false);
+    expect(containsLoneSurrogate(null)).toBe(false);
+    expect(containsLoneSurrogate(42)).toBe(false);
   });
 });

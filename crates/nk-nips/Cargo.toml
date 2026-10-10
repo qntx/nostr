@@ -31,6 +31,7 @@ nip19  = ["dep:bech32", "dep:zeroize"]
 nip21  = ["nip19"]
 nip42  = []
 nip44  = ["dep:base64ct", "dep:chacha20", "dep:hkdf", "dep:hmac", "dep:rand_core", "dep:secp256k1", "dep:sha2", "dep:zeroize"]
+nip46  = ["dep:serde", "dep:serde_json", "dep:url"]
 nip49  = ["nip19", "dep:chacha20poly1305", "dep:rand_core", "dep:scrypt", "dep:unicode-normalization", "dep:zeroize"]
 nip51  = ["nip44", "dep:serde_json"]
 nip17  = ["nip59"]
@@ -55,9 +56,11 @@ nk-core               = { workspace = true }
 rand_core             = { workspace = true, optional = true }
 scrypt                = { workspace = true, optional = true }
 secp256k1             = { workspace = true, optional = true }
+serde                 = { workspace = true, optional = true }
 serde_json            = { workspace = true, optional = true, features = ["float_roundtrip"] }
 sha2                  = { workspace = true, optional = true }
 unicode-normalization = { workspace = true, optional = true }
+url                   = { workspace = true, optional = true }
 zeroize               = { workspace = true, optional = true }
 
 [dev-dependencies]

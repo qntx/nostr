@@ -27,6 +27,7 @@ let entity = nip19::decode(&nsec)?;
 | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`); needs `nip19`                                         | —                                                                                   |
 | `nip42`  | no      | relay authentication (`auth_event`, `is_auth_required`)                                                 | —                                                                                   |
 | `nip44`  | no      | NIP-44 v2 payload encryption (`ConversationKey`, `encrypt`/`decrypt`)                                   | `base64ct`, `chacha20`, `hkdf`, `hmac`, `rand_core`, `secp256k1`, `sha2`, `zeroize` |
+| `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Request`/`Response`)                   | `serde`, `serde_json`, `url`                                                        |
 | `nip49`  | no      | `ncryptsec` secret-key encryption (`encrypt_with`/`encrypt`/`decrypt`); needs `nip19`                   | `chacha20poly1305`, `rand_core`, `scrypt`, `unicode-normalization`, `zeroize`       |
 | `nip51`  | no      | lists (`parse_mute_list`, `mute_list`, `pin_list`, `bookmark_list`, NIP-44 private tags); needs `nip44` | `serde_json`                                                                        |
 | `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`                                 | `rand_core`, `serde_json`                                                           |
