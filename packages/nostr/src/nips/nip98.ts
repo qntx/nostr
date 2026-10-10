@@ -76,7 +76,7 @@ export async function getToken(
   });
 
   // Canonical NIP-01 wire field order: the token is deterministic regardless
-  // of the signer's object key order, and byte-identical to nk-nips'
+  // of the signer's object key order, and byte-identical to `nk`'s
   // `token(&Event)`. Extra signer-provided properties are dropped.
   const encoded = base64.encode(
     utf8Encoder.encode(

@@ -22,10 +22,10 @@
 
 mod common;
 
-use nk_core::{Event, PublicKey, RelayUrl, Timestamp};
-use nk_nips::nip57::{
+use nk::nips::nip57::{
     ZapTarget, parse_bolt11, validate_zap_receipt, zap_request, zap_request_from_receipt,
 };
+use nk::{Event, PublicKey, RelayUrl, Timestamp};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(
@@ -200,7 +200,7 @@ fn zap_request_cases_match() {
                 assert_eq!(err.as_str(), "EventValidationError", "{}", case.name);
                 assert_eq!(
                     error.kind(),
-                    nk_nips::ErrorKind::EventValidation,
+                    nk::nips::ErrorKind::EventValidation,
                     "{}",
                     case.name
                 );

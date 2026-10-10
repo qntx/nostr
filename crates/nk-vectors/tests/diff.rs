@@ -1,9 +1,9 @@
-//! Differential replay for the TS ↔ nk-core parity harness (NK1-08).
+//! Differential replay for the TS ↔ `nk` parity harness (NK1-08).
 //!
 //! `bun packages/nostr/scripts/parity/diff.ts --seed <n> --count <n> --out <dir>`
 //! writes one JSONL file per capability (`{"capability","seed","count"}` meta
 //! line, then `{"i","input","out"|"err"}` records). These tests replay every
-//! input through nk-core and compare; a mismatch reports the capability id,
+//! input through `nk` and compare; a mismatch reports the capability id,
 //! the seed, and the case index.
 //!
 //! Every test is `#[ignore]` so the regular `cargo test --workspace` does not
@@ -30,11 +30,11 @@ use std::path::PathBuf;
 
 mod common;
 
-use nk_core::{ClientMessage, Event, Filter, PublicKey, RelayMessage, Tag, Tags, UnsignedEvent};
-use nk_nips::nip10::parse_thread_tags;
-use nk_nips::nip27::{ParseOptions, parse_content};
-use nk_nips::nip46::{BunkerUri, NostrConnectUri};
-use nk_nips::{nip19, nip44};
+use nk::nips::nip10::parse_thread_tags;
+use nk::nips::nip27::{ParseOptions, parse_content};
+use nk::nips::nip46::{BunkerUri, NostrConnectUri};
+use nk::nips::{nip19, nip44};
+use nk::{ClientMessage, Event, Filter, PublicKey, RelayMessage, Tag, Tags, UnsignedEvent};
 use serde::Deserialize;
 
 use common::{EntityJson, blocks_json, encode_entity, entity_json, thread_json, unhex};
@@ -119,7 +119,7 @@ fn fail(capability: &str, seed: u64, case: &Case, detail: &str) -> ! {
 }
 
 /// Recomputes one case: `run` returns `Some(output)` on success or `None`
-/// when nk-core rejects the input (matching `err` on the TS side).
+/// when `nk` rejects the input (matching `err` on the TS side).
 fn check<F>(capability: &str, seed: u64, case: &Case, run: F)
 where
     F: FnOnce(&str) -> Option<serde_json::Value>,

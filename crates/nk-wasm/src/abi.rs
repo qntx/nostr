@@ -16,7 +16,7 @@
     reason = "the byte ABI dereferences caller-provided pointers"
 )]
 
-use nk_core::{EventId, Keys, PublicKey, SecretKey, Signature};
+use nk::{EventId, Keys, PublicKey, SecretKey, Signature};
 
 /// Status: success, or the signature verified.
 const OK: i32 = 0;

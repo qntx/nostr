@@ -208,7 +208,7 @@ export async function createSeal(
 ): Promise<Event> {
   const recipientPk = assertHex32(recipient, "public key");
   // The timestamp offset is drawn from `opts.randomBytes` before the crypto's nonce and aux so
-  // the shared stream matches nk-nips: offset → nonce → aux.
+  // the shared stream matches `nk`: offset → nonce → aux.
   const created_at =
     opts?.timestamps?.seal ??
     (opts?.randomize === "wrap" ? rumor.created_at : randomPastTimestamp(opts));
@@ -236,7 +236,7 @@ export function createGiftWrap(seal: Event, recipient: string, opts?: WrapOption
   const recipientPk = assertHex32(recipient, "public key");
   const drawBytes = opts?.randomBytes ?? randomBytes;
   // Ephemeral key: redraw 32-byte candidates until a valid scalar, like
-  // nk-core's `SecretKey::generate_with_rng`. Stream order: key → offset → nonce → aux. The
+  // `nk`'s `SecretKey::generate_with_rng`. Stream order: key → offset → nonce → aux. The
   // candidates, the ephemeral secret key, and the conversation key are wiped after use.
   let secretKey: SecretKey;
   for (;;) {

@@ -57,7 +57,7 @@ jobs:
       doc: true
       # Per-package -p runs: Cargo feature unification across members must
       # not mask the minimal configuration. Extend the list per new crate.
-      packages: nk-core nk-nips nk-vectors nk-wasm
+      packages: nk nk-vectors nk-wasm
       package-check: true
       each-feature: true
 
@@ -67,11 +67,11 @@ jobs:
       contents: read
     with:
       targets: wasm32-unknown-unknown aarch64-linux-android x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
-      packages: nk-wasm nk-core
+      packages: nk-wasm nk
       features: --no-default-features
       forbid-deps: getrandom
 
-  # nk-core's default set (std, clock, os-rng) spelled out: the reusable
+  # nk's default set (std, clock, os-rng) spelled out: the reusable
   # workflow accepts no empty features value, and --all-features would pick
   # up any future non-default feature instead of tracking the default set.
   portable-std:
@@ -80,10 +80,10 @@ jobs:
       contents: read
     with:
       targets: aarch64-linux-android armv7-linux-androideabi x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
-      packages: nk-core
+      packages: nk
       features: --features std,clock,os-rng
 
-  # nk-nips without std: same P-level targets as `portable`, only the NIP
+  # nk without std: same P-level targets as `portable`, only the NIP
   # features enabled so the no_std+alloc configuration is what gets checked.
   portable-nips:
     uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
@@ -91,11 +91,11 @@ jobs:
       contents: read
     with:
       targets: wasm32-unknown-unknown aarch64-linux-android x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
-      packages: nk-nips
+      packages: nk
       features: --no-default-features --features nip04,nip10,nip13,nip17,nip19,nip21,nip27,nip42,nip44,nip46,nip49,nip51,nip57,nip59,nip65,nip98
       forbid-deps: getrandom
 
-  # nk-nips' default set (std, clock, os-rng) plus the NIP features on the
+  # nk's default set (std, clock, os-rng) plus the NIP features on the
   # portable-std targets; a separate job because cross calls cannot mix
   # per-package features.
   portable-std-nips:
@@ -104,5 +104,5 @@ jobs:
       contents: read
     with:
       targets: aarch64-linux-android armv7-linux-androideabi x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
-      packages: nk-nips
+      packages: nk
       features: --features std,clock,os-rng,nip04,nip10,nip13,nip17,nip19,nip21,nip27,nip42,nip44,nip46,nip49,nip51,nip57,nip59,nip65,nip98

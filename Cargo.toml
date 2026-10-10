@@ -14,8 +14,7 @@ keywords     = ["nostr", "protocol", "sdk"]
 categories   = ["cryptography", "network-programming"]
 
 [workspace.dependencies]
-nk-core               = { path = "crates/nk-core", version = "=0.12.1", default-features = false }
-nk-nips               = { path = "crates/nk-nips", version = "=0.12.1", default-features = false }
+nk                    = { path = "crates/nk", version = "=0.12.1", default-features = false }
 aes                   = { version = "0.9", default-features = false }
 base16ct              = { version = "1.0", default-features = false, features = ["alloc"] }
 base64ct              = { version = "1.8", default-features = false, features = ["alloc"] }

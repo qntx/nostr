@@ -598,26 +598,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "nk-core"
-version = "0.12.1"
-dependencies = [
- "base16ct",
- "criterion",
- "getrandom 0.4.3",
- "rand_core 0.10.1",
- "secp256k1",
- "serde",
- "serde_json",
- "sha2",
- "url",
- "zeroize",
-]
-
-[[package]]
-name = "nk-nips"
+name = "nk"
 version = "0.12.1"
 dependencies = [
  "aes",
+ "base16ct",
  "base64ct",
  "bech32",
  "cbc",
@@ -627,7 +612,6 @@ dependencies = [
  "getrandom 0.4.3",
  "hkdf",
  "hmac",
- "nk-core",
  "rand_core 0.10.1",
  "scrypt",
  "secp256k1",
@@ -644,8 +628,7 @@ dependencies = [
 name = "nk-vectors"
 version = "0.12.1"
 dependencies = [
- "nk-core",
- "nk-nips",
+ "nk",
  "proptest",
  "rand_core 0.10.1",
  "serde",
@@ -657,7 +640,7 @@ dependencies = [
 name = "nk-wasm"
 version = "0.12.1"
 dependencies = [
- "nk-core",
+ "nk",
  "secp256k1",
  "serde_json",
 ]

@@ -1,4 +1,4 @@
-//! Property-based checks against the nk-core public API.
+//! Property-based checks against the `nk` public API.
 
 #![allow(
     unused_crate_dependencies,
@@ -14,7 +14,7 @@
     reason = "integration test crate is itself the test module"
 )]
 
-use nk_core::{
+use nk::{
     Event, EventId, Filter, Keys, Kind, PublicKey, SecretKey, SingleLetterTag, SubscriptionId, Tag,
     Tags, Timestamp, UnsignedEvent,
 };

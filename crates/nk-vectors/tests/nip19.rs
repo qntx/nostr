@@ -1,5 +1,5 @@
 //! Executes `vectors/nip19/codec.json` and `vectors/nip19/official.json`
-//! against the nk-nips `nip19` API.
+//! against the `nk::nips::nip19` API.
 
 #![allow(
     unused_crate_dependencies,
@@ -17,8 +17,8 @@
 
 mod common;
 
-use nk_nips::ErrorKind;
-use nk_nips::nip19;
+use nk::nips::ErrorKind;
+use nk::nips::nip19;
 use serde::Deserialize;
 
 use common::{EntityJson, encode_entity, entity_json};

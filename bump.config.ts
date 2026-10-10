@@ -2,7 +2,7 @@ import { defineConfig } from "bumpp";
 
 // npm packages and Cargo workspace versions are lockstep; bumpp rewrites every
 // `0.x.y` occurrence of the current version in non-JSON files, so Cargo.toml
-// picks up both [workspace.package].version and the `nk-core = "=x.y.z"` dep.
+// picks up both [workspace.package].version and the `nk = "=x.y.z"` dep.
 // Internal @qntx/* ranges (peer ^<v>, dev <v>) and `cargo update --workspace`
 // are run by sync-versions — bumpp spawns `execute` without a shell, so the
 // string must stay a single command with no shell operators.

@@ -24,21 +24,21 @@ export type FeatureInputs = {
   ci: string;
   /** Parsed `crates/nk-vectors/Cargo.toml`. */
   vectorsToml: unknown;
-  /** Raw text of `crates/nk-nips/README.md`. */
+  /** Raw text of `crates/nk/README.md`. */
   readme: string;
-  /** Raw text of `crates/nk-nips/src/lib.rs`. */
+  /** Raw text of `crates/nk/src/lib.rs`. */
   libRs: string;
 };
 
 /**
- * Feature-drift check: the sorted list F of NIP features in `crates/nk-nips`' `[features]`
- * (everything except `default`/`std`/`clock`/`os-rng`) is the single source of truth and must be
- * reproduced exactly by the portable CI job feature lists, the `nk-vectors` dependency, the README
- * feature table, and the crate-level doc table in `lib.rs`.
+ * Feature-drift check: the sorted list F of NIP features in `crates/nk`'s `[features]` (everything
+ * except `default`/`std`/`clock`/`os-rng`) is the single source of truth and must be reproduced
+ * exactly by the portable CI job feature lists, the `nk-vectors` dependency, the README feature
+ * table, and the crate-level doc table in `lib.rs`.
  */
-export function checkFeatures(nipsToml: unknown, inputs: FeatureInputs): string[] {
+export function checkFeatures(nkToml: unknown, inputs: FeatureInputs): string[] {
   const errors: string[] = [];
-  const featureKeys = Object.keys(asRecord(asRecord(nipsToml)["features"]));
+  const featureKeys = Object.keys(asRecord(asRecord(nkToml)["features"]));
   const allFeatures = new Set(featureKeys);
   const nipFeatures = featureKeys.filter((f) => !INFRA_FEATURES.has(f)).toSorted();
 
@@ -62,18 +62,18 @@ export function checkFeatures(nipsToml: unknown, inputs: FeatureInputs): string[
 
   // --- crates/nk-vectors/Cargo.toml -----------------------------------------
   const vectorsToml = asRecord(inputs.vectorsToml);
-  const nkNipsDep =
-    asRecord(asRecord(vectorsToml["dev-dependencies"])["nk-nips"])["features"] ??
-    asRecord(asRecord(vectorsToml["dependencies"])["nk-nips"])["features"];
-  if (nkNipsDep === undefined) {
-    errors.push("crates/nk-vectors/Cargo.toml: nk-nips dependency has no features list");
+  const nkDep =
+    asRecord(asRecord(vectorsToml["dev-dependencies"])["nk"])["features"] ??
+    asRecord(asRecord(vectorsToml["dependencies"])["nk"])["features"];
+  if (nkDep === undefined) {
+    errors.push("crates/nk-vectors/Cargo.toml: nk dependency has no features list");
   } else {
-    const actual = Array.isArray(nkNipsDep) ? nkNipsDep.map(String) : [];
+    const actual = Array.isArray(nkDep) ? nkDep.map(String) : [];
     const missing = nipFeatures.filter((f) => !actual.includes(f));
     const extra = actual.filter((f) => !nipFeatures.includes(f));
     if (missing.length > 0 || extra.length > 0) {
       errors.push(
-        `crates/nk-vectors/Cargo.toml: nk-nips features drift —${describeDrift(
+        `crates/nk-vectors/Cargo.toml: nk features drift —${describeDrift(
           missing,
           extra,
         )} expected [${nipFeatures.map((f) => `"${f}"`).join(", ")}]`,
@@ -84,7 +84,7 @@ export function checkFeatures(nipsToml: unknown, inputs: FeatureInputs): string[
   // --- Feature tables --------------------------------------------------------
   checkTable(
     errors,
-    "crates/nk-nips/README.md",
+    "crates/nk/README.md",
     inputs.readme,
     /^\|\s*`([A-Za-z0-9_-]+)`\s*\|/gm,
     nipFeatures,
@@ -92,7 +92,7 @@ export function checkFeatures(nipsToml: unknown, inputs: FeatureInputs): string[
   );
   checkTable(
     errors,
-    "crates/nk-nips/src/lib.rs",
+    "crates/nk/src/lib.rs",
     inputs.libRs,
     /^\/\/!\s*\|\s*`([A-Za-z0-9_-]+)`\s*\|/gm,
     nipFeatures,
@@ -199,17 +199,17 @@ function checkTable(
     errors.push(
       `${file}: feature table has row(s) for ${unknown
         .map((f) => `\`${f}\``)
-        .join(", ")}, which are not nk-nips [features] keys`,
+        .join(", ")}, which are not nk [features] keys`,
     );
   }
 }
 
 if (import.meta.main) {
-  const errors = checkFeatures(Bun.TOML.parse(readFileSync("crates/nk-nips/Cargo.toml", "utf8")), {
+  const errors = checkFeatures(Bun.TOML.parse(readFileSync("crates/nk/Cargo.toml", "utf8")), {
     ci: readFileSync(".github/workflows/ci.yml", "utf8"),
     vectorsToml: Bun.TOML.parse(readFileSync("crates/nk-vectors/Cargo.toml", "utf8")),
-    readme: readFileSync("crates/nk-nips/README.md", "utf8"),
-    libRs: readFileSync("crates/nk-nips/src/lib.rs", "utf8"),
+    readme: readFileSync("crates/nk/README.md", "utf8"),
+    libRs: readFileSync("crates/nk/src/lib.rs", "utf8"),
   });
   for (const error of errors) {
     console.error(`check-features: ${error}`);

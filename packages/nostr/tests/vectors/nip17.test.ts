@@ -86,7 +86,7 @@ const vector = JSON.parse(
   relay_list: { build: RelayBuildCase[]; parse: RelayParseCase[] };
 };
 
-/** Sequential reads over the recorded `entropy` hex — the same bytes nk-nips replays. */
+/** Sequential reads over the recorded `entropy` hex — the same bytes `nk` replays. */
 class Stream {
   private readonly bytes: Uint8Array;
   private pos = 0;

@@ -4,10 +4,10 @@
 
 #![allow(dead_code, reason = "each test binary uses a subset")]
 
-use nk_core::{EventId, Kind, PublicKey, SecretKey};
-use nk_nips::nip10::{Quote, ThreadReferences};
-use nk_nips::nip19::{self, AddressPointer, Entity, EventPointer, ProfilePointer};
-use nk_nips::nip27::{ContentBlock, Reference};
+use nk::nips::nip10::{Quote, ThreadReferences};
+use nk::nips::nip19::{self, AddressPointer, Entity, EventPointer, ProfilePointer};
+use nk::nips::nip27::{ContentBlock, Reference};
+use nk::{EventId, Kind, PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
 
 /// The vector's normalized entity shape (TS `DecodedResult` / pointer input).
@@ -43,7 +43,7 @@ pub(crate) enum EntityJson {
     },
 }
 
-/// Lowercase hex for a byte slice — nk-core exposes no public hex encoder.
+/// Lowercase hex for a byte slice — `nk` exposes no public hex encoder.
 pub(crate) fn hex(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     bytes.iter().fold(String::new(), |mut out, b| {
@@ -53,7 +53,7 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
 }
 
 /// Decodes a hex string of either case; `None` on odd length or bad digits.
-/// nk-core's typed `from_hex` constructors cover fixed-width keys — this is
+/// `nk`'s typed `from_hex` constructors cover fixed-width keys — this is
 /// for vector fields that need the raw byte length checked by the caller.
 pub(crate) fn unhex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) || !s.is_ascii() {
@@ -239,7 +239,7 @@ pub(crate) fn blocks_json(blocks: &[ContentBlock<'_>]) -> serde_json::Value {
 }
 
 /// Builds a typed pointer/entity from the vector shape. Hex failures surface
-/// as `HexError` (nk-core's `ErrorKind::Hex`), kinds above 65535 as
+/// as `HexError` (`nk`'s `ErrorKind::Hex`), kinds above 65535 as
 /// `Nip19Error` — the classes the TS encoders throw for those inputs.
 pub(crate) fn encode_entity(entity: &EntityJson) -> Result<String, &'static str> {
     fn pubkey(hex: &str) -> Result<PublicKey, &'static str> {

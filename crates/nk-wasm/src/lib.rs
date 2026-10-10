@@ -6,12 +6,12 @@
     )
 )]
 
-//! `nk-wasm`: the `nk_*` byte ABI (version 1) over `nk-core`, compiled to
+//! `nk-wasm`: the `nk_*` byte ABI (version 1) over `nk`, compiled to
 //! `wasm32-unknown-unknown` as `nk_wasm.wasm` for `@qntx/nostr-wasm`.
 //!
 //! No wasm-bindgen: the module has zero imports and exports `memory` plus
 //! `nk_abi_version`, `nk_verify`, `nk_verify_serialized`, `nk_sign`,
 //! `nk_public_key`, and (wasm32 only) the `nk_buffer` scratch region — every
-//! crypto operation delegates to `nk-core`. See `docs/nk/acceleration.mdx`.
+//! crypto operation delegates to `nk`. See `docs/nk/acceleration.mdx`.
 
 pub mod abi;

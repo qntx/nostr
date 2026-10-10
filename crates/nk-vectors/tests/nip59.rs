@@ -22,8 +22,8 @@
 
 mod common;
 
-use nk_core::{Event, Keys, PublicKey, RelayUrl, SecretKey, Tag, Timestamp, UnsignedEvent};
-use nk_nips::nip59::{self, RandomScope, Rumor, Timestamps, WrapOptions};
+use nk::nips::nip59::{self, RandomScope, Rumor, Timestamps, WrapOptions};
+use nk::{Event, Keys, PublicKey, RelayUrl, SecretKey, Tag, Timestamp, UnsignedEvent};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(

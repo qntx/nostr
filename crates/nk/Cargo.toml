@@ -1,0 +1,93 @@
+[package]
+name                   = "nk"
+description            = "Platform-neutral nostr protocol crate: errors, limits, timestamps, relay URL normalization, keys, events, filters, messages, and feature-gated NIP modules. Rust counterpart of @qntx/nostr's core and nips layers."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+authors.workspace      = true
+keywords.workspace     = true
+categories.workspace   = true
+readme                 = "README.md"
+documentation          = "https://docs.rs/nk"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["std", "clock", "os-rng"]
+std     = ["url/std", "serde/std", "serde_json/std", "secp256k1/std", "secp256k1/global-context"]
+clock   = ["std"]
+# os-rng owns the optional getrandom so NIP modules (nip44::encrypt) can draw
+# nonces; portable --no-default-features builds never see it.
+os-rng = ["std", "dep:getrandom"]
+# NIP modules — each is additive and compiles independently.
+nip04 = ["dep:aes", "dep:base64ct", "dep:cbc"]
+nip10 = ["nip19"]
+nip13 = []
+nip17 = ["nip59"]
+nip19 = ["dep:bech32"]
+nip21 = ["nip19"]
+nip27 = ["nip19", "dep:unicode-properties"]
+nip42 = []
+nip44 = ["dep:base64ct", "dep:chacha20", "dep:hkdf", "dep:hmac"]
+nip46 = []
+nip49 = ["nip19", "dep:chacha20poly1305", "dep:scrypt", "dep:unicode-normalization"]
+nip51 = ["nip44"]
+nip57 = ["dep:bech32"]
+nip59 = ["nip44"]
+nip65 = []
+nip98 = ["dep:base64ct"]
+
+# Rule: dependencies that were optional in nk-nips stay optional and are
+# enabled by the NIP features that use them; dependencies that were
+# non-optional in nk-core stay non-optional, so --no-default-features pulls
+# the core dependency set only.
+[dependencies]
+aes                   = { workspace = true, optional = true }
+base16ct              = { workspace = true }
+base64ct              = { workspace = true, optional = true }
+bech32                = { workspace = true, optional = true }
+cbc                   = { workspace = true, optional = true, features = ["block-padding"] }
+chacha20              = { workspace = true, optional = true, features = ["cipher"] }
+chacha20poly1305      = { workspace = true, optional = true }
+getrandom             = { workspace = true, optional = true, features = ["sys_rng"] }
+hkdf                  = { workspace = true, optional = true }
+hmac                  = { workspace = true, optional = true }
+rand_core             = { workspace = true }
+scrypt                = { workspace = true, optional = true }
+secp256k1             = { workspace = true, features = ["alloc"] }
+serde                 = { workspace = true }
+serde_json            = { workspace = true, features = ["float_roundtrip"] }
+sha2                  = { workspace = true }
+unicode-normalization = { workspace = true, optional = true }
+unicode-properties    = { workspace = true, optional = true, features = ["general-category"] }
+url                   = { workspace = true }
+zeroize               = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true, features = ["html_reports"] }
+
+[[bench]]
+name    = "deserialize"
+harness = false
+
+[[bench]]
+name    = "verify"
+harness = false
+
+[[bench]]
+name              = "pow"
+harness           = false
+required-features = ["nip13"]
+
+[[bench]]
+name              = "tokenize"
+harness           = false
+required-features = ["nip27"]
+
+[lints]
+workspace = true

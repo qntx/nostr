@@ -1,4 +1,4 @@
-//! Executes `vectors/core/*.json` against the nk-core public API.
+//! Executes `vectors/core/*.json` against the `nk` public API.
 
 #![allow(
     unused_crate_dependencies,
@@ -14,7 +14,7 @@
     reason = "integration test crate is itself the test module"
 )]
 
-use nk_core::{
+use nk::{
     ClientMessage, CountHll, DeletionTarget, ErrorKind, Event, EventAddress, EventBuilder, EventId,
     Filter, Keys, Kind, KindClass, ProfileMetadata, PublicKey, RelayMessage, RelayUrl, SecretKey,
     Tag, Timestamp, UnsignedEvent, cmp_newest_first, cmp_oldest_first, fingerprint,
@@ -612,7 +612,7 @@ struct BuilderVector {
     clippy::panic_in_result_fn,
     reason = "fixture-shape violations are generator bugs, not case results"
 )]
-fn build_case(case: &BuilderCase, index: usize) -> nk_core::Result<EventBuilder> {
+fn build_case(case: &BuilderCase, index: usize) -> nk::Result<EventBuilder> {
     match case.op.as_str() {
         "text_note" => Ok(EventBuilder::text_note(
             case.content.clone().unwrap_or_default(),
@@ -746,7 +746,7 @@ struct MessageCase {
     error: Option<String>,
 }
 
-fn check_message_cases<M>(vector: &str, name: &str, parse: fn(&str) -> nk_core::Result<M>)
+fn check_message_cases<M>(vector: &str, name: &str, parse: fn(&str) -> nk::Result<M>)
 where
     M: MessageEncode,
 {
@@ -856,7 +856,7 @@ fn count_hll() {
             case.inputs
                 .iter()
                 .try_fold(CountHll::zero(), |mut acc, input| {
-                    let sketch: CountHll = input.parse().map_err(|e: nk_core::Error| e.kind())?;
+                    let sketch: CountHll = input.parse().map_err(|e: nk::Error| e.kind())?;
                     acc.merge(&sketch);
                     Ok(acc)
                 });

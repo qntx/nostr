@@ -22,9 +22,9 @@
 
 mod common;
 
-use nk_core::{Event, EventId, Kind, PublicKey, RelayUrl, Tags, Timestamp};
-use nk_nips::nip10::{Quote, parse_thread_tags, reply_tags, reply_to};
-use nk_nips::nip19::{AddressPointer, EventPointer};
+use nk::nips::nip10::{Quote, parse_thread_tags, reply_tags, reply_to};
+use nk::nips::nip19::{AddressPointer, EventPointer};
+use nk::{Event, EventId, Kind, PublicKey, RelayUrl, Tags, Timestamp};
 use serde::Deserialize;
 
 use common::{ThreadJson, thread_json};
@@ -117,7 +117,7 @@ struct ReplyCase {
     err: Option<String>,
 }
 
-/// TS accepts `{ tags }` with raw arrays; nk-core's `Tags` only rejects the
+/// TS accepts `{ tags }` with raw arrays; `nk`'s `Tags` only rejects the
 /// empty inner arrays TS tolerates, so build it tag by tag (same rule the
 /// `nip10.thread` diff replay uses). Cases marked `rust: false` carry
 /// non-string elements and never reach here.
@@ -128,7 +128,7 @@ fn tags_of(raw: &[serde_json::Value]) -> Tags {
                 .expect("rust-shared tags are string arrays")
         })
         .filter(|items| !items.is_empty())
-        .map(|items| nk_core::Tag::new(items.iter().cloned()).expect("vector tag"))
+        .map(|items| nk::Tag::new(items.iter().cloned()).expect("vector tag"))
         .collect()
 }
 
@@ -210,7 +210,7 @@ fn reply_cases_match() {
             (Err(error), _, Some(err)) => {
                 // The vector records the TS constructor name.
                 let kind = match err.as_str() {
-                    "EventValidationError" => nk_nips::ErrorKind::EventValidation,
+                    "EventValidationError" => nk::nips::ErrorKind::EventValidation,
                     other => panic!("reply {}: unknown error class {other}", case.name),
                 };
                 assert_eq!(error.kind(), kind, "reply {}", case.name);

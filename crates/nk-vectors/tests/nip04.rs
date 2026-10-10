@@ -20,9 +20,9 @@
 
 mod common;
 
-use nk_core::{PublicKey, SecretKey};
-use nk_nips::ErrorKind;
-use nk_nips::nip04::{self, SharedSecret};
+use nk::nips::ErrorKind;
+use nk::nips::nip04::{self, SharedSecret};
+use nk::{PublicKey, SecretKey};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(

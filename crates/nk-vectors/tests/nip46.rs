@@ -22,9 +22,9 @@
 
 mod common;
 
-use nk_core::PublicKey;
-use nk_nips::ErrorKind;
-use nk_nips::nip46::{BunkerUri, NostrConnectUri, Request, Response};
+use nk::PublicKey;
+use nk::nips::ErrorKind;
+use nk::nips::nip46::{BunkerUri, NostrConnectUri, Request, Response};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(

@@ -22,11 +22,11 @@
 
 mod common;
 
-use nk_core::{Event, PublicKey, RelayUrl, Timestamp};
-use nk_nips::nip65::{
+use nk::nips::nip65::{
     RelayListItem, RelayMarker, parse_relay_list, read_relays, relay_list, relay_list_tags,
     write_relays,
 };
+use nk::{Event, PublicKey, RelayUrl, Timestamp};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(
@@ -125,7 +125,7 @@ fn parse_cases_match() {
             }
             (Err(error), _, Some(err)) => {
                 let kind = match err.as_str() {
-                    "EventValidationError" => nk_nips::ErrorKind::EventValidation,
+                    "EventValidationError" => nk::nips::ErrorKind::EventValidation,
                     other => panic!("parse {}: unknown error class {other}", case.name),
                 };
                 assert_eq!(error.kind(), kind, "parse {}", case.name);

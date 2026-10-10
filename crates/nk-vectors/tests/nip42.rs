@@ -22,8 +22,8 @@
 
 mod common;
 
-use nk_core::{Kind, PublicKey, RelayUrl, Tag, Timestamp};
-use nk_nips::nip42;
+use nk::nips::nip42;
+use nk::{Kind, PublicKey, RelayUrl, Tag, Timestamp};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(
