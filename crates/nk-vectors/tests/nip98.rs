@@ -22,8 +22,8 @@
 
 mod common;
 
-use nk_core::{Event, Keys, SecretKey, Timestamp};
-use nk_nips::nip98;
+use nk::nips::nip98;
+use nk::{Event, Keys, SecretKey, Timestamp};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(

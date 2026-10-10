@@ -9,7 +9,7 @@
 // stream: `WrapOptions.randomBytes` feeds the gift wrap's ephemeral key,
 // timestamp offset, NIP-44 nonce and BIP-340 aux, and the injected
 // `Nip59Crypto` wrapper draws its seal nonce/aux from the same stream — the
-// byte order matches nk-nips `*_with_rng` (seal: [offset] → nonce → aux;
+// byte order matches `nk`'s `*_with_rng` (seal: [offset] → nonce → aux;
 // gift wrap: key → [offset] → nonce → aux). The consumed prefix is recorded
 // per case as `entropy`, which the Rust runner replays through a scripted
 // `CryptoRng`.

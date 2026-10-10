@@ -1,5 +1,5 @@
 /// <reference types="node" />
-// Differential-input generator for the TS ↔ nk-core parity harness (NK1-08).
+// Differential-input generator for the TS ↔ `nk` parity harness (NK1-08).
 //
 //   bun packages/nostr/scripts/parity/diff.ts --seed <n> --count <n> --out target/parity
 //
@@ -8,7 +8,7 @@
 // `--out`: the first line is {"capability", "seed", "count"} and every
 // following line is {"i", "input", "out" | "err"}. Inputs are raw JSON text so
 // number spellings (1e3, 1.0, -0), duplicate keys, and dropped keys survive;
-// crates/nk-vectors/tests/diff.rs replays them through nk-core (NK_DIFF_DIR).
+// crates/nk-vectors/tests/diff.rs replays them through `nk` (NK_DIFF_DIR).
 //
 // Capabilities: core.event.serialize, core.event.id, core.filter.match,
 // core.filter.canonicalize, core.message.client, core.message.relay,
@@ -267,7 +267,7 @@ function rawUnsignedEvent({ corrupt = 0.15 } = {}): string {
 
 // Signed event with the canonical wire-key order (id, pubkey, created_at,
 // kind, tags, content, sig) so the relay/client re-encode paths — TS
-// JSON.stringify passthrough vs nk-core write_signed — emit identical bytes.
+// JSON.stringify passthrough vs `nk` write_signed — emit identical bytes.
 function eventJson({ corrupt = 0.1 } = {}): string {
   const bad = (hex: string): string => pick([hex.toUpperCase(), hex.slice(0, -2), `${hex}zz`]);
   const id = JSON.stringify(chance(corrupt) ? bad(randHex(64)) : randHex(64));
@@ -285,7 +285,7 @@ function eventJson({ corrupt = 0.1 } = {}): string {
 }
 
 // A filter in the shared input domain: every key is either a known field
-// nk-core parses or one both sides drop (unknown / multi-letter `#`).
+// `nk` parses or one both sides drop (unknown / multi-letter `#`).
 function filterJson(): string {
   const fields: string[] = [];
   const hexList = (count: number): string =>
@@ -545,7 +545,7 @@ function matchInputText(): string {
 
 // A 64-char hex field for pointers: mostly canonical, occasionally corrupted.
 // Any-case hex stays in the domain — TS `assertHex32` lowercases first and
-// nk-core's `from_hex` accepts mixed case, so both accept the same inputs.
+// `nk`'s `from_hex` accepts mixed case, so both accept the same inputs.
 function randHex32(corrupt: boolean): string {
   if (corrupt) {
     return pick([randHex(62), randHex(66), `${randHex(60)}zzzz`, randString(64), ""]);
@@ -554,7 +554,7 @@ function randHex32(corrupt: boolean): string {
 }
 
 // A 32-byte secret for `nsec` encode entities. Well-formed secrets must be
-// valid scalars: nk-core's `SecretKey` type cannot express an invalid scalar,
+// valid scalars: `nk`'s `SecretKey` type cannot express an invalid scalar,
 // so encode-side scalar rejection has no TS counterpart. Invalid scalars are
 // exercised on the decode side instead (both decoders reject them).
 function randSecretHex(): string {

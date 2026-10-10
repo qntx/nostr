@@ -17,7 +17,7 @@
     reason = "integration test crate is itself the test module"
 )]
 
-use nk_core::UnsignedEvent;
+use nk::UnsignedEvent;
 use nk_wasm::abi::{nk_abi_version, nk_public_key, nk_sign, nk_verify, nk_verify_serialized};
 
 const OK: i32 = 0;
@@ -129,7 +129,7 @@ fn verify_serialized_success_failure_and_invalid_input() {
     let mut sig = [0u8; 64];
     {
         // Sign sha256(ser) with vector 0's key through the ABI.
-        let hashed = nk_core::EventId::hash(ser);
+        let hashed = nk::EventId::hash(ser);
         id.copy_from_slice(hashed.as_bytes());
         assert_eq!(sign(&id, &mut sk, &AUX, &mut sig), OK);
     }
@@ -221,7 +221,7 @@ fn public_key_rejects_invalid_scalar_and_still_wipes() {
 }
 
 // Shared-vector coverage through the ABI: the nk-vectors runners assert the
-// same files against nk-core; here they drive the raw-pointer surface.
+// same files against `nk`; here they drive the raw-pointer surface.
 
 const BIP340_CSV: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),

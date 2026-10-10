@@ -11,7 +11,7 @@
         "tests": ["packages/nostr/tests/core.test.ts", "packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/hex.rs",
+        "module": "crates/nk/src/hex.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/hex.json"]
@@ -26,7 +26,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/url.rs",
+        "module": "crates/nk/src/url.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/url-normalize.json"]
@@ -41,7 +41,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/kind.rs",
+        "module": "crates/nk/src/kind.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/kind-classify.json"]
@@ -56,7 +56,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/tag.rs",
+        "module": "crates/nk/src/tag.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/tag-build.json"]
@@ -71,7 +71,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/tag.rs",
+        "module": "crates/nk/src/tag.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/tag-address.json"]
@@ -86,7 +86,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/event.rs",
+        "module": "crates/nk/src/event.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-validate.json"]
@@ -101,7 +101,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/event.rs",
+        "module": "crates/nk/src/event.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-serialize.json"]
@@ -116,7 +116,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/event.rs",
+        "module": "crates/nk/src/event.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-serialize.json"]
@@ -131,7 +131,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/event.rs",
+        "module": "crates/nk/src/event.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-order.json"]
@@ -146,7 +146,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/event.rs",
+        "module": "crates/nk/src/event.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-signed-matches.json"]
@@ -164,7 +164,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-core/src/key.rs",
+        "module": "crates/nk/src/key.rs",
         "tests": ["crates/nk-vectors/tests/bip340.rs"]
       },
       "vectors": ["vectors/bip340/official.csv"]
@@ -182,7 +182,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-core/src/key.rs",
+        "module": "crates/nk/src/key.rs",
         "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk-vectors/tests/bip340.rs"]
       },
       "vectors": ["vectors/core/event-sign.json", "vectors/bip340/official.csv"]
@@ -200,7 +200,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-core/src/event.rs",
+        "module": "crates/nk/src/event.rs",
         "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk-vectors/tests/bip340.rs"]
       },
       "vectors": ["vectors/bip340/official.csv"]
@@ -215,7 +215,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/filter.rs",
+        "module": "crates/nk/src/filter.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/filter-match.json"]
@@ -230,7 +230,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/filter.rs",
+        "module": "crates/nk/src/filter.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/filter-limit.json"]
@@ -245,7 +245,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/filter.rs",
+        "module": "crates/nk/src/filter.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/filter-canonicalize.json"]
@@ -260,7 +260,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/filter.rs",
+        "module": "crates/nk/src/filter.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/filter-fingerprint.json"]
@@ -275,7 +275,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/message.rs",
+        "module": "crates/nk/src/message.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/message-client.json"]
@@ -290,7 +290,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/message.rs",
+        "module": "crates/nk/src/message.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/message-relay.json"]
@@ -305,8 +305,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/message.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk-core/src/message.rs"]
+        "module": "crates/nk/src/message.rs",
+        "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk/src/message.rs"]
       },
       "vectors": ["vectors/core/message-client.json", "vectors/core/message-relay.json"]
     },
@@ -320,7 +320,7 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/count.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-core/src/message.rs",
+        "module": "crates/nk/src/message.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/count-hll.json"]
@@ -338,7 +338,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-core/src/builder.rs",
+        "module": "crates/nk/src/builder.rs",
         "tests": ["crates/nk-vectors/tests/core.rs"]
       },
       "vectors": ["vectors/core/builder.json"]
@@ -356,7 +356,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip19.rs",
+        "module": "crates/nk/src/nips/nip19.rs",
         "tests": ["crates/nk-vectors/tests/nip19.rs"]
       },
       "vectors": ["vectors/nip19/codec.json", "vectors/nip19/official.json"]
@@ -374,7 +374,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip21.rs",
+        "module": "crates/nk/src/nips/nip21.rs",
         "tests": ["crates/nk-vectors/tests/nip21.rs"]
       },
       "vectors": ["vectors/nip21/uri.json"]
@@ -389,7 +389,7 @@
         "tests": ["packages/nostr/tests/nip44.test.ts"]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip44.rs",
+        "module": "crates/nk/src/nips/nip44.rs",
         "tests": ["crates/nk-vectors/tests/nip44.rs"]
       },
       "vectors": [
@@ -411,7 +411,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip04.rs",
+        "module": "crates/nk/src/nips/nip04.rs",
         "tests": ["crates/nk-vectors/tests/nip04.rs"]
       },
       "vectors": ["vectors/nip04/codec.json"]
@@ -429,7 +429,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip49.rs",
+        "module": "crates/nk/src/nips/nip49.rs",
         "tests": ["crates/nk-vectors/tests/nip49.rs"]
       },
       "vectors": [
@@ -451,7 +451,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip13.rs",
+        "module": "crates/nk/src/nips/nip13.rs",
         "tests": ["crates/nk-vectors/tests/nip13.rs"]
       },
       "vectors": ["vectors/nip13/codec.json"]
@@ -469,7 +469,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip42.rs",
+        "module": "crates/nk/src/nips/nip42.rs",
         "tests": ["crates/nk-vectors/tests/nip42.rs"]
       },
       "vectors": ["vectors/nip42/codec.json"]
@@ -487,7 +487,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip98.rs",
+        "module": "crates/nk/src/nips/nip98.rs",
         "tests": ["crates/nk-vectors/tests/nip98.rs"]
       },
       "vectors": ["vectors/nip98/codec.json"]
@@ -505,7 +505,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip59.rs",
+        "module": "crates/nk/src/nips/nip59.rs",
         "tests": ["crates/nk-vectors/tests/nip59.rs"]
       },
       "vectors": ["vectors/nip59/codec.json"]
@@ -523,7 +523,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip17.rs",
+        "module": "crates/nk/src/nips/nip17.rs",
         "tests": ["crates/nk-vectors/tests/nip17.rs"]
       },
       "vectors": ["vectors/nip17/codec.json"]
@@ -541,7 +541,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip10.rs",
+        "module": "crates/nk/src/nips/nip10.rs",
         "tests": ["crates/nk-vectors/tests/nip10.rs"]
       },
       "vectors": ["vectors/nip10/codec.json"]
@@ -559,7 +559,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip27.rs",
+        "module": "crates/nk/src/nips/nip27.rs",
         "tests": ["crates/nk-vectors/tests/nip27.rs"]
       },
       "vectors": ["vectors/nip27/codec.json"]
@@ -577,7 +577,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip51.rs",
+        "module": "crates/nk/src/nips/nip51.rs",
         "tests": ["crates/nk-vectors/tests/nip51.rs"]
       },
       "vectors": ["vectors/nip51/codec.json"]
@@ -595,7 +595,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip57.rs",
+        "module": "crates/nk/src/nips/nip57.rs",
         "tests": ["crates/nk-vectors/tests/nip57.rs"]
       },
       "vectors": ["vectors/nip57/codec.json"]
@@ -613,7 +613,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip65.rs",
+        "module": "crates/nk/src/nips/nip65.rs",
         "tests": ["crates/nk-vectors/tests/nip65.rs"]
       },
       "vectors": ["vectors/nip65/codec.json"]
@@ -643,7 +643,7 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-nips/src/nip46.rs",
+        "module": "crates/nk/src/nips/nip46.rs",
         "tests": ["crates/nk-vectors/tests/nip46.rs"]
       },
       "vectors": ["vectors/nip46/codec.json"]

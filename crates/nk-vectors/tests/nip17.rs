@@ -22,12 +22,12 @@
 
 mod common;
 
-use nk_core::{Event, Keys, PublicKey, RelayUrl, SecretKey, Tag, Tags, Timestamp, UnsignedEvent};
-use nk_nips::nip17::{
+use nk::nips::nip17::{
     ChatMessageOptions, Recipient, ReplyTo, chat_message_rumor, dm_relay_list, dm_relay_list_tags,
     normalize_recipients, parse_dm_relay_list, wrap_direct_message_with_rng,
 };
-use nk_nips::nip59::{RandomScope, Rumor, Timestamps, WrapOptions};
+use nk::nips::nip59::{RandomScope, Rumor, Timestamps, WrapOptions};
+use nk::{Event, Keys, PublicKey, RelayUrl, SecretKey, Tag, Tags, Timestamp, UnsignedEvent};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(
@@ -182,7 +182,7 @@ impl RumorInput {
         Rumor::new(UnsignedEvent::new(
             pubkey(&self.pubkey),
             Timestamp::from_secs(self.created_at),
-            nk_core::Kind::new(self.kind),
+            nk::Kind::new(self.kind),
             tags,
             self.content.clone(),
         ))
@@ -269,7 +269,7 @@ impl ChatCase {
         ChatMessageOptions {
             subject: self.options.subject.clone(),
             reply_to: self.options.reply_to.as_ref().map(|reply| ReplyTo {
-                id: nk_core::EventId::from_hex(&reply.id).expect("vector reply id"),
+                id: nk::EventId::from_hex(&reply.id).expect("vector reply id"),
                 relay_hint: reply.relay_hint.as_deref().map(relay_url),
             }),
         }

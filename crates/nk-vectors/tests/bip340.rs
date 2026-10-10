@@ -1,4 +1,4 @@
-//! Executes `vectors/bip340/official.csv` against the nk-core public API:
+//! Executes `vectors/bip340/official.csv` against the `nk` public API:
 //! signing rows through `Keys::sign_id_with_aux`, verification rows through
 //! `Signature::verify`, and public-key derivation through
 //! `SecretKey::public_key`.
@@ -17,7 +17,7 @@
     reason = "integration test crate is itself the test module"
 )]
 
-use nk_core::{EventId, Keys, PublicKey, SecretKey, Signature};
+use nk::{EventId, Keys, PublicKey, SecretKey, Signature};
 
 const VECTORS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),

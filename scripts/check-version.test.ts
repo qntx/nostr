@@ -9,7 +9,7 @@ members = ["crates/*"]
 version = "0.9.0"
 
 [workspace.dependencies]
-nk-core = { version = "=0.9.0", path = "crates/nk-core", default-features = false }
+nk = { version = "=0.9.0", path = "crates/nk", default-features = false }
 sha2 = "0.11"
 `;
 
@@ -17,7 +17,7 @@ const PARSED = {
   workspace: {
     package: { version: "0.9.0" },
     dependencies: {
-      "nk-core": { version: "=0.9.0", path: "crates/nk-core", "default-features": false },
+      nk: { version: "=0.9.0", path: "crates/nk", "default-features": false },
       sha2: "0.11",
     },
   },
@@ -27,7 +27,7 @@ const PARSED = {
 // `source`; everything from crates.io carries a registry source.
 const LOCK = {
   package: [
-    { name: "nk-core", version: "0.9.0" },
+    { name: "nk", version: "0.9.0" },
     { name: "nk-vectors", version: "0.9.0" },
     {
       name: "sha2",
@@ -44,14 +44,14 @@ const PARSED_11 = {
   workspace: {
     package: { version: "0.11.0" },
     dependencies: {
-      "nk-core": { version: "=0.11.0", path: "crates/nk-core", "default-features": false },
+      nk: { version: "=0.11.0", path: "crates/nk", "default-features": false },
       sha2: "0.11",
     },
   },
 };
 const STALE_LOCK = {
   package: [
-    { name: "nk-core", version: "0.10.1" },
+    { name: "nk", version: "0.10.1" },
     { name: "nk-vectors", version: "0.10.1" },
     {
       name: "sha2",
@@ -90,7 +90,7 @@ const BUN_LOCK = {
 
 const LOCK_11 = {
   package: [
-    { name: "nk-core", version: "0.11.0" },
+    { name: "nk", version: "0.11.0" },
     { name: "nk-vectors", version: "0.11.0" },
     {
       name: "sha2",
@@ -186,10 +186,10 @@ describe("check-version", () => {
 
   test("rejects an internal dep not pinned to the workspace version", () => {
     const parsed = structuredClone(PARSED);
-    parsed.workspace.dependencies["nk-core"].version = "=0.8.0";
+    parsed.workspace.dependencies.nk.version = "=0.8.0";
     const errors = checkVersion(PACKAGES, parsed, CARGO_TOML, LOCK, BUN_LOCK);
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toContain("nk-core");
+    expect(errors[0]).toContain("nk");
   });
 
   test("rejects a third-party dep equal to the current version", () => {
@@ -205,7 +205,7 @@ describe("check-version", () => {
   test("rejects a stale Cargo.lock member version", () => {
     const errors = checkVersion(PACKAGES_11, PARSED_11, CARGO_TOML_11, STALE_LOCK, BUN_LOCK_11);
     expect(errors).toStrictEqual([
-      'Cargo.lock: workspace member "nk-core" has version "0.10.1", expected "0.11.0"',
+      'Cargo.lock: workspace member "nk" has version "0.10.1", expected "0.11.0"',
       'Cargo.lock: workspace member "nk-vectors" has version "0.10.1", expected "0.11.0"',
     ]);
   });

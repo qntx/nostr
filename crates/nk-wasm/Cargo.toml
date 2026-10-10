@@ -1,7 +1,7 @@
 [package]
 name                   = "nk-wasm"
 publish                = false
-description            = "nk_* byte-ABI bindings over nk-core for @qntx/nostr-wasm — verify, sign, and public key without wasm-bindgen."
+description            = "nk_* byte-ABI bindings over nk for @qntx/nostr-wasm — verify, sign, and public key without wasm-bindgen."
 version.workspace      = true
 edition.workspace      = true
 rust-version.workspace = true
@@ -14,7 +14,7 @@ authors.workspace      = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-nk-core   = { workspace = true, features = ["std"] }
+nk        = { workspace = true, features = ["std"] }
 secp256k1 = { workspace = true, features = ["lowmemory"] }
 
 [dev-dependencies]

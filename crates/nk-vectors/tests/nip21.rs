@@ -20,8 +20,8 @@
 
 mod common;
 
-use nk_nips::ErrorKind;
-use nk_nips::nip21::{self, NostrUri};
+use nk::nips::ErrorKind;
+use nk::nips::nip21::{self, NostrUri};
 use serde::Deserialize;
 
 use common::entity_json;

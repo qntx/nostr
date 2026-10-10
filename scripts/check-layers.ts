@@ -15,36 +15,26 @@ export type CrateInfo = {
 
 type JsonObject = Record<string, unknown>;
 
-const P_LEVEL = new Set(["nk-core", "nk-nips", "nk-signer", "nk-gossip", "nk-storage", "nk-wasm"]);
+const P_LEVEL = new Set(["nk", "nk-database", "nk-sqlite", "nk-gossip", "nk-wasm", "nk-ffi"]);
 
 const RUNTIME_BANNED = new Set(["tokio", "reqwest", "tokio-tungstenite"]);
 const SQLITE = "rusqlite";
-const SQLITE_OWNER = "nk-storage";
+const SQLITE_OWNER = "nk-sqlite";
 
 const ALL = "*";
+// The crate graph of docs/nk/redesign.mdx: `nk` is the leaf protocol crate,
+// everything above depends on it directly or transitively.
 const ALLOWED: Record<string, string[]> = {
-  "nk-core": [],
-  "nk-nips": ["nk-core"],
-  "nk-signer": ["nk-core", "nk-nips"],
-  "nk-gossip": ["nk-core", "nk-nips"],
-  "nk-storage": ["nk-core"],
-  "nk-relay": ["nk-core", "nk-nips", "nk-signer"],
-  "nk-store": ["nk-core", "nk-storage"],
-  "nk-loaders": ["nk-core", "nk-nips", "nk-relay", "nk-storage", "nk-store", "nk-gossip"],
-  "nk-client": [
-    "nk-core",
-    "nk-nips",
-    "nk-signer",
-    "nk-gossip",
-    "nk-storage",
-    "nk-relay",
-    "nk-store",
-    "nk-loaders",
-  ],
-  "nk-testing": ["nk-core", "nk-nips", "nk-relay", "nk-storage"],
-  nk: [ALL],
-  "nk-wasm": ["nk-core"],
+  nk: [],
+  "nk-database": ["nk"],
+  "nk-sqlite": ["nk", "nk-database"],
+  "nk-gossip": ["nk"],
+  "nk-sdk": ["nk", "nk-database", "nk-gossip"],
+  "nk-connect": ["nk", "nk-sdk"],
+  "nk-blossom": ["nk"],
+  "nk-wasm": ["nk"],
   "nk-vectors": [ALL],
+  "nk-ffi": ["nk", "nk-sdk"],
 };
 
 function isRecord(value: unknown): value is JsonObject {
@@ -88,7 +78,7 @@ export function checkLayers(crates: CrateInfo[]): string[] {
   const byName = new Map<string, CrateInfo>();
 
   for (const crate of crates) {
-    if (crate.name.startsWith("nk-") && !(crate.name in ALLOWED)) {
+    if ((crate.name === "nk" || crate.name.startsWith("nk-")) && !(crate.name in ALLOWED)) {
       errors.push(`unknown crate "${crate.name}"`);
     }
     byName.set(crate.name, crate);
@@ -97,7 +87,7 @@ export function checkLayers(crates: CrateInfo[]): string[] {
   for (const crate of crates) {
     const allowed = ALLOWED[crate.name] ?? [];
     for (const dep of crate.deps) {
-      if (dep.startsWith("nk-")) {
+      if (dep === "nk" || dep.startsWith("nk-")) {
         if (!(dep in ALLOWED)) {
           errors.push(`${crate.name}: unknown internal dependency "${dep}"`);
           continue;

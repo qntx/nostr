@@ -94,7 +94,7 @@ export function mergeCountHll(hexes: ReadonlyArray<string>): string {
 
 /** Serialize a client->relay message to its NIP-01 JSON wire form. */
 export function encodeClientMessage(message: ClientMessage): string {
-  // REQ/COUNT/NEG-OPEN filters are canonicalized so the wire form matches nk-core.
+  // REQ/COUNT/NEG-OPEN filters are canonicalized so the wire form matches `nk`.
   switch (message[0]) {
     case "REQ":
     case "COUNT": {
@@ -313,7 +313,7 @@ const HEX64_LOWER_RE = /^[0-9a-f]{64}$/;
  * string, and `#<single letter>` arrays of strings (`#e`/`#p` lowercased). Multi-letter `#` keys
  * and unknown non-`#` keys are dropped; wrong types throw {@link MessageError}. Duplicate keys and
  * integer spellings (`1e3`, `1.0`, `-0`) need no handling: `JSON.parse` already applied last-wins
- * and normalized the numbers before this runs (nk-core's map visitors mirror that, NK-ADR-012).
+ * and normalized the numbers before this runs (`nk`'s map visitors mirror that, NK-ADR-012).
  */
 function parseWireFilter(value: unknown, kind: string): Filter {
   if (!isRecord(value)) {

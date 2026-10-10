@@ -25,9 +25,9 @@
 
 mod common;
 
-use nk_core::{PublicKey, SecretKey};
-use nk_nips::ErrorKind;
-use nk_nips::nip44::{self, ConversationKey, MessageKeys};
+use nk::nips::ErrorKind;
+use nk::nips::nip44::{self, ConversationKey, MessageKeys};
+use nk::{PublicKey, SecretKey};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
@@ -261,7 +261,7 @@ fn official_invalid_get_conversation_key() {
     let vector: OfficialVectors = serde_json::from_str(OFFICIAL).expect("valid JSON");
     for (i, case) in vector.v2.invalid.get_conversation_key.iter().enumerate() {
         // A bad scalar fails at SecretKey construction; a bad x-only peer
-        // fails inside `ConversationKey::derive` (nk-core's PublicKey wraps
+        // fails inside `ConversationKey::derive` (`nk`'s PublicKey wraps
         // bytes without a curve check).
         let rejected = SecretKey::from_hex(&case.sec1).map_or(true, |secret| {
             PublicKey::from_hex(&case.pub2).map_or(true, |peer| {

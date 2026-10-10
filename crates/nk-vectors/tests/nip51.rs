@@ -23,12 +23,12 @@
 
 use std::string::ToString;
 
-use nk_core::{EventAddress, EventId, Keys, PublicKey, RelayUrl, SecretKey, Tag, Timestamp};
-use nk_nips::nip51::{
+use nk::nips::nip51::{
     MuteItem, bookmark_list, decrypt_private_tags, encrypt_private_tags_with_rng, mute_items,
     mute_list, parse_bookmark_list, parse_emoji_set, parse_favorite_relays, parse_follow_pack,
     parse_mute_list, parse_pin_list, parse_relay_set, parse_user_emoji_list, pin_list,
 };
+use nk::{EventAddress, EventId, Keys, PublicKey, RelayUrl, SecretKey, Tag, Timestamp};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -52,7 +52,7 @@ struct Codec {
 struct ParseCase {
     name: String,
     op: String,
-    event: nk_core::Event,
+    event: nk::Event,
     out: Option<Value>,
     err: Option<String>,
 }
@@ -170,7 +170,7 @@ fn keys(hex: &str) -> Keys {
     Keys::new(SecretKey::from_hex(hex).expect("vector secret key"))
 }
 
-fn tags_json(tags: &nk_core::Tags) -> Value {
+fn tags_json(tags: &nk::Tags) -> Value {
     serde_json::to_value(tags).expect("tags serialize")
 }
 
@@ -198,7 +198,7 @@ fn mute_items_json(items: &[MuteItem]) -> Vec<MuteItemJson> {
         .collect()
 }
 
-fn parse_op(case: &ParseCase) -> Option<nk_nips::Result<Value>> {
+fn parse_op(case: &ParseCase) -> Option<nk::nips::Result<Value>> {
     Some(match case.op.as_str() {
         "mute" => parse_mute_list(&case.event).map(|items| json!(mute_items_json(&items))),
         "pin" => parse_pin_list(&case.event)
@@ -350,7 +350,7 @@ fn parse_cases_match() {
             }
             (Err(error), _, Some(err)) => {
                 let kind = match err.as_str() {
-                    "EventValidationError" => nk_nips::ErrorKind::EventValidation,
+                    "EventValidationError" => nk::nips::ErrorKind::EventValidation,
                     other => panic!("parse {}: unknown error class {other}", case.name),
                 };
                 assert_eq!(error.kind(), kind, "parse {}", case.name);
@@ -394,7 +394,7 @@ fn encrypt_cases_match() {
             // `Tags` cannot carry the empty inner tag this case records.
             continue;
         }
-        let tags: nk_core::Tags = case
+        let tags: nk::Tags = case
             .tags
             .iter()
             .map(|items| Tag::new(items.iter().cloned()).expect("vector tag"))
@@ -415,7 +415,7 @@ fn decrypt_cases_match() {
         // deserialize so the event carries `pubkey` verbatim (foreign-author
         // cases declare a key the signer does not hold). id/sig need only be
         // well-formed hex.
-        let event: nk_core::Event = serde_json::from_value(json!({
+        let event: nk::Event = serde_json::from_value(json!({
             "id": "01".repeat(32),
             "pubkey": case.pubkey,
             "created_at": 0,
@@ -436,8 +436,8 @@ fn decrypt_cases_match() {
             }
             (Err(error), _, Some(err)) => {
                 let kind = match err.as_str() {
-                    "EventValidationError" => nk_nips::ErrorKind::EventValidation,
-                    "CryptoError" => nk_nips::ErrorKind::Crypto,
+                    "EventValidationError" => nk::nips::ErrorKind::EventValidation,
+                    "CryptoError" => nk::nips::ErrorKind::Crypto,
                     other => panic!("decrypt {}: unknown error class {other}", case.name),
                 };
                 assert_eq!(error.kind(), kind, "decrypt {}", case.name);

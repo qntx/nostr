@@ -24,8 +24,8 @@
 
 mod common;
 
-use nk_core::{EventId, Kind, PublicKey, Tag, Timestamp, UnsignedEvent};
-use nk_nips::nip13::{self, PowMiner};
+use nk::nips::nip13::{self, PowMiner};
+use nk::{EventId, Kind, PublicKey, Tag, Timestamp, UnsignedEvent};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(

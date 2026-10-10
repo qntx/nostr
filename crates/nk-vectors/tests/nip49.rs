@@ -20,9 +20,9 @@
 
 mod common;
 
-use nk_core::SecretKey;
-use nk_nips::ErrorKind;
-use nk_nips::nip49::{self, EncryptOptions, KeySecurity};
+use nk::SecretKey;
+use nk::nips::ErrorKind;
+use nk::nips::nip49::{self, EncryptOptions, KeySecurity};
 use serde::Deserialize;
 
 const OFFICIAL: &str = include_str!(concat!(

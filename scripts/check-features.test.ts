@@ -6,14 +6,14 @@ import { describe, expect, test } from "vite-plus/test";
 import { checkFeatures } from "./check-features.ts";
 import type { FeatureInputs } from "./check-features.ts";
 
-const NIPS_TOML = {
+const NK_TOML = {
   features: {
     default: ["std", "clock", "os-rng"],
-    std: ["nk-core/std"],
-    clock: ["std", "nk-core/clock"],
-    "os-rng": ["std", "nk-core/os-rng"],
+    std: ["serde/std"],
+    clock: ["std"],
+    "os-rng": ["std", "dep:getrandom"],
     nip04: ["dep:aes"],
-    nip13: ["dep:sha2"],
+    nip13: [],
   },
 };
 
@@ -22,7 +22,7 @@ const CI = `jobs:
     uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
     with:
       targets: wasm32-unknown-unknown
-      packages: nk-nips
+      packages: nk
       features: --no-default-features --features nip04,nip13
       forbid-deps: getrandom
 
@@ -30,7 +30,7 @@ const CI = `jobs:
     uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
     with:
       targets: aarch64-apple-ios
-      packages: nk-nips
+      packages: nk
       features: --features std,clock,os-rng,nip04,nip13
 
   other-job:
@@ -39,11 +39,11 @@ const CI = `jobs:
 
 const VECTORS = {
   "dev-dependencies": {
-    "nk-nips": { workspace: true, features: ["nip04", "nip13"] },
+    nk: { workspace: true, features: ["nip04", "nip13"] },
   },
 };
 
-const README = `# nk-nips
+const README = `# nk
 
 | feature  | default | effect |
 | -------- | ------- | ------ |
@@ -83,7 +83,7 @@ describe("check-features", () => {
   });
 
   test("consistent fixtures produce no errors", () => {
-    expect(checkFeatures(NIPS_TOML, INPUTS)).toStrictEqual([]);
+    expect(checkFeatures(NK_TOML, INPUTS)).toStrictEqual([]);
   });
 
   test("a missing CI feature is reported with the job and feature name", () => {
@@ -91,7 +91,7 @@ describe("check-features", () => {
       "--features nip04,nip13\n      forbid-deps",
       "--features nip04\n      forbid-deps",
     );
-    const errors = checkFeatures(NIPS_TOML, { ...INPUTS, ci });
+    const errors = checkFeatures(NK_TOML, { ...INPUTS, ci });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain('ci.yml: job "portable-nips"');
     expect(errors[0]).toContain('missing "nip13"');
@@ -100,10 +100,10 @@ describe("check-features", () => {
   test("an extra nk-vectors feature is reported", () => {
     const vectorsToml = {
       "dev-dependencies": {
-        "nk-nips": { workspace: true, features: ["nip04", "nip13", "nip99"] },
+        nk: { workspace: true, features: ["nip04", "nip13", "nip99"] },
       },
     };
-    const errors = checkFeatures(NIPS_TOML, { ...INPUTS, vectorsToml });
+    const errors = checkFeatures(NK_TOML, { ...INPUTS, vectorsToml });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("crates/nk-vectors/Cargo.toml");
     expect(errors[0]).toContain('extra "nip99"');
@@ -111,31 +111,31 @@ describe("check-features", () => {
 
   test("a missing README row is reported", () => {
     const readme = README.replace("| `nip13`  | no      | proof of work |\n", "");
-    const errors = checkFeatures(NIPS_TOML, { ...INPUTS, readme });
+    const errors = checkFeatures(NK_TOML, { ...INPUTS, readme });
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toContain("crates/nk-nips/README.md");
+    expect(errors[0]).toContain("crates/nk/README.md");
     expect(errors[0]).toContain("`nip13`");
   });
 
   test("a table row for a non-feature is reported", () => {
     const readme = `${README}| \`nip99\`  | no      | not a feature |\n`;
-    const errors = checkFeatures(NIPS_TOML, { ...INPUTS, readme });
+    const errors = checkFeatures(NK_TOML, { ...INPUTS, readme });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("`nip99`");
-    expect(errors[0]).toContain("not nk-nips [features] keys");
+    expect(errors[0]).toContain("not nk [features] keys");
   });
 
   test("a missing lib.rs doc-table row is reported", () => {
     const libRs = LIB_RS.replace("//! | `nip13`  | no      | proof of work |\n", "");
-    const errors = checkFeatures(NIPS_TOML, { ...INPUTS, libRs });
+    const errors = checkFeatures(NK_TOML, { ...INPUTS, libRs });
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toContain("crates/nk-nips/src/lib.rs");
+    expect(errors[0]).toContain("crates/nk/src/lib.rs");
     expect(errors[0]).toContain("`nip13`");
   });
 
   test("a duplicated table row is reported", () => {
     const readme = `${README}| \`nip04\`  | no      | duplicated |\n`;
-    const errors = checkFeatures(NIPS_TOML, { ...INPUTS, readme });
+    const errors = checkFeatures(NK_TOML, { ...INPUTS, readme });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("duplicate");
     expect(errors[0]).toContain("`nip04`");
@@ -143,7 +143,7 @@ describe("check-features", () => {
 
   test("a missing CI job is reported", () => {
     const ci = CI.replace("  portable-std-nips:", "  portable-std-nips-renamed:");
-    const errors = checkFeatures(NIPS_TOML, { ...INPUTS, ci });
+    const errors = checkFeatures(NK_TOML, { ...INPUTS, ci });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain('job "portable-std-nips" not found');
   });

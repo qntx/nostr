@@ -22,8 +22,8 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use nk_core::{Tag, Tags};
-use nk_nips::nip27::{ParseOptions, parse_content};
+use nk::nips::nip27::{ParseOptions, parse_content};
+use nk::{Tag, Tags};
 use serde::Deserialize;
 
 use common::blocks_json;
