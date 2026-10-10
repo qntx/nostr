@@ -1,5 +1,5 @@
-//! Keys: x-only public keys, secret scalars, and BIP-340 signing — the
-//! counterpart of `@qntx/nostr`'s `core/key.ts`.
+//! Keys: x-only public keys, secret scalars, and BIP-340 signing
+//! ([NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md)).
 //!
 //! Context management is delegated to `secp256k1`'s internal global-context
 //! machinery: a thread-local context under `std`, a self-contained
@@ -13,9 +13,39 @@ use core::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zeroize::Zeroize;
 
-use crate::error::{Error, ErrorKind, Result};
+use crate::detail::HexSource;
 use crate::event::{Event, EventId, Signature, UnsignedEvent};
 use crate::hex;
+
+/// The result type for this module.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+/// Why a key operation failed.
+#[allow(
+    variant_size_differences,
+    reason = "InvalidLength carries two counts; boxing a 23-byte error is not worth it"
+)]
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// A byte input was not the required length.
+    #[error("invalid length: expected {expected} bytes, got {found}")]
+    InvalidLength {
+        /// The required byte count.
+        expected: usize,
+        /// The actual byte count.
+        found: usize,
+    },
+    /// The input is not valid hexadecimal for the required width.
+    #[error("invalid hex input")]
+    InvalidHex(#[source] HexSource),
+    /// The bytes are not a valid secp256k1 secret scalar.
+    #[error("invalid secret key")]
+    InvalidSecretKey,
+    /// The unsigned event's author is not this signing key.
+    #[error("unsigned event public key does not match the signing key")]
+    PublicKeyMismatch,
+}
 
 /// An x-only public key (32 bytes).
 ///
@@ -35,11 +65,12 @@ impl PublicKey {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Hex`] when `bytes` is not exactly 32 bytes long.
+    /// [`Error::InvalidLength`] when `bytes` is not exactly 32 bytes long.
     pub fn from_slice(bytes: &[u8]) -> Result<Self> {
-        let array: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| Error::new(ErrorKind::Hex, "invalid public key length"))?;
+        let array: [u8; 32] = bytes.try_into().map_err(|_| Error::InvalidLength {
+            expected: 32,
+            found: bytes.len(),
+        })?;
         Ok(Self(array))
     }
 
@@ -48,9 +79,11 @@ impl PublicKey {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Hex`] when the input is not 64 hex characters.
+    /// [`Error::InvalidHex`] when the input is not 64 hex characters.
     pub fn from_hex(hex: &str) -> Result<Self> {
-        Ok(Self(hex::decode_caller(hex)?))
+        Ok(Self(
+            hex::decode_caller(hex).map_err(|e| Error::InvalidHex(HexSource(e)))?,
+        ))
     }
 
     /// The raw key bytes.
@@ -123,14 +156,14 @@ impl SecretKey {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Crypto`] when `bytes` is not a valid secret scalar.
+    /// [`Error::InvalidSecretKey`] when `bytes` is not a valid secret scalar.
     pub fn from_bytes(bytes: [u8; 32]) -> Result<Self> {
         secp256k1::SecretKey::from_secret_bytes(bytes)
             .map(Self)
             .map_err(|_| {
                 let mut bytes = bytes;
                 bytes.zeroize();
-                Error::new(ErrorKind::Crypto, "invalid secret key")
+                Error::InvalidSecretKey
             })
     }
 
@@ -138,13 +171,15 @@ impl SecretKey {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Hex`] when `bytes` is not exactly 32 bytes long (TS
-    /// `assertByteLength` throws `HexError`); [`ErrorKind::Crypto`] when it is
-    /// not a valid secret scalar.
+    /// [`Error::InvalidLength`] when `bytes` is not exactly 32 bytes long;
+    /// [`Error::InvalidSecretKey`] when it is not a valid secret scalar.
     pub fn from_slice(bytes: &[u8]) -> Result<Self> {
         let mut array = [0u8; 32];
         if bytes.len() != array.len() {
-            return Err(Error::new(ErrorKind::Hex, "invalid secret key length"));
+            return Err(Error::InvalidLength {
+                expected: 32,
+                found: bytes.len(),
+            });
         }
         array.copy_from_slice(bytes);
         Self::from_bytes(array)
@@ -155,10 +190,10 @@ impl SecretKey {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Hex`] when the input is not 64 hex characters;
-    /// [`ErrorKind::Crypto`] when it is not a valid secret scalar.
+    /// [`Error::InvalidHex`] when the input is not 64 hex characters;
+    /// [`Error::InvalidSecretKey`] when it is not a valid secret scalar.
     pub fn from_hex(hex: &str) -> Result<Self> {
-        Self::from_bytes(hex::decode_caller(hex)?)
+        Self::from_bytes(hex::decode_caller(hex).map_err(|e| Error::InvalidHex(HexSource(e)))?)
     }
 
     /// Draws 32-byte candidates from `rng` until one is a valid scalar.
@@ -298,7 +333,7 @@ impl Keys {
     }
 
     /// BIP-340-signs the 32-byte `id` with `aux` as the auxiliary randomness
-    /// (TS `schnorr.sign(id, secret, aux)`).
+    /// (BIP-340 `aux_rand`).
     #[must_use]
     pub fn sign_id_with_aux(&self, id: &EventId, aux: &[u8; 32]) -> Signature {
         let mut keypair = self.secret.keypair();
@@ -311,14 +346,11 @@ impl Keys {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Crypto`] when `unsigned`'s pubkey differs from this key's
-    /// public key (TS `signEvent` throws `CryptoError`).
+    /// [`Error::PublicKeyMismatch`] when `unsigned`'s pubkey differs from
+    /// this key's public key.
     pub fn sign_event_with_aux(&self, unsigned: UnsignedEvent, aux: &[u8; 32]) -> Result<Event> {
         if unsigned.pubkey() != self.public {
-            return Err(Error::new(
-                ErrorKind::Crypto,
-                "unsigned event pubkey does not match the signing key",
-            ));
+            return Err(Error::PublicKeyMismatch);
         }
         let id = unsigned.id();
         let signature = self.sign_id_with_aux(&id, aux);
@@ -329,8 +361,8 @@ impl Keys {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Crypto`] when `unsigned`'s pubkey differs from this key's
-    /// public key.
+    /// [`Error::PublicKeyMismatch`] when `unsigned`'s pubkey differs from
+    /// this key's public key.
     pub fn sign_event_with_rng<R>(&self, unsigned: UnsignedEvent, rng: &mut R) -> Result<Event>
     where
         R: rand_core::CryptoRng + ?Sized,
@@ -347,8 +379,8 @@ impl Keys {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Crypto`] when `unsigned`'s pubkey differs from this key's
-    /// public key.
+    /// [`Error::PublicKeyMismatch`] when `unsigned`'s pubkey differs from
+    /// this key's public key.
     ///
     /// # Panics
     ///
@@ -505,26 +537,30 @@ mod tests {
     fn secret_key_rejects_out_of_range_scalars() {
         for bytes in [[0u8; 32], [0xff; 32]] {
             let error = SecretKey::from_bytes(bytes).unwrap_err();
-            assert_eq!(error.kind(), ErrorKind::Crypto);
+            assert!(matches!(error, Error::InvalidSecretKey));
         }
     }
 
     #[test]
     fn secret_key_from_slice_checks_length() {
-        // Wrong length: `Hex` (TS `assertByteLength` -> `HexError`).
-        assert_eq!(
-            SecretKey::from_slice(&[1u8; 31]).unwrap_err().kind(),
-            ErrorKind::Hex
-        );
-        assert_eq!(
-            SecretKey::from_slice(&[1u8; 33]).unwrap_err().kind(),
-            ErrorKind::Hex
-        );
-        // Right length, invalid scalar: `Crypto`.
-        assert_eq!(
-            SecretKey::from_slice(&[0xff; 32]).unwrap_err().kind(),
-            ErrorKind::Crypto
-        );
+        assert!(matches!(
+            SecretKey::from_slice(&[1u8; 31]).unwrap_err(),
+            Error::InvalidLength {
+                expected: 32,
+                found: 31
+            }
+        ));
+        assert!(matches!(
+            SecretKey::from_slice(&[1u8; 33]).unwrap_err(),
+            Error::InvalidLength {
+                expected: 32,
+                found: 33
+            }
+        ));
+        assert!(matches!(
+            SecretKey::from_slice(&[0xff; 32]).unwrap_err(),
+            Error::InvalidSecretKey
+        ));
         SecretKey::from_slice(&[1u8; 32]).unwrap();
     }
 
@@ -536,14 +572,14 @@ mod tests {
 
     #[test]
     fn secret_key_from_hex_reports_hex_errors() {
-        assert_eq!(
-            SecretKey::from_hex("zz").unwrap_err().kind(),
-            ErrorKind::Hex
-        );
-        assert_eq!(
-            SecretKey::from_hex(&"00".repeat(32)).unwrap_err().kind(),
-            ErrorKind::Crypto
-        );
+        assert!(matches!(
+            SecretKey::from_hex("zz").unwrap_err(),
+            Error::InvalidHex(_)
+        ));
+        assert!(matches!(
+            SecretKey::from_hex(&"00".repeat(32)).unwrap_err(),
+            Error::InvalidSecretKey
+        ));
     }
 
     #[test]
@@ -603,7 +639,7 @@ mod tests {
             "gm",
         );
         let error = keys.sign_event_with_aux(unsigned, &[0u8; 32]).unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::Crypto);
+        assert!(matches!(error, Error::PublicKeyMismatch));
     }
 
     #[test]

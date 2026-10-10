@@ -1,5 +1,5 @@
-//! NIP-01 tags, tag collections, and `kind:pubkey:identifier` event
-//! addresses — the counterpart of `@qntx/nostr`'s `core/tag.ts`.
+//! [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md) tags,
+//! tag collections, and `kind:pubkey:identifier` event addresses.
 
 use alloc::string::String;
 use alloc::vec;
@@ -9,11 +9,25 @@ use core::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::error::{Error, ErrorKind, Result};
 use crate::event::EventId;
 use crate::key::PublicKey;
 use crate::kind::Kind;
 use crate::url::RelayUrl;
+
+/// The result type for this module.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+/// Why a tag operation failed.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// A tag must contain at least its name element.
+    #[error("tag must not be empty")]
+    Empty,
+    /// The text is not a `kind:pubkey:identifier` coordinate.
+    #[error("invalid event address")]
+    InvalidEventAddress,
+}
 
 /// Pushes positional tag values: absent slots before a present one emit `""`,
 /// trailing absent slots are omitted (NIP-10 `e` and NIP-02 `p` layout).
@@ -39,7 +53,7 @@ impl Tag {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::EventValidation`] when `items` is empty.
+    /// [`Error::Empty`] when `items` is empty.
     pub fn new<I, S>(items: I) -> Result<Self>
     where
         I: IntoIterator<Item = S>,
@@ -47,10 +61,7 @@ impl Tag {
     {
         let items: Vec<String> = items.into_iter().map(Into::into).collect();
         if items.is_empty() {
-            return Err(Error::new(
-                ErrorKind::EventValidation,
-                "tag must not be empty",
-            ));
+            return Err(Error::Empty);
         }
         Ok(Self(items))
     }
@@ -218,7 +229,7 @@ impl Tags {
     }
 
     /// First value of a tag with `name`, skipping same-name tags without a
-    /// value, or `None` when none carries one (TS `firstTagValue`).
+    /// value, or `None` when none carries one.
     #[must_use]
     pub fn first_value(&self, name: &str) -> Option<&str> {
         self.0.iter().find_map(|tag| {
@@ -230,13 +241,14 @@ impl Tags {
         })
     }
 
-    /// The first `d` tag value (TS `getDTag`).
+    /// The first `d` tag value.
     #[must_use]
     pub fn identifier(&self) -> Option<&str> {
         self.first_value("d")
     }
 
-    /// Values of `p` tags that are valid public keys, in order.
+    /// Values of `p` tags that are valid public keys, in order; malformed
+    /// values are skipped.
     pub fn public_keys(&self) -> impl Iterator<Item = PublicKey> + '_ {
         self.0
             .iter()
@@ -245,7 +257,8 @@ impl Tags {
             .filter_map(|value| PublicKey::from_hex(value).ok())
     }
 
-    /// Values of `e` tags that are valid event ids, in order.
+    /// Values of `e` tags that are valid event ids, in order; malformed
+    /// values are skipped.
     pub fn event_ids(&self) -> impl Iterator<Item = EventId> + '_ {
         self.0
             .iter()
@@ -347,11 +360,15 @@ impl EventAddress {
 impl FromStr for EventAddress {
     type Err = Error;
 
-    /// TS `parseEventAddress`: `kind` is 1–5 digits and ≤ 65535, `pubkey` is
-    /// 32 bytes of hex (any case, normalized to lowercase), and `identifier`
-    /// may be empty or contain further colons.
+    /// `kind` is 1–5 digits and ≤ 65535, `pubkey` is 32 bytes of hex (any
+    /// case, normalized to lowercase), and `identifier` may be empty or
+    /// contain further colons.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidEventAddress`] on any other shape.
     fn from_str(value: &str) -> Result<Self> {
-        let invalid = || Error::new(ErrorKind::EventValidation, "invalid event address");
+        let invalid = || Error::InvalidEventAddress;
         let (kind_text, rest) = value.split_once(':').ok_or_else(invalid)?;
         if kind_text.is_empty()
             || kind_text.len() > 5
@@ -367,7 +384,7 @@ impl FromStr for EventAddress {
 }
 
 impl fmt::Display for EventAddress {
-    /// TS `formatEventAddress`: `kind:pubkey:identifier`, pubkey lowercase.
+    /// `kind:pubkey:identifier`, pubkey lowercase.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}:{}", self.kind, self.pubkey, self.identifier)
     }
@@ -445,10 +462,10 @@ mod tests {
 
     #[test]
     fn new_rejects_empty() {
-        assert_eq!(
-            Tag::new(Vec::<String>::new()).unwrap_err().kind(),
-            ErrorKind::EventValidation
-        );
+        assert!(matches!(
+            Tag::new(Vec::<String>::new()).unwrap_err(),
+            Error::Empty
+        ));
     }
 
     #[test]

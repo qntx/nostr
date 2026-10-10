@@ -1,19 +1,19 @@
 //! Wire JSON deserialization helpers shared by the event and filter map
-//! visitors (NK-ADR-012 rulings 7–9).
+//! visitors.
 //!
-//! Ruling 7 gives duplicate keys `JSON.parse` semantics: the *last* value
-//! wins, even when an earlier duplicate would fail typed validation. That
-//! rules out deserializing fields eagerly — an early error aborts the map.
-//! Instead each known field reads through a lenient [`Captured`] wrapper:
-//! it accepts any JSON value, converts the wanted shape, and records
-//! `Invalid(reason)` for everything else, so a later duplicate simply
-//! overwrites it. Unknown keys drain through `IgnoredAny`; no `Value` tree
-//! is built and nothing here depends on `serde_json`.
+//! Duplicate keys keep the *last* value, even when an earlier duplicate
+//! would fail typed validation. That rules out deserializing fields
+//! eagerly — an early error aborts the map. Instead each known field reads
+//! through a lenient [`Captured`] wrapper: it accepts any JSON value,
+//! converts the wanted shape, and records `Invalid(reason)` for everything
+//! else, so a later duplicate simply overwrites it. Unknown keys drain
+//! through `IgnoredAny`; no `Value` tree is built and nothing here depends
+//! on `serde_json`.
 //!
-//! Rulings 8–9: a JSON number counts as an integer whenever its *value* is
-//! integral — `u64`, a non-negative `i64` (including `-0`), or an `f64`
-//! that round-trips exactly — bounded by `Number.MAX_SAFE_INTEGER`. Above
-//! that bound TS has already lost precision after `JSON.parse`.
+//! A JSON number counts as an integer whenever its *value* is integral —
+//! `u64`, a non-negative `i64` (including `-0`), or an `f64` that
+//! round-trips exactly — bounded by `MAX_SAFE_INTEGER`; wire numbers beyond
+//! it cannot be represented exactly.
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -30,7 +30,7 @@ pub(crate) const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
 /// The outcome of leniently reading one wire field: converted content, or a
 /// reason the value was unusable — which surfaces only when no later
-/// duplicate replaces the slot (NK-ADR-012 ruling 7).
+/// duplicate replaces the slot.
 #[derive(Debug)]
 pub(crate) enum Captured<T> {
     Valid(T),

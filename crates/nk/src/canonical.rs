@@ -1,10 +1,10 @@
-//! The canonical JSON writer shared by event hashing and filter
+//! The canonical JSON writer shared by event hashing and wire
 //! serialization.
 //!
-//! Escapes exactly like `JSON.stringify` (`\"`, `\\`, the `\b \f \n \r \t`
-//! short forms, every other U+0000–U+001F as lowercase `\u00xx`, everything
-//! else as raw UTF-8) and writes into either a `String` or the SHA-256 hasher
-//! with no intermediate buffer — `serde_json` cannot do this under `no_std`.
+//! Escapes `"` and `\`, uses the `\b \f \n \r \t` short forms, writes every
+//! other U+0000–U+001F as lowercase `\u00xx`, and leaves everything else as
+//! raw UTF-8. It writes into either a `String` or the SHA-256 hasher with no
+//! intermediate buffer — `serde_json` cannot do this under `no_std`.
 
 use alloc::string::String;
 
@@ -83,7 +83,7 @@ fn push_control_escape(c: char, out: &mut impl Sink) {
     }
 }
 
-/// Writes `s` as a JSON string with `JSON.stringify` escaping, flushing
+/// Writes `s` as a JSON string with the canonical escaping rules, flushing
 /// maximal unescaped runs as single slices.
 pub(crate) fn push_json_string(s: &str, out: &mut impl Sink) {
     out.push_char('"');
@@ -148,9 +148,25 @@ pub(crate) fn write_event(event: &UnsignedEvent, out: &mut impl Sink) {
     out.push_char(']');
 }
 
-/// Writes the signed event wire object — `JSON.stringify(event)` in
-/// field order `id`, `pubkey`, `created_at`, `kind`, `tags`,
-/// `content`, `sig` (NIP-18 repost content; wire encoding).
+/// Writes the unsigned event wire object in field order `pubkey`,
+/// `created_at`, `kind`, `tags`, `content`.
+pub(crate) fn write_unsigned(event: &UnsignedEvent, out: &mut impl Sink) {
+    out.push_str("{\"pubkey\":\"");
+    push_hex(event.pubkey().as_bytes(), out);
+    out.push_str("\",\"created_at\":");
+    push_u64(event.created_at().as_secs(), out);
+    out.push_str(",\"kind\":");
+    push_u64(u64::from(event.kind().as_u16()), out);
+    out.push_str(",\"tags\":");
+    push_tags(event.tags(), out);
+    out.push_str(",\"content\":");
+    push_json_string(event.content(), out);
+    out.push_char('}');
+}
+
+/// Writes the signed event wire object in field order `id`, `pubkey`,
+/// `created_at`, `kind`, `tags`, `content`, `sig` — the string that ends up
+/// inside NIP-18 repost content.
 pub(crate) fn write_signed(event: &Event, out: &mut impl Sink) {
     out.push_str("{\"id\":\"");
     push_hex(event.id().as_bytes(), out);

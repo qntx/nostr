@@ -1,6 +1,6 @@
-//! The NIP-01 event model: event ids, signatures, unsigned and signed events,
-//! and the canonical serialization used for hashing — the counterpart of
-//! `@qntx/nostr`'s `core/event.ts`.
+//! [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md) —
+//! the event model: event ids, signatures, unsigned and signed events, and
+//! the canonical serialization used for hashing.
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -13,13 +13,46 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::canonical;
-use crate::error::{Error, ErrorKind, Result};
+use crate::detail::{HexSource, JsonSource};
 use crate::hex;
 use crate::json::{self, Captured, MAX_SAFE_INTEGER, WireCow, WireInt, WireStr, WireTags};
 use crate::key::PublicKey;
 use crate::kind::Kind;
 use crate::tag::{EventAddress, Tags};
 use crate::time::Timestamp;
+
+/// The result type for this module.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+/// Why an event operation failed.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// A byte input was not the required length.
+    #[error("invalid length: expected {expected} bytes, got {found}")]
+    InvalidLength {
+        /// The required byte count.
+        expected: usize,
+        /// The actual byte count.
+        found: usize,
+    },
+    /// The input is not valid hexadecimal for the required width.
+    #[error("invalid hex input")]
+    InvalidHex(#[source] HexSource),
+    /// The wire JSON is malformed or fails a NIP-01 shape rule; the source
+    /// message names the offending field.
+    #[error("invalid JSON")]
+    InvalidJson(#[source] JsonSource),
+    /// The stored id does not match the recomputed hash of the contents.
+    #[error("event id does not match the event contents")]
+    IdMismatch,
+    /// The BIP-340 signature does not verify.
+    #[error("invalid signature")]
+    InvalidSignature,
+    /// The author public key is not a valid curve point.
+    #[error("invalid public key")]
+    InvalidPublicKey,
+}
 
 /// An event id: the SHA-256 digest of the canonical serialization (32 bytes).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -36,11 +69,12 @@ impl EventId {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Hex`] when `bytes` is not exactly 32 bytes long.
+    /// [`Error::InvalidLength`] when `bytes` is not exactly 32 bytes long.
     pub fn from_slice(bytes: &[u8]) -> Result<Self> {
-        let array: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| Error::new(ErrorKind::Hex, "invalid event id length"))?;
+        let array: [u8; 32] = bytes.try_into().map_err(|_| Error::InvalidLength {
+            expected: 32,
+            found: bytes.len(),
+        })?;
         Ok(Self(array))
     }
 
@@ -48,9 +82,11 @@ impl EventId {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Hex`] when the input is not 64 hex characters.
+    /// [`Error::InvalidHex`] when the input is not 64 hex characters.
     pub fn from_hex(hex: &str) -> Result<Self> {
-        Ok(Self(hex::decode_caller(hex)?))
+        Ok(Self(
+            hex::decode_caller(hex).map_err(|e| Error::InvalidHex(HexSource(e)))?,
+        ))
     }
 
     /// SHA-256 of `canonical` — used by nk-wasm's `verify_serialized`.
@@ -122,11 +158,12 @@ impl Signature {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Hex`] when `bytes` is not exactly 64 bytes long.
+    /// [`Error::InvalidLength`] when `bytes` is not exactly 64 bytes long.
     pub fn from_slice(bytes: &[u8]) -> Result<Self> {
-        let array: [u8; 64] = bytes
-            .try_into()
-            .map_err(|_| Error::new(ErrorKind::Hex, "invalid signature length"))?;
+        let array: [u8; 64] = bytes.try_into().map_err(|_| Error::InvalidLength {
+            expected: 64,
+            found: bytes.len(),
+        })?;
         Ok(Self(array))
     }
 
@@ -134,9 +171,11 @@ impl Signature {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Hex`] when the input is not 128 hex characters.
+    /// [`Error::InvalidHex`] when the input is not 128 hex characters.
     pub fn from_hex(hex: &str) -> Result<Self> {
-        Ok(Self(hex::decode_caller(hex)?))
+        Ok(Self(
+            hex::decode_caller(hex).map_err(|e| Error::InvalidHex(HexSource(e)))?,
+        ))
     }
 
     /// The raw signature bytes.
@@ -151,22 +190,21 @@ impl Signature {
         hex::encode(&self.0)
     }
 
-    /// BIP-340 verification of this signature over `id` for `pubkey`
-    /// (TS `verifyEvent`'s crypto step).
+    /// BIP-340 verification of this signature over `id` for `pubkey`.
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Crypto`] when `pubkey` is not a valid curve point or the
-    /// signature does not verify.
+    /// [`Error::InvalidPublicKey`] when `pubkey` is not a valid curve point;
+    /// [`Error::InvalidSignature`] when the signature does not verify.
     pub fn verify(&self, id: &EventId, pubkey: &PublicKey) -> Result<()> {
         // `secp256k1::Error` is not `core::error::Error` without its `std`
-        // feature, so crypto failures carry only a kind and a fixed message —
-        // the upstream variant adds no detail callers can act on.
+        // feature, so crypto failures carry no source — the upstream variant
+        // adds no detail callers can act on.
         let pubkey = secp256k1::XOnlyPublicKey::from_byte_array(*pubkey.as_bytes())
-            .map_err(|_| Error::new(ErrorKind::Crypto, "invalid public key"))?;
+            .map_err(|_| Error::InvalidPublicKey)?;
         let signature = secp256k1::schnorr::Signature::from_byte_array(self.0);
         secp256k1::schnorr::verify(&signature, id.as_bytes(), &pubkey)
-            .map_err(|_| Error::new(ErrorKind::Crypto, "invalid signature"))
+            .map_err(|_| Error::InvalidSignature)
     }
 }
 
@@ -268,12 +306,31 @@ impl UnsignedEvent {
     }
 
     /// The canonical NIP-01 serialization `[0,pubkey,created_at,kind,tags,content]`
-    /// — byte-for-byte `JSON.stringify` on the wire array.
+    /// — the byte-exact input of the id hash.
     #[must_use]
     pub fn canonical_json(&self) -> String {
         let mut out = String::new();
         canonical::write_event(self, &mut out);
         out
+    }
+
+    /// The wire JSON object: `pubkey`, `created_at`, `kind`, `tags`,
+    /// `content` in canonical field order and escaping.
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        let mut out = String::new();
+        canonical::write_unsigned(self, &mut out);
+        out
+    }
+
+    /// Parses the wire JSON object.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidJson`] on any malformed input; the source message
+    /// names the offending field.
+    pub fn from_json(json: &str) -> Result<Self> {
+        serde_json::from_str(json).map_err(|e| Error::InvalidJson(JsonSource(e)))
     }
 
     /// The event id: SHA-256 over the canonical serialization, written
@@ -309,8 +366,8 @@ impl Serialize for UnsignedEvent {
 }
 
 /// Captured wire fields shared by the `Event` and `UnsignedEvent`
-/// visitors; a later duplicate key overwrites the earlier capture
-/// (`JSON.parse` semantics, NK-ADR-012 ruling 7).
+/// visitors; a later duplicate key overwrites the earlier capture, even
+/// when the earlier value was malformed.
 #[derive(Default)]
 struct EventFields<'de> {
     id: Option<Captured<Cow<'de, str>>>,
@@ -378,11 +435,11 @@ fn hex_field<const N: usize, T, E: DeError>(
 }
 
 impl<'de> Deserialize<'de> for UnsignedEvent {
-    /// Strictness matches TS `validateEvent`: `pubkey` is 64-char lowercase
-    /// hex, `created_at` a non-negative safe integer, `kind` an integer in
+    /// NIP-01 shape rules: `pubkey` is 64-char lowercase hex, `created_at`
+    /// a non-negative integer below `2^53`, `kind` an integer in
     /// `0..=65535`, `content` a string, `tags` an array of non-empty string
-    /// arrays; unknown fields are ignored and a duplicate key takes the last
-    /// value (NK-ADR-012 ruling 7), matching `JSON.parse`.
+    /// arrays; unknown fields are ignored and a duplicate key takes the
+    /// last value — even when an earlier duplicate was malformed.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct UnsignedVisitor;
 
@@ -474,8 +531,9 @@ impl Event {
         self.sig
     }
 
-    /// The `kind:pubkey:d` coordinate for replaceable and addressable events
-    /// (TS `eventAddress`); `None` for regular and ephemeral kinds.
+    /// The `kind:pubkey:d` coordinate for replaceable and addressable
+    /// events; `None` for regular and ephemeral kinds. An addressable event
+    /// without a `d` tag takes the empty identifier.
     #[must_use]
     pub fn address(&self) -> Option<EventAddress> {
         if self.kind.is_addressable() {
@@ -491,9 +549,8 @@ impl Event {
         }
     }
 
-    /// Whether this is the signed form of `unsigned` (TS
-    /// `signedMatchesUnsigned`): `kind`, `content`, `created_at`, `tags`, and
-    /// `pubkey` all equal.
+    /// Whether this is the signed form of `unsigned`: `kind`, `content`,
+    /// `created_at`, `tags`, and `pubkey` all equal.
     #[must_use]
     pub fn matches_unsigned(&self, unsigned: &UnsignedEvent) -> bool {
         self.kind == unsigned.kind
@@ -503,8 +560,8 @@ impl Event {
             && self.pubkey == unsigned.pubkey
     }
 
-    /// NIP-01 replaceable/addressable winner (TS `isReplaceableWinner`):
-    /// higher `created_at`, or equal timestamp and lexicographically lower id.
+    /// NIP-01 replaceable/addressable winner: higher `created_at`, or equal
+    /// timestamp and lexicographically lower id.
     #[must_use]
     pub fn supersedes(&self, other: &Self) -> bool {
         if self.created_at != other.created_at {
@@ -540,14 +597,14 @@ impl Event {
     }
 
     /// Full NIP-01 verification: recomputes the id from the canonical
-    /// serialization, then BIP-340-verifies `sig` over it (TS `verifyEvent`,
-    /// which returns a boolean — the failing stage is reported here instead).
+    /// serialization, then BIP-340-verifies `sig` over it.
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::EventValidation`] when the stored id does not match the
-    /// recomputed id; [`ErrorKind::Crypto`] when the public key is not on the
-    /// curve or the signature is invalid.
+    /// [`Error::IdMismatch`] when the stored id does not match the
+    /// recomputed id; [`Error::InvalidPublicKey`] when the public key is not
+    /// on the curve; [`Error::InvalidSignature`] when the signature is
+    /// invalid.
     pub fn verify(&self) -> Result<()> {
         let computed = UnsignedEvent::new(
             self.pubkey,
@@ -558,12 +615,46 @@ impl Event {
         )
         .id();
         if computed != self.id {
-            return Err(Error::new(
-                ErrorKind::EventValidation,
-                "event id does not match the event contents",
-            ));
+            return Err(Error::IdMismatch);
         }
         self.sig.verify(&self.id, &self.pubkey)
+    }
+
+    /// The wire JSON object: `id`, `pubkey`, `created_at`, `kind`, `tags`,
+    /// `content`, `sig` in canonical field order and escaping.
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        let mut out = String::new();
+        canonical::write_signed(self, &mut out);
+        out
+    }
+
+    /// Parses the wire JSON object.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidJson`] on any malformed input; the source message
+    /// names the offending field.
+    pub fn from_json(json: &str) -> Result<Self> {
+        serde_json::from_str(json).map_err(|e| Error::InvalidJson(JsonSource(e)))
+    }
+
+    /// NIP-01 newest-first order: `created_at` descending, `id` ascending
+    /// as the tie-break. Usable as `sort_by(Event::cmp_newest_first)`.
+    #[must_use]
+    pub fn cmp_newest_first(a: &Self, b: &Self) -> Ordering {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| a.id.cmp(&b.id))
+    }
+
+    /// Negentropy item order: `created_at` ascending, `id` ascending as the
+    /// tie-break — the same id direction as [`Self::cmp_newest_first`].
+    #[must_use]
+    pub fn cmp_oldest_first(a: &Self, b: &Self) -> Ordering {
+        a.created_at
+            .cmp(&b.created_at)
+            .then_with(|| a.id.cmp(&b.id))
     }
 }
 
@@ -595,8 +686,8 @@ impl Serialize for Event {
 }
 
 impl<'de> Deserialize<'de> for Event {
-    /// Strictness matches TS `validateSignedEvent`: [`UnsignedEvent`] rules
-    /// plus `id` and `sig` as exact-length lowercase hex.
+    /// The [`UnsignedEvent`] rules plus `id` and `sig` as exact-length
+    /// lowercase hex.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct EventVisitor;
 
@@ -631,25 +722,6 @@ impl<'de> Deserialize<'de> for Event {
 
         deserializer.deserialize_map(EventVisitor)
     }
-}
-
-/// NIP-01 newest-first order (TS `compareEventsDesc`/`sortEvents`):
-/// `created_at` descending, `id` ascending as the tie-break.
-#[must_use]
-pub fn cmp_newest_first(a: &Event, b: &Event) -> Ordering {
-    b.created_at
-        .cmp(&a.created_at)
-        .then_with(|| a.id.cmp(&b.id))
-}
-
-/// Negentropy item order (TS `itemCompare`): `created_at` ascending, `id`
-/// ascending as the tie-break — the same id direction as
-/// [`cmp_newest_first`].
-#[must_use]
-pub fn cmp_oldest_first(a: &Event, b: &Event) -> Ordering {
-    a.created_at
-        .cmp(&b.created_at)
-        .then_with(|| a.id.cmp(&b.id))
 }
 
 #[cfg(test)]
@@ -804,8 +876,8 @@ mod tests {
             "bb".repeat(32),
             "cd".repeat(64),
         ));
-        assert_eq!(cmp_newest_first(&a, &b), Ordering::Less);
-        assert_eq!(cmp_oldest_first(&a, &b), Ordering::Greater);
+        assert_eq!(Event::cmp_newest_first(&a, &b), Ordering::Less);
+        assert_eq!(Event::cmp_oldest_first(&a, &b), Ordering::Greater);
         assert!(a.supersedes(&b));
         assert!(!b.supersedes(&a));
         // Equal timestamps: lexicographically lower id wins.
@@ -858,10 +930,7 @@ mod tests {
             .unwrap()
             .insert("content".into(), "tampered".into());
         let event: Event = serde_json::from_value(value).unwrap();
-        assert_eq!(
-            event.verify().unwrap_err().kind(),
-            ErrorKind::EventValidation
-        );
+        assert!(matches!(event.verify().unwrap_err(), Error::IdMismatch));
     }
 
     #[test]
@@ -872,45 +941,43 @@ mod tests {
             .unwrap()
             .insert("sig".into(), "ff".repeat(64).into());
         let event: Event = serde_json::from_value(value).unwrap();
-        assert_eq!(event.verify().unwrap_err().kind(), ErrorKind::Crypto);
+        assert!(matches!(
+            event.verify().unwrap_err(),
+            Error::InvalidSignature
+        ));
     }
 
     #[test]
     fn signature_verify_rejects_an_off_curve_pubkey() {
         let event = valid_event();
         let off_curve = PublicKey::from_bytes([0xff; 32]);
-        assert_eq!(
-            event
-                .sig()
-                .verify(&event.id(), &off_curve)
-                .unwrap_err()
-                .kind(),
-            ErrorKind::Crypto
-        );
+        assert!(matches!(
+            event.sig().verify(&event.id(), &off_curve).unwrap_err(),
+            Error::InvalidPublicKey
+        ));
     }
 
     #[test]
     fn signature_verify_rejects_a_wrong_message() {
         let event = valid_event();
         let other_id = EventId::from_bytes([0u8; 32]);
-        assert_eq!(
-            event
-                .sig()
-                .verify(&other_id, &event.pubkey())
-                .unwrap_err()
-                .kind(),
-            ErrorKind::Crypto
-        );
+        assert!(matches!(
+            event.sig().verify(&other_id, &event.pubkey()).unwrap_err(),
+            Error::InvalidSignature
+        ));
     }
 
     #[test]
     fn event_id_glue() {
         let id = EventId::from_bytes([0xab; 32]);
         assert_eq!(EventId::from_slice(id.as_bytes()).unwrap(), id);
-        assert_eq!(
-            EventId::from_slice(&[0u8; 31]).unwrap_err().kind(),
-            ErrorKind::Hex
-        );
+        assert!(matches!(
+            EventId::from_slice(&[0u8; 31]).unwrap_err(),
+            Error::InvalidLength {
+                expected: 32,
+                found: 31
+            }
+        ));
         assert_eq!(id.to_string(), "ab".repeat(32));
         assert_eq!(
             alloc::format!("{id:?}"),
@@ -930,10 +997,13 @@ mod tests {
     fn signature_glue_and_wire_rejects() {
         let sig = Signature::from_bytes([0xcd; 64]);
         assert_eq!(Signature::from_slice(sig.as_bytes()).unwrap(), sig);
-        assert_eq!(
-            Signature::from_slice(&[0u8; 63]).unwrap_err().kind(),
-            ErrorKind::Hex
-        );
+        assert!(matches!(
+            Signature::from_slice(&[0u8; 63]).unwrap_err(),
+            Error::InvalidLength {
+                expected: 64,
+                found: 63
+            }
+        ));
         assert_eq!(sig.to_string(), "cd".repeat(64));
         assert_eq!(
             alloc::format!("{sig:?}"),
