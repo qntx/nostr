@@ -30,6 +30,7 @@ let entity = nip19::decode(&nsec)?;
 | `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Request`/`Response`)                   | `serde`, `serde_json`, `url`                                                        |
 | `nip49`  | no      | `ncryptsec` secret-key encryption (`encrypt_with`/`encrypt`/`decrypt`); needs `nip19`                   | `chacha20poly1305`, `rand_core`, `scrypt`, `unicode-normalization`, `zeroize`       |
 | `nip51`  | no      | lists (`parse_mute_list`, `mute_list`, `pin_list`, `bookmark_list`, NIP-44 private tags); needs `nip44` | `serde_json`                                                                        |
+| `nip57`  | no      | Lightning zaps (`ZapTarget`, `zap_request`, `parse_bolt11`, `validate_zap_receipt`)                     | `bech32`, `serde_json`, `sha2`                                                      |
 | `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`                                 | `rand_core`, `serde_json`                                                           |
 | `nip65`  | no      | relay lists (`parse_relay_list`, `relay_list`, `read_relays`/`write_relays`)                            | —                                                                                   |
 | `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)                                | `base64ct`, `serde_json`, `sha2`                                                    |

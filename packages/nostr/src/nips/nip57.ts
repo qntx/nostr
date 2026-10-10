@@ -270,7 +270,12 @@ export function parseBolt11(pr: string): Bolt11Fields | undefined {
       if (type === BOLT11_TAG_EXPIRY) {
         if (!sawExpiry) {
           sawExpiry = true;
-          fields.expiry = wordsToInt(data);
+          // An `x` beyond 2^53-1 would lose precision as a JS number —
+          // ignore the field and keep the 3600s default (N8).
+          const expiry = wordsToInt(data);
+          if (Number.isSafeInteger(expiry)) {
+            fields.expiry = expiry;
+          }
         }
         continue;
       }
