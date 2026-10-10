@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
+import { markVerified } from "../src/core/event.ts";
 import { itemCompare } from "../src/core/index.ts";
 import {
   CryptoError,
@@ -10,6 +11,8 @@ import {
   MemoryEventStore,
   StorageError,
 } from "../src/index.ts";
+import type { Event } from "../src/index.ts";
+import { MAX_MERGE_CURSORS } from "../src/storage/idb-query.ts";
 import { IDB_VERSION } from "../src/storage/idb-schema.ts";
 import { installIdbMock, seedIdbV1, seedIdbV2, seedIdbV3 } from "./helpers/idb-mock.ts";
 import type { IdbMock } from "./helpers/idb-mock.ts";
@@ -1308,21 +1311,34 @@ describe("scanFilter merge cursor cap (issue #134)", () => {
     mock.uninstall();
   });
 
-  test("100 authors × 1 kind falls back to wide cursors with identical results", async () => {
-    const authors = Array.from({ length: 100 }, () => Keys.generate());
-    const events = authors.flatMap((k, i) =>
-      [0, 1, 2].map((j) =>
-        EventBuilder.textNote(`a${i}-${j}`)
-          .createdAt(1000 + i * 10 + j)
-          .signWithKeys(k),
-      ),
+  test("over-cap authors × 1 kind falls back to wide cursors with identical results", async () => {
+    // The query path does not care about signatures, so the fixture uses
+    // markVerified fabricated events: real key generation and signing for
+    // hundreds of events made this test exceed the timeout under suite load.
+    const authors = Array.from({ length: MAX_MERGE_CURSORS + 6 }, (_, i) =>
+      (0x100 + i).toString(16).padStart(64, "0"),
+    );
+    const events = authors.flatMap((pk, i) =>
+      [0, 1, 2].map((j) => {
+        const event: Event = {
+          id: (i * 3 + j + 1).toString(16).padStart(64, "0"),
+          pubkey: pk,
+          kind: Kind.TextNote,
+          created_at: 1000 + i * 10 + j,
+          tags: [],
+          content: `a${i}-${j}`,
+          sig: "ab".repeat(64),
+        };
+        markVerified(event);
+        return event;
+      }),
     );
     const idb = new IndexedDbEventStore({ dbName: "merge-cap" });
     const mem = new MemoryEventStore();
     await idb.putMany(events);
     await mem.putMany(events);
 
-    const pks = authors.map((k) => k.publicKey);
+    const pks = authors;
     // authors × kinds exceeds MAX_MERGE_CURSORS → one cursor per kind.
     const filter = { authors: pks, kinds: [Kind.TextNote] };
     const got22 = await idb.query([filter]);
