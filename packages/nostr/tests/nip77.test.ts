@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
+import { markVerified } from "../src/core/event.ts";
 import {
   Client,
   EventBuilder,
@@ -34,6 +35,25 @@ const SK_B = "0000000000000000000000000000000000000000000000000000000000000001";
 
 function note(sk: string, content: string, createdAt: number) {
   return EventBuilder.textNote(content).createdAt(createdAt).signWithKeys(Keys.fromSecretKey(sk));
+}
+
+/**
+ * A structurally valid event whose id/pubkey/sig are fabricated hex, marked verified so the fake
+ * relay's store accepts it without running the signature check. Bulk sync fixtures use this instead
+ * of hundreds of real signatures, which made the test exceed its timeout under suite load.
+ */
+function markedFakeNote(seq: number, createdAt: number): Event {
+  const event: Event = {
+    id: seq.toString(16).padStart(64, "0"),
+    pubkey: "ab".repeat(32),
+    created_at: createdAt,
+    kind: 1,
+    tags: [],
+    content: `batch-${seq}`,
+    sig: "cd".repeat(64),
+  };
+  markVerified(event);
+  return event;
 }
 
 function wrapEventStore(
@@ -261,16 +281,10 @@ describe("Negentropy algorithm", () => {
   });
 
   test("fingerprint path with >32 items still finds the delta", () => {
-    const keys = Keys.fromSecretKey(SK_A);
-    const alice = Array.from({ length: 40 }, (_, i) =>
-      EventBuilder.textNote(`n${i}`)
-        .createdAt(100 + i)
-        .signWithKeys(keys),
-    );
+    // Negentropy only orders (created_at, id) — fabricated events avoid bulk signing.
+    const alice = Array.from({ length: 40 }, (_, i) => markedFakeNote(i + 1, 100 + i));
     const bob = alice.filter(exceptIndices(new Set([7, 33])));
-    const extra = EventBuilder.textNote("remote")
-      .createdAt(999)
-      .signWithKeys(Keys.fromSecretKey(SK_B));
+    const extra = markedFakeNote(1000, 999);
     bob.push(extra);
     const { have, need } = runUntilDone(
       new Negentropy(storageFromEvents(alice)),
@@ -404,15 +418,10 @@ describe("Negentropy algorithm", () => {
 
   test("reconcile converges for items with created_at above 2^31", () => {
     const base = 2 ** 31 + 5000;
-    const keys = Keys.fromSecretKey(SK_A);
-    const events = Array.from({ length: 40 }, (_, i) =>
-      EventBuilder.textNote(`big-ts-${i}`)
-        .createdAt(base + i)
-        .signWithKeys(keys),
-    );
+    const events = Array.from({ length: 40 }, (_, i) => markedFakeNote(i + 1, base + i));
     const missing = events[17]!;
     const remote = events.filter((_, i) => i !== 17);
-    remote.push(note(SK_B, "extra", base + 100));
+    remote.push(markedFakeNote(2000, base + 100));
     const extra = remote.at(-1)!;
     const { have, need } = runUntilDone(
       new Negentropy(storageFromEvents(events)),
@@ -875,10 +884,9 @@ describe("Relay.negReconcile + Client.sync", () => {
   });
 
   test("Client.sync down putMany throw does not fetch remaining need batches", async () => {
-    const remotes: Event[] = [];
-    for (let i = 0; i < 200; i++) {
-      remotes.push(note(SK_B, `batch-${i}`, 1000 + i));
-    }
+    // Fabricated events: the assertions cover id-batch bookkeeping, not signatures, and the
+    // client verifier is stubbed below since the wire path re-verifies delivered events.
+    const remotes = Array.from({ length: 200 }, (_, i) => markedFakeNote(i + 1, 1000 + i));
     net.relay("wss://neg.example").seed(remotes);
     const inner = new MemoryEventStore();
     let putManyCalls = 0;
@@ -894,6 +902,7 @@ describe("Relay.negReconcile + Client.sync", () => {
       websocketImplementation: net.websocketImplementation,
       enableReconnect: false,
       persistEvents: true,
+      verifyEvent: () => true,
     });
     await client.connect();
     let fetchCalls = 0;

@@ -281,21 +281,33 @@ type MaxLognCase = {
   error?: string;
 };
 
+// A second payload at a small log_n for the ceiling contract: two distinct
+// payload sizes prove the boundary without the spec example's log_n 16,
+// which would run a real 2^16 scrypt on both sides' vector replays.
+const MID_LOGN = await (async () => {
+  const ncryptsec = buildNcrypted(hexToBytes(SECRET_B), "nostr", 6, 0x00, SALT_B, NONCE_B);
+  const secret = bytesToHex(await nip49Decrypt(ncryptsec, "nostr", { maxLogN: 22 }));
+  if (secret !== SECRET_B) {
+    throw new Error("nip49.decrypt diverged on the mid-logn payload");
+  }
+  return { ncryptsec, password: "nostr", secret };
+})();
+
 const maxLognCases: MaxLognCase[] = [
   // logn == maxLogN: the ceiling is inclusive, decryption succeeds.
   { input: LOW_LOGN.ncryptsec, password: LOW_LOGN.password, maxLogN: 4, secret: LOW_LOGN.secret },
   {
-    input: SPEC_EXAMPLE.ncryptsec,
-    password: SPEC_EXAMPLE.password,
-    maxLogN: 16,
-    secret: SPEC_EXAMPLE.secret,
+    input: MID_LOGN.ncryptsec,
+    password: MID_LOGN.password,
+    maxLogN: 6,
+    secret: MID_LOGN.secret,
   },
   // logn > maxLogN: rejected with Nip49Error before scrypt runs.
   { input: LOW_LOGN.ncryptsec, password: LOW_LOGN.password, maxLogN: 3, error: "Nip49Error" },
   {
-    input: SPEC_EXAMPLE.ncryptsec,
-    password: SPEC_EXAMPLE.password,
-    maxLogN: 15,
+    input: MID_LOGN.ncryptsec,
+    password: MID_LOGN.password,
+    maxLogN: 5,
     error: "Nip49Error",
   },
   // maxLogN itself must be an integer in 1..=22.

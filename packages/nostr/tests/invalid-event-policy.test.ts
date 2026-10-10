@@ -17,8 +17,16 @@ const A = "wss://a.example";
 const B = "wss://b.example";
 const POLICY = { limit: 2, windowMs: 300, cooldownMs: 200 };
 
-const sleep = async (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+// Fake timers drive both Date.now (suspension `until`) and the resume
+// setTimeout — wall-clock waits made the cooldown window race under load.
+const advance = async (ms: number): Promise<void> => {
+  vi.advanceTimersByTime(ms);
+  // Settle the fake network's queueMicrotask handlers and promise chains.
+  for (let i = 0; i < 50; i += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential ticks are the flush
+    await Promise.resolve();
+  }
+};
 
 const keys = Keys.fromSecretKey(SK);
 
@@ -46,21 +54,23 @@ let net: FakeRelayNetwork;
 
 describe("invalid-event policy", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     net = createFakeRelayNetwork();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     net.close();
   });
 
   test("below the limit nothing is suspended", async () => {
     const { pool, onSuspend } = makePool();
     pool.subscribe([A], [{}]);
-    await sleep(20);
+    await advance(20);
 
     net.relay(A).deliver(forged(1));
     net.relay(A).deliver(forged(2));
-    await sleep(20);
+    await advance(20);
 
     expect(onSuspend).not.toHaveBeenCalled();
     expect(pool.getRelay(A)?.connected).toBe(true);
@@ -70,12 +80,12 @@ describe("invalid-event policy", () => {
   test("limit+1 inside the window closes the connection and reports once", async () => {
     const { pool, onSuspend } = makePool();
     pool.subscribe([A], [{}]);
-    await sleep(20);
+    await advance(20);
 
     net.relay(A).deliver(forged(1));
     net.relay(A).deliver(forged(2));
     net.relay(A).deliver(forged(3));
-    await sleep(20);
+    await advance(20);
 
     expect(onSuspend).toHaveBeenCalledTimes(1);
     const payload = onSuspend.mock.calls[0]?.[0] as unknown as { url: string; until: number };
@@ -90,12 +100,12 @@ describe("invalid-event policy", () => {
       invalidEventPolicy: { limit: 2, windowMs: 80, cooldownMs: 200 },
     });
     pool.subscribe([A], [{}]);
-    await sleep(20);
+    await advance(20);
 
     for (let i = 0; i < 5; i += 1) {
       net.relay(A).deliver(forged(i));
       // oxlint-disable-next-line no-await-in-loop -- spacing failures beyond the window is the test
-      await sleep(120);
+      await advance(120);
     }
 
     expect(onSuspend).not.toHaveBeenCalled();
@@ -106,14 +116,14 @@ describe("invalid-event policy", () => {
   test("during cooldown ensureRelay rejects while other relays keep working", async () => {
     const { pool } = makePool();
     pool.subscribe([A], [{}]);
-    await sleep(20);
+    await advance(20);
     const note = EventBuilder.textNote("from b").createdAt(9).signWithKeys(keys);
     net.relay(B).seed([note]);
 
     net.relay(A).deliver(forged(1));
     net.relay(A).deliver(forged(2));
     net.relay(A).deliver(forged(3));
-    await sleep(20);
+    await advance(20);
 
     const failure = await pool.ensureRelay(A).then(
       () => undefined,
@@ -145,26 +155,26 @@ describe("invalid-event policy", () => {
         seen.push(event.id);
       },
     });
-    await sleep(20);
+    await advance(20);
 
     net.relay(A).deliver(forged(1));
     net.relay(A).deliver(forged(2));
     net.relay(A).deliver(forged(3));
-    await sleep(20);
+    await advance(20);
     expect(onSuspend).toHaveBeenCalledTimes(1);
     expect(pool.getRelay(A)?.connected).toBe(false);
 
     // During the cooldown the relay stays disconnected.
-    await sleep(POLICY.cooldownMs / 2);
+    await advance(POLICY.cooldownMs / 2);
     expect(pool.getRelay(A)?.connected).toBe(false);
 
     // Past `until` the pool reconnects and replays the open REQ.
-    await sleep(POLICY.cooldownMs);
+    await advance(POLICY.cooldownMs);
     expect(pool.getRelay(A)?.connected).toBe(true);
 
     const live = EventBuilder.textNote("resumed").createdAt(11).signWithKeys(keys);
     net.relay(A).inject(live);
-    await sleep(30);
+    await advance(30);
     expect(seen).toStrictEqual([live.id]);
     pool.close();
   });
@@ -172,12 +182,12 @@ describe("invalid-event policy", () => {
   test("pinned relays are suspended too", async () => {
     const { pool, onSuspend } = makePool({ pinnedUrls: [A] });
     pool.subscribe([A], [{}]);
-    await sleep(20);
+    await advance(20);
 
     net.relay(A).deliver(forged(1));
     net.relay(A).deliver(forged(2));
     net.relay(A).deliver(forged(3));
-    await sleep(20);
+    await advance(20);
 
     expect(onSuspend).toHaveBeenCalledTimes(1);
     await expect(pool.ensureRelay(A)).rejects.toBeInstanceOf(RelaySuspendedError);
@@ -195,12 +205,12 @@ describe("invalid-event policy", () => {
         seen.push(event.id);
       },
     });
-    await sleep(20);
+    await advance(20);
 
     for (let i = 0; i < 6; i += 1) {
       net.relay(A).deliver(forged(i));
     }
-    await sleep(30);
+    await advance(30);
 
     expect(seen).toHaveLength(0);
     expect(pool.getRelay(A)?.connected).toBe(true);
@@ -218,12 +228,12 @@ describe("invalid-event policy", () => {
     client.pool.on("suspend", onSuspend);
     await client.connect();
     client.subscribe([{}]);
-    await sleep(20);
+    await advance(20);
 
     net.relay(A).deliver(forged(1));
     net.relay(A).deliver(forged(2));
     net.relay(A).deliver(forged(3));
-    await sleep(20);
+    await advance(20);
 
     expect(onSuspend).toHaveBeenCalledTimes(1);
     await expect(client.pool.ensureRelay(A)).rejects.toBeInstanceOf(RelaySuspendedError);

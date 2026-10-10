@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.11.0",
+    "version": "0.12.1",
     "cross_check": null
   },
   "cases": [
@@ -15,10 +15,10 @@
       "secret": "f7f2f77f98890885462764afb15b68eb5f69979c8046ecb08cad7c4ae6b221ab"
     },
     {
-      "input": "ncryptsec1qgg9947rlpvqu76pj5ecreduf9jxhselq2nae2kghhvd5g7dgjtcxfqtd67p9m0w57lspw8gsq6yphnm8623nsl8xn9j4jdzz84zm3frztj3z7s35vpzmqf6ksu8r89qk5z2zxfmu5gv8th8wclt0h4p",
+      "input": "ncryptsec1qgr0pu0j7060tahhlrul47lulhl075z32ff4g42k2av9jkjmt3w4uhmqv93xxer9vensqs90anlz4s2tc2qfjgkxekeedn84f42k5wm4fr2un42yn57h7e8svjeh8y6cggvvnnq9ufyr8vyz8g9czmv2",
       "password": "nostr",
-      "maxLogN": 16,
-      "secret": "3501454135014541350145413501453fefb02227e449e57cf4d3a3ce05378683"
+      "maxLogN": 6,
+      "secret": "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa"
     },
     {
       "input": "ncryptsec1qgzv73a9ktnwmgyvv24x2xtr6grup2v6an96xgs64z3pmh5etg2k4yryachtlu3tpqwqphhm0pjnq9zmftr0qf4p5lmah4rlz02ucjkawr2s9quau67p3jq3d7yp3kreghs0wdcqpf6pkc8jcgsqrn5l",
@@ -27,9 +27,9 @@
       "error": "Nip49Error"
     },
     {
-      "input": "ncryptsec1qgg9947rlpvqu76pj5ecreduf9jxhselq2nae2kghhvd5g7dgjtcxfqtd67p9m0w57lspw8gsq6yphnm8623nsl8xn9j4jdzz84zm3frztj3z7s35vpzmqf6ksu8r89qk5z2zxfmu5gv8th8wclt0h4p",
+      "input": "ncryptsec1qgr0pu0j7060tahhlrul47lulhl075z32ff4g42k2av9jkjmt3w4uhmqv93xxer9vensqs90anlz4s2tc2qfjgkxekeedn84f42k5wm4fr2un42yn57h7e8svjeh8y6cggvvnnq9ufyr8vyz8g9czmv2",
       "password": "nostr",
-      "maxLogN": 15,
+      "maxLogN": 5,
       "error": "Nip49Error"
     },
     {
