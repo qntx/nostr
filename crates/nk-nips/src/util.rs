@@ -1,6 +1,7 @@
 //! Crate-private helpers shared by the NIP modules — currently the JS
-//! whitespace class used by nip46 (`String.prototype.trim`) and nip98
-//! (the `\s` in the `Nostr ` scheme regex).
+//! whitespace class used by nip46 (`String.prototype.trim`), nip98
+//! (the `\s` in the `Nostr ` scheme regex), and nip27 (the `\s` in the
+//! URL-run stop set).
 
 /// The whitespace class of JS `\s`/`String.prototype.trim()`: Unicode
 /// `White_Space` minus U+0085 (NEL, not in JS `\s`) plus U+FEFF (BOM, which

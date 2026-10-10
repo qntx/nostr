@@ -10,6 +10,7 @@ await import("./nip13.ts");
 await import("./nip17.ts");
 await import("./nip19.ts");
 await import("./nip21.ts");
+await import("./nip27.ts");
 await import("./nip42.ts");
 await import("./nip44.ts");
 await import("./nip46.ts");

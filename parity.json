@@ -549,14 +549,20 @@
     {
       "id": "nip27.tokenize",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK3",
       "ts": {
         "module": "packages/nostr/src/nips/nip27.ts",
-        "tests": ["packages/nostr/tests/nip27.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip27.test.ts",
+          "packages/nostr/tests/vectors/nip27.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip27.rs",
+        "tests": ["crates/nk-vectors/tests/nip27.rs"]
+      },
+      "vectors": ["vectors/nip27/codec.json"]
     },
     {
       "id": "nip51.lists",

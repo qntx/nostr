@@ -1,0 +1,1738 @@
+{
+  "schema": 1,
+  "capability": "nip27.tokenize",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.12.1"
+  },
+  "cases": [
+    {
+      "name": "empty content",
+      "content": "",
+      "out": []
+    },
+    {
+      "name": "plain text merges",
+      "content": "hello nostr world",
+      "out": [
+        {
+          "type": "text",
+          "text": "hello nostr world"
+        }
+      ]
+    },
+    {
+      "name": "unmatched fragments stay text",
+      "content": ":: :a nostr: lnbc # !",
+      "out": [
+        {
+          "type": "text",
+          "text": ":: :a nostr: lnbc # !"
+        }
+      ]
+    },
+    {
+      "name": "nostr npub",
+      "content": "nostr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m",
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr glued to preceding text",
+      "content": "xnostr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m",
+      "out": [
+        {
+          "type": "text",
+          "text": "x"
+        },
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr uppercase scheme and prefix",
+      "content": "NOSTR:NPUB1SG6PLZPTD64U62A878HEP2KEV88SWJH3TW00GJSFL8F237LMU63Q0UF63M",
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr long-s scheme",
+      "content": "noſtr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m",
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr nprofile with relays",
+      "content": "nostr:nprofile1qyg8wumn8ghj7u339ejhsctdwpkx2qgswaehxw309aerytn90psk6urvv5qzpq35r7yzkm4te5460u00jz4djcw0qa90zku7739qn7wj4ralhe4z9mgrjp",
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": [
+              "wss://r1.example",
+              "wss://r2.example"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr nprofile without relays",
+      "content": "nostr:nprofile1qqsgydql3q4ka27d9wnlrmus4tvkrnc8ftc4h8h5fgyln54gl0a7dgstw3r3l",
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr note",
+      "content": "nostr:note1424242424242424242424242424242424242424242424242424qv3q9y6",
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [],
+            "author": null,
+            "kind": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr nevent with hints",
+      "content": "nostr:nevent1qvzqqqqqqypzpq35r7yzkm4te5460u00jz4djcw0qa90zku7739qn7wj4ralhe4zqy8hwumn8ghj7u3wv4uxzmtsd3jsqg924242424242424242424242424242424242424242424242424gc0a90r",
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [
+              "wss://r.example"
+            ],
+            "author": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "kind": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr nevent without hints",
+      "content": "nostr:nevent1qqs242424242424242424242424242424242424242424242424242s7c3tw2",
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [],
+            "author": null,
+            "kind": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr naddr",
+      "content": "nostr:naddr1qvzqqqr4gupzpq35r7yzkm4te5460u00jz4djcw0qa90zku7739qn7wj4ralhe4zqqykzun5d93kcefdxyskr8vy",
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "address",
+            "identifier": "article-1",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "kind": 30023,
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "nostr nsec ignored",
+      "content": "nostr:nsec1uyyrnx7cgfp40fcskcr2urqnzekc20fj0er6de0q8qvhx34ahazsvs9p36",
+      "out": [
+        {
+          "type": "text",
+          "text": "nostr:nsec1uyyrnx7cgfp40fcskcr2urqnzekc20fj0er6de0q8qvhx34ahazsvs9p36"
+        }
+      ]
+    },
+    {
+      "name": "nostr invalid bech32",
+      "content": "nostr:npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
+      "out": [
+        {
+          "type": "text",
+          "text": "nostr:npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+        }
+      ]
+    },
+    {
+      "name": "nostr empty data",
+      "content": "nostr:npub1",
+      "out": [
+        {
+          "type": "text",
+          "text": "nostr:npub1"
+        }
+      ]
+    },
+    {
+      "name": "adjacent references merge no text",
+      "content": "nostr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63mnostr:note1424242424242424242424242424242424242424242424242424qv3q9y6",
+      "out": [
+        {
+          "type": "text",
+          "text": "nostr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m"
+        },
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [],
+            "author": null,
+            "kind": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "https url",
+      "content": "see https://example.com/x now",
+      "out": [
+        {
+          "type": "text",
+          "text": "see "
+        },
+        {
+          "type": "url",
+          "url": "https://example.com/x"
+        },
+        {
+          "type": "text",
+          "text": " now"
+        }
+      ]
+    },
+    {
+      "name": "http url",
+      "content": "http://a.b",
+      "out": [
+        {
+          "type": "url",
+          "url": "http://a.b"
+        }
+      ]
+    },
+    {
+      "name": "uppercase scheme",
+      "content": "HTTPS://a.b/x",
+      "out": [
+        {
+          "type": "url",
+          "url": "HTTPS://a.b/x"
+        }
+      ]
+    },
+    {
+      "name": "long-s scheme candidate fails URL parse",
+      "content": "HTTſ://a.b/x",
+      "out": [
+        {
+          "type": "text",
+          "text": "HTTſ://a.b/x"
+        }
+      ]
+    },
+    {
+      "name": "kelvin in host stays text-adjacent",
+      "content": "https://a.K/x",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.K/x"
+        }
+      ]
+    },
+    {
+      "name": "host without dot",
+      "content": "https://localhost/x",
+      "out": [
+        {
+          "type": "text",
+          "text": "https://localhost/x"
+        }
+      ]
+    },
+    {
+      "name": "ipv6 host has no dot",
+      "content": "https://[::1]/x",
+      "out": [
+        {
+          "type": "text",
+          "text": "https://[::1]/x"
+        }
+      ]
+    },
+    {
+      "name": "ipv4 host",
+      "content": "https://1.2.3.4/x",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://1.2.3.4/x"
+        }
+      ]
+    },
+    {
+      "name": "ws relay",
+      "content": "ws://a.b/socket",
+      "out": [
+        {
+          "type": "relay",
+          "url": "ws://a.b/socket"
+        }
+      ]
+    },
+    {
+      "name": "wss relay",
+      "content": "wss://relay.example",
+      "out": [
+        {
+          "type": "relay",
+          "url": "wss://relay.example"
+        }
+      ]
+    },
+    {
+      "name": "relay ignores imeta",
+      "content": "wss://a.b/f",
+      "imeta": {
+        "wss://a.b/f": "image/png"
+      },
+      "out": [
+        {
+          "type": "relay",
+          "url": "wss://a.b/f"
+        }
+      ]
+    },
+    {
+      "name": "relay host without dot",
+      "content": "wss://localhost",
+      "out": [
+        {
+          "type": "text",
+          "text": "wss://localhost"
+        }
+      ]
+    },
+    {
+      "name": "url trailing period",
+      "content": "https://a.b/x.",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "name": "url trailing comma and bang",
+      "content": "https://a.b/x,!",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": ",!"
+        }
+      ]
+    },
+    {
+      "name": "url trailing semicolon colon quote",
+      "content": "https://a.b/x;:'",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": ";:'"
+        }
+      ]
+    },
+    {
+      "name": "url trailing question",
+      "content": "https://a.b/x?",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": "?"
+        }
+      ]
+    },
+    {
+      "name": "url unbalanced closer",
+      "content": "https://a.b/x)",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": ")"
+        }
+      ]
+    },
+    {
+      "name": "url double closer",
+      "content": "https://a.b/x))",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": "))"
+        }
+      ]
+    },
+    {
+      "name": "url balanced parens kept",
+      "content": "https://a.b/(x)",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/(x)"
+        }
+      ]
+    },
+    {
+      "name": "url nested unbalanced",
+      "content": "https://a.b/(x))",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/(x)"
+        },
+        {
+          "type": "text",
+          "text": ")"
+        }
+      ]
+    },
+    {
+      "name": "url unbalanced bracket",
+      "content": "https://a.b/x]",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": "]"
+        }
+      ]
+    },
+    {
+      "name": "url balanced bracket kept",
+      "content": "https://a.b/[x]",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/[x]"
+        }
+      ]
+    },
+    {
+      "name": "url opener only",
+      "content": "https://a.b/(x",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/(x"
+        }
+      ]
+    },
+    {
+      "name": "url stops at angle bracket",
+      "content": "https://a.b/x<y",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": "<y"
+        }
+      ]
+    },
+    {
+      "name": "url stops at quote",
+      "content": "https://a.b/x\"y",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": "\"y"
+        }
+      ]
+    },
+    {
+      "name": "url stops at cjk period",
+      "content": "https://a.b/x。tail",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": "。tail"
+        }
+      ]
+    },
+    {
+      "name": "url stops at fullwidth bang",
+      "content": "https://a.b/x！tail",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": "！tail"
+        }
+      ]
+    },
+    {
+      "name": "url stops at bom whitespace",
+      "content": "https://a.b/x﻿y",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": "﻿y"
+        }
+      ]
+    },
+    {
+      "name": "url stops at space",
+      "content": "https://a.b/x y",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/x"
+        },
+        {
+          "type": "text",
+          "text": " y"
+        }
+      ]
+    },
+    {
+      "name": "image by extension",
+      "content": "https://a.b/pic.png",
+      "out": [
+        {
+          "type": "image",
+          "url": "https://a.b/pic.png"
+        }
+      ]
+    },
+    {
+      "name": "image uppercase extension",
+      "content": "https://a.b/PIC.PNG",
+      "out": [
+        {
+          "type": "image",
+          "url": "https://a.b/PIC.PNG"
+        }
+      ]
+    },
+    {
+      "name": "video extension",
+      "content": "https://a.b/v.webm",
+      "out": [
+        {
+          "type": "video",
+          "url": "https://a.b/v.webm"
+        }
+      ]
+    },
+    {
+      "name": "audio extension",
+      "content": "https://a.b/song.FLAC",
+      "out": [
+        {
+          "type": "audio",
+          "url": "https://a.b/song.FLAC"
+        }
+      ]
+    },
+    {
+      "name": "image extension before query",
+      "content": "https://a.b/f.png?w=100",
+      "out": [
+        {
+          "type": "image",
+          "url": "https://a.b/f.png?w=100"
+        }
+      ]
+    },
+    {
+      "name": "unknown extension stays url",
+      "content": "https://a.b/f.txt",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/f.txt"
+        }
+      ]
+    },
+    {
+      "name": "no extension stays url",
+      "content": "https://a.b/path",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/path"
+        }
+      ]
+    },
+    {
+      "name": "dot-only tail trims to url",
+      "content": "https://a.b/path.",
+      "out": [
+        {
+          "type": "url",
+          "url": "https://a.b/path"
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "name": "imeta mime wins over extension",
+      "content": "https://a.b/f.png",
+      "imeta": {
+        "https://a.b/f.png": "video/mp4"
+      },
+      "out": [
+        {
+          "type": "video",
+          "url": "https://a.b/f.png"
+        }
+      ]
+    },
+    {
+      "name": "imeta mime without slash",
+      "content": "https://a.b/f",
+      "imeta": {
+        "https://a.b/f": "audio"
+      },
+      "out": [
+        {
+          "type": "audio",
+          "url": "https://a.b/f"
+        }
+      ]
+    },
+    {
+      "name": "imeta uppercase base falls to extension",
+      "content": "https://a.b/f.png",
+      "imeta": {
+        "https://a.b/f.png": "IMAGE/png"
+      },
+      "out": [
+        {
+          "type": "image",
+          "url": "https://a.b/f.png"
+        }
+      ]
+    },
+    {
+      "name": "imeta non-media mime falls to extension",
+      "content": "https://a.b/f.png",
+      "imeta": {
+        "https://a.b/f.png": "application/pdf"
+      },
+      "out": [
+        {
+          "type": "image",
+          "url": "https://a.b/f.png"
+        }
+      ]
+    },
+    {
+      "name": "imeta key must equal trimmed url",
+      "content": "https://a.b/f.png.",
+      "imeta": {
+        "https://a.b/f.png.": "image/png",
+        "https://a.b/f.png": "video/webm"
+      },
+      "out": [
+        {
+          "type": "video",
+          "url": "https://a.b/f.png"
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "name": "invoice plain",
+      "content": "lnbc1xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice amount",
+      "content": "lnbc2100n1xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc2100n1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice amount multiplier",
+      "content": "lnbc10m1xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc10m1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice backtracks separator",
+      "content": "lnbc101xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc101xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice digit-1 splits amount",
+      "content": "lnbc21xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc21xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice no-amount with multiplier-shaped data",
+      "content": "lnbc1uxyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc1uxyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice multiplier",
+      "content": "lnbc1m1xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc1m1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice currencies",
+      "content": "lntbs1xyz lnbcrt1xyz lntb1xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lntbs1xyz"
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "invoice",
+          "bolt11": "lnbcrt1xyz"
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "invoice",
+          "bolt11": "lntb1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice uppercase",
+      "content": "LNBC1XYZ",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice lightning prefix stripped",
+      "content": "LIGHTNING:lnbc1xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice prefix and body folded",
+      "content": "lightſghtning:LNBC1XYZ",
+      "out": [
+        {
+          "type": "text",
+          "text": "lightſghtning:"
+        },
+        {
+          "type": "invoice",
+          "bolt11": "lnbc1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice kelvin in data",
+      "content": "lnbc1Kyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc1kyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice word char before",
+      "content": "xlnbc1xyz",
+      "out": [
+        {
+          "type": "text",
+          "text": "xlnbc1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice word char after",
+      "content": "lnbc1xyzb",
+      "out": [
+        {
+          "type": "text",
+          "text": "lnbc1xyzb"
+        }
+      ]
+    },
+    {
+      "name": "invoice cjk after",
+      "content": "lnbc1xyz中",
+      "out": [
+        {
+          "type": "text",
+          "text": "lnbc1xyz中"
+        }
+      ]
+    },
+    {
+      "name": "invoice astral after ok",
+      "content": "lnbc1xyz😀",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc1xyz"
+        },
+        {
+          "type": "text",
+          "text": "😀"
+        }
+      ]
+    },
+    {
+      "name": "invoice no separator",
+      "content": "lnbcxyz",
+      "out": [
+        {
+          "type": "text",
+          "text": "lnbcxyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice separator without data",
+      "content": "lnbc1",
+      "out": [
+        {
+          "type": "text",
+          "text": "lnbc1"
+        }
+      ]
+    },
+    {
+      "name": "invoice zero amount run no separator",
+      "content": "lnbc000xyz",
+      "out": [
+        {
+          "type": "text",
+          "text": "lnbc000xyz"
+        }
+      ]
+    },
+    {
+      "name": "hashtag plain",
+      "content": "#nostr",
+      "out": [
+        {
+          "type": "hashtag",
+          "value": "nostr"
+        }
+      ]
+    },
+    {
+      "name": "hashtag digit leading",
+      "content": "#1abc",
+      "out": [
+        {
+          "type": "hashtag",
+          "value": "1abc"
+        }
+      ]
+    },
+    {
+      "name": "hashtag underscore",
+      "content": "#_x_",
+      "out": [
+        {
+          "type": "hashtag",
+          "value": "_x_"
+        }
+      ]
+    },
+    {
+      "name": "hashtag unicode letters",
+      "content": "#日本語 #café",
+      "out": [
+        {
+          "type": "hashtag",
+          "value": "日本語"
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "hashtag",
+          "value": "café"
+        }
+      ]
+    },
+    {
+      "name": "hashtag combining mark",
+      "content": "#é",
+      "out": [
+        {
+          "type": "hashtag",
+          "value": "é"
+        }
+      ]
+    },
+    {
+      "name": "hashtag trailing punctuation",
+      "content": "#tag.#next",
+      "out": [
+        {
+          "type": "hashtag",
+          "value": "tag"
+        },
+        {
+          "type": "text",
+          "text": "."
+        },
+        {
+          "type": "hashtag",
+          "value": "next"
+        }
+      ]
+    },
+    {
+      "name": "hashtag preceded by letter",
+      "content": "x#tag",
+      "out": [
+        {
+          "type": "text",
+          "text": "x#tag"
+        }
+      ]
+    },
+    {
+      "name": "hashtag preceded by hash",
+      "content": "##tag",
+      "out": [
+        {
+          "type": "text",
+          "text": "#"
+        },
+        {
+          "type": "hashtag",
+          "value": "tag"
+        }
+      ]
+    },
+    {
+      "name": "hashtag after astral",
+      "content": "😀#tag",
+      "out": [
+        {
+          "type": "text",
+          "text": "😀"
+        },
+        {
+          "type": "hashtag",
+          "value": "tag"
+        }
+      ]
+    },
+    {
+      "name": "hashtag before astral",
+      "content": "#tag😀",
+      "out": [
+        {
+          "type": "hashtag",
+          "value": "tag"
+        },
+        {
+          "type": "text",
+          "text": "😀"
+        }
+      ]
+    },
+    {
+      "name": "hashtag at 42 cap",
+      "content": "#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "out": [
+        {
+          "type": "hashtag",
+          "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    {
+      "name": "hashtag beyond 42 is text",
+      "content": "#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "out": [
+        {
+          "type": "text",
+          "text": "#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ]
+    },
+    {
+      "name": "hash alone",
+      "content": "# #!",
+      "out": [
+        {
+          "type": "text",
+          "text": "# #!"
+        }
+      ]
+    },
+    {
+      "name": "emoji hit and miss",
+      "content": "hi :wave: and :wave2:",
+      "tags": [
+        [
+          "emoji",
+          "wave",
+          "https://a.b/w.gif"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u1"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u2"
+        ],
+        [
+          "emoji",
+          "",
+          "ignored"
+        ],
+        [
+          "emoji",
+          "novalue",
+          ""
+        ],
+        [
+          "emoji",
+          "single"
+        ],
+        [
+          "notemoji",
+          "wave",
+          "x"
+        ],
+        [
+          "emoji",
+          "K",
+          "https://a.b/k.gif"
+        ]
+      ],
+      "out": [
+        {
+          "type": "text",
+          "text": "hi "
+        },
+        {
+          "type": "emoji",
+          "shortcode": "wave",
+          "url": "https://a.b/w.gif"
+        },
+        {
+          "type": "text",
+          "text": " and :wave2:"
+        }
+      ]
+    },
+    {
+      "name": "emoji later duplicate wins",
+      "content": ":dup:",
+      "tags": [
+        [
+          "emoji",
+          "wave",
+          "https://a.b/w.gif"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u1"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u2"
+        ],
+        [
+          "emoji",
+          "",
+          "ignored"
+        ],
+        [
+          "emoji",
+          "novalue",
+          ""
+        ],
+        [
+          "emoji",
+          "single"
+        ],
+        [
+          "notemoji",
+          "wave",
+          "x"
+        ],
+        [
+          "emoji",
+          "K",
+          "https://a.b/k.gif"
+        ]
+      ],
+      "out": [
+        {
+          "type": "emoji",
+          "shortcode": "dup",
+          "url": "u2"
+        }
+      ]
+    },
+    {
+      "name": "emoji kelvin shortcode",
+      "content": ":K:",
+      "tags": [
+        [
+          "emoji",
+          "wave",
+          "https://a.b/w.gif"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u1"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u2"
+        ],
+        [
+          "emoji",
+          "",
+          "ignored"
+        ],
+        [
+          "emoji",
+          "novalue",
+          ""
+        ],
+        [
+          "emoji",
+          "single"
+        ],
+        [
+          "notemoji",
+          "wave",
+          "x"
+        ],
+        [
+          "emoji",
+          "K",
+          "https://a.b/k.gif"
+        ]
+      ],
+      "out": [
+        {
+          "type": "emoji",
+          "shortcode": "K",
+          "url": "https://a.b/k.gif"
+        }
+      ]
+    },
+    {
+      "name": "emoji ascii-k misses kelvin tag",
+      "content": ":k:",
+      "tags": [
+        [
+          "emoji",
+          "wave",
+          "https://a.b/w.gif"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u1"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u2"
+        ],
+        [
+          "emoji",
+          "",
+          "ignored"
+        ],
+        [
+          "emoji",
+          "novalue",
+          ""
+        ],
+        [
+          "emoji",
+          "single"
+        ],
+        [
+          "notemoji",
+          "wave",
+          "x"
+        ],
+        [
+          "emoji",
+          "K",
+          "https://a.b/k.gif"
+        ]
+      ],
+      "out": [
+        {
+          "type": "text",
+          "text": ":k:"
+        }
+      ]
+    },
+    {
+      "name": "emoji shortcode shape only",
+      "content": ":a-b_c9:",
+      "tags": [
+        [
+          "emoji",
+          "wave",
+          "https://a.b/w.gif"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u1"
+        ],
+        [
+          "emoji",
+          "dup",
+          "u2"
+        ],
+        [
+          "emoji",
+          "",
+          "ignored"
+        ],
+        [
+          "emoji",
+          "novalue",
+          ""
+        ],
+        [
+          "emoji",
+          "single"
+        ],
+        [
+          "notemoji",
+          "wave",
+          "x"
+        ],
+        [
+          "emoji",
+          "K",
+          "https://a.b/k.gif"
+        ]
+      ],
+      "out": [
+        {
+          "type": "text",
+          "text": ":a-b_c9:"
+        }
+      ]
+    },
+    {
+      "name": "emoji no tags never match",
+      "content": ":wave:",
+      "out": [
+        {
+          "type": "text",
+          "text": ":wave:"
+        }
+      ]
+    },
+    {
+      "name": "emoji unclosed",
+      "content": ":wave",
+      "out": [
+        {
+          "type": "text",
+          "text": ":wave"
+        }
+      ]
+    },
+    {
+      "name": "emoji empty",
+      "content": "::",
+      "out": [
+        {
+          "type": "text",
+          "text": "::"
+        }
+      ]
+    },
+    {
+      "name": "bare npub legacy",
+      "content": "npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m",
+      "legacy": true,
+      "out": [
+        {
+          "type": "reference",
+          "bare": true,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "bare note legacy",
+      "content": "at note1424242424242424242424242424242424242424242424242424qv3q9y6 end",
+      "legacy": true,
+      "out": [
+        {
+          "type": "text",
+          "text": "at "
+        },
+        {
+          "type": "reference",
+          "bare": true,
+          "pointer": {
+            "type": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [],
+            "author": null,
+            "kind": null
+          }
+        },
+        {
+          "type": "text",
+          "text": " end"
+        }
+      ]
+    },
+    {
+      "name": "bare nevent legacy",
+      "content": "nevent1qvzqqqqqqypzpq35r7yzkm4te5460u00jz4djcw0qa90zku7739qn7wj4ralhe4zqy8hwumn8ghj7u3wv4uxzmtsd3jsqg924242424242424242424242424242424242424242424242424gc0a90r",
+      "legacy": true,
+      "out": [
+        {
+          "type": "reference",
+          "bare": true,
+          "pointer": {
+            "type": "event",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [
+              "wss://r.example"
+            ],
+            "author": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "kind": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "bare naddr legacy",
+      "content": "naddr1qvzqqqr4gupzpq35r7yzkm4te5460u00jz4djcw0qa90zku7739qn7wj4ralhe4zqqykzun5d93kcefdxyskr8vy",
+      "legacy": true,
+      "out": [
+        {
+          "type": "reference",
+          "bare": true,
+          "pointer": {
+            "type": "address",
+            "identifier": "article-1",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "kind": 30023,
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "bare nprofile legacy",
+      "content": "nprofile1qyg8wumn8ghj7u339ejhsctdwpkx2qgswaehxw309aerytn90psk6urvv5qzpq35r7yzkm4te5460u00jz4djcw0qa90zku7739qn7wj4ralhe4z9mgrjp",
+      "legacy": true,
+      "out": [
+        {
+          "type": "reference",
+          "bare": true,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": [
+              "wss://r1.example",
+              "wss://r2.example"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "bare uppercase prefix legacy",
+      "content": "NPUB1SG6PLZPTD64U62A878HEP2KEV88SWJH3TW00GJSFL8F237LMU63Q0UF63M",
+      "legacy": true,
+      "out": [
+        {
+          "type": "reference",
+          "bare": true,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "bare without legacy is text",
+      "content": "npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m",
+      "out": [
+        {
+          "type": "text",
+          "text": "npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m"
+        }
+      ]
+    },
+    {
+      "name": "bare word char before",
+      "content": "xnpub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m",
+      "legacy": true,
+      "out": [
+        {
+          "type": "text",
+          "text": "xnpub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m"
+        }
+      ]
+    },
+    {
+      "name": "bare word char after",
+      "content": "npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63mb",
+      "legacy": true,
+      "out": [
+        {
+          "type": "text",
+          "text": "npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63mb"
+        }
+      ]
+    },
+    {
+      "name": "bare cjk after",
+      "content": "npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m中",
+      "legacy": true,
+      "out": [
+        {
+          "type": "text",
+          "text": "npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m中"
+        }
+      ]
+    },
+    {
+      "name": "bare astral after ok",
+      "content": "npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m😀",
+      "legacy": true,
+      "out": [
+        {
+          "type": "reference",
+          "bare": true,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        },
+        {
+          "type": "text",
+          "text": "😀"
+        }
+      ]
+    },
+    {
+      "name": "bare nsec never",
+      "content": "nsec1uyyrnx7cgfp40fcskcr2urqnzekc20fj0er6de0q8qvhx34ahazsvs9p36",
+      "legacy": true,
+      "out": [
+        {
+          "type": "text",
+          "text": "nsec1uyyrnx7cgfp40fcskcr2urqnzekc20fj0er6de0q8qvhx34ahazsvs9p36"
+        }
+      ]
+    },
+    {
+      "name": "bare invalid checksum",
+      "content": "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
+      "legacy": true,
+      "out": [
+        {
+          "type": "text",
+          "text": "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+        }
+      ]
+    },
+    {
+      "name": "bare glued inside nostr scheme",
+      "content": "nostr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m",
+      "legacy": true,
+      "out": [
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "failed candidate resumes inside its span",
+      "content": "see https://x/wss://a.b now",
+      "out": [
+        {
+          "type": "text",
+          "text": "see https://x/"
+        },
+        {
+          "type": "relay",
+          "url": "wss://a.b"
+        },
+        {
+          "type": "text",
+          "text": " now"
+        }
+      ]
+    },
+    {
+      "name": "mixed stream",
+      "content": "gm nostr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m check https://a.b/pic.png and wss://r.x pay lnbc10u1xyz #nostr :wave: end",
+      "tags": [
+        [
+          "emoji",
+          "wave",
+          "https://a.b/w.gif"
+        ]
+      ],
+      "out": [
+        {
+          "type": "text",
+          "text": "gm "
+        },
+        {
+          "type": "reference",
+          "bare": false,
+          "pointer": {
+            "type": "profile",
+            "pubkey": "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
+            "relays": []
+          }
+        },
+        {
+          "type": "text",
+          "text": " check "
+        },
+        {
+          "type": "image",
+          "url": "https://a.b/pic.png"
+        },
+        {
+          "type": "text",
+          "text": " and "
+        },
+        {
+          "type": "relay",
+          "url": "wss://r.x"
+        },
+        {
+          "type": "text",
+          "text": " pay "
+        },
+        {
+          "type": "invoice",
+          "bolt11": "lnbc10u1xyz"
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "hashtag",
+          "value": "nostr"
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "emoji",
+          "shortcode": "wave",
+          "url": "https://a.b/w.gif"
+        },
+        {
+          "type": "text",
+          "text": " end"
+        }
+      ]
+    }
+  ]
+}

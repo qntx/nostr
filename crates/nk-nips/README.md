@@ -25,6 +25,7 @@ let entity = nip19::decode(&nsec)?;
 | `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`, kind-10050 lists); needs `nip59`              | —                                                                                   |
 | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`)                                  | `bech32`, `zeroize`                                                                 |
 | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`); needs `nip19`                                         | —                                                                                   |
+| `nip27`  | no      | content tokenizer (`parse_content`, `ContentBlock`); needs `nip19`                                      | `unicode-properties`, `url`                                                         |
 | `nip42`  | no      | relay authentication (`auth_event`, `is_auth_required`)                                                 | —                                                                                   |
 | `nip44`  | no      | NIP-44 v2 payload encryption (`ConversationKey`, `encrypt`/`decrypt`)                                   | `base64ct`, `chacha20`, `hkdf`, `hmac`, `rand_core`, `secp256k1`, `sha2`, `zeroize` |
 | `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Request`/`Response`)                   | `serde`, `serde_json`, `url`                                                        |

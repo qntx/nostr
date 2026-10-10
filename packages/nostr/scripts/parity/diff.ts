@@ -32,7 +32,17 @@ import {
 import type { Tag } from "../../src/core/tag.ts";
 import { hexToBytes } from "../../src/core/util.ts";
 import { parseThreadTags } from "../../src/nips/nip10.ts";
-import { decode as nip19Decode } from "../../src/nips/nip19.ts";
+import {
+  decode as nip19Decode,
+  naddrEncode,
+  neventEncode,
+  noteEncode,
+  npubEncode,
+  nprofileEncode,
+  nsecEncode,
+} from "../../src/nips/nip19.ts";
+import { parseContent } from "../../src/nips/nip27.ts";
+import type { ParseContentOptions } from "../../src/nips/nip27.ts";
 import { decrypt as nip44Decrypt, encrypt as nip44Encrypt } from "../../src/nips/nip44.ts";
 import {
   createNostrConnectURI,
@@ -40,6 +50,7 @@ import {
   parseNostrConnectURI,
   toBunkerURL,
 } from "../../src/nips/nip46.ts";
+import { blocksJson } from "./content-json.ts";
 import type { EntityJson } from "./gen/entities.ts";
 import { encodeEntity, toJson } from "./gen/entities.ts";
 import { threadJson } from "./thread-json.ts";
@@ -996,6 +1007,232 @@ function nip46UriInputText(): string {
   return JSON.stringify(input);
 }
 
+// `nip27.tokenize` builds adversarial content from a fragment alphabet —
+// every rule's prefix in mixed case plus the folding outliers U+212A and
+// U+017F, bech32 charset runs, stray `1`s, invoice amounts and multipliers,
+// URL punctuation, bracket balance, CJK/full-width neighbours, astral
+// characters, and stop characters. Emoji tags toggle on and off and the
+// `legacy` flag flips so bare bech32 entities surface intermittently.
+const NIP27_PK = "11".repeat(32);
+const NIP27_ID = "22".repeat(32);
+const NIP27_NPUB = npubEncode(NIP27_PK);
+const NIP27_NOTE = noteEncode(NIP27_ID);
+const NIP27_NPROFILE = nprofileEncode({ pubkey: NIP27_PK, relays: ["wss://r.io"] });
+const NIP27_NEVENT = neventEncode({ id: NIP27_ID, relays: ["wss://r.io"] });
+const NIP27_NADDR = naddrEncode({
+  identifier: "d-tag",
+  pubkey: NIP27_PK,
+  kind: 30023,
+  relays: ["wss://r.io"],
+});
+const NIP27_NSEC = nsecEncode(hexToBytes("33".repeat(32)));
+const NIP27_FRAGMENTS = [
+  // nostr: references — valid, invalid, folded prefixes, truncated data
+  `nostr:${NIP27_NPUB}`,
+  `nostr:${NIP27_NOTE}`,
+  `nostr:${NIP27_NPROFILE}`,
+  `nostr:${NIP27_NEVENT}`,
+  `nostr:${NIP27_NADDR}`,
+  `nostr:${NIP27_NSEC}`,
+  `NOSTR:${NIP27_NPUB}`,
+  `noſtr:${NIP27_NOTE}`,
+  `nostr:note1qqqqqqqqqqqq`,
+  "nostr:",
+  "nostr",
+  "nostr:npub",
+  `nostr:${NIP27_NPUB.slice(0, 30)}`,
+  // bare bech32 (legacy flag only)
+  NIP27_NPUB,
+  NIP27_NOTE,
+  NIP27_NPROFILE,
+  NIP27_NSEC,
+  NIP27_NPUB.toUpperCase(),
+  "npub",
+  "note1",
+  "npub1x",
+  // URLs — valid, dotless, trailing punctuation, brackets, folded scheme
+  "http://a.b",
+  "https://x.y/p.png",
+  "https://x.y/a.MP4",
+  "https://m.n/song.opus",
+  "https://a.b/c",
+  "http://w.z/x.mov?x=1",
+  "HTTP://UP.D/x",
+  "httpſ://fold.de",
+  "https://a.b/tail).,;!?",
+  "https://a.b/open(x)",
+  "https://localhost/x",
+  "https://a.b",
+  "http://",
+  "wss://r.io",
+  "ws://r.io/relay",
+  "Wſ://relay.de",
+  "wss://no.dot",
+  "https:/a.b",
+  // invoices — prefixes, networks, amounts, multipliers, stray 1s
+  "lnbc10u1xyz",
+  "lnbc21n1qqqp",
+  "lntb1qqqq",
+  "lntbs1qqq",
+  "lnbcrt1qq",
+  "lightning:lnbc10u1xyz",
+  "LIGHTNING:LNBC10U1XYZ",
+  "lightning:",
+  "ln",
+  "lnx",
+  "lnbc",
+  "lnbcrt",
+  "lnbcx1y",
+  "lnbc10",
+  "lnbc10z",
+  "lnbc101xyz",
+  "lnbc10a1x",
+  "lnbc10ux",
+  "lnbc1",
+  "lnbc11",
+  "lnbc100",
+  "lnbc1u",
+  "lnbc1uxyz",
+  "lnbc0p1q",
+  "lnbc5m1qq",
+  "LNBC10U1XYZ",
+  "lnbcrtn1x",
+  // hashtags — boundaries, the 42-cap, unicode, marks
+  "#a",
+  "#TAG",
+  "#_",
+  "#42",
+  "#日本語",
+  "#café",
+  "#",
+  `#${"x".repeat(41)}`,
+  `#${"x".repeat(43)}`,
+  "#x́",
+  "##",
+  "a#b",
+  // emoji shortcodes — present/absent, fold chars, empty rows
+  ":wave:",
+  ":K:",
+  ":k:",
+  ":a:",
+  ":bad:",
+  ":x-9_:",
+  ":wave",
+  "::",
+  // glue and boundary characters
+  "x",
+  "e",
+  "j",
+  "n",
+  "b",
+  "i",
+  "o",
+  "1",
+  "0",
+  "9",
+  "m",
+  "u",
+  "p",
+  "M",
+  "中",
+  "文",
+  "。",
+  "、",
+  "！",
+  "（",
+  "）",
+  "ｓ",
+  "＜",
+  "Ｆ",
+  "<",
+  ">",
+  '"',
+  "'",
+  "(",
+  ")",
+  "[",
+  "]",
+  ".",
+  ",",
+  ";",
+  ":",
+  "!",
+  "?",
+  "=",
+  "@",
+  "/",
+  "\\",
+  "|",
+  "`",
+  "~",
+  "^",
+  "$",
+  "%",
+  "&",
+  "*",
+  "+",
+  "{",
+  "}",
+  "😀",
+  "🎉",
+  "K",
+  "ſ",
+  "_",
+  "-",
+  " ",
+  "​",
+];
+
+const NIP27_EMOJI_SETS: string[][][] = [
+  [["emoji", "wave", "https://a.b/w.gif"]],
+  [
+    ["emoji", "K", "https://a.b/k.png"],
+    ["emoji", "k", "https://a.b/kl.png"],
+  ],
+  [
+    ["emoji", "wave", "https://a.b/first.gif"],
+    ["emoji", "wave", "https://a.b/last.gif"],
+  ],
+  [["emoji", "", ""]],
+];
+
+const NIP27_IMETAS: Array<Record<string, string>> = [
+  { "https://a.b/c": "image/png" },
+  { "https://x.y/p.png": "video/mp4" },
+  { "https://m.n/song.opus": "audio/mpeg" },
+  { "https://a.b/c": "text/html" },
+  { "https://w.z/x.mov?x=1": "image/webp" },
+];
+
+type Nip27TokenizeInput = {
+  content: string;
+  tags?: string[][];
+  legacy?: boolean;
+  imeta?: Record<string, string>;
+};
+
+function nip27TokenizeInputText(): string {
+  const parts: string[] = [];
+  const count = 1 + int(14);
+  for (let i = 0; i < count; i++) {
+    if (chance(0.18)) {
+      parts.push(" ");
+    }
+    parts.push(pick(NIP27_FRAGMENTS));
+  }
+  const input: Nip27TokenizeInput = { content: parts.join("") };
+  if (chance(0.35)) {
+    input.tags = pick(NIP27_EMOJI_SETS);
+  }
+  if (chance(0.4)) {
+    input.legacy = true;
+  }
+  if (chance(0.3)) {
+    input.imeta = pick(NIP27_IMETAS);
+  }
+  return JSON.stringify(input);
+}
+
 type CaseRecord = { i: number; input: string; out?: unknown; err?: string };
 
 function capture(run: () => unknown): { out?: unknown; err?: string } {
@@ -1179,6 +1416,29 @@ const CAPABILITIES: ReadonlyArray<Capability> = [
             throw new Error("decode case without input");
           }
           return toJson(nip19Decode(req.input));
+        }),
+      };
+    },
+  },
+  {
+    name: "nip27.tokenize",
+    make: () => {
+      const input = nip27TokenizeInputText();
+      return {
+        i: 0,
+        input,
+        ...capture(() => {
+          const req = parseJson<Nip27TokenizeInput>(input);
+          const options: ParseContentOptions = {};
+          if (req.legacy === true) {
+            options.legacyBech32 = true;
+          }
+          if (req.imeta !== undefined) {
+            options.imeta = new Map(Object.entries(req.imeta));
+          }
+          const source =
+            req.tags === undefined ? req.content : { content: req.content, tags: req.tags };
+          return blocksJson(parseContent(source, options));
         }),
       };
     },

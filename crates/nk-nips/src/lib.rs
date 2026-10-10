@@ -16,6 +16,7 @@
 //! | `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`); needs `nip59` |
 //! | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) |
 //! | `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`)                   |
+//! | `nip27`  | no      | content tokenizer (`parse_content`, `ContentBlock`); needs `nip19` |
 //! | `nip42`  | no      | relay auth (`auth_event`, `is_auth_required`)                     |
 //! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
 //! | `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Request`/`Response`) |
@@ -44,7 +45,7 @@ pub mod error;
 
 #[cfg(any(feature = "nip04", feature = "nip44"))]
 mod ecdh;
-#[cfg(any(feature = "nip46", feature = "nip98"))]
+#[cfg(any(feature = "nip27", feature = "nip46", feature = "nip98"))]
 mod util;
 
 #[cfg(feature = "nip04")]
@@ -59,6 +60,8 @@ pub mod nip17;
 pub mod nip19;
 #[cfg(feature = "nip21")]
 pub mod nip21;
+#[cfg(feature = "nip27")]
+pub mod nip27;
 #[cfg(feature = "nip42")]
 pub mod nip42;
 #[cfg(feature = "nip44")]
