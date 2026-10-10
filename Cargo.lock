@@ -599,7 +599,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "nk-core"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "base16ct",
  "criterion",
@@ -615,7 +615,7 @@ dependencies = [
 
 [[package]]
 name = "nk-nips"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "aes",
  "base64ct",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "nk-vectors"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "nk-core",
  "nk-nips",
@@ -652,7 +652,7 @@ dependencies = [
 
 [[package]]
 name = "nk-wasm"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "nk-core",
  "secp256k1",
