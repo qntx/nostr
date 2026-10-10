@@ -1,0 +1,1001 @@
+{
+  "schema": 1,
+  "capability": "nip51.lists",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.12.1"
+  },
+  "parse": [
+    {
+      "name": "mute: public items and ignores",
+      "op": "mute",
+      "event": {
+        "kind": 10000,
+        "tags": [
+          [
+            "p",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wss://hint.example"
+          ],
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          [
+            "t",
+            "spam"
+          ],
+          [
+            "word",
+            "Scam"
+          ],
+          [
+            "emoji",
+            "ignored",
+            "https://x.example/x.png"
+          ],
+          [
+            "p",
+            "not-hex"
+          ],
+          [
+            "e",
+            ""
+          ],
+          [
+            "t",
+            ""
+          ],
+          [
+            "word",
+            ""
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "204cf6d1671f73d22ba8e6897df40574eed5e06f74b5e73db647f9992ae47865",
+        "sig": "d7fd10e8e6990d11a72c8461eae8e9265de8ea86c186f91c5c8dba805e2df9761a993d2db650a0e446d0e8ad3b891eda66860ea5f405ceacf342d5aba582f4e4"
+      },
+      "out": [
+        {
+          "type": "pubkey",
+          "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "type": "event",
+          "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "type": "hashtag",
+          "value": "spam"
+        },
+        {
+          "type": "word",
+          "value": "scam"
+        }
+      ]
+    },
+    {
+      "name": "mute: empty list",
+      "op": "mute",
+      "event": {
+        "kind": 10000,
+        "tags": [],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "4268b195762238b1f02418dc130b63a059e8d0232460ce8ab07c4382d2c3d67a",
+        "sig": "98b64230fecd388e2c0cfc02ad8f2624ae55b48729f8e8b274ebf516f23161734f52773bf991a26c07078e592f3eccb98466debbaa941b3e2994dca11a0e0c7e"
+      },
+      "out": []
+    },
+    {
+      "name": "mute: wrong kind",
+      "op": "mute",
+      "event": {
+        "kind": 1,
+        "tags": [
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "37a509d2a94cb3921cb1caa05da049abc9291a183a806456ed16cd4dd6c4dc8b",
+        "sig": "5566923ec0e3b77163018efbd91737b27f1a88ed82a6698e594c6a01b38eb3b19967c9800ace46feaf6ff4c5ecbbe0f20854f7d23bc47de66d165c04b7d36ed5"
+      },
+      "err": "EventValidationError"
+    },
+    {
+      "name": "pin: ids and ignores",
+      "op": "pin",
+      "event": {
+        "kind": 10001,
+        "tags": [
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "wss://r.example",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "e",
+            "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+          ],
+          [
+            "e",
+            "nope"
+          ],
+          [
+            "e"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "dcd78e59d1c1720d4381d14c03ac19c884796aadd489d0748684e17552389676",
+        "sig": "737b9b7c63c53918a6e95718034f7fdcee244b0b3d19e7a09e718130c90380e925776942aaa9eb72defd168cee2d4719f9307c44877cd71b3ea0b07feb5a29f7"
+      },
+      "out": [
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      ]
+    },
+    {
+      "name": "pin: wrong kind",
+      "op": "pin",
+      "event": {
+        "kind": 10000,
+        "tags": [
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "560a09b5c4f34e753f4f32ba1568e136deaf9c2728fb7a7ac345f14942f9f65c",
+        "sig": "0b245c6bcd7fc63c2592a2e389950ffbb26560e8ac07bf214ece5584eb2048ff8a92d78cd106c7841ab574e2a0fc1cd63d433998b603d5bf3f95d71e2e146d0e"
+      },
+      "err": "EventValidationError"
+    },
+    {
+      "name": "bookmark: events and verbatim addresses",
+      "op": "bookmark",
+      "event": {
+        "kind": 10003,
+        "tags": [
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          [
+            "a",
+            "30023:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:post-1"
+          ],
+          [
+            "a",
+            "30023:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:post:with:colons"
+          ],
+          [
+            "t",
+            "ignored"
+          ],
+          [
+            "e",
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          ],
+          [
+            "a",
+            ""
+          ],
+          [
+            "e",
+            "nope"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "7c1c67f96c267c150af79d5c1715dd96153c62b7ecbc6210703a554227a1c871",
+        "sig": "fb08cb6073904831c991a5202eb625147a94c3b8f2dae21a36f55a577614b038bbf8abedf16a158ea2ede1ace81e9d07b708ae4cebe5a98dde7f643ddf431bc0"
+      },
+      "out": {
+        "e": [
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        ],
+        "a": [
+          "30023:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:post-1",
+          "30023:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:post:with:colons"
+        ]
+      }
+    },
+    {
+      "name": "bookmark: wrong kind",
+      "op": "bookmark",
+      "event": {
+        "kind": 1,
+        "tags": [
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "777afd94caec9b32ce0ad21c9c1a8fc19c96d10ae775bb54abe9d8f1c775f058",
+        "sig": "a1517bff95392b63773d8d472d117cfae9aa649222c439834c1343afa1ccace41b95d4335f5c8e4a85d8735a10e7b17343f92c7d05c36aacca506a1d1e26087c"
+      },
+      "err": "EventValidationError"
+    },
+    {
+      "name": "user emoji: sets and complete emoji only",
+      "op": "user_emoji",
+      "event": {
+        "kind": 10030,
+        "tags": [
+          [
+            "emoji",
+            "cat",
+            "https://cdn.example/cat.png",
+            "30030:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:cats"
+          ],
+          [
+            "a",
+            "30030:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:cats"
+          ],
+          [
+            "a",
+            "not a coord, kept verbatim"
+          ],
+          [
+            "emoji",
+            "incomplete"
+          ],
+          [
+            "emoji",
+            "",
+            "https://cdn.example/none.png"
+          ],
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "emoji",
+            "dog",
+            "https://cdn.example/dog.png"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "fb117a3dc26ab37daf5b5bb1307735bf98726af2c4317be67420c45d424e5157",
+        "sig": "6a9ab5278f14dacb2981febbbab4f0e403c10f4a9ee4d8627eb16375e0734958acde4e67cbf3c19424391b38e56e3f59f29cae6ed857d6eaec6c10767064dc3d"
+      },
+      "out": {
+        "emoji": [
+          {
+            "shortcode": "cat",
+            "url": "https://cdn.example/cat.png"
+          },
+          {
+            "shortcode": "dog",
+            "url": "https://cdn.example/dog.png"
+          }
+        ],
+        "sets": [
+          "30030:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:cats",
+          "not a coord, kept verbatim"
+        ]
+      }
+    },
+    {
+      "name": "user emoji: wrong kind",
+      "op": "user_emoji",
+      "event": {
+        "kind": 30030,
+        "tags": [],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "75a63cfe85ef019f195c5963c3bd81ea6d21ece052886920f35157c611554e82",
+        "sig": "d1a57473efe4b87016d30953f914e23642c64f621b544b8b1cf351991b79f5f5dad006101c640a2d3c7f50ff443cf7ef7c7b13060b7e4807bc04ea24e42c12a9"
+      },
+      "err": "EventValidationError"
+    },
+    {
+      "name": "relay set: d, normalization, dedup, skips",
+      "op": "relay_set",
+      "event": {
+        "kind": 30002,
+        "tags": [
+          [
+            "d",
+            "home"
+          ],
+          [
+            "title",
+            "Home"
+          ],
+          [
+            "relay",
+            "wss://a.example"
+          ],
+          [
+            "relay",
+            "not a url"
+          ],
+          [
+            "relay",
+            "wss://a.example/"
+          ],
+          [
+            "r",
+            "wss://wrong.example"
+          ],
+          [
+            "relay",
+            "wss://b.example"
+          ],
+          [
+            "relay",
+            ""
+          ],
+          [
+            "relay"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "8c8faf6090c1d93a88d9e53ea41dbd871b32ae2823c5438a06c92e823747c698",
+        "sig": "a1ac23ba31f3e480351da0c947c4d368f38cc3eb70124e747c07231700c6270949b7ee7ad8e7335dd06988738a67d10f719ebf2cddd531b452f644819d2e9ed9"
+      },
+      "out": {
+        "d": "home",
+        "relays": [
+          "wss://a.example/",
+          "wss://b.example/"
+        ]
+      }
+    },
+    {
+      "name": "relay set: missing d is empty",
+      "op": "relay_set",
+      "event": {
+        "kind": 30002,
+        "tags": [],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "8533d398d4594ad4d105fe7832bf3bdde25c74458b9fd96ed2d87ac84480a04b",
+        "sig": "7fc5bfb4f680add0cb1af02b3b8ad25d62a775301acc628a6eac18cbe48bc18cece7d1fa8b94a983de89e755b4f4136e556502f30c9c3e0f3906d9e8e700bfa5"
+      },
+      "out": {
+        "d": "",
+        "relays": []
+      }
+    },
+    {
+      "name": "relay set: wrong kind",
+      "op": "relay_set",
+      "event": {
+        "kind": 10012,
+        "tags": [
+          [
+            "d",
+            "x"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "19137782ac46b1559bde56e3ac5dc79401a8fe100502b5b8a3dfc4e65cfdc5e7",
+        "sig": "0c561bd3218cdff2d20809595f6f376958fcfcb34b6ed0f3a9756339c6d48b9cbdc0b39444177a9a72a04fc766dec545315afb61f9f4cd9931ff39495ed94bb6"
+      },
+      "err": "EventValidationError"
+    },
+    {
+      "name": "favorite relays: relay urls and 30002 coordinates only",
+      "op": "favorite_relays",
+      "event": {
+        "kind": 10012,
+        "tags": [
+          [
+            "relay",
+            "wss://a.example"
+          ],
+          [
+            "a",
+            "30002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:home"
+          ],
+          [
+            "a",
+            "30002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:home:extra"
+          ],
+          [
+            "a",
+            "30002"
+          ],
+          [
+            "a",
+            "30002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "a",
+            "30002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:"
+          ],
+          [
+            "a",
+            "30000:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:friends"
+          ],
+          [
+            "a",
+            "30030:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:cats"
+          ],
+          [
+            "a",
+            "30002:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC:upper"
+          ],
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "relay",
+            "://bad"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "1bf52b0733a9310c123aeddffcf5eb4cb32f38fe341a5c5952c2534772151459",
+        "sig": "4312d85a89434e1dcbb2009af97a8514208c919617daaceccff3bc4bd97c58712d2b3de7e9f3965cc701d832748b57ee59f22ed07c2e9f0e10e94bf6bdafe982"
+      },
+      "out": {
+        "relays": [
+          "wss://a.example/"
+        ],
+        "sets": [
+          "30002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:home",
+          "30002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:home:extra",
+          "30002:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC:upper"
+        ]
+      }
+    },
+    {
+      "name": "favorite relays: wrong kind",
+      "op": "favorite_relays",
+      "event": {
+        "kind": 30002,
+        "tags": [],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "8533d398d4594ad4d105fe7832bf3bdde25c74458b9fd96ed2d87ac84480a04b",
+        "sig": "7fc5bfb4f680add0cb1af02b3b8ad25d62a775301acc628a6eac18cbe48bc18cece7d1fa8b94a983de89e755b4f4136e556502f30c9c3e0f3906d9e8e700bfa5"
+      },
+      "err": "EventValidationError"
+    },
+    {
+      "name": "emoji set: d title emoji",
+      "op": "emoji_set",
+      "event": {
+        "kind": 30030,
+        "tags": [
+          [
+            "d",
+            "cats"
+          ],
+          [
+            "title",
+            "Cats"
+          ],
+          [
+            "image",
+            "https://cdn.example/cover.png"
+          ],
+          [
+            "emoji",
+            "cat",
+            "https://cdn.example/cat.png"
+          ],
+          [
+            "emoji",
+            "short-only"
+          ],
+          [
+            "a",
+            "30030:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:cats"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "e26d9ea2b7e6480bf537d1b1e55cafe80d1b41bf99c6bc986c6baabe50717efa",
+        "sig": "0bf86ccb1388280c60acebd72f7353a4935353b37cedc19bd88c2c05868e5d993e1335989df077d987475c036b1caa31d011ebf7353f5168e6fdc6e06a5cf232"
+      },
+      "out": {
+        "d": "cats",
+        "emoji": [
+          {
+            "shortcode": "cat",
+            "url": "https://cdn.example/cat.png"
+          }
+        ],
+        "title": "Cats"
+      }
+    },
+    {
+      "name": "emoji set: empty title is absent",
+      "op": "emoji_set",
+      "event": {
+        "kind": 30030,
+        "tags": [
+          [
+            "d",
+            "cats"
+          ],
+          [
+            "title",
+            ""
+          ],
+          [
+            "emoji",
+            "cat",
+            "https://cdn.example/cat.png"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "722f0aa3eed1d3e5d62f6c89a799844185896255a172b146e7d9cc1d1fb62332",
+        "sig": "189bab728aed3ec88ad7a601721f14183e0ec66115ddc4250d5e6f629a727ee8be5a6eca61ba515d83183f07816897356433b3391a71b71af144e651ba48aec7"
+      },
+      "out": {
+        "d": "cats",
+        "emoji": [
+          {
+            "shortcode": "cat",
+            "url": "https://cdn.example/cat.png"
+          }
+        ]
+      }
+    },
+    {
+      "name": "emoji set: wrong kind",
+      "op": "emoji_set",
+      "event": {
+        "kind": 10030,
+        "tags": [],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "005b46cc19061d4b089811fc5b15d31fc82fe66c932fb8279cf001ce885fc0db",
+        "sig": "2027ff95ac229d21b7189a5720443ca451f40d124caa5510131a96a0c7014e00d33943e8921b4d9ec9a7c536b67d956987c0d6d13ac0bbd6a58e640a42d8139b"
+      },
+      "err": "EventValidationError"
+    },
+    {
+      "name": "follow pack: d and pubkeys",
+      "op": "follow_pack",
+      "event": {
+        "kind": 39089,
+        "tags": [
+          [
+            "d",
+            "dev"
+          ],
+          [
+            "title",
+            "Devs"
+          ],
+          [
+            "p",
+            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+            "wss://hint.example"
+          ],
+          [
+            "p",
+            "short"
+          ],
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "b02e570a27e6cf1ae538d77812e0bab32b56c87d6c206ded6aff39b13928cf71",
+        "sig": "cb6f69eb19206a1c50deeadb697b9c2ce4424374bc2da503466026e4f1879c17147e4a4a44c0ac7097bf4c796089602b9ac8f925740fce26d946c2953c3baa1d"
+      },
+      "out": {
+        "d": "dev",
+        "pubkeys": [
+          "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
+    },
+    {
+      "name": "follow pack: wrong kind",
+      "op": "follow_pack",
+      "event": {
+        "kind": 30002,
+        "tags": [
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "id": "ccbacdd1d9afdc1239a5dda3ae03bf5dcb76aa319937bcbf9729bc9dcc3f8903",
+        "sig": "accc1b4e24cb313ac21444297e5ea5e059684babd14698fd6bad0b5f5a4825cda4e959c3949532828a053b97cbd5ddfda8fa44fb186bbece14d119405548af4e"
+      },
+      "err": "EventValidationError"
+    }
+  ],
+  "build": [
+    {
+      "name": "mute: all item kinds",
+      "op": "mute",
+      "input": [
+        {
+          "type": "pubkey",
+          "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "type": "event",
+          "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "type": "hashtag",
+          "value": "spam"
+        },
+        {
+          "type": "word",
+          "value": "Scam"
+        },
+        {
+          "type": "hashtag",
+          "value": ""
+        },
+        {
+          "type": "word",
+          "value": ""
+        }
+      ],
+      "builder": {
+        "kind": 10000,
+        "content": "",
+        "tags": [
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          [
+            "t",
+            "spam"
+          ],
+          [
+            "word",
+            "scam"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "mute: non-hex pubkey is TS-only",
+      "op": "mute",
+      "input": [
+        {
+          "type": "pubkey",
+          "value": "nope"
+        }
+      ],
+      "rust": false,
+      "err": "HexError"
+    },
+    {
+      "name": "pin: ids",
+      "op": "pin",
+      "input": [
+        "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      ],
+      "builder": {
+        "kind": 10001,
+        "content": "",
+        "tags": [
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          [
+            "e",
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "pin: non-hex id is TS-only",
+      "op": "pin",
+      "input": [
+        "nope"
+      ],
+      "rust": false,
+      "err": "HexError"
+    },
+    {
+      "name": "bookmark: events then addresses",
+      "op": "bookmark",
+      "input": {
+        "e": [
+          "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        ],
+        "a": [
+          "30023:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:post-1",
+          "30023:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:post:with:colons"
+        ]
+      },
+      "builder": {
+        "kind": 10003,
+        "content": "",
+        "tags": [
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          [
+            "a",
+            "30023:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:post-1"
+          ],
+          [
+            "a",
+            "30023:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:post:with:colons"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "bookmark: verbatim a is TS-only",
+      "op": "bookmark",
+      "input": {
+        "a": [
+          "not a coord",
+          ""
+        ]
+      },
+      "rust": false,
+      "builder": {
+        "kind": 10003,
+        "content": "",
+        "tags": [
+          [
+            "a",
+            "not a coord"
+          ]
+        ]
+      }
+    }
+  ],
+  "private": {
+    "encrypt": [
+      {
+        "name": "empty tag list",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "nonce": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "tags": [],
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnS9zNTAUGsbZDdZKRsrOqDWKgD3LyV6YKwqFKrfdxw8C3Q2wbO3veyR/oipbisHZbnvbdlka+YZWGiw8x1sNh7XP"
+      },
+      {
+        "name": "mixed tags",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "nonce": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "tags": [
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          [
+            "t",
+            "spam"
+          ],
+          [
+            "word",
+            "Lower"
+          ],
+          [
+            "emoji",
+            "cat",
+            "https://cdn.example/cat.png"
+          ],
+          [
+            "relay",
+            "wss://a.example"
+          ],
+          [
+            "d",
+            ""
+          ]
+        ],
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnClzMxJkOOr7bLcrJ6uvyVTr4VyqqD/5SmvkS9a8pm5jvFmiUufw2YPKoZdQtUJUMLIUe+ExdYmt+sDG9i6XJP1Q7z/LgYqalK+a1a3hkydy4F2jf5QiFa4Qpz5hKOnQZLg9r7Gu48V07Ehi4gGb9+rcagqLx7MK7Aphf7din9J/E9MmU+Ah4otAVggzSjHs66F3IOvi+aLQ2kYcDIJl4//mT0RS+0vnyWeAa2aejUJuERdg9BdVXiWGRi3AO0b9X11ZSRrlSIpU0yfAZSv+IGvyQ29bpsBfK/CrlpoiwbwUeUdTURFGWalZVn+wRwGUeIXaODWhR/4CGCiCjNBbX9A8a5R/LheQmVY/ZP0gHeU4k57PWHGMKsUP/ddwMED6h4Kb7b+/xhe+R/sgcV4uk47E5++Jb5TozXDxZq3QtkIVADwHKb1z2bb/Ohh6OvjyPy46/h2P6WTPaPo7eOGfdK74"
+      },
+      {
+        "name": "second key second nonce",
+        "secret_key": "e108399bd8424357a710b606ae0c13166d853d327e47a6e5e038197346bdbf45",
+        "nonce": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+        "tags": [
+          [
+            "p",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          ]
+        ],
+        "content": "AtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS9fvvRXEN9khfk9yoLgZ0GUDteKVV/3h4hNHEgbkNp4Oy5YAkvZBFx2GL1gMvTwrfZ3gkyHAERlvhbWAU1QiAcTfZpQBak9gpsCGauLlmgCkQS/w2l3h+wg4Lv9yZNs64TLBFTGJ+qIfXujFiBZ0AK6os9B1Kku80yxVXqu7AGKOCKA=="
+      },
+      {
+        "name": "empty inner tag is TS-only",
+        "rust": false,
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "nonce": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+        "tags": [
+          [],
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ],
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnWBzM204QeSpL/poJ6uvyVTr4VyqqD/5SmvkS9a8pm5jvFmiUufw2YPKoZdQtUJUMLIUe+ExdYmt+sDG9i6XJP1Q7z/LgYqalOymmNSeqwVewj/BHfZAd8xyxVwDSouyBtpcokKwjaTTmsZuBasM8b+xE3UDbrVrZl+CFyv10p9knA=="
+      }
+    ],
+    "decrypt": [
+      {
+        "name": "round trip",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnClzMxJkOOr7bLcrJ6uvyVTr4VyqqD/5SmvkS9a8pm5jvFmiUufw2YPKoZdQtUJUMLIUe+ExdYmt+sDG9i6XJP1Q7z/LgYqalK+a1a3hkydy4F2jf5QiFa4Qpz5hKOnQZLg9r7Gu48V07Ehi4gGb9+rcagqLx7MK7Aphf7din9J/E9MmU+Ah4otAVggzSjHs66F3IOvi+aLQ2kYcDIJl4//mT0RS+0vnyWeAa2aejUJuERdg9BdVXiWGRi3AO0b9X11ZSRrlSIpU0yfAZSv+IGvyQ29bpsBfK/CrlpoiwbwUeUdTURFGWalZVn+wRwGUeIXaODWhR/4CGCiCjNBbX9A8a5R/LheQmVY/ZP0gHeU4k57PWHGMKsUP/ddwMED6h4Kb7b+/xhe+R/sgcV4uk47E5++Jb5TozXDxZq3QtkIVADwHKb1z2bb/Ohh6OvjyPy46/h2P6WTPaPo7eOGfdK74",
+        "out": [
+          [
+            "p",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "e",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          [
+            "t",
+            "spam"
+          ],
+          [
+            "word",
+            "Lower"
+          ],
+          [
+            "emoji",
+            "cat",
+            "https://cdn.example/cat.png"
+          ],
+          [
+            "relay",
+            "wss://a.example"
+          ],
+          [
+            "d",
+            ""
+          ]
+        ],
+        "items": [
+          {
+            "type": "pubkey",
+            "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "type": "event",
+            "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "type": "hashtag",
+            "value": "spam"
+          },
+          {
+            "type": "word",
+            "value": "lower"
+          }
+        ]
+      },
+      {
+        "name": "empty content is no private tags",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "content": "",
+        "out": [],
+        "items": []
+      },
+      {
+        "name": "foreign author rejects",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnClzMxJkOOr7bLcrJ6uvyVTr4VyqqD/5SmvkS9a8pm5jvFmiUufw2YPKoZdQtUJUMLIUe+ExdYmt+sDG9i6XJP1Q7z/LgYqalK+a1a3hkydy4F2jf5QiFa4Qpz5hKOnQZLg9r7Gu48V07Ehi4gGb9+rcagqLx7MK7Aphf7din9J/E9MmU+Ah4otAVggzSjHs66F3IOvi+aLQ2kYcDIJl4//mT0RS+0vnyWeAa2aejUJuERdg9BdVXiWGRi3AO0b9X11ZSRrlSIpU0yfAZSv+IGvyQ29bpsBfK/CrlpoiwbwUeUdTURFGWalZVn+wRwGUeIXaODWhR/4CGCiCjNBbX9A8a5R/LheQmVY/ZP0gHeU4k57PWHGMKsUP/ddwMED6h4Kb7b+/xhe+R/sgcV4uk47E5++Jb5TozXDxZq3QtkIVADwHKb1z2bb/Ohh6OvjyPy46/h2P6WTPaPo7eOGfdK74",
+        "err": "EventValidationError"
+      },
+      {
+        "name": "decrypts to non-JSON",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnSVGB0Q5cLW2Y9ZKRsrOqDWKgD3LyV6YKwqFKrfdxw8C3RkCmUyETrG6di+ErhzHDn0zqtofxMBaRICIzpuIzNAu",
+        "err": "EventValidationError"
+      },
+      {
+        "name": "decrypts to wrong shape",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnS9TFTAUGsbZDdZKRsrOqDWKgD3LyV6YKwqFKrfdxw8C3aau0inH6C+gvnIhQWewVgY4kkoRBslzPXX70ku7i/1/",
+        "err": "EventValidationError"
+      },
+      {
+        "name": "decrypts to empty inner tag",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnSlzM21JGsbZDdZKRsrOqDWKgD3LyV6YKwqFKrfdxw8C3aC8iDEGKpaD1JsAnArJOzTBvu9/7v7eVEjfUvXKBR42",
+        "err": "EventValidationError"
+      },
+      {
+        "name": "decrypts to non-string item",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnSdzMxJkOOr5PIsXRsrOqDWKgD3LyV6YKwqFKrfdxw8C3QIGkJZEx9Jg7kvN55gpBx9xSGDd4gPWZrPyXBmDSTkX",
+        "err": "EventValidationError"
+      },
+      {
+        "name": "decrypts to lone surrogate",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnT5zMxJjdbS9L/poGr+qkAW6omCWyV6YKwqFKrfdxw8C3Yvmy2Wm4wQLEzDWc4hEGozJs5klMK47tpBbgm4WDsdw",
+        "err": "EventValidationError"
+      },
+      {
+        "name": "NIP-04-shaped content is a crypto error",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "content": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=?iv=AAAAAAAAAAAAAAAAAAAAAA==",
+        "err": "CryptoError"
+      },
+      {
+        "name": "tampered payload is a crypto error",
+        "secret_key": "000000000000000000000000000000000000000000000000000000000000a1ce",
+        "pubkey": "9cf6f642e8b183cd53a6ce7d4f57e0ad498588d3bc38c8dfacff1d4a4a31e747",
+        "content": "AsHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBnClzMxJkOOr7bLcrJ6uvyVTr4VyqqD/5SmvkS9a8pm5jvFmiUufw2YPKoZdQtUJUMLIUe+ExdYmt+sDG9i6XJP1Q7z/LgYqalK+a1a3hkydy4F2jf5QiFa4Qpz5hKOnQZLg9r7Gu48V07Ehi4gGb9+rcagqLx7MK7Aphf7din9J/E9MmU+Ah4otAVggzSjHs66F3IOvi+aLQ2kYcDIJl4//mT0RS+0vnyWeAa2aejUJuERdg9BdVXiWGRi3AO0b9X11ZSRrlSIpU0yfAZSv+IGvyQ29bpsBfK/CrlpoiwbwUeUdTURFGWalZVn+wRwGUeIXaODWhR/4CGCiCjNBbX9A8a5R/LheQmVY/ZP0gHeU4k57PWHGMKsUP/ddwMED6h4Kb7b+/xhe+R/sgcV4uk47E5++Jb5TozXDxZq3QtkIVADwHKb1z2bb/Ohh6OvjyPy46/h2P6WTPaPo7eOGfdK7A",
+        "err": "CryptoError"
+      }
+    ]
+  }
+}

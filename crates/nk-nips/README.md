@@ -14,23 +14,24 @@ let entity = nip19::decode(&nsec)?;
 
 ## Features
 
-| feature  | default | effect                                                                                     | external dependencies                                                               |
-| -------- | ------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `std`    | yes     | OS facilities; base for `clock`/`os-rng`                                                   | —                                                                                   |
-| `clock`  | yes     | wall-clock helpers where a NIP needs them                                                  | —                                                                                   |
-| `os-rng` | yes     | OS entropy where a NIP needs it                                                            | `getrandom`                                                                         |
-| `nip04`  | no      | legacy encrypted DMs (`SharedSecret`, `encrypt`/`decrypt`)                                 | `aes`, `base64ct`, `cbc`, `rand_core`, `secp256k1`, `zeroize`                       |
-| `nip10`  | no      | thread references (`parse_thread_tags`, `reply_tags`/`reply_to`); needs `nip19`            | —                                                                                   |
-| `nip13`  | no      | proof of work (`pow`, `PowMiner`)                                                          | `sha2`                                                                              |
-| `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`, kind-10050 lists); needs `nip59` | —                                                                                   |
-| `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`)                     | `bech32`, `zeroize`                                                                 |
-| `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`); needs `nip19`                            | —                                                                                   |
-| `nip42`  | no      | relay authentication (`auth_event`, `is_auth_required`)                                    | —                                                                                   |
-| `nip44`  | no      | NIP-44 v2 payload encryption (`ConversationKey`, `encrypt`/`decrypt`)                      | `base64ct`, `chacha20`, `hkdf`, `hmac`, `rand_core`, `secp256k1`, `sha2`, `zeroize` |
-| `nip49`  | no      | `ncryptsec` secret-key encryption (`encrypt_with`/`encrypt`/`decrypt`); needs `nip19`      | `chacha20poly1305`, `rand_core`, `scrypt`, `unicode-normalization`, `zeroize`       |
-| `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`                    | `rand_core`, `serde_json`                                                           |
-| `nip65`  | no      | relay lists (`parse_relay_list`, `relay_list`, `read_relays`/`write_relays`)               | —                                                                                   |
-| `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)                   | `base64ct`, `serde_json`, `sha2`                                                    |
+| feature  | default | effect                                                                                                  | external dependencies                                                               |
+| -------- | ------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `std`    | yes     | OS facilities; base for `clock`/`os-rng`                                                                | —                                                                                   |
+| `clock`  | yes     | wall-clock helpers where a NIP needs them                                                               | —                                                                                   |
+| `os-rng` | yes     | OS entropy where a NIP needs it                                                                         | `getrandom`                                                                         |
+| `nip04`  | no      | legacy encrypted DMs (`SharedSecret`, `encrypt`/`decrypt`)                                              | `aes`, `base64ct`, `cbc`, `rand_core`, `secp256k1`, `zeroize`                       |
+| `nip10`  | no      | thread references (`parse_thread_tags`, `reply_tags`/`reply_to`); needs `nip19`                         | —                                                                                   |
+| `nip13`  | no      | proof of work (`pow`, `PowMiner`)                                                                       | `sha2`                                                                              |
+| `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`, kind-10050 lists); needs `nip59`              | —                                                                                   |
+| `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`)                                  | `bech32`, `zeroize`                                                                 |
+| `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`); needs `nip19`                                         | —                                                                                   |
+| `nip42`  | no      | relay authentication (`auth_event`, `is_auth_required`)                                                 | —                                                                                   |
+| `nip44`  | no      | NIP-44 v2 payload encryption (`ConversationKey`, `encrypt`/`decrypt`)                                   | `base64ct`, `chacha20`, `hkdf`, `hmac`, `rand_core`, `secp256k1`, `sha2`, `zeroize` |
+| `nip49`  | no      | `ncryptsec` secret-key encryption (`encrypt_with`/`encrypt`/`decrypt`); needs `nip19`                   | `chacha20poly1305`, `rand_core`, `scrypt`, `unicode-normalization`, `zeroize`       |
+| `nip51`  | no      | lists (`parse_mute_list`, `mute_list`, `pin_list`, `bookmark_list`, NIP-44 private tags); needs `nip44` | `serde_json`                                                                        |
+| `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`                                 | `rand_core`, `serde_json`                                                           |
+| `nip65`  | no      | relay lists (`parse_relay_list`, `relay_list`, `read_relays`/`write_relays`)                            | —                                                                                   |
+| `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)                                | `base64ct`, `serde_json`, `sha2`                                                    |
 
 Each NIP is a separate default-off feature and compiles independently. `nsec` secrets move through `SecretKey::with_secret_bytes` and decoded scratch buffers are zeroized before the key is returned.
 

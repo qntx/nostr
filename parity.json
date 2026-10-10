@@ -561,14 +561,20 @@
     {
       "id": "nip51.lists",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK3",
       "ts": {
         "module": "packages/nostr/src/nips/nip51.ts",
-        "tests": ["packages/nostr/tests/nip51.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip51.test.ts",
+          "packages/nostr/tests/vectors/nip51.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip51.rs",
+        "tests": ["crates/nk-vectors/tests/nip51.rs"]
+      },
+      "vectors": ["vectors/nip51/codec.json"]
     },
     {
       "id": "nip57.zap",

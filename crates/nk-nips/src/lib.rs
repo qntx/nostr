@@ -19,6 +19,7 @@
 //! | `nip42`  | no      | relay auth (`auth_event`, `is_auth_required`)                     |
 //! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
 //! | `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptOptions`, `encrypt`/`decrypt`) |
+//! | `nip51`  | no      | lists (`parse_mute_list`, …, NIP-44 private tags); needs `nip44`           |
 //! | `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`  |
 //! | `nip65`  | no      | relay lists (`parse_relay_list`, `relay_list`, `read_relays`/`write_relays`) |
 //! | `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)    |
@@ -60,6 +61,8 @@ pub mod nip42;
 pub mod nip44;
 #[cfg(feature = "nip49")]
 pub mod nip49;
+#[cfg(feature = "nip51")]
+pub mod nip51;
 #[cfg(feature = "nip59")]
 pub mod nip59;
 #[cfg(feature = "nip65")]
@@ -100,6 +103,11 @@ const _: () = {
         assert_send_sync::<nip49::EncryptOptions>();
         assert_send_sync::<nip49::KeySecurity>();
         assert_send_sync::<nip49::Decrypted>();
+    }
+    #[cfg(feature = "nip51")]
+    {
+        assert_send_sync::<nip51::MuteItem>();
+        assert_send_sync::<nip51::BookmarkList>();
     }
     #[cfg(feature = "nip21")]
     assert_send_sync::<nip21::NostrUri>();
