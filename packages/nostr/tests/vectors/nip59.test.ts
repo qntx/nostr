@@ -1,12 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { schnorr } from "@noble/curves/secp256k1.js";
 import { describe, expect, test } from "vite-plus/test";
 
 import type { Event } from "../../src/core/event.ts";
 import { Keys, signEvent } from "../../src/core/key.ts";
-import type { SigningBackend } from "../../src/core/key.ts";
 import type { Tag } from "../../src/core/tag.ts";
 import { hexToBytes } from "../../src/core/util.ts";
 import * as nip44 from "../../src/nips/nip44.ts";
@@ -95,14 +93,10 @@ class Stream {
 
 function cryptoOf(secretKey: string, stream: Stream): Nip59Crypto {
   const secretBytes = hexToBytes(secretKey);
-  const backend: SigningBackend = {
-    publicKey: (sk) => schnorr.getPublicKey(sk),
-    sign: (id, sk) => schnorr.sign(id, sk, stream.take(32)),
-  };
-  const keys = Keys.fromSecretKey(secretKey, backend);
+  const keys = Keys.fromSecretKey(secretKey);
   return {
     getPublicKey: async () => Promise.resolve(keys.publicKey),
-    signEvent: async (unsigned) => Promise.resolve(signEvent(unsigned, keys)),
+    signEvent: async (unsigned) => Promise.resolve(signEvent(unsigned, keys, stream.take(32))),
     nip44Encrypt: async (peer, plaintext) =>
       Promise.resolve(
         nip44.encrypt(plaintext, nip44.getConversationKey(secretBytes, peer), stream.take(32)),

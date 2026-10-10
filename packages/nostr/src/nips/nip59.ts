@@ -4,14 +4,13 @@
  *
  * @see https://github.com/nostr-protocol/nips/blob/master/59.md
  */
-import { schnorr, secp256k1 } from "@noble/curves/secp256k1.js";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 
 import { NostrError } from "../core/error.ts";
 import type { Event, UnsignedEvent } from "../core/event.ts";
 import { getEventHash, validateEvent, validateSignedEvent } from "../core/event.ts";
-import type { SigningBackend } from "../core/key.ts";
-import { Keys, signEvent } from "../core/key.ts";
+import { Keys, SecretKey, signEvent } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
@@ -237,42 +236,50 @@ export function createGiftWrap(seal: Event, recipient: string, opts?: WrapOption
   const recipientPk = assertHex32(recipient, "public key");
   const drawBytes = opts?.randomBytes ?? randomBytes;
   // Ephemeral key: redraw 32-byte candidates until a valid scalar, like
-  // nk-core's `SecretKey::generate_with_rng`. Signing goes through `signEvent` with a backend that
-  // draws the BIP-340 aux from the same stream — order: key → offset → nonce → aux.
-  const backend: SigningBackend = {
-    publicKey: (secretKey) => schnorr.getPublicKey(secretKey),
-    sign: (id, secretKey) => schnorr.sign(id, secretKey, drawBytes(32)),
-  };
-  let ephemeral: Keys;
+  // nk-core's `SecretKey::generate_with_rng`. Stream order: key → offset → nonce → aux. The
+  // candidates, the ephemeral secret key, and the conversation key are wiped after use.
+  let secretKey: SecretKey;
   for (;;) {
     const candidate = drawBytes(32);
     if (secp256k1.utils.isValidSecretKey(candidate)) {
-      ephemeral = Keys.fromSecretKey(candidate, backend);
+      secretKey = SecretKey.fromBytes(candidate);
+      candidate.fill(0);
       break;
     }
+    candidate.fill(0);
   }
-  const created_at =
-    opts?.timestamps?.wrap ?? randomPastTimestamp({ ...opts, randomBytes: drawBytes });
-  const content = encrypt(
-    eventToJson(seal),
-    getConversationKey(ephemeral.secretKey.bytes, recipientPk),
-    drawBytes(32),
-  );
-  const tags: Tag[] = [TagBuilder.p(recipientPk, opts?.relayHint)];
-  if (opts?.expiration !== undefined) {
-    tags.push(["expiration", String(assertExpiration(opts.expiration))]);
+  try {
+    const ephemeral = Keys.fromSecretKey(secretKey);
+    const created_at =
+      opts?.timestamps?.wrap ?? randomPastTimestamp({ ...opts, randomBytes: drawBytes });
+    const secretBytes = secretKey.bytes;
+    let conversationKey: Uint8Array | undefined;
+    try {
+      conversationKey = getConversationKey(secretBytes, recipientPk);
+      const content = encrypt(eventToJson(seal), conversationKey, drawBytes(32));
+      const tags: Tag[] = [TagBuilder.p(recipientPk, opts?.relayHint)];
+      if (opts?.expiration !== undefined) {
+        tags.push(["expiration", String(assertExpiration(opts.expiration))]);
+      }
+      tags.push(...(opts?.extraTags ?? []));
+      return signEvent(
+        {
+          kind: opts?.ephemeral === true ? Kind.GiftWrapEphemeral : Kind.GiftWrap,
+          content,
+          created_at,
+          tags,
+          pubkey: ephemeral.publicKey,
+        },
+        ephemeral,
+        drawBytes(32),
+      );
+    } finally {
+      secretBytes.fill(0);
+      conversationKey?.fill(0);
+    }
+  } finally {
+    secretKey.zeroize();
   }
-  tags.push(...(opts?.extraTags ?? []));
-  return signEvent(
-    {
-      kind: opts?.ephemeral === true ? Kind.GiftWrapEphemeral : Kind.GiftWrap,
-      content,
-      created_at,
-      tags,
-      pubkey: ephemeral.publicKey,
-    },
-    ephemeral,
-  );
 }
 
 export async function wrap(

@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { schnorr } from "@noble/curves/secp256k1.js";
 import { describe, expect, test } from "vite-plus/test";
 
 import { EventBuilder } from "../../src/core/builder.ts";
@@ -25,7 +24,6 @@ import {
 } from "../../src/core/filter.ts";
 import type { Filter } from "../../src/core/filter.ts";
 import { Keys, signEvent } from "../../src/core/key.ts";
-import type { SigningBackend } from "../../src/core/key.ts";
 import {
   classifyKind,
   isAddressableKind,
@@ -281,12 +279,8 @@ describe("vectors/core", () => {
   test("event sign: signEvent with fixed aux reproduces id and sig", () => {
     for (const c of signed) {
       const aux = hexToBytes(c.aux);
-      const backend: SigningBackend = {
-        publicKey: (sk) => schnorr.getPublicKey(sk),
-        sign: (id, sk) => schnorr.sign(id, sk, aux),
-      };
-      const keys = Keys.fromSecretKey(c.secretKey, backend);
-      const event = signEvent(c.unsigned, keys);
+      const keys = Keys.fromSecretKey(c.secretKey);
+      const event = signEvent(c.unsigned, keys, aux);
       expect(event).toStrictEqual(c.event);
     }
   });

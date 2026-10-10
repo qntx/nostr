@@ -1,3 +1,4 @@
+import { schnorr } from "@noble/curves/secp256k1.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { expect, test, describe } from "vite-plus/test";
 
@@ -8,6 +9,7 @@ import {
   MessageError,
   UrlError,
   SUBSCRIPTION_ID_MAX_CHARS,
+  CryptoError,
   SecretKey,
   assertSubscriptionId,
   canonicalizeFilter,
@@ -34,6 +36,7 @@ import {
   parseRelayMessage,
   serializeEvent,
   signEvent,
+  bytesToHex,
   normalizeURL,
   Tag,
   validateEvent,
@@ -84,6 +87,52 @@ describe("events", () => {
     expect(verifyEvent(event)).toBe(true);
     // WeakSet cache path
     expect(verifyEvent(event)).toBe(true);
+  });
+
+  test("signEvent with explicit auxRand matches schnorr.sign and is reproducible", () => {
+    const keys = Keys.fromSecretKey(SK_HEX);
+    const unsigned = {
+      kind: Kind.TextNote,
+      tags: [],
+      content: "hi",
+      created_at: 1,
+      pubkey: keys.publicKey,
+    };
+    const aux = hexToBytes("42".repeat(32));
+    const a = signEvent(unsigned, keys, aux);
+    const b = signEvent(unsigned, keys, aux);
+    expect(b).toStrictEqual(a);
+    const expected = schnorr.sign(hexToBytes(getEventHash(unsigned)), keys.secretKey.bytes, aux);
+    expect(a.sig).toBe(bytesToHex(expected));
+    // finalizeEvent forwards auxRand: same template + aux → same signature.
+    const finalized = finalizeEvent(
+      { kind: unsigned.kind, tags: unsigned.tags, content: unsigned.content, created_at: 1 },
+      SK_HEX,
+      aux,
+    );
+    expect(finalized.sig).toBe(a.sig);
+  });
+
+  test.each([31, 33])("signEvent rejects a %d-byte auxRand", (len) => {
+    const keys = Keys.fromSecretKey(SK_HEX);
+    const unsigned = {
+      kind: Kind.TextNote,
+      tags: [],
+      content: "hi",
+      created_at: 1,
+      pubkey: keys.publicKey,
+    };
+    expect(() => signEvent(unsigned, keys, new Uint8Array(len))).toThrow(CryptoError);
+    expect(() => signEvent(unsigned, keys, new Uint8Array(len))).toThrow(
+      "auxRand must be 32 bytes",
+    );
+    expect(() =>
+      finalizeEvent(
+        { kind: Kind.TextNote, tags: [], content: "hi", created_at: 1 },
+        SK_HEX,
+        new Uint8Array(len),
+      ),
+    ).toThrow("auxRand must be 32 bytes");
   });
 
   test("signEvent on a structurally invalid unsigned event throws EventValidationError", () => {

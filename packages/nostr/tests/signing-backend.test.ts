@@ -56,7 +56,8 @@ describe("SigningBackend", () => {
     const sk = hexToBytes(SK_HEX);
     const keys = Keys.fromSecretKey(sk, backend);
     expect(calls.publicKey).toHaveLength(1);
-    expect(calls.publicKey[0]).toStrictEqual(sk);
+    // The secret-key copy handed to the backend is wiped after the call.
+    expect(calls.publicKey[0]).toStrictEqual(new Uint8Array(32));
     expect(keys.publicKey).toBe(bytesToHex(schnorr.getPublicKey(sk)));
   });
 
@@ -67,9 +68,10 @@ describe("SigningBackend", () => {
     expect(calls.sign).toHaveLength(1);
     const call = calls.sign[0]!;
     expect(call.id).toStrictEqual(hexToBytes(event.id));
-    expect(call.secretKey).toStrictEqual(hexToBytes(SK_HEX));
+    // The secret-key copy handed to the backend is wiped after the call.
+    expect(call.secretKey).toStrictEqual(new Uint8Array(32));
     expect(call.auxRand).toHaveLength(32);
-    expect(event.sig).toBe(bytesToHex(schnorr.sign(call.id, call.secretKey, call.auxRand)));
+    expect(event.sig).toBe(bytesToHex(schnorr.sign(call.id, hexToBytes(SK_HEX), call.auxRand)));
 
     const again = finalizeEvent(TEMPLATE, keys);
     expect(calls.sign).toHaveLength(2);
@@ -78,6 +80,18 @@ describe("SigningBackend", () => {
 
     expect(verifyEvent({ ...event })).toBe(true);
     expect(verifyEvent({ ...again })).toBe(true);
+  });
+
+  test("secret-key copies handed to the backend are wiped after use", () => {
+    const { backend, calls } = recordingBackend();
+    const keys = Keys.fromSecretKey(SK_HEX, backend);
+    // The constructor's publicKey derivation copy is already wiped.
+    expect(calls.publicKey.every((sk) => sk.every((x) => x === 0))).toBe(true);
+    finalizeEvent(TEMPLATE, keys);
+    expect(calls.sign).toHaveLength(1);
+    expect(calls.sign.every((c) => c.secretKey.every((x) => x === 0))).toBe(true);
+    // The aux and id buffers are not secret and keep their content.
+    expect(calls.sign[0]!.auxRand.some((x) => x !== 0)).toBe(true);
   });
 
   test("KeysSigner.signEvent routes through the backend", async () => {
