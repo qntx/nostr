@@ -18,7 +18,7 @@
     },
     "packages/nostr": {
       "name": "@qntx/nostr",
-      "version": "0.9.0",
+      "version": "0.12.1",
       "dependencies": {
         "@noble/ciphers": "^2.4.0",
         "@noble/curves": "^2.4.0",
@@ -46,11 +46,11 @@
     },
     "packages/nostr-wasm": {
       "name": "@qntx/nostr-wasm",
-      "version": "0.9.0",
+      "version": "0.12.1",
       "devDependencies": {
         "@arethetypeswrong/cli": "0.18.5",
         "@noble/curves": "2.4.0",
-        "@qntx/nostr": "0.9.0",
+        "@qntx/nostr": "0.12.1",
         "@qntx/tsconfig": "1.0.1",
         "@types/node": "26.6.3",
         "binaryen": "132.0.0",
@@ -59,7 +59,7 @@
         "vite-plus": "1.0.0",
       },
       "peerDependencies": {
-        "@qntx/nostr": "^0.9.0",
+        "@qntx/nostr": "^0.12.1",
       },
     },
   },
