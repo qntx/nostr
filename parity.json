@@ -585,14 +585,20 @@
     {
       "id": "nip65.relay-list",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK3",
       "ts": {
         "module": "packages/nostr/src/nips/nip65.ts",
-        "tests": ["packages/nostr/tests/nip42-65-storage.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip42-65-storage.test.ts",
+          "packages/nostr/tests/vectors/nip65.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip65.rs",
+        "tests": ["crates/nk-vectors/tests/nip65.rs"]
+      },
+      "vectors": ["vectors/nip65/codec.json"]
     },
     {
       "id": "nip77.negentropy",

@@ -29,6 +29,7 @@ let entity = nip19::decode(&nsec)?;
 | `nip44`  | no      | NIP-44 v2 payload encryption (`ConversationKey`, `encrypt`/`decrypt`)                      | `base64ct`, `chacha20`, `hkdf`, `hmac`, `rand_core`, `secp256k1`, `sha2`, `zeroize` |
 | `nip49`  | no      | `ncryptsec` secret-key encryption (`encrypt_with`/`encrypt`/`decrypt`); needs `nip19`      | `chacha20poly1305`, `rand_core`, `scrypt`, `unicode-normalization`, `zeroize`       |
 | `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`                    | `rand_core`, `serde_json`                                                           |
+| `nip65`  | no      | relay lists (`parse_relay_list`, `relay_list`, `read_relays`/`write_relays`)               | —                                                                                   |
 | `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)                   | `base64ct`, `serde_json`, `sha2`                                                    |
 
 Each NIP is a separate default-off feature and compiles independently. `nsec` secrets move through `SecretKey::with_secret_bytes` and decoded scratch buffers are zeroized before the key is returned.
