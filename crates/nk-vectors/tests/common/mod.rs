@@ -7,6 +7,7 @@
 use nk_core::{EventId, Kind, PublicKey, SecretKey};
 use nk_nips::nip10::{Quote, ThreadReferences};
 use nk_nips::nip19::{self, AddressPointer, Entity, EventPointer, ProfilePointer};
+use nk_nips::nip27::{ContentBlock, Reference};
 use serde::{Deserialize, Serialize};
 
 /// The vector's normalized entity shape (TS `DecodedResult` / pointer input).
@@ -178,6 +179,63 @@ pub(crate) fn thread_json(t: &ThreadReferences) -> ThreadJson {
 
 const fn hex_err_name() -> &'static str {
     "HexError"
+}
+
+/// The canonical `nip27.tokenize` pointer shape (TS `pointerJson`): the
+/// pointer family flattens to `profile`/`event`/`address` with absent hints
+/// serialized as `[]`/`null`.
+pub(crate) fn reference_json(r: &Reference) -> serde_json::Value {
+    match r {
+        Reference::Profile(p) => serde_json::json!({
+            "type": "profile",
+            "pubkey": p.pubkey.to_hex(),
+            "relays": p.relays,
+        }),
+        Reference::Event(p) => serde_json::json!({
+            "type": "event",
+            "id": p.id.to_hex(),
+            "relays": p.relays,
+            "author": p.author.map(PublicKey::to_hex),
+            "kind": p.kind.map(|k| u64::from(k.as_u16())),
+        }),
+        Reference::Address(p) => serde_json::json!({
+            "type": "address",
+            "identifier": p.identifier,
+            "pubkey": p.pubkey.to_hex(),
+            "kind": u64::from(p.kind.as_u16()),
+            "relays": p.relays,
+        }),
+    }
+}
+
+/// The canonical `nip27.tokenize` block shape (TS `blocksJson`).
+pub(crate) fn block_json(b: &ContentBlock<'_>) -> serde_json::Value {
+    match b {
+        ContentBlock::Text(text) => serde_json::json!({ "type": "text", "text": text }),
+        ContentBlock::Reference { reference, bare } => serde_json::json!({
+            "type": "reference",
+            "bare": bare,
+            "pointer": reference_json(reference),
+        }),
+        ContentBlock::Url(url) => serde_json::json!({ "type": "url", "url": url }),
+        ContentBlock::Image(url) => serde_json::json!({ "type": "image", "url": url }),
+        ContentBlock::Video(url) => serde_json::json!({ "type": "video", "url": url }),
+        ContentBlock::Audio(url) => serde_json::json!({ "type": "audio", "url": url }),
+        ContentBlock::Relay(url) => serde_json::json!({ "type": "relay", "url": url }),
+        ContentBlock::Hashtag(value) => serde_json::json!({ "type": "hashtag", "value": value }),
+        ContentBlock::Emoji { shortcode, url } => {
+            serde_json::json!({ "type": "emoji", "shortcode": shortcode, "url": url })
+        }
+        ContentBlock::Invoice(bolt11) => {
+            serde_json::json!({ "type": "invoice", "bolt11": bolt11 })
+        }
+        _ => serde_json::Value::Null,
+    }
+}
+
+/// Serializes a parsed content stream for the diff/vector comparison.
+pub(crate) fn blocks_json(blocks: &[ContentBlock<'_>]) -> serde_json::Value {
+    serde_json::Value::Array(blocks.iter().map(block_json).collect())
 }
 
 /// Builds a typed pointer/entity from the vector shape. Hex failures surface

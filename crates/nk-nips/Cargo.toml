@@ -29,6 +29,7 @@ nip10  = ["nip19"]
 nip13  = ["dep:sha2"]
 nip19  = ["dep:bech32", "dep:zeroize"]
 nip21  = ["nip19"]
+nip27  = ["nip19", "dep:unicode-properties", "dep:url"]
 nip42  = []
 nip44  = ["dep:base64ct", "dep:chacha20", "dep:hkdf", "dep:hmac", "dep:rand_core", "dep:secp256k1", "dep:sha2", "dep:zeroize"]
 nip46  = ["dep:serde", "dep:serde_json", "dep:url"]
@@ -61,6 +62,7 @@ serde                 = { workspace = true, optional = true }
 serde_json            = { workspace = true, optional = true, features = ["float_roundtrip"] }
 sha2                  = { workspace = true, optional = true }
 unicode-normalization = { workspace = true, optional = true }
+unicode-properties    = { workspace = true, optional = true, features = ["general-category"] }
 url                   = { workspace = true, optional = true }
 zeroize               = { workspace = true, optional = true }
 
@@ -71,6 +73,11 @@ criterion = { workspace = true, features = ["html_reports"] }
 name              = "pow"
 harness           = false
 required-features = ["nip13"]
+
+[[bench]]
+name              = "tokenize"
+harness           = false
+required-features = ["nip27"]
 
 [lints]
 workspace = true

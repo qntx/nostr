@@ -25,17 +25,19 @@
     reason = "integration test crate is itself the test module"
 )]
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 mod common;
 
 use nk_core::{ClientMessage, Event, Filter, PublicKey, RelayMessage, Tag, Tags, UnsignedEvent};
 use nk_nips::nip10::parse_thread_tags;
+use nk_nips::nip27::{ParseOptions, parse_content};
 use nk_nips::nip46::{BunkerUri, NostrConnectUri};
 use nk_nips::{nip19, nip44};
 use serde::Deserialize;
 
-use common::{EntityJson, encode_entity, entity_json, thread_json, unhex};
+use common::{EntityJson, blocks_json, encode_entity, entity_json, thread_json, unhex};
 
 /// The generator's meta line; `seed` is reported on every mismatch.
 #[derive(Deserialize)]
@@ -357,6 +359,39 @@ fn diff_nip19_codec() {
             nip19::decode(&req.input?).ok().map(|entity| {
                 serde_json::to_value(entity_json(&entity)).expect("entity serializes")
             })
+        });
+    }
+}
+
+/// One `nip27.tokenize` input: `{"content": "…", "tags"?: [[…]],
+/// "legacy"?: bool, "imeta"?: {url: mime}}` — adversarial content fragments.
+#[test]
+#[ignore = "requires NK_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
+fn diff_nip27_tokenize() {
+    let fixture = load("nip27.tokenize");
+    for case in &fixture.cases {
+        check("nip27.tokenize", fixture.seed, case, |input| {
+            #[derive(Deserialize)]
+            struct TokenizeInput {
+                content: String,
+                tags: Option<Vec<Vec<String>>>,
+                legacy: Option<bool>,
+                imeta: Option<BTreeMap<String, String>>,
+            }
+            let parsed: TokenizeInput = serde_json::from_str(input).ok()?;
+            let tags: Option<Tags> = parsed.tags.map(|items| {
+                items
+                    .iter()
+                    .filter(|tag| !tag.is_empty())
+                    .map(|tag| Tag::new(tag.iter().cloned()).expect("diff tag"))
+                    .collect()
+            });
+            let options = ParseOptions {
+                legacy_bech32: parsed.legacy.unwrap_or(false),
+                imeta: parsed.imeta.as_ref(),
+            };
+            let blocks = parse_content(&parsed.content, tags.as_ref(), options);
+            Some(blocks_json(&blocks))
         });
     }
 }
