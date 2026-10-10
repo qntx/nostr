@@ -9,6 +9,12 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-10
+
+### Fixed
+
+- `@qntx/nostr` 0.12.0 was never published: its publish job ran Bun's built-in test runner instead of the package's `vp test` script and two runner-dependent `DelegatedSigner` tests failed (#242). 0.12.1 publishes every package and crate in lockstep with the 0.12.0 changes; `@qntx/nostr-wasm` 0.12.0 (peer `^0.12.0`) is satisfied by `@qntx/nostr` 0.12.1.
+
 ## [0.12.0] - 2026-10-10
 
 ### Added
