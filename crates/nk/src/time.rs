@@ -1,4 +1,5 @@
-//! Unix-timestamp newtype (seconds since the epoch).
+//! Unix-timestamp newtype (seconds since the epoch) —
+//! [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md).
 
 use core::fmt;
 
@@ -17,7 +18,7 @@ pub struct Timestamp(u64);
 
 impl<'de> Deserialize<'de> for Timestamp {
     /// Accepts any integer-valued JSON number (`1e3`, `1.0`, `-0`) up to
-    /// `2^53-1`; output is always a plain integer (NK-ADR-012 rulings 8–9).
+    /// `2^53-1`; output is always a plain integer.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         json::de_u64(deserializer).map(Self)
     }
@@ -38,6 +39,8 @@ impl Timestamp {
 
     /// The current wall-clock time. Requires the `clock` feature (absent on
     /// platforms without a wall clock, e.g. bare `wasm32-unknown-unknown`).
+    ///
+    /// A clock reporting a time before the Unix epoch yields `0`.
     #[must_use]
     #[cfg(feature = "clock")]
     pub fn now() -> Self {

@@ -1,12 +1,13 @@
-//! Client and relay wire messages (NIP-01, NIP-42, NIP-45, NIP-77) — the
-//! counterpart of `core/message.ts`.
+//! Client and relay wire messages —
+//! [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md),
+//! [NIP-42](https://github.com/nostr-protocol/nips/blob/master/42.md),
+//! [NIP-45](https://github.com/nostr-protocol/nips/blob/master/45.md),
+//! [NIP-77](https://github.com/nostr-protocol/nips/blob/master/77.md).
 //!
-//! `encode` is byte-identical to `encodeClientMessage`/`encodeRelayMessage`
-//! (filters and events go through the canonical writer); `parse` applies the
-//! NIP-01 parse table from `docs/nk/api/nk-core.mdx` and rulings 5–6 of
-//! NK-ADR-012: subscription ids are validated in both directions (1..=64
-//! Unicode scalar values) and the `OK` event id must be 64 lowercase hex.
-//! Every parse failure is [`ErrorKind::Message`].
+//! `to_json` writes the byte-exact wire form (filters and events go through
+//! the canonical writer); `from_json` validates subscription ids in both
+//! directions (1..=64 Unicode scalar values) and requires the `OK` event id
+//! to be 64 lowercase hex.
 
 use alloc::borrow::Cow;
 use alloc::borrow::ToOwned;
@@ -15,14 +16,67 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::str::FromStr;
 
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::canonical;
-use crate::error::{Error, ErrorKind, Result};
+use crate::detail::JsonSource;
 use crate::event::{Event, EventId};
 use crate::filter::Filter;
 use crate::hex;
 use crate::limits::SUBSCRIPTION_ID_MAX_CHARS;
+
+/// The result type for this module.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+/// Why a wire message could not be parsed.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// The wire text is not valid JSON.
+    #[error("invalid JSON")]
+    InvalidJson(#[source] JsonSource),
+    /// The wire value is not a non-empty JSON array whose first element is
+    /// the message type string.
+    #[error("message must be a non-empty JSON array")]
+    NotAMessageArray,
+    /// The message type string is not a known NIP-01/42/45/77 type.
+    #[error("unknown message type {ty}")]
+    UnknownType {
+        /// The unrecognized type string.
+        ty: String,
+    },
+    /// A known message type has the wrong arity or field types.
+    #[error("invalid {ty} message")]
+    InvalidMessage {
+        /// The message type (`EVENT`, `REQ`, `OK`, …).
+        ty: &'static str,
+    },
+    /// An embedded event or filter failed wire validation.
+    #[error("invalid {ty} payload")]
+    InvalidPayload {
+        /// The containing message type.
+        ty: &'static str,
+        /// The serde error describing the offending field.
+        #[source]
+        source: JsonSource,
+    },
+    /// The subscription id length is outside `1..=64` scalar values.
+    #[error("subscription id length {len} is outside 1..=64")]
+    InvalidSubscriptionId {
+        /// The length in Unicode scalar values.
+        len: usize,
+    },
+    /// A NIP-45 sketch is not a 512-character hex string.
+    #[error("invalid NIP-45 HLL sketch: expected 512-char hex")]
+    InvalidHll,
+    /// The obsolete 5-element `NEG-OPEN` wire form.
+    #[error("obsolete 5-element NEG-OPEN; expected [NEG-OPEN, id, filter, hex]")]
+    ObsoleteNegOpen,
+    /// A NIP-77 negentropy message is not non-empty even-length hex.
+    #[error("invalid negentropy message: expected non-empty even-length hex")]
+    InvalidNegMessage,
+}
 
 /// A NIP-01 subscription id: 1..=64 Unicode scalar values.
 #[cfg_attr(not(feature = "os-rng"), doc = "```compile_fail")]
@@ -39,7 +93,7 @@ impl SubscriptionId {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Message`] when the length is outside `1..=64`.
+    /// [`Error::InvalidSubscriptionId`] when the length is outside `1..=64`.
     pub fn new<S>(id: S) -> Result<Self>
     where
         S: Into<String>,
@@ -47,15 +101,12 @@ impl SubscriptionId {
         let id = id.into();
         let len = id.chars().count();
         if len == 0 || len > SUBSCRIPTION_ID_MAX_CHARS {
-            return Err(Error::new(
-                ErrorKind::Message,
-                alloc::format!("subscription id length must be 1..{SUBSCRIPTION_ID_MAX_CHARS}"),
-            ));
+            return Err(Error::InvalidSubscriptionId { len });
         }
         Ok(Self(id))
     }
 
-    /// A random 16-hex-char subscription id (TS `createSubscriptionId`).
+    /// A random 16-hex-char subscription id.
     pub fn generate_with_rng<R>(rng: &mut R) -> Self
     where
         R: rand_core::CryptoRng + ?Sized,
@@ -137,21 +188,14 @@ impl FromStr for CountHll {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Message`] when `s` is not 512 hex characters (matching
-    /// the `MessageError` thrown by TS `mergeCountHll`).
+    /// [`Error::InvalidHll`] when `s` is not 512 hex characters.
     fn from_str(s: &str) -> Result<Self> {
         if s.len() != 512 {
-            return Err(Error::new(
-                ErrorKind::Message,
-                "invalid NIP-45 HLL sketch: expected 512-char hex",
-            ));
+            return Err(Error::InvalidHll);
         }
-        hex::decode_caller::<256>(s).map(Self).map_err(|_| {
-            Error::new(
-                ErrorKind::Message,
-                "invalid NIP-45 HLL sketch: expected 512-char hex",
-            )
-        })
+        hex::decode_caller::<256>(s)
+            .map(Self)
+            .map_err(|_| Error::InvalidHll)
     }
 }
 
@@ -295,77 +339,89 @@ const fn bool_str(value: bool) -> &'static str {
     if value { "true" } else { "false" }
 }
 
-fn msg_error(message: impl Into<Cow<'static, str>>) -> Error {
-    Error::new(ErrorKind::Message, message)
-}
-
-/// `fail` becomes an owned copy inside the error.
-fn fail_msg(fail: &str) -> Error {
-    msg_error(fail.to_owned())
-}
-
 /// The subscription id at `index`, validated to 1..=64 scalar values.
-fn parse_sub_id(items: &[serde_json::Value], index: usize, fail: &str) -> Result<SubscriptionId> {
-    items
+fn parse_sub_id(
+    items: &[serde_json::Value],
+    index: usize,
+    ty: &'static str,
+) -> Result<SubscriptionId> {
+    let raw = items
         .get(index)
         .and_then(serde_json::Value::as_str)
-        .map_or_else(|| Err(fail_msg(fail)), SubscriptionId::new)
+        .ok_or(Error::InvalidMessage { ty })?;
+    SubscriptionId::new(raw)
 }
 
 /// A non-empty, even-length hex string, lowercased.
-fn parse_neg_hex(item: Option<&serde_json::Value>, fail: &str) -> Result<String> {
+fn parse_neg_hex(item: Option<&serde_json::Value>) -> Result<String> {
     let Some(raw) = item.and_then(serde_json::Value::as_str) else {
-        return Err(fail_msg(fail));
+        return Err(Error::InvalidNegMessage);
     };
     if raw.is_empty() || raw.len() % 2 != 0 || !raw.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(fail_msg(fail));
+        return Err(Error::InvalidNegMessage);
     }
     Ok(raw.to_lowercase())
 }
 
-fn parse_event(item: Option<&serde_json::Value>, fail: &str) -> Result<Event> {
+fn parse_event(item: Option<&serde_json::Value>, ty: &'static str) -> Result<Event> {
     let Some(item) = item else {
-        return Err(fail_msg(fail));
+        return Err(Error::InvalidMessage { ty });
     };
-    Event::deserialize(item)
-        .map_err(|source| Error::with_source(ErrorKind::Message, fail.to_owned(), source))
+    Event::deserialize(item).map_err(|e| Error::InvalidPayload {
+        ty,
+        source: JsonSource(e),
+    })
 }
 
-fn parse_filter(item: Option<&serde_json::Value>, fail: &str) -> Result<Filter> {
+fn parse_filter(item: Option<&serde_json::Value>, ty: &'static str) -> Result<Filter> {
     let Some(item) = item else {
-        return Err(fail_msg(fail));
+        return Err(Error::InvalidMessage { ty });
     };
-    Filter::deserialize(item)
-        .map_err(|source| Error::with_source(ErrorKind::Message, fail.to_owned(), source))
+    Filter::deserialize(item).map_err(|e| Error::InvalidPayload {
+        ty,
+        source: JsonSource(e),
+    })
+}
+
+/// Reads a `COUNT` result object: `count` must be an integer; a non-bool
+/// `approximate` and a non-512-hex `hll` are ignored rather than failing.
+fn count_result(value: &serde_json::Value) -> Option<CountResult> {
+    let payload = value.as_object()?;
+    let count = payload
+        .get("count")
+        .and_then(|v| crate::json::de_u64(v).ok())?;
+    let approximate = payload
+        .get("approximate")
+        .and_then(serde_json::Value::as_bool);
+    let hll = payload
+        .get("hll")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|text| CountHll::from_str(text).ok());
+    Some(CountResult {
+        count,
+        approximate,
+        hll,
+    })
 }
 
 /// Splits `raw` into the message type and the remaining items.
-fn parse_wire(raw: &str, side: &'static str) -> Result<(String, Vec<serde_json::Value>)> {
-    let value: serde_json::Value = serde_json::from_str(raw).map_err(|source| {
-        Error::with_source(
-            ErrorKind::Message,
-            alloc::format!("{side} message is not valid JSON"),
-            source,
-        )
-    })?;
+fn parse_wire(raw: &str) -> Result<(String, Vec<serde_json::Value>)> {
+    let value: serde_json::Value =
+        serde_json::from_str(raw).map_err(|e| Error::InvalidJson(JsonSource(e)))?;
     let serde_json::Value::Array(items) = value else {
-        return Err(msg_error(alloc::format!(
-            "{side} message must be a non-empty JSON array"
-        )));
+        return Err(Error::NotAMessageArray);
     };
     let mut items = items.into_iter();
     let Some(kind) = items.next().and_then(|v| v.as_str().map(str::to_owned)) else {
-        return Err(msg_error(alloc::format!(
-            "{side} message must be a non-empty JSON array"
-        )));
+        return Err(Error::NotAMessageArray);
     };
     Ok((kind, items.collect()))
 }
 
 impl ClientMessage<'_> {
-    /// The NIP-01 JSON wire form — byte-identical to `encodeClientMessage`.
+    /// The canonical NIP-01 JSON wire form.
     #[must_use]
-    pub fn encode(&self) -> String {
+    pub fn to_json(&self) -> String {
         let mut out = String::new();
         match self {
             Self::Event(event) => {
@@ -442,29 +498,57 @@ impl ClientMessage<'_> {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Message`] on any malformed input (not a JSON array,
-    /// unknown type, wrong arity/types, invalid filter, bad subscription id,
-    /// or malformed NEG hex).
-    pub fn parse(raw: &str) -> Result<ClientMessage<'static>> {
-        let (kind, items) = parse_wire(raw, "client")?;
-        let fail = alloc::format!("invalid {kind} client message");
-        match kind.as_str() {
+    /// [`Error::InvalidJson`] when the text is not JSON,
+    /// [`Error::NotAMessageArray`] when it is not a non-empty array starting
+    /// with the type string, [`Error::UnknownType`] for an unrecognized
+    /// type, [`Error::InvalidMessage`] for wrong arity or field types,
+    /// [`Error::InvalidPayload`] when an embedded event or filter fails
+    /// wire validation, [`Error::InvalidSubscriptionId`] for a bad
+    /// subscription id, [`Error::ObsoleteNegOpen`] for the 5-element
+    /// `NEG-OPEN`, and [`Error::InvalidNegMessage`] for malformed NEG hex.
+    pub fn from_json(raw: &str) -> Result<ClientMessage<'static>> {
+        let (kind, items) = parse_wire(raw)?;
+        Self::from_items(&kind, &items)
+    }
+
+    /// Builds a message from the already-parsed wire items.
+    ///
+    /// # Errors
+    ///
+    /// The same errors as [`ClientMessage::from_json`].
+    fn from_items(kind: &str, items: &[serde_json::Value]) -> Result<ClientMessage<'static>> {
+        let ty: &'static str = match kind {
+            "EVENT" => "EVENT",
+            "REQ" => "REQ",
+            "COUNT" => "COUNT",
+            "CLOSE" => "CLOSE",
+            "AUTH" => "AUTH",
+            "NEG-OPEN" => "NEG-OPEN",
+            "NEG-MSG" => "NEG-MSG",
+            "NEG-CLOSE" => "NEG-CLOSE",
+            _ => {
+                return Err(Error::UnknownType {
+                    ty: kind.to_owned(),
+                });
+            }
+        };
+        match ty {
             "EVENT" if items.len() == 1 => Ok(ClientMessage::Event(Cow::Owned(parse_event(
                 items.first(),
-                "invalid EVENT client message",
+                ty,
             )?))),
             "REQ" | "COUNT" if !items.is_empty() => {
-                let subscription_id = parse_sub_id(&items, 0, &fail)?;
+                let subscription_id = parse_sub_id(items, 0, ty)?;
                 let filters: Vec<Filter> = items
                     .iter()
                     .skip(1)
-                    .map(|item| parse_filter(Some(item), "invalid REQ/COUNT filter"))
+                    .map(|item| parse_filter(Some(item), ty))
                     .collect::<Result<_>>()?;
                 if filters.is_empty() {
-                    return Err(msg_error(fail));
+                    return Err(Error::InvalidMessage { ty });
                 }
                 let filters = Cow::Owned(filters);
-                Ok(if kind == "REQ" {
+                Ok(if ty == "REQ" {
                     ClientMessage::Req {
                         subscription_id: Cow::Owned(subscription_id),
                         filters,
@@ -477,19 +561,17 @@ impl ClientMessage<'_> {
                 })
             }
             "CLOSE" if items.len() == 1 => Ok(ClientMessage::Close(Cow::Owned(parse_sub_id(
-                &items, 0, &fail,
+                items, 0, ty,
             )?))),
             "AUTH" if items.len() == 1 => Ok(ClientMessage::Auth(Cow::Owned(parse_event(
                 items.first(),
-                "invalid AUTH client message",
+                ty,
             )?))),
-            "NEG-OPEN" if items.len() == 4 => Err(msg_error(
-                "obsolete 5-element NEG-OPEN; expected [NEG-OPEN, id, filter, hex]",
-            )),
+            "NEG-OPEN" if items.len() == 4 => Err(Error::ObsoleteNegOpen),
             "NEG-OPEN" if items.len() == 3 => {
-                let subscription_id = parse_sub_id(&items, 0, &fail)?;
-                let filter = parse_filter(items.get(1), "invalid NEG-OPEN filter")?;
-                let message = parse_neg_hex(items.get(2), &fail)?;
+                let subscription_id = parse_sub_id(items, 0, ty)?;
+                let filter = parse_filter(items.get(1), ty)?;
+                let message = parse_neg_hex(items.get(2))?;
                 Ok(ClientMessage::NegOpen {
                     subscription_id: Cow::Owned(subscription_id),
                     filter: Cow::Owned(filter),
@@ -497,18 +579,13 @@ impl ClientMessage<'_> {
                 })
             }
             "NEG-MSG" if items.len() == 2 => Ok(ClientMessage::NegMsg {
-                subscription_id: Cow::Owned(parse_sub_id(&items, 0, &fail)?),
-                message: Cow::Owned(parse_neg_hex(items.get(1), &fail)?),
+                subscription_id: Cow::Owned(parse_sub_id(items, 0, ty)?),
+                message: Cow::Owned(parse_neg_hex(items.get(1))?),
             }),
             "NEG-CLOSE" if items.len() == 1 => Ok(ClientMessage::NegClose(Cow::Owned(
-                parse_sub_id(&items, 0, &fail)?,
+                parse_sub_id(items, 0, ty)?,
             ))),
-            "EVENT" | "REQ" | "COUNT" | "CLOSE" | "AUTH" | "NEG-OPEN" | "NEG-MSG" | "NEG-CLOSE" => {
-                Err(msg_error(fail))
-            }
-            _ => Err(msg_error(alloc::format!(
-                "unknown client message type: {kind}"
-            ))),
+            _ => Err(Error::InvalidMessage { ty }),
         }
     }
 
@@ -555,9 +632,9 @@ impl ClientMessage<'_> {
 }
 
 impl RelayMessage<'_> {
-    /// The NIP-01 JSON wire form — byte-identical to `encodeRelayMessage`.
+    /// The canonical NIP-01 JSON wire form.
     #[must_use]
-    pub fn encode(&self) -> String {
+    pub fn to_json(&self) -> String {
         let mut out = String::new();
         match self {
             Self::Event {
@@ -655,16 +732,41 @@ impl RelayMessage<'_> {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Message`] on any malformed input. `OK` requires a 64-char
-    /// lowercase hex event id (NK-ADR-012 ruling 5); `COUNT` ignores
-    /// non-bool `approximate` and non-512-hex `hll` instead of failing.
-    pub fn parse(raw: &str) -> Result<RelayMessage<'static>> {
-        let (kind, items) = parse_wire(raw, "relay")?;
-        let fail = alloc::format!("invalid {kind} relay message");
-        match kind.as_str() {
+    /// The same errors as [`ClientMessage::from_json`] except
+    /// [`Error::ObsoleteNegOpen`]. `OK` requires a 64-char lowercase hex
+    /// event id; `COUNT` ignores non-bool `approximate` and non-512-hex
+    /// `hll` instead of failing.
+    pub fn from_json(raw: &str) -> Result<RelayMessage<'static>> {
+        let (kind, items) = parse_wire(raw)?;
+        Self::from_items(&kind, &items)
+    }
+
+    /// Builds a message from the already-parsed wire items.
+    ///
+    /// # Errors
+    ///
+    /// The same errors as [`RelayMessage::from_json`].
+    fn from_items(kind: &str, items: &[serde_json::Value]) -> Result<RelayMessage<'static>> {
+        let ty: &'static str = match kind {
+            "EVENT" => "EVENT",
+            "OK" => "OK",
+            "EOSE" => "EOSE",
+            "CLOSED" => "CLOSED",
+            "NOTICE" => "NOTICE",
+            "AUTH" => "AUTH",
+            "COUNT" => "COUNT",
+            "NEG-MSG" => "NEG-MSG",
+            "NEG-ERR" => "NEG-ERR",
+            _ => {
+                return Err(Error::UnknownType {
+                    ty: kind.to_owned(),
+                });
+            }
+        };
+        match ty {
             "EVENT" if items.len() == 2 => Ok(RelayMessage::Event {
-                subscription_id: Cow::Owned(parse_sub_id(&items, 0, &fail)?),
-                event: Cow::Owned(parse_event(items.get(1), "invalid EVENT relay message")?),
+                subscription_id: Cow::Owned(parse_sub_id(items, 0, ty)?),
+                event: Cow::Owned(parse_event(items.get(1), ty)?),
             }),
             "OK" if items.len() == 3 => {
                 let event_id = items
@@ -673,12 +775,12 @@ impl RelayMessage<'_> {
                     .and_then(|text| {
                         EventId::deserialize(serde_json::Value::String(text.to_owned())).ok()
                     })
-                    .ok_or_else(|| msg_error("invalid OK relay message"))?;
+                    .ok_or(Error::InvalidMessage { ty })?;
                 let Some(accepted) = items.get(1).and_then(serde_json::Value::as_bool) else {
-                    return Err(msg_error("invalid OK relay message"));
+                    return Err(Error::InvalidMessage { ty });
                 };
                 let Some(message) = items.get(2).and_then(serde_json::Value::as_str) else {
-                    return Err(msg_error("invalid OK relay message"));
+                    return Err(Error::InvalidMessage { ty });
                 };
                 Ok(RelayMessage::Ok {
                     event_id,
@@ -686,13 +788,13 @@ impl RelayMessage<'_> {
                     message: Cow::Owned(message.to_owned()),
                 })
             }
-            "EOSE" if items.len() == 1 => Ok(RelayMessage::Eose(Cow::Owned(parse_sub_id(
-                &items, 0, &fail,
-            )?))),
+            "EOSE" if items.len() == 1 => {
+                Ok(RelayMessage::Eose(Cow::Owned(parse_sub_id(items, 0, ty)?)))
+            }
             "CLOSED" if items.len() == 2 => {
-                let subscription_id = parse_sub_id(&items, 0, &fail)?;
+                let subscription_id = parse_sub_id(items, 0, ty)?;
                 let Some(message) = items.get(1).and_then(serde_json::Value::as_str) else {
-                    return Err(msg_error(fail));
+                    return Err(Error::InvalidMessage { ty });
                 };
                 Ok(RelayMessage::Closed {
                     subscription_id: Cow::Owned(subscription_id),
@@ -701,64 +803,43 @@ impl RelayMessage<'_> {
             }
             "NOTICE" if items.len() == 1 => {
                 let Some(message) = items.first().and_then(serde_json::Value::as_str) else {
-                    return Err(msg_error(fail));
+                    return Err(Error::InvalidMessage { ty });
                 };
                 Ok(RelayMessage::Notice(Cow::Owned(message.to_owned())))
             }
             "AUTH" if items.len() == 1 => {
                 let Some(challenge) = items.first().and_then(serde_json::Value::as_str) else {
-                    return Err(msg_error(fail));
+                    return Err(Error::InvalidMessage { ty });
                 };
                 Ok(RelayMessage::Auth {
                     challenge: Cow::Owned(challenge.to_owned()),
                 })
             }
             "COUNT" if items.len() == 2 => {
-                let subscription_id = parse_sub_id(&items, 0, &fail)?;
-                let Some(payload) = items.get(1).and_then(serde_json::Value::as_object) else {
-                    return Err(msg_error(fail));
+                let subscription_id = parse_sub_id(items, 0, ty)?;
+                let Some(result) = items.get(1).and_then(count_result) else {
+                    return Err(Error::InvalidMessage { ty });
                 };
-                let Some(count) = payload
-                    .get("count")
-                    .and_then(|v| crate::json::de_u64(v).ok())
-                else {
-                    return Err(msg_error(fail));
-                };
-                let approximate = payload
-                    .get("approximate")
-                    .and_then(serde_json::Value::as_bool);
-                let hll = payload
-                    .get("hll")
-                    .and_then(serde_json::Value::as_str)
-                    .and_then(|text| CountHll::from_str(text).ok());
                 Ok(RelayMessage::Count {
                     subscription_id: Cow::Owned(subscription_id),
-                    result: CountResult {
-                        count,
-                        approximate,
-                        hll,
-                    },
+                    result,
                 })
             }
             "NEG-MSG" if items.len() == 2 => Ok(RelayMessage::NegMsg {
-                subscription_id: Cow::Owned(parse_sub_id(&items, 0, &fail)?),
-                message: Cow::Owned(parse_neg_hex(items.get(1), &fail)?),
+                subscription_id: Cow::Owned(parse_sub_id(items, 0, ty)?),
+                message: Cow::Owned(parse_neg_hex(items.get(1))?),
             }),
             "NEG-ERR" if items.len() == 2 || items.len() == 3 => {
-                let subscription_id = parse_sub_id(&items, 0, &fail)?;
+                let subscription_id = parse_sub_id(items, 0, ty)?;
                 let Some(message) = items.get(1).and_then(serde_json::Value::as_str) else {
-                    return Err(msg_error(fail));
+                    return Err(Error::InvalidMessage { ty });
                 };
                 Ok(RelayMessage::NegErr {
                     subscription_id: Cow::Owned(subscription_id),
                     message: Cow::Owned(message.to_owned()),
                 })
             }
-            "EVENT" | "OK" | "EOSE" | "CLOSED" | "NOTICE" | "AUTH" | "COUNT" | "NEG-MSG"
-            | "NEG-ERR" => Err(msg_error(fail)),
-            _ => Err(msg_error(alloc::format!(
-                "unknown relay message type: {kind}"
-            ))),
+            _ => Err(Error::InvalidMessage { ty }),
         }
     }
 
@@ -819,10 +900,246 @@ impl RelayMessage<'_> {
     }
 }
 
+fn to_de_error<E: serde::de::Error>(error: Error) -> E {
+    serde::de::Error::custom(error)
+}
+
+impl Serialize for ClientMessage<'_> {
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeSeq;
+        match self {
+            Self::Event(event) => {
+                let mut seq = serializer.serialize_seq(Some(2))?;
+                seq.serialize_element("EVENT")?;
+                seq.serialize_element(&**event)?;
+                seq.end()
+            }
+            Self::Req {
+                subscription_id,
+                filters,
+            }
+            | Self::Count {
+                subscription_id,
+                filters,
+            } => {
+                let ty = if matches!(self, Self::Req { .. }) {
+                    "REQ"
+                } else {
+                    "COUNT"
+                };
+                let mut seq = serializer.serialize_seq(Some(2 + filters.len()))?;
+                seq.serialize_element(ty)?;
+                seq.serialize_element(&**subscription_id)?;
+                for filter in filters.iter() {
+                    seq.serialize_element(filter)?;
+                }
+                seq.end()
+            }
+            Self::Close(subscription_id) => {
+                let mut seq = serializer.serialize_seq(Some(2))?;
+                seq.serialize_element("CLOSE")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.end()
+            }
+            Self::Auth(event) => {
+                let mut seq = serializer.serialize_seq(Some(2))?;
+                seq.serialize_element("AUTH")?;
+                seq.serialize_element(&**event)?;
+                seq.end()
+            }
+            Self::NegOpen {
+                subscription_id,
+                filter,
+                message,
+            } => {
+                let mut seq = serializer.serialize_seq(Some(4))?;
+                seq.serialize_element("NEG-OPEN")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.serialize_element(&**filter)?;
+                seq.serialize_element(&**message)?;
+                seq.end()
+            }
+            Self::NegMsg {
+                subscription_id,
+                message,
+            } => {
+                let mut seq = serializer.serialize_seq(Some(3))?;
+                seq.serialize_element("NEG-MSG")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.serialize_element(&**message)?;
+                seq.end()
+            }
+            Self::NegClose(subscription_id) => {
+                let mut seq = serializer.serialize_seq(Some(2))?;
+                seq.serialize_element("NEG-CLOSE")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.end()
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ClientMessage<'static> {
+    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let serde_json::Value::Array(items) = serde_json::Value::deserialize(deserializer)? else {
+            return Err(serde::de::Error::custom(Error::NotAMessageArray));
+        };
+        let mut items = items.into_iter();
+        let Some(kind) = items.next().and_then(|v| v.as_str().map(str::to_owned)) else {
+            return Err(serde::de::Error::custom(Error::NotAMessageArray));
+        };
+        Self::from_items(&kind, &items.collect::<Vec<_>>()).map_err(to_de_error)
+    }
+}
+
+impl Serialize for RelayMessage<'_> {
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeSeq;
+        match self {
+            Self::Event {
+                subscription_id,
+                event,
+            } => {
+                let mut seq = serializer.serialize_seq(Some(3))?;
+                seq.serialize_element("EVENT")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.serialize_element(&**event)?;
+                seq.end()
+            }
+            Self::Ok {
+                event_id,
+                accepted,
+                message,
+            } => {
+                let mut seq = serializer.serialize_seq(Some(4))?;
+                seq.serialize_element("OK")?;
+                seq.serialize_element(event_id)?;
+                seq.serialize_element(accepted)?;
+                seq.serialize_element(&**message)?;
+                seq.end()
+            }
+            Self::Eose(subscription_id) => {
+                let mut seq = serializer.serialize_seq(Some(2))?;
+                seq.serialize_element("EOSE")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.end()
+            }
+            Self::Closed {
+                subscription_id,
+                message,
+            } => {
+                let mut seq = serializer.serialize_seq(Some(3))?;
+                seq.serialize_element("CLOSED")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.serialize_element(&**message)?;
+                seq.end()
+            }
+            Self::Notice(message) => {
+                let mut seq = serializer.serialize_seq(Some(2))?;
+                seq.serialize_element("NOTICE")?;
+                seq.serialize_element(&**message)?;
+                seq.end()
+            }
+            Self::Auth { challenge } => {
+                let mut seq = serializer.serialize_seq(Some(2))?;
+                seq.serialize_element("AUTH")?;
+                seq.serialize_element(&**challenge)?;
+                seq.end()
+            }
+            Self::Count {
+                subscription_id,
+                result,
+            } => {
+                let mut seq = serializer.serialize_seq(Some(3))?;
+                seq.serialize_element("COUNT")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.serialize_element(result)?;
+                seq.end()
+            }
+            Self::NegMsg {
+                subscription_id,
+                message,
+            } => {
+                let mut seq = serializer.serialize_seq(Some(3))?;
+                seq.serialize_element("NEG-MSG")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.serialize_element(&**message)?;
+                seq.end()
+            }
+            Self::NegErr {
+                subscription_id,
+                message,
+            } => {
+                let mut seq = serializer.serialize_seq(Some(3))?;
+                seq.serialize_element("NEG-ERR")?;
+                seq.serialize_element(&**subscription_id)?;
+                seq.serialize_element(&**message)?;
+                seq.end()
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for RelayMessage<'static> {
+    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let serde_json::Value::Array(items) = serde_json::Value::deserialize(deserializer)? else {
+            return Err(serde::de::Error::custom(Error::NotAMessageArray));
+        };
+        let mut items = items.into_iter();
+        let Some(kind) = items.next().and_then(|v| v.as_str().map(str::to_owned)) else {
+            return Err(serde::de::Error::custom(Error::NotAMessageArray));
+        };
+        Self::from_items(&kind, &items.collect::<Vec<_>>()).map_err(to_de_error)
+    }
+}
+
+impl Serialize for CountResult {
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(
+            1 + usize::from(self.approximate.is_some()) + usize::from(self.hll.is_some()),
+        ))?;
+        map.serialize_entry("count", &self.count)?;
+        if let Some(approximate) = self.approximate {
+            map.serialize_entry("approximate", &approximate)?;
+        }
+        if let Some(hll) = &self.hll {
+            map.serialize_entry("hll", hll)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for CountResult {
+    /// Lenient like the message parser: a non-bool `approximate` and a
+    /// non-512-hex `hll` are ignored rather than failing.
+    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        count_result(&value).ok_or_else(|| serde::de::Error::custom("invalid COUNT result object"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::panic, reason = "tests fail by panicking")]
-    use alloc::borrow::Cow;
+
     use alloc::string::ToString;
 
     use super::*;
@@ -857,10 +1174,10 @@ mod tests {
         // Astral characters count once each, not per UTF-16 unit.
         assert!(SubscriptionId::new("\u{1F600}".repeat(64)).is_ok());
         assert!(SubscriptionId::new("\u{1F600}".repeat(65)).is_err());
-        assert_eq!(
-            SubscriptionId::new("x".repeat(65)).unwrap_err().kind(),
-            ErrorKind::Message
-        );
+        assert!(matches!(
+            SubscriptionId::new("x".repeat(65)).unwrap_err(),
+            Error::InvalidSubscriptionId { len: 65 }
+        ));
     }
 
     #[test]
@@ -906,10 +1223,10 @@ mod tests {
         assert_eq!(a.to_string(), upper.to_lowercase());
         assert!(CountHll::from_str("ab").is_err());
         assert!(CountHll::from_str(&"zz".repeat(256)).is_err());
-        assert_eq!(
-            CountHll::from_str("ab").unwrap_err().kind(),
-            ErrorKind::Message
-        );
+        assert!(matches!(
+            CountHll::from_str("ab").unwrap_err(),
+            Error::InvalidHll
+        ));
     }
 
     #[test]
@@ -921,7 +1238,7 @@ mod tests {
                 subscription_id: Cow::Borrowed(&id),
                 filters: Cow::Borrowed(core::slice::from_ref(&filter)),
             }
-            .encode(),
+            .to_json(),
             "[\"REQ\",\"sub\",{\"kinds\":[1]}]"
         );
         // An empty filter slice encodes as `["REQ","sub"]` per the design table.
@@ -930,11 +1247,11 @@ mod tests {
                 subscription_id: Cow::Borrowed(&id),
                 filters: Cow::Borrowed(&[][..]),
             }
-            .encode(),
+            .to_json(),
             "[\"REQ\",\"sub\"]"
         );
         assert_eq!(
-            ClientMessage::Close(Cow::Borrowed(&id)).encode(),
+            ClientMessage::Close(Cow::Borrowed(&id)).to_json(),
             "[\"CLOSE\",\"sub\"]"
         );
         assert_eq!(
@@ -942,19 +1259,19 @@ mod tests {
                 subscription_id: Cow::Borrowed(&id),
                 message: Cow::Borrowed("deadbeef"),
             }
-            .encode(),
+            .to_json(),
             "[\"NEG-MSG\",\"sub\",\"deadbeef\"]"
         );
         assert_eq!(
-            ClientMessage::NegClose(Cow::Borrowed(&id)).encode(),
+            ClientMessage::NegClose(Cow::Borrowed(&id)).to_json(),
             "[\"NEG-CLOSE\",\"sub\"]"
         );
         let event = signed_event();
-        let wire = ClientMessage::Event(Cow::Borrowed(&event)).encode();
+        let wire = ClientMessage::Event(Cow::Borrowed(&event)).to_json();
         assert!(wire.starts_with("[\"EVENT\",{\"id\":\""));
         // Round-trip: parse(encode(x)) reproduces an equivalent message.
         assert_eq!(
-            ClientMessage::parse(&wire).expect("parse"),
+            ClientMessage::from_json(&wire).expect("parse"),
             ClientMessage::Event(Cow::Owned(event))
         );
     }
@@ -964,7 +1281,7 @@ mod tests {
         let event = signed_event();
         let event_json = serde_json::to_string(&event).expect("ser");
         assert!(matches!(
-            ClientMessage::parse(&alloc::format!("[\"EVENT\",{event_json}]")).expect("event"),
+            ClientMessage::from_json(&alloc::format!("[\"EVENT\",{event_json}]")).expect("event"),
             ClientMessage::Event(_)
         ));
         for bad in [
@@ -987,15 +1304,11 @@ mod tests {
             "[\"CLOSE\",\"\"]",
             "[\"CLOSE\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]",
         ] {
-            assert_eq!(
-                ClientMessage::parse(bad).unwrap_err().kind(),
-                ErrorKind::Message,
-                "{bad}"
-            );
+            assert!(ClientMessage::from_json(bad).is_err(), "{bad}");
         }
         // Uppercase NEG hex is lowercased on parse.
         let ClientMessage::NegMsg { message, .. } =
-            ClientMessage::parse("[\"NEG-MSG\",\"s\",\"FF00\"]").expect("neg-msg")
+            ClientMessage::from_json("[\"NEG-MSG\",\"s\",\"FF00\"]").expect("neg-msg")
         else {
             panic!("expected NegMsg");
         };
@@ -1006,7 +1319,7 @@ mod tests {
     fn relay_parse_rules() {
         let event = signed_event();
         let event_json = serde_json::to_string(&event).expect("ser");
-        let ok = RelayMessage::parse(&alloc::format!(
+        let ok = RelayMessage::from_json(&alloc::format!(
             "[\"OK\",\"{}\",true,\"saved\"]",
             event.id().to_hex()
         ))
@@ -1025,21 +1338,18 @@ mod tests {
             "[\"COUNT\",\"s\",\"x\"]",
             "[\"NEG-ERR\",\"s\"]",
         ] {
-            assert_eq!(
-                RelayMessage::parse(bad).unwrap_err().kind(),
-                ErrorKind::Message,
-                "{bad}"
-            );
+            assert!(RelayMessage::from_json(bad).is_err(), "{bad}");
         }
         let relay_event =
-            RelayMessage::parse(&alloc::format!("[\"EVENT\",\"s\",{event_json}]")).expect("event");
+            RelayMessage::from_json(&alloc::format!("[\"EVENT\",\"s\",{event_json}]"))
+                .expect("event");
         assert!(matches!(relay_event, RelayMessage::Event { .. }));
     }
 
     #[test]
     fn relay_count_result_parsing() {
         // approximate/hll wrong types are ignored, not errors.
-        let RelayMessage::Count { result, .. } = RelayMessage::parse(
+        let RelayMessage::Count { result, .. } = RelayMessage::from_json(
             "[\"COUNT\",\"s\",{\"count\":7,\"approximate\":\"yes\",\"hll\":\"zz\"}]",
         )
         .expect("count") else {
@@ -1055,7 +1365,7 @@ mod tests {
         );
         let RelayMessage::Count {
             result: max_result, ..
-        } = RelayMessage::parse(&alloc::format!(
+        } = RelayMessage::from_json(&alloc::format!(
             "[\"COUNT\",\"s\",{{\"count\":{},\"approximate\":true,\"hll\":\"{}\"}}]",
             9_007_199_254_740_991u64,
             "ab".repeat(256).to_uppercase()
@@ -1068,7 +1378,7 @@ mod tests {
         assert_eq!(max_result.approximate, Some(true));
         assert_eq!(max_result.hll.expect("hll").to_string(), "ab".repeat(256));
         // 2^53 is rejected.
-        assert!(RelayMessage::parse("[\"COUNT\",\"s\",{\"count\":9007199254740992}]").is_err());
+        assert!(RelayMessage::from_json("[\"COUNT\",\"s\",{\"count\":9007199254740992}]").is_err());
     }
 
     #[test]
@@ -1081,11 +1391,11 @@ mod tests {
                 accepted: true,
                 message: Cow::Borrowed(""),
             }
-            .encode(),
+            .to_json(),
             alloc::format!("[\"OK\",\"{}\",true,\"\"]", event.id().to_hex())
         );
         assert_eq!(
-            RelayMessage::Eose(Cow::Borrowed(&id)).encode(),
+            RelayMessage::Eose(Cow::Borrowed(&id)).to_json(),
             "[\"EOSE\",\"sub\"]"
         );
         assert_eq!(
@@ -1097,7 +1407,7 @@ mod tests {
                     hll: Some(CountHll::from_str(&"ab".repeat(256)).expect("hll")),
                 },
             }
-            .encode(),
+            .to_json(),
             alloc::format!(
                 "[\"COUNT\",\"sub\",{{\"count\":7,\"approximate\":true,\"hll\":\"{}\"}}]",
                 "ab".repeat(256)
@@ -1176,9 +1486,9 @@ mod tests {
             ClientMessage::NegClose(Cow::Borrowed(&id)),
         ];
         for message in clients {
-            let encoded = message.encode();
+            let encoded = message.to_json();
             let owned: ClientMessage<'static> = message.into_owned();
-            assert_eq!(owned.encode(), encoded);
+            assert_eq!(owned.to_json(), encoded);
         }
         let relays: [RelayMessage<'_>; 9] = [
             RelayMessage::Event {
@@ -1217,9 +1527,9 @@ mod tests {
             },
         ];
         for message in relays {
-            let encoded = message.encode();
+            let encoded = message.to_json();
             let owned: RelayMessage<'static> = message.into_owned();
-            assert_eq!(owned.encode(), encoded);
+            assert_eq!(owned.to_json(), encoded);
         }
     }
 

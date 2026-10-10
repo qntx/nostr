@@ -340,7 +340,7 @@ pub fn encode_note(id: &EventId) -> String {
 ///
 /// [`ErrorKind::Nip19`] on malformed bech32, an unknown prefix, a wrong
 /// payload length, malformed TLVs, an out-of-range kind, or an invalid
-/// secret scalar (with the [`crate::Error`] error as `source`).
+/// secret scalar (with the [`crate::key::Error`] error as `source`).
 pub fn decode(code: &str) -> Result<Entity> {
     // The drop guard wipes the decoded buffer on every path — `nsec`
     // payloads are secret key material (#210).

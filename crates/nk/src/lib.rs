@@ -1,8 +1,11 @@
-//! `nk` is the leaf protocol crate of the `nk-*` workspace: the
-//! platform-neutral (`no_std` + `alloc`, sans-IO) counterpart of
-//! `@qntx/nostr`'s `core` and `nips` layers. Core types are re-exported flat
-//! at the crate root; the NIP modules live under [`nips`]. There is no
-//! prelude.
+//! `nk` is the leaf protocol crate of the `nk-*` workspace: a
+//! platform-neutral (`no_std` + `alloc`, sans-IO) implementation of the
+//! nostr wire protocol — [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md)
+//! core types plus every supported NIP module under [`nips`]. Core types are
+//! re-exported flat at the crate root; there is no prelude.
+//!
+//! Every module owns an [`Error`](key::Error) enum describing its own
+//! failure causes; the root exports no shared error type.
 //!
 //! # Features
 //!
@@ -34,7 +37,7 @@
 //! let url = RelayUrl::parse("Relay.EXAMPLE")?;
 //! assert_eq!(url.as_str(), "wss://relay.example/");
 //! let _ = Timestamp::from_secs(1_700_000_000);
-//! # Ok::<(), nk::Error>(())
+//! # Ok::<(), nk::url::Error>(())
 //! ```
 
 #![no_std]
@@ -45,11 +48,12 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-pub mod error;
 pub mod limits;
 
 pub mod builder;
 pub(crate) mod canonical;
+#[doc(hidden)]
+pub mod detail;
 pub mod event;
 pub mod filter;
 pub(crate) mod hex;
@@ -64,8 +68,7 @@ pub mod url;
 pub mod nips;
 
 pub use builder::{DeletionTarget, EventBuilder, ProfileMetadata};
-pub use error::{Error, ErrorKind, Result};
-pub use event::{Event, EventId, Signature, UnsignedEvent, cmp_newest_first, cmp_oldest_first};
+pub use event::{Event, EventId, Signature, UnsignedEvent};
 pub use filter::{Filter, SingleLetterTag, fingerprint};
 pub use key::{Keys, PublicKey, SecretKey};
 pub use kind::{Kind, KindClass};
@@ -82,8 +85,6 @@ use criterion as _;
 const _: () = {
     const fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<DeletionTarget>();
-    assert_send_sync::<Error>();
-    assert_send_sync::<ErrorKind>();
     assert_send_sync::<Event>();
     assert_send_sync::<EventAddress>();
     assert_send_sync::<EventBuilder>();

@@ -219,9 +219,9 @@ fn diff_message_client() {
     let fixture = load("core.message.client");
     for case in &fixture.cases {
         check("core.message.client", fixture.seed, case, |input| {
-            ClientMessage::parse(input)
+            ClientMessage::from_json(input)
                 .ok()
-                .map(|message| json_str(message.encode()))
+                .map(|message| json_str(message.to_json()))
         });
     }
 }
@@ -232,9 +232,9 @@ fn diff_message_relay() {
     let fixture = load("core.message.relay");
     for case in &fixture.cases {
         check("core.message.relay", fixture.seed, case, |input| {
-            RelayMessage::parse(input)
+            RelayMessage::from_json(input)
                 .ok()
-                .map(|message| json_str(message.encode()))
+                .map(|message| json_str(message.to_json()))
         });
     }
 }
