@@ -6,21 +6,18 @@
 // (tests/vectors/nip98.test.ts) and the nk-* Rust crates.
 //
 // Events are signed deterministically: a fixed secret key plus a fixed BIP-340
-// auxiliary rand injected through the `SigningBackend` (same aux path as
-// vectors/core), so Rust's `Keys::sign_event_with_aux` reproduces `id`/`sig`
-// byte-for-byte. `getToken` serializes in the canonical wire order
-// (id, pubkey, created_at, kind, tags, content, sig), so its output is the
-// token both languages produce.
+// auxiliary rand passed to `signEvent`, so Rust's `Keys::sign_event_with_aux`
+// reproduces `id`/`sig` byte-for-byte. `getToken` serializes in the canonical
+// wire order (id, pubkey, created_at, kind, tags, content, sig), so its output
+// is the token both languages produce.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { schnorr } from "@noble/curves/secp256k1.js";
 import { base64 } from "@scure/base";
 
 import type { Event, EventTemplate } from "../../../src/core/event.ts";
 import { Keys, signEvent } from "../../../src/core/key.ts";
-import type { SigningBackend } from "../../../src/core/key.ts";
 import { bytesToHex, hexToBytes, utf8Encoder } from "../../../src/core/util.ts";
 import { getToken } from "../../../src/nips/nip98.ts";
 
@@ -39,14 +36,10 @@ const AUX = "42".repeat(32);
 const NOW = 1_700_000_000;
 
 const auxBytes = hexToBytes(AUX);
-const backend: SigningBackend = {
-  publicKey: (sk) => schnorr.getPublicKey(sk),
-  sign: (id, sk) => schnorr.sign(id, sk, auxBytes),
-};
-const keys = Keys.fromSecretKey(SECRET_KEY, backend);
+const keys = Keys.fromSecretKey(SECRET_KEY);
 
 function sign(template: EventTemplate): Event {
-  return signEvent({ ...template, pubkey: keys.publicKey }, keys);
+  return signEvent({ ...template, pubkey: keys.publicKey }, keys, auxBytes);
 }
 
 /** The raw bytes `hashPayload` feeds SHA-256 for a TS payload argument. */

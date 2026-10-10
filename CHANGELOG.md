@@ -24,6 +24,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 - `nk-nips` `nip17` feature: NIP-17 private direct messages — `Recipient`/`ReplyTo`/`ChatMessageOptions`, `chat_message_rumor` (kind-14 rumor with `p` tags, unmarked reply `e` tag, `subject`), `wrap_direct_message_with_rng`/`wrap_direct_message` (sender copy first, recipients deduplicated by public key, NIP-59 errors propagated per copy), `normalize_recipients`, and the kind-10050 DM relay list (`parse_dm_relay_list`, `dm_relay_list_tags`, `dm_relay_list`). Verified against `vectors/nip17/codec.json` replayed byte-for-byte under the recorded entropy stream.
 - `nk-nips` `nip44` feature: NIP-44 v2 payload encryption — `ConversationKey` (`derive`, `from_shared_secret`, `from_bytes`, `to_bytes`), `MessageKeys`, `calc_padded_len`, `encrypt_with_nonce`/`encrypt_with_rng`/`encrypt` (the last under `os-rng`), and `decrypt`/`decrypt_with_max_len` under `DEFAULT_MAX_PAYLOAD_CHARS`. The MAC is verified in constant time before decryption, the extended u32 length prefix is used at ≥65536 bytes, and all key material and scratch buffers are zeroized. Verified by both languages against `vectors/nip44/official.json` (every section), the new `vectors/nip44/extended.json` spec-text boundary cases, and generated `shared-secret.json` cases proving `from_shared_secret(ecdh_x) == conversation_key`; a `nip44.v2` differential stream covers random plaintexts, keys, nonces, and corrupted payloads.
 - `nk-nips` is now published to crates.io with the `nip04`, `nip13`, `nip17`, `nip19`, `nip21`, `nip42`, `nip44`, `nip49`, `nip59`, and `nip98` features (all default-off, each compiling independently).
+- `finalizeEvent` and `signEvent` accept an optional 32-byte `auxRand` BIP-340 auxiliary randomness (default: a fresh `randomBytes(32)` draw) — the counterpart of nk-core `Keys::sign_event_with_aux`, for reproducible signatures in vectors and tests. Never reuse aux randomness in production.
 
 ### Changed
 
@@ -32,6 +33,11 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 - `nip49.decrypt` rejects a decrypted secret that is not a valid secp256k1 scalar with `Nip49Error` (NIP-49 ruling N3 — a key that decrypts to `0` or `≥ n` can never sign or derive a conversation key).
 - `nip98.getToken` encodes the signed event in canonical NIP-01 field order (`id`, `pubkey`, `created_at`, `kind`, `tags`, `content`, `sig`) and drops non-event properties from the signer's return value, so tokens are deterministic and byte-identical to nk-nips.
 - **BREAKING:** `nip59` `WrapOptions.randomInt` is replaced by `randomBytes` — a single entropy stream feeding the ephemeral secret key, timestamp offsets (big-endian `u32` rejection sampling), the NIP-44 nonce, and the BIP-340 auxiliary randomness, in that order. Gift wraps are reproducible under an injected stream, matching the draw order of `nk-nips`' `*_with_rng` functions.
+- `nip59.createGiftWrap` signs through `signEvent`'s `auxRand` parameter instead of an injected signing backend.
+
+### Security
+
+- `nip59.createGiftWrap` wipes the ephemeral secret key, its ephemeral-key candidate draws, and the NIP-44 conversation key after use; `signEvent`, `finalizeEvent`, and the `Keys` constructor wipe the secret-key copies handed to the `SigningBackend` after each call — reducing the lifetime of key material in memory.
 
 ### Fixed
 

@@ -17,10 +17,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { schnorr } from "@noble/curves/secp256k1.js";
-
 import type { Event } from "../../../src/core/event.ts";
-import type { Keys as KeysType, SigningBackend } from "../../../src/core/key.ts";
 import { Keys, signEvent } from "../../../src/core/key.ts";
 import { Kind } from "../../../src/core/kind.ts";
 import type { Tag } from "../../../src/core/tag.ts";
@@ -77,10 +74,7 @@ class Stream {
 /** `Nip59Crypto` backed by `secretKey` whose nonce/aux draws come from `stream`. */
 function cryptoOf(secretKey: string, stream: Stream): Nip59Crypto {
   const secretBytes = hexToBytes(secretKey);
-  const keys = Keys.fromSecretKey(secretKey, {
-    publicKey: (sk) => schnorr.getPublicKey(sk),
-    sign: (id, sk) => schnorr.sign(id, sk, stream.take(32)),
-  });
+  const keys = Keys.fromSecretKey(secretKey);
   return {
     getPublicKey: async () => {
       await Promise.resolve();
@@ -88,7 +82,7 @@ function cryptoOf(secretKey: string, stream: Stream): Nip59Crypto {
     },
     signEvent: async (unsigned) => {
       await Promise.resolve();
-      return signEvent(unsigned, keys);
+      return signEvent(unsigned, keys, stream.take(32));
     },
     nip44Encrypt: async (peer, plaintext) => {
       await Promise.resolve();
@@ -99,14 +93,6 @@ function cryptoOf(secretKey: string, stream: Stream): Nip59Crypto {
       return nip44.decrypt(payload, nip44.getConversationKey(secretBytes, peer));
     },
   };
-}
-
-/** Signing `Keys` whose aux draws come from `stream`. */
-function keysOf(secretKey: string, stream: Stream): KeysType {
-  return Keys.fromSecretKey(secretKey, {
-    publicKey: (sk) => schnorr.getPublicKey(sk),
-    sign: (id, sk) => schnorr.sign(id, sk, stream.take(32)),
-  });
 }
 
 type VectorOptions = {
@@ -304,7 +290,8 @@ function manualSeal(
       tags,
       pubkey: Keys.fromSecretKey(author).publicKey,
     },
-    keysOf(author, stream),
+    Keys.fromSecretKey(author),
+    stream.take(32),
   );
 }
 
@@ -414,11 +401,7 @@ async function main(): Promise<void> {
    */
   const manualWrap = (plaintext: string, seed: number): Event => {
     const s = new Stream(entropy(seed));
-    const backend: SigningBackend = {
-      publicKey: (sk) => schnorr.getPublicKey(sk),
-      sign: (id, sk) => schnorr.sign(id, sk, s.take(32)),
-    };
-    const ephemeral = Keys.fromSecretKey(s.take(32), backend);
+    const ephemeral = Keys.fromSecretKey(s.take(32));
     return signEvent(
       {
         kind: Kind.GiftWrap,
@@ -432,6 +415,7 @@ async function main(): Promise<void> {
         pubkey: ephemeral.publicKey,
       },
       ephemeral,
+      s.take(32),
     );
   };
 
@@ -443,7 +427,8 @@ async function main(): Promise<void> {
       created_at: 1_700_000_000,
       pubkey: authorPk,
     },
-    keysOf(AUTHOR, carrierStream),
+    Keys.fromSecretKey(AUTHOR),
+    carrierStream.take(32),
   );
   unwrap.push(err("wrong-kind", signedNote, "expected gift wrap"));
 

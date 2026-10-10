@@ -1,12 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { schnorr } from "@noble/curves/secp256k1.js";
 import { afterEach, describe, expect, test } from "vite-plus/test";
 
 import type { Event, EventTemplate } from "../../src/core/event.ts";
 import { Keys, signEvent } from "../../src/core/key.ts";
-import type { SigningBackend } from "../../src/core/key.ts";
 import { hexToBytes } from "../../src/core/util.ts";
 import {
   Nip98Error,
@@ -56,15 +54,11 @@ const vector = JSON.parse(
 };
 
 const aux = hexToBytes(vector.aux);
-const backend: SigningBackend = {
-  publicKey: (sk) => schnorr.getPublicKey(sk),
-  sign: (id, sk) => schnorr.sign(id, sk, aux),
-};
-const keys = Keys.fromSecretKey(vector.secret_key, backend);
+const keys = Keys.fromSecretKey(vector.secret_key);
 
 /** Deterministic signer: fixed key + fixed aux → the vector's id/sig. */
 function sign(template: EventTemplate): Event {
-  return signEvent({ ...template, pubkey: keys.publicKey }, keys);
+  return signEvent({ ...template, pubkey: keys.publicKey }, keys, aux);
 }
 
 function payloadOf(c: { payload_hex?: string; payload_json?: unknown }): unknown {

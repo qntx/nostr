@@ -2,7 +2,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { CryptoError } from "../src/core/error.ts";
 import { verifyEvent } from "../src/core/verifier.ts";
-import { Kind, Keys, KeysSigner, finalizeEvent } from "../src/index.ts";
+import { Kind, Keys, KeysSigner, finalizeEvent, hexToBytes } from "../src/index.ts";
 import { encryptToPubkey } from "../src/nips/nip44.ts";
 import {
   Nip59Error,
@@ -115,6 +115,37 @@ describe("nip59", () => {
     expect(randomPastTimestamp({ now: 1000, randomBytes: () => be32(TWO_DAYS_SECS - 1) })).toBe(
       1000 - (TWO_DAYS_SECS - 1),
     );
+  });
+
+  test("createGiftWrap zeroes the ephemeral-key candidate draws", () => {
+    const { aliceKeys, bobKeys } = pair();
+    const seal = finalizeEvent(
+      { kind: Kind.Seal, content: "cipher", tags: [], created_at: 1 },
+      aliceKeys.secretKey,
+    );
+    // Entropy tape: [invalid all-zero candidate][valid candidate][nonce][aux].
+    const tape = new Uint8Array(4 * 32);
+    tape.set(hexToBytes(BOB_SK), 32);
+    tape.fill(0x2a, 64);
+    const draws: Uint8Array[] = [];
+    let pos = 0;
+    const randomBytes = (n: number): Uint8Array => {
+      const b = tape.slice(pos, pos + n);
+      pos += n;
+      draws.push(b);
+      return b;
+    };
+    const wrap = createGiftWrap(seal, bobKeys.publicKey, {
+      timestamps: { seal: 1, wrap: 1_700_000_300 },
+      randomBytes,
+    });
+    expect(verifyEvent(wrap)).toBe(true);
+    // Fixed timestamps → draws are exactly: invalid candidate, valid candidate, nonce, aux.
+    expect(draws).toHaveLength(4);
+    // Both candidate draws (the rejected zero scalar and the accepted key) are zero-filled.
+    expect(draws.slice(0, 2).every((d) => d.every((x) => x === 0))).toBe(true);
+    // The NIP-44 nonce and BIP-340 aux draws are not secrets and keep their content.
+    expect(draws.slice(2).every((d) => d.some((x) => x !== 0))).toBe(true);
   });
 
   test("unwrap of a non-gift-wrap throws", async () => {

@@ -104,7 +104,13 @@ export class Keys {
   private constructor(secretKey: SecretKey, backend: SigningBackend) {
     this.secretKey = secretKey;
     this.backend = backend;
-    const pubkey = backend.publicKey(secretKey.bytes);
+    const secretBytes = secretKey.bytes;
+    let pubkey: Uint8Array;
+    try {
+      pubkey = backend.publicKey(secretBytes);
+    } finally {
+      secretBytes.fill(0);
+    }
     if (pubkey.length !== 32) {
       throw new CryptoError("signing backend returned an invalid public key");
     }
@@ -124,8 +130,19 @@ function resolveKeys(secretKey: SecretKeyInput | Keys): Keys {
   return secretKey instanceof Keys ? secretKey : Keys.fromSecretKey(secretKey);
 }
 
-/** Fill pubkey/id/sig on a template and return a signed event. */
-export function finalizeEvent(template: EventTemplate, secretKey: SecretKeyInput | Keys): Event {
+/**
+ * Fill pubkey/id/sig on a template and return a signed event.
+ *
+ * `auxRand` is the 32-byte BIP-340 auxiliary randomness. It defaults to a fresh `randomBytes(32)`
+ * draw; an explicit value makes the signature reproducible, which is required for vectors and
+ * tests. This is the counterpart of nk-core `Keys::sign_event_with_aux`. Never reuse aux randomness
+ * in production.
+ */
+export function finalizeEvent(
+  template: EventTemplate,
+  secretKey: SecretKeyInput | Keys,
+  auxRand?: Uint8Array,
+): Event {
   const keys = resolveKeys(secretKey);
   const unsigned: UnsignedEvent = {
     kind: template.kind,
@@ -134,15 +151,27 @@ export function finalizeEvent(template: EventTemplate, secretKey: SecretKeyInput
     created_at: template.created_at,
     pubkey: keys.publicKey,
   };
-  return signEvent(unsigned, keys);
+  return signEvent(unsigned, keys, auxRand);
 }
 
 /**
  * Sign an already-assembled unsigned event. Rejects when `unsigned.pubkey` does not match the
  * secret key.
+ *
+ * `auxRand` is the 32-byte BIP-340 auxiliary randomness. It defaults to a fresh `randomBytes(32)`
+ * draw; an explicit value makes the signature reproducible, which is required for vectors and
+ * tests. This is the counterpart of nk-core `Keys::sign_event_with_aux`. Never reuse aux randomness
+ * in production.
  */
-export function signEvent(unsigned: UnsignedEvent, secretKey: SecretKeyInput | Keys): Event {
+export function signEvent(
+  unsigned: UnsignedEvent,
+  secretKey: SecretKeyInput | Keys,
+  auxRand?: Uint8Array,
+): Event {
   const keys = resolveKeys(secretKey);
+  if (auxRand !== undefined && auxRand.length !== 32) {
+    throw new CryptoError("auxRand must be 32 bytes");
+  }
   if (!validateEvent(unsigned)) {
     throw new EventValidationError("cannot sign invalid unsigned event");
   }
@@ -160,7 +189,13 @@ export function signEvent(unsigned: UnsignedEvent, secretKey: SecretKeyInput | K
   };
 
   const id = bytesToHex(sha256(utf8Encoder.encode(serializeValidatedEvent(normalized))));
-  const sig = keys.backend.sign(hexToBytes(id), keys.secretKey.bytes, randomBytes(32));
+  const secretBytes = keys.secretKey.bytes;
+  let sig: Uint8Array;
+  try {
+    sig = keys.backend.sign(hexToBytes(id), secretBytes, auxRand ?? randomBytes(32));
+  } finally {
+    secretBytes.fill(0);
+  }
   if (sig.length !== 64) {
     throw new CryptoError("signing backend returned an invalid signature");
   }

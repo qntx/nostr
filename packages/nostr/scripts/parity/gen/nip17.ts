@@ -17,8 +17,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { schnorr } from "@noble/curves/secp256k1.js";
-
 import type { Event } from "../../../src/core/event.ts";
 import { Keys, signEvent } from "../../../src/core/key.ts";
 import type { Tag } from "../../../src/core/tag.ts";
@@ -86,10 +84,7 @@ class Stream {
 /** `Nip59Crypto` backed by `secretKey` whose nonce/aux draws come from `stream`. */
 function cryptoOf(secretKey: string, stream: Stream): Nip59Crypto {
   const secretBytes = hexToBytes(secretKey);
-  const keys = Keys.fromSecretKey(secretKey, {
-    publicKey: (sk) => schnorr.getPublicKey(sk),
-    sign: (id, sk) => schnorr.sign(id, sk, stream.take(32)),
-  });
+  const keys = Keys.fromSecretKey(secretKey);
   return {
     getPublicKey: async () => {
       await Promise.resolve();
@@ -97,7 +92,7 @@ function cryptoOf(secretKey: string, stream: Stream): Nip59Crypto {
     },
     signEvent: async (unsigned) => {
       await Promise.resolve();
-      return signEvent(unsigned, keys);
+      return signEvent(unsigned, keys, stream.take(32));
     },
     nip44Encrypt: async (peer, plaintext) => {
       await Promise.resolve();
@@ -315,11 +310,12 @@ async function parseCase(name: string, event: Event): Promise<RelayParseCase> {
 }
 
 function signNow(template: { kind: number; content: string; tags: Tag[] }, key: string): Event {
-  const keys = Keys.fromSecretKey(key, {
-    publicKey: (sk) => schnorr.getPublicKey(sk),
-    sign: (id, sk) => schnorr.sign(id, sk, hexToBytes("42".repeat(32))),
-  });
-  return signEvent({ ...template, created_at: 1_700_000_000, pubkey: keys.publicKey }, keys);
+  const keys = Keys.fromSecretKey(key);
+  return signEvent(
+    { ...template, created_at: 1_700_000_000, pubkey: keys.publicKey },
+    keys,
+    hexToBytes("42".repeat(32)),
+  );
 }
 
 async function main(): Promise<void> {
