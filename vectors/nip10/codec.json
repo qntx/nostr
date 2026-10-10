@@ -1,0 +1,1278 @@
+{
+  "schema": 1,
+  "capability": "nip10.thread",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.12.1"
+  },
+  "parse": [
+    {
+      "name": "marked root/reply with profiles and quotes",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "wss://root.example",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "wss://reply.example",
+          "reply",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "e",
+          "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "",
+          "mention"
+        ],
+        [
+          "q",
+          "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "wss://quote.example"
+        ],
+        [
+          "q",
+          "30023:3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858:article",
+          "wss://addr.example"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "wss://author.example"
+        ],
+        [
+          "p",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [
+            "wss://root.example",
+            "wss://author.example"
+          ],
+          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "kind": null
+        },
+        "reply": {
+          "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relays": [
+            "wss://reply.example",
+            "wss://author.example"
+          ],
+          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "kind": null
+        },
+        "mentions": [
+          {
+            "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "relays": [],
+            "author": null,
+            "kind": null
+          }
+        ],
+        "quotes": [
+          {
+            "type": "address",
+            "identifier": "article",
+            "pubkey": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+            "kind": 30023,
+            "relays": [
+              "wss://addr.example"
+            ]
+          },
+          {
+            "type": "event",
+            "id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "relays": [
+              "wss://quote.example"
+            ],
+            "author": null,
+            "kind": null
+          }
+        ],
+        "profiles": [
+          {
+            "pubkey": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+            "relays": []
+          },
+          {
+            "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+            "relays": [
+              "wss://author.example"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "positional two unmarked e tags",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "reply": {
+          "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "positional single unmarked e is both",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "reply": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "empty marker is positional unmarked",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "",
+          ""
+        ],
+        [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "",
+          ""
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "reply": {
+          "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "NIP-01 four-tuple author at index 3 is positional",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "wss://relay.example",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [
+            "wss://relay.example"
+          ],
+          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "kind": null
+        },
+        "reply": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [
+            "wss://relay.example"
+          ],
+          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "five-tuple author at index 4 with markers",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "wss://relay.example",
+          "",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "",
+          "reply",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [
+            "wss://relay.example"
+          ],
+          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "kind": null
+        },
+        "reply": {
+          "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relays": [],
+          "author": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "author scanned index 4 then 3",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "",
+          "nonhex-marker",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ]
+      ],
+      "out": {
+        "root": null,
+        "reply": null,
+        "mentions": [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [],
+            "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+            "kind": null
+          }
+        ],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "uppercase hex id and author are lowercased",
+      "tags": [
+        [
+          "e",
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "wss://relay.example",
+          "root",
+          "166BF3765EBD1FC55DECFE395BEFF2EA3B2A4E0A8946E7EB578512B555737C99"
+        ],
+        [
+          "p",
+          "166BF3765EBD1FC55DECFE395BEFF2EA3B2A4E0A8946E7EB578512B555737C99",
+          "wss://author.example"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [
+            "wss://relay.example",
+            "wss://author.example"
+          ],
+          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "kind": null
+        },
+        "reply": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [
+            "wss://relay.example",
+            "wss://author.example"
+          ],
+          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": [
+          {
+            "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+            "relays": [
+              "wss://author.example"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown marker is a mention only",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "",
+          "fork"
+        ]
+      ],
+      "out": {
+        "root": null,
+        "reply": null,
+        "mentions": [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [],
+            "author": null,
+            "kind": null
+          }
+        ],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "mention marker leaves positional unset",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "",
+          "mention"
+        ],
+        [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "reply": {
+          "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "mentions": [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [],
+            "author": null,
+            "kind": null
+          }
+        ],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "marked reply back-fills root",
+      "tags": [
+        [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "",
+          "reply"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "reply": {
+          "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "marked root back-fills reply",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "",
+          "root"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "reply": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "mention with root id is dropped",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "",
+          "root"
+        ],
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "",
+          "mention"
+        ],
+        [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "",
+          "mention"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "reply": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "mentions": [
+          {
+            "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "relays": [],
+            "author": null,
+            "kind": null
+          }
+        ],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "author inherits p-tag relay hints",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "wss://direct.example",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "e",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "",
+          "reply",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "wss://author.example"
+        ],
+        [
+          "p",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "wss://author.example"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [
+            "wss://direct.example",
+            "wss://author.example"
+          ],
+          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "kind": null
+        },
+        "reply": {
+          "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relays": [],
+          "author": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": [
+          {
+            "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+            "relays": [
+              "wss://author.example"
+            ]
+          },
+          {
+            "pubkey": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+            "relays": []
+          },
+          {
+            "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+            "relays": [
+              "wss://author.example"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "q hex with author and relay",
+      "tags": [
+        [
+          "q",
+          "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "wss://q.example",
+          "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2"
+        ]
+      ],
+      "out": {
+        "root": null,
+        "reply": null,
+        "mentions": [],
+        "quotes": [
+          {
+            "type": "event",
+            "id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "relays": [
+              "wss://q.example"
+            ],
+            "author": "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2",
+            "kind": null
+          }
+        ],
+        "profiles": []
+      }
+    },
+    {
+      "name": "q address ignores index 3",
+      "tags": [
+        [
+          "q",
+          "30023:3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858:post",
+          "wss://a.example",
+          "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ]
+      ],
+      "out": {
+        "root": null,
+        "reply": null,
+        "mentions": [],
+        "quotes": [
+          {
+            "type": "address",
+            "identifier": "post",
+            "pubkey": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+            "kind": 30023,
+            "relays": [
+              "wss://a.example"
+            ]
+          }
+        ],
+        "profiles": []
+      }
+    },
+    {
+      "name": "invalid q tags skipped",
+      "tags": [
+        [
+          "q"
+        ],
+        [
+          "q",
+          ""
+        ],
+        [
+          "q",
+          "not-a-quote"
+        ],
+        [
+          "q",
+          "30023:short:d"
+        ],
+        [
+          "q",
+          "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "wss://ok.example",
+          "not-a-pubkey"
+        ]
+      ],
+      "out": {
+        "root": null,
+        "reply": null,
+        "mentions": [],
+        "quotes": [
+          {
+            "type": "event",
+            "id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "relays": [
+              "wss://ok.example"
+            ],
+            "author": null,
+            "kind": null
+          }
+        ],
+        "profiles": []
+      }
+    },
+    {
+      "name": "q mixed-case id and author",
+      "tags": [
+        [
+          "q",
+          "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+          "",
+          "DFFF72A9AEA65B809F9AD9A44705E4291340DBA0BD4F682F237390310CC653A2"
+        ]
+      ],
+      "out": {
+        "root": null,
+        "reply": null,
+        "mentions": [],
+        "quotes": [
+          {
+            "type": "event",
+            "id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "relays": [],
+            "author": "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2",
+            "kind": null
+          }
+        ],
+        "profiles": []
+      }
+    },
+    {
+      "name": "uppercase marker is not a marker",
+      "tags": [
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "",
+          "ROOT"
+        ]
+      ],
+      "out": {
+        "root": null,
+        "reply": null,
+        "mentions": [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "relays": [],
+            "author": null,
+            "kind": null
+          }
+        ],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "noise tags skipped",
+      "tags": [
+        [
+          "t",
+          "nostr"
+        ],
+        [
+          "x",
+          "1"
+        ],
+        [
+          "a",
+          "30023:pk:d"
+        ],
+        [
+          "e",
+          "nothex"
+        ]
+      ],
+      "out": {
+        "root": null,
+        "reply": null,
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "empty tag array skipped",
+      "tags": [
+        [],
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "reply": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": null,
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      }
+    },
+    {
+      "name": "p tag validation",
+      "tags": [
+        [
+          "p",
+          "nothex"
+        ],
+        [
+          "p"
+        ],
+        [
+          "p",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+          ""
+        ],
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "",
+          "root",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858"
+        ]
+      ],
+      "out": {
+        "root": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+          "kind": null
+        },
+        "reply": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relays": [],
+          "author": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+          "kind": null
+        },
+        "mentions": [],
+        "quotes": [],
+        "profiles": [
+          {
+            "pubkey": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+            "relays": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "null tag throws",
+      "tags": [
+        null,
+        [
+          "e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      ],
+      "err": "TypeError",
+      "rust": false
+    },
+    {
+      "name": "numeric e value throws",
+      "tags": [
+        [
+          "e",
+          42
+        ]
+      ],
+      "err": "TypeError",
+      "rust": false
+    }
+  ],
+  "reply": [
+    {
+      "name": "root parent with relay hint",
+      "parent": {
+        "kind": 1,
+        "tags": [],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+        "sig": "9fd38abee018080cb9ed5675395276cc13741a230f3d4540991e2cc94365b00e0d899c636acec01b04bccbf59700e7a90474fbcef16f1198c9518874373d6bef"
+      },
+      "relay_hint": "wss://hint.example/",
+      "quotes": [],
+      "out_tags": [
+        [
+          "e",
+          "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+          "wss://hint.example/",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ]
+      ]
+    },
+    {
+      "name": "root parent without hint",
+      "parent": {
+        "kind": 1,
+        "tags": [],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+        "sig": "9fd38abee018080cb9ed5675395276cc13741a230f3d4540991e2cc94365b00e0d899c636acec01b04bccbf59700e7a90474fbcef16f1198c9518874373d6bef"
+      },
+      "relay_hint": null,
+      "quotes": [],
+      "out_tags": [
+        [
+          "e",
+          "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+          "",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ]
+      ]
+    },
+    {
+      "name": "unnormalized caller hint is TS-only",
+      "parent": {
+        "kind": 1,
+        "tags": [],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+        "sig": "9fd38abee018080cb9ed5675395276cc13741a230f3d4540991e2cc94365b00e0d899c636acec01b04bccbf59700e7a90474fbcef16f1198c9518874373d6bef"
+      },
+      "relay_hint": "hint.example",
+      "quotes": [],
+      "out_tags": [
+        [
+          "e",
+          "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+          "hint.example",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ]
+      ],
+      "rust": false
+    },
+    {
+      "name": "nested reply parent",
+      "parent": {
+        "kind": 1,
+        "tags": [
+          [
+            "e",
+            "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+            "wss://root.example",
+            "root",
+            "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+          ]
+        ],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+        "id": "1a62ddbd239271d70830d76285ce05ba54ef460134faa28c96d0859c45272ab8",
+        "sig": "082d44f9f94b8bbc26142923bf579bc3d82d2286ca900c8a0f856913818c92fabe84e72768e92dcc17ed3f0b38f1a18ce0fce84396b19200dda3f0b7ffeeda1c"
+      },
+      "relay_hint": "wss://parent.example/",
+      "quotes": [],
+      "out_tags": [
+        [
+          "e",
+          "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+          "wss://root.example",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "e",
+          "1a62ddbd239271d70830d76285ce05ba54ef460134faa28c96d0859c45272ab8",
+          "wss://parent.example/",
+          "reply",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "wss://root.example"
+        ],
+        [
+          "p",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+          "wss://parent.example/"
+        ]
+      ]
+    },
+    {
+      "name": "deep thread parent",
+      "parent": {
+        "kind": 1,
+        "tags": [
+          [
+            "e",
+            "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+            "wss://root.example",
+            "root"
+          ],
+          [
+            "e",
+            "1a62ddbd239271d70830d76285ce05ba54ef460134faa28c96d0859c45272ab8",
+            "",
+            "reply"
+          ],
+          [
+            "p",
+            "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+            "wss://parent.example"
+          ]
+        ],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2",
+        "id": "1037978e39a3e5d8bbb13a5fe3691fccbb469e905db4a15fa94d9e98e45f9cc2",
+        "sig": "4088972654ab985fbd60cbc731e3e6d8ad75ea53ee90e7e5fd20f637cc00feccd922db999a76d8b51ab10b4cb3d53c10835c54b75fc53c06c144dae3944513af"
+      },
+      "relay_hint": null,
+      "quotes": [],
+      "out_tags": [
+        [
+          "e",
+          "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+          "wss://root.example",
+          "root"
+        ],
+        [
+          "e",
+          "1037978e39a3e5d8bbb13a5fe3691fccbb469e905db4a15fa94d9e98e45f9cc2",
+          "",
+          "reply",
+          "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2"
+        ],
+        [
+          "p",
+          "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2"
+        ],
+        [
+          "p",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+          "wss://parent.example"
+        ]
+      ]
+    },
+    {
+      "name": "quotes emit q tags and author p tags",
+      "parent": {
+        "kind": 1,
+        "tags": [],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+        "sig": "9fd38abee018080cb9ed5675395276cc13741a230f3d4540991e2cc94365b00e0d899c636acec01b04bccbf59700e7a90474fbcef16f1198c9518874373d6bef"
+      },
+      "relay_hint": null,
+      "quotes": [
+        {
+          "id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "relays": [
+            "wss://quote.example"
+          ],
+          "author": "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2"
+        },
+        {
+          "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "relays": []
+        },
+        {
+          "identifier": "article",
+          "pubkey": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+          "kind": 30023,
+          "relays": [
+            "wss://addr.example"
+          ]
+        }
+      ],
+      "out_tags": [
+        [
+          "e",
+          "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+          "",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "p",
+          "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2",
+          "wss://quote.example"
+        ],
+        [
+          "p",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+          "wss://addr.example"
+        ],
+        [
+          "q",
+          "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "wss://quote.example",
+          "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2"
+        ],
+        [
+          "q",
+          "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        ],
+        [
+          "q",
+          "30023:3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858:article",
+          "wss://addr.example"
+        ]
+      ]
+    },
+    {
+      "name": "quote with author but no relay writes empty slot",
+      "parent": {
+        "kind": 1,
+        "tags": [],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+        "sig": "9fd38abee018080cb9ed5675395276cc13741a230f3d4540991e2cc94365b00e0d899c636acec01b04bccbf59700e7a90474fbcef16f1198c9518874373d6bef"
+      },
+      "relay_hint": null,
+      "quotes": [
+        {
+          "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        }
+      ],
+      "out_tags": [
+        [
+          "e",
+          "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+          "",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "q",
+          "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ]
+      ]
+    },
+    {
+      "name": "string quotes are a TS convenience",
+      "parent": {
+        "kind": 1,
+        "tags": [],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+        "sig": "9fd38abee018080cb9ed5675395276cc13741a230f3d4540991e2cc94365b00e0d899c636acec01b04bccbf59700e7a90474fbcef16f1198c9518874373d6bef"
+      },
+      "relay_hint": null,
+      "quotes": [
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "30023:3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858:slug",
+        "garbage"
+      ],
+      "out_tags": [
+        [
+          "e",
+          "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+          "",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "q",
+          "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        ],
+        [
+          "q",
+          "30023:3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858:slug"
+        ]
+      ],
+      "rust": false
+    },
+    {
+      "name": "non-kind-1 parent rejected",
+      "parent": {
+        "kind": 6,
+        "tags": [],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "fb65b8c6f09096af614213e7692e9a60db42cb47155f4c0e145b049135d689dc",
+        "sig": "eccb8d6c9ebbbd2607f922f457c1c5d8bcca065db411f476ef1c238d274cb8da189b24ffe70dd7e509dd1c45d6140d386751b1e98f0318add4e2805641c27861"
+      },
+      "relay_hint": null,
+      "quotes": [],
+      "err": "EventValidationError"
+    },
+    {
+      "name": "kind-0 parent rejected",
+      "parent": {
+        "kind": 0,
+        "tags": [],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "2c43a27913e260c8c94340fe5d3b0f13f42ef3de485cef361e1bcb45998fd6ad",
+        "sig": "24dffb53c7d771663c05b5b7be4adf971c7a639e4f1358c79e22ec71e01b04d28448b949c15268e44be1cd5119ad1906a7a047ecc08b26f72c76105be6eb3e1e"
+      },
+      "relay_hint": null,
+      "quotes": [],
+      "err": "EventValidationError"
+    },
+    {
+      "name": "reply_to wraps buildReplyTags in a kind-1 builder",
+      "parent": {
+        "kind": 1,
+        "tags": [
+          [
+            "e",
+            "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+            "wss://root.example",
+            "root",
+            "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+          ]
+        ],
+        "content": "n",
+        "created_at": 1700000000,
+        "pubkey": "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858",
+        "id": "1a62ddbd239271d70830d76285ce05ba54ef460134faa28c96d0859c45272ab8",
+        "sig": "082d44f9f94b8bbc26142923bf579bc3d82d2286ca900c8a0f856913818c92fabe84e72768e92dcc17ed3f0b38f1a18ce0fce84396b19200dda3f0b7ffeeda1c"
+      },
+      "relay_hint": null,
+      "quotes": [],
+      "reply_to": {
+        "content": "reply body",
+        "kind": 1
+      },
+      "out_tags": [
+        [
+          "e",
+          "8ee60895b4792d366a4f1f4f73e570145e950e6f2ab6803e1c9d1fca8dc623a1",
+          "wss://root.example",
+          "root",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99"
+        ],
+        [
+          "e",
+          "1a62ddbd239271d70830d76285ce05ba54ef460134faa28c96d0859c45272ab8",
+          "",
+          "reply",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858"
+        ],
+        [
+          "p",
+          "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+          "wss://root.example"
+        ],
+        [
+          "p",
+          "3550510ffb21f7663873ebf343d701d871b958743cf78ff6c151fe03125e5858"
+        ]
+      ]
+    }
+  ]
+}

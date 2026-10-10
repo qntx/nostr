@@ -5,6 +5,7 @@
 #![allow(dead_code, reason = "each test binary uses a subset")]
 
 use nk_core::{EventId, Kind, PublicKey, SecretKey};
+use nk_nips::nip10::{Quote, ThreadReferences};
 use nk_nips::nip19::{self, AddressPointer, Entity, EventPointer, ProfilePointer};
 use serde::{Deserialize, Serialize};
 
@@ -90,6 +91,88 @@ pub(crate) fn entity_json(entity: &Entity) -> EntityJson {
         },
         Entity::Note(id) => EntityJson::Note { id: id.to_hex() },
         _ => panic!("unexpected entity variant"),
+    }
+}
+
+/// The `nip10.thread` canonical event-pointer shape (TS `pointerJson`):
+/// absent hints serialize as `null`, never omitted.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct EventPointerJson {
+    pub id: String,
+    pub relays: Vec<String>,
+    pub author: Option<String>,
+    pub kind: Option<u64>,
+}
+
+/// The `nip10.thread` canonical quote shape — `{"type":"event"}` flattens the
+/// pointer fields, `{"type":"address"}` carries the coordinate parts.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub(crate) enum QuoteJson {
+    Event(EventPointerJson),
+    Address {
+        identifier: String,
+        pubkey: String,
+        kind: u64,
+        relays: Vec<String>,
+    },
+}
+
+/// The `nip10.thread` canonical `ThreadReferences` output (TS `threadJson`).
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ThreadJson {
+    pub root: Option<EventPointerJson>,
+    pub reply: Option<EventPointerJson>,
+    pub mentions: Vec<EventPointerJson>,
+    pub quotes: Vec<QuoteJson>,
+    pub profiles: Vec<ProfileJson>,
+}
+
+/// The canonical profile-pointer shape (`{"pubkey","relays"}`).
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ProfileJson {
+    pub pubkey: String,
+    pub relays: Vec<String>,
+}
+
+/// Converts a parsed `EventPointer` into the canonical vector shape.
+pub(crate) fn event_pointer_json(p: &EventPointer) -> EventPointerJson {
+    EventPointerJson {
+        id: p.id.to_hex(),
+        relays: p.relays.clone(),
+        author: p.author.map(PublicKey::to_hex),
+        kind: p.kind.map(|k| u64::from(k.as_u16())),
+    }
+}
+
+/// Converts a parsed `Quote` into the canonical vector shape.
+pub(crate) fn quote_json(q: &Quote) -> QuoteJson {
+    match q {
+        Quote::Event(p) => QuoteJson::Event(event_pointer_json(p)),
+        Quote::Address(p) => QuoteJson::Address {
+            identifier: p.identifier.clone(),
+            pubkey: p.pubkey.to_hex(),
+            kind: u64::from(p.kind.as_u16()),
+            relays: p.relays.clone(),
+        },
+    }
+}
+
+/// Converts parsed `ThreadReferences` into the canonical vector shape.
+pub(crate) fn thread_json(t: &ThreadReferences) -> ThreadJson {
+    ThreadJson {
+        root: t.root.as_ref().map(event_pointer_json),
+        reply: t.reply.as_ref().map(event_pointer_json),
+        mentions: t.mentions.iter().map(event_pointer_json).collect(),
+        quotes: t.quotes.iter().map(quote_json).collect(),
+        profiles: t
+            .profiles
+            .iter()
+            .map(|p| ProfileJson {
+                pubkey: p.pubkey.to_hex(),
+                relays: p.relays.clone(),
+            })
+            .collect(),
     }
 }
 

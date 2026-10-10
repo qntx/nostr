@@ -9,6 +9,10 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 
 ## [Unreleased]
 
+### Added
+
+- `nk-nips` `nip10` feature: NIP-10 thread references — `Quote`/`ThreadReferences`, `parse_thread_tags` (marked `root`/`reply`/`mention` tags, legacy positional fallback, `root`/`reply` back-fill, `q` quote tags in event-id and address form, author/relay-hint inheritance from `p` tags), and the marked-style builders `reply_tags`/`reply_to` (non-kind-1 parents rejected). Relay strings read from tags are kept verbatim; the caller relay hint is a normalized `RelayUrl`. Verified by both languages against `vectors/nip10/codec.json`, plus a seeded `nip10.thread` differential stream.
+
 ## [0.12.1] - 2026-10-10
 
 ### Fixed

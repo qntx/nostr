@@ -20,6 +20,7 @@ let entity = nip19::decode(&nsec)?;
 | `clock`  | yes     | wall-clock helpers where a NIP needs them                                                  | —                                                                                   |
 | `os-rng` | yes     | OS entropy where a NIP needs it                                                            | `getrandom`                                                                         |
 | `nip04`  | no      | legacy encrypted DMs (`SharedSecret`, `encrypt`/`decrypt`)                                 | `aes`, `base64ct`, `cbc`, `rand_core`, `secp256k1`, `zeroize`                       |
+| `nip10`  | no      | thread references (`parse_thread_tags`, `reply_tags`/`reply_to`); needs `nip19`            | —                                                                                   |
 | `nip13`  | no      | proof of work (`pow`, `PowMiner`)                                                          | `sha2`                                                                              |
 | `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`, kind-10050 lists); needs `nip59` | —                                                                                   |
 | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`)                     | `bech32`, `zeroize`                                                                 |

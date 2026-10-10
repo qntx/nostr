@@ -29,11 +29,14 @@ import {
   parseClientMessage,
   parseRelayMessage,
 } from "../../src/core/message.ts";
+import type { Tag } from "../../src/core/tag.ts";
 import { hexToBytes } from "../../src/core/util.ts";
+import { parseThreadTags } from "../../src/nips/nip10.ts";
 import { decode as nip19Decode } from "../../src/nips/nip19.ts";
 import { decrypt as nip44Decrypt, encrypt as nip44Encrypt } from "../../src/nips/nip44.ts";
 import type { EntityJson } from "./gen/entities.ts";
 import { encodeEntity, toJson } from "./gen/entities.ts";
+import { threadJson } from "./thread-json.ts";
 
 /* oxlint-disable no-bitwise -- a PRNG is bit arithmetic by design */
 function mulberry32(seed: number): () => number {
@@ -786,6 +789,115 @@ function nip44CaseText(): string {
   return JSON.stringify({ op: "decrypt", conversation_key: decryptKey, payload });
 }
 
+// 64-hex with per-character case — `randHex(.., anyCase)` uppercases the
+// whole string; NIP-10 accepts mixed-case ids/pubkeys and lowercases them.
+function mixedHex(chars: number): string {
+  let out = "";
+  for (let i = 0; i < chars; i++) {
+    const digit = HEX_DIGITS[int(16)];
+    out += digit !== undefined && chance(0.3) ? digit.toUpperCase() : digit;
+  }
+  return out;
+}
+
+function nip10Id(): string {
+  return pick([randHex(64), mixedHex(64), randHex(64, { anyCase: true }), randString(12)]);
+}
+function nip10Relay(): string {
+  return pick([
+    "",
+    "wss://relay.example",
+    "wss://relay.example/",
+    "relay.example",
+    "not a url",
+    randString(8),
+  ]);
+}
+function nip10Marker(): string {
+  return pick(["root", "reply", "mention", "fork", "", mixedHex(64), randString(6)]);
+}
+function nip10Pubkey(): string {
+  return pick([randHex(64), mixedHex(64), randString(10), ""]);
+}
+
+// A NIP-10 tag list mixing e/q/p markers and positional forms, hex32 and
+// non-hex at the author/marker slots, verbatim relay strings, and foreign or
+// malformed entries — replayed by `nip10.thread` on both sides.
+function nip10TagsText(): string {
+  const tags: unknown[] = [];
+  const count = int(9);
+  for (let i = 0; i < count; i++) {
+    const which = int(12);
+    if (which < 5) {
+      const tag: unknown[] = ["e"];
+      if (chance(0.92)) {
+        tag.push(nip10Id());
+      }
+      if (chance(0.6)) {
+        tag.push(nip10Relay());
+      }
+      if (chance(0.65)) {
+        tag.push(nip10Marker());
+      }
+      if (chance(0.45)) {
+        tag.push(nip10Pubkey());
+      }
+      if (chance(0.05)) {
+        // Only index 1 throws in TS (`42.toLowerCase()`); a number at the
+        // relay slot would land verbatim in `relays` on the TS side while
+        // `Vec<String>` rejects the whole tag on the Rust side.
+        tag.splice(1, 0, int(100));
+      }
+      tags.push(tag);
+    } else if (which < 8) {
+      const tag: unknown[] = ["q"];
+      if (chance(0.9)) {
+        tag.push(
+          pick([
+            randHex(64),
+            mixedHex(64),
+            `${int(65536)}:${randHex(64)}:${randString(8)}`,
+            `${int(99999)}:${randHex(64, { anyCase: true })}:d`,
+            `${int(99999)}:badpk:x`,
+            "garbage",
+            "",
+          ]),
+        );
+      }
+      if (chance(0.6)) {
+        tag.push(nip10Relay());
+      }
+      if (chance(0.45)) {
+        tag.push(nip10Pubkey());
+      }
+      tags.push(tag);
+    } else if (which < 10) {
+      const tag: unknown[] = ["p"];
+      if (chance(0.9)) {
+        tag.push(nip10Pubkey());
+      }
+      if (chance(0.5)) {
+        tag.push(nip10Relay());
+      }
+      tags.push(tag);
+    } else {
+      // Foreign tags and the holes TS tolerates but `Tags` cannot carry.
+      tags.push(
+        pick([
+          ["t", "nostr"],
+          ["a", `30023:${randHex(64)}:d`],
+          ["x"],
+          ["e"],
+          ["E", randHex(64)],
+          [],
+          null,
+        ]),
+      );
+    }
+  }
+  return JSON.stringify({ tags });
+}
+
 type CaseRecord = { i: number; input: string; out?: unknown; err?: string };
 
 function capture(run: () => unknown): { out?: unknown; err?: string } {
@@ -865,6 +977,17 @@ const CAPABILITIES: ReadonlyArray<Capability> = [
         i: 0,
         input,
         ...capture(() => encodeRelayMessage(parseRelayMessage(input))),
+      };
+    },
+  },
+  {
+    name: "nip10.thread",
+    make: () => {
+      const input = nip10TagsText();
+      return {
+        i: 0,
+        input,
+        ...capture(() => threadJson(parseThreadTags(parseJson<{ tags: Tag[] }>(input)))),
       };
     },
   },

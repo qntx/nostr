@@ -11,6 +11,7 @@
 //! | `clock`  | yes     | wall-clock helpers where a NIP needs them                   |
 //! | `os-rng` | yes     | OS entropy where a NIP needs it                             |
 //! | `nip04`  | no      | legacy encrypted DMs (`SharedSecret`, `encrypt`/`decrypt`)       |
+//! | `nip10`  | no      | thread references (`parse_thread_tags`, `reply_tags`/`reply_to`); needs `nip19` |
 //! | `nip13`  | no      | proof of work (`pow`, `PowMiner`)                                 |
 //! | `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`); needs `nip59` |
 //! | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) |
@@ -42,6 +43,8 @@ mod ecdh;
 
 #[cfg(feature = "nip04")]
 pub mod nip04;
+#[cfg(feature = "nip10")]
+pub mod nip10;
 #[cfg(feature = "nip13")]
 pub mod nip13;
 #[cfg(feature = "nip17")]

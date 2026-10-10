@@ -29,11 +29,12 @@ use std::path::PathBuf;
 
 mod common;
 
-use nk_core::{ClientMessage, Event, Filter, RelayMessage, UnsignedEvent};
+use nk_core::{ClientMessage, Event, Filter, RelayMessage, Tag, Tags, UnsignedEvent};
+use nk_nips::nip10::parse_thread_tags;
 use nk_nips::{nip19, nip44};
 use serde::Deserialize;
 
-use common::{EntityJson, encode_entity, entity_json, unhex};
+use common::{EntityJson, encode_entity, entity_json, thread_json, unhex};
 
 /// The generator's meta line; `seed` is reported on every mismatch.
 #[derive(Deserialize)]
@@ -237,6 +238,35 @@ fn diff_message_relay() {
 
 /// One `nip19.codec` input: `{"op":"encode","entity":…}` or
 /// `{"op":"decode","input":"…"}`.
+/// `nip10.thread` inputs are `{"tags": [[…]]}` — raw arrays, so non-string or
+/// non-array elements fail the `Vec<Vec<String>>` decode while TS throws
+/// inside the scan (the `None`/`err` arms pair up). Empty inner arrays are
+/// the holes `Tags` cannot carry and TS skips.
+#[test]
+#[ignore = "requires NK_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
+fn diff_nip10_thread() {
+    let fixture = load("nip10.thread");
+    for case in &fixture.cases {
+        check("nip10.thread", fixture.seed, case, |input| {
+            #[derive(Deserialize)]
+            struct ThreadInput {
+                tags: Vec<Vec<String>>,
+            }
+            let parsed: ThreadInput = serde_json::from_str(input).ok()?;
+            let tags: Tags = parsed
+                .tags
+                .iter()
+                .filter(|items| !items.is_empty())
+                .map(|items| Tag::new(items.iter().cloned()).expect("diff tag"))
+                .collect();
+            Some(
+                serde_json::to_value(thread_json(&parse_thread_tags(&tags)))
+                    .expect("thread serializes"),
+            )
+        });
+    }
+}
+
 #[derive(Deserialize)]
 struct Nip19Case {
     op: String,
