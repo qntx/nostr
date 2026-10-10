@@ -34,6 +34,7 @@ nip44  = ["dep:base64ct", "dep:chacha20", "dep:hkdf", "dep:hmac", "dep:rand_core
 nip49  = ["nip19", "dep:chacha20poly1305", "dep:rand_core", "dep:scrypt", "dep:unicode-normalization", "dep:zeroize"]
 nip17  = ["nip59"]
 nip59  = ["nip44", "dep:rand_core", "dep:serde_json"]
+nip65  = []
 nip98  = ["dep:base64ct", "dep:serde_json", "dep:sha2"]
 
 # Rule: every external dependency is optional and enabled by the NIP

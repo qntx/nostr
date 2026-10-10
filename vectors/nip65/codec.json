@@ -1,0 +1,372 @@
+{
+  "schema": 1,
+  "capability": "nip65.relay-list",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.12.1"
+  },
+  "parse": [
+    {
+      "name": "mixed markers with dedup and skips",
+      "event": {
+        "kind": 10002,
+        "tags": [
+          [
+            "r",
+            "wss://a.example",
+            "read"
+          ],
+          [
+            "r",
+            "wss://a.example/",
+            "write"
+          ],
+          [
+            "r",
+            "https://b.example/",
+            "write"
+          ],
+          [
+            "r",
+            "wss://c.example//path",
+            ""
+          ],
+          [
+            "r",
+            "relay.example",
+            "read"
+          ],
+          [
+            "r",
+            "not a url"
+          ],
+          [
+            "r",
+            ""
+          ],
+          [
+            "r"
+          ],
+          [
+            "r",
+            "wss://d.example",
+            "bogus"
+          ],
+          [
+            "x",
+            "wss://e.example"
+          ],
+          [
+            "t",
+            "wss://f.example"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "895e2b8f9f73edd9fa32df0e6814f6aa553ec53ef731ebf0d8754933db90eede",
+        "sig": "5875e8ddc7ed5df034a552fc4e2e5f53a4f659f0f99d522880b1e31d26dc181607a31e3b539158caa8a1fb277de2a8ec10348443edf574e2d5daa9c4956f0eee"
+      },
+      "out": [
+        {
+          "url": "wss://a.example/",
+          "marker": "read"
+        },
+        {
+          "url": "wss://b.example/",
+          "marker": "write"
+        },
+        {
+          "url": "wss://c.example/path",
+          "marker": "both"
+        },
+        {
+          "url": "wss://relay.example/",
+          "marker": "read"
+        },
+        {
+          "url": "wss://d.example/",
+          "marker": "both"
+        }
+      ]
+    },
+    {
+      "name": "empty list",
+      "event": {
+        "kind": 10002,
+        "tags": [],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "ce28c13bb41e1a372e90996133ddd4e5440452968b0578c73f3c5b40d674e902",
+        "sig": "de2ad4b733af924728ccfee0d3b597fdeaa252e9a6e3dbaed536e21012032111a5bd85d2d9c3bfa4f6b4dc2518df9c7d8ea160e41a08c3bf2bda3c0e755a6796"
+      },
+      "out": []
+    },
+    {
+      "name": "uppercase marker is not a marker",
+      "event": {
+        "kind": 10002,
+        "tags": [
+          [
+            "r",
+            "wss://a.example",
+            "READ"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "e81744fc5fc7dc696088a41a467ed79e285301ca0b78de67c3430b7a4692772e",
+        "sig": "b099c502676b8d8382cbaf27e31899e48246b9d6cf08ccda46896b9f238d81dd379fea96ccaea1d2323f0f3bcd2e59603e16b2de4f8666486250699a3a47c6ac"
+      },
+      "out": [
+        {
+          "url": "wss://a.example/",
+          "marker": "both"
+        }
+      ]
+    },
+    {
+      "name": "marker slot extra positions ignored",
+      "event": {
+        "kind": 10002,
+        "tags": [
+          [
+            "r",
+            "wss://a.example",
+            "write",
+            "extra",
+            "more"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "e92d17dd87746520da2d81bebb36487a7338a49f15f29d5b65005500a991eae1",
+        "sig": "06840c4910d8033943adb17756872d7a3abb306bbbb3d6e45ec2a5060784b23104f008da69f6c610f726e3bb34f4e3014bce6dc8657dda1d0e2551d5168e18b1"
+      },
+      "out": [
+        {
+          "url": "wss://a.example/",
+          "marker": "write"
+        }
+      ]
+    },
+    {
+      "name": "wrong kind 3 rejected",
+      "event": {
+        "kind": 3,
+        "tags": [
+          [
+            "r",
+            "wss://a.example"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "abaa8a978e8124264efd2cd095c0c717a35fd3d6cd97cd0c41c6aee5369414f6",
+        "sig": "5c9a99e6397e9900c48deed7429724c94f29fd74937928df98c9ea9d4fd16cd8acc24e4d69c9d24ee815e5e17661aaf0289796e99405601cc9b6220d6eba5bfd"
+      },
+      "err": "EventValidationError"
+    },
+    {
+      "name": "wrong kind 0 rejected",
+      "event": {
+        "kind": 0,
+        "tags": [],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "9291144eedf61cedb4e98c20ff060629cbb5b880380394accec5ea1f5dda4eb2",
+        "sig": "991eac3134e541d2d6bb27e221f53c3558d28341a5a771e88ee38324c10a175afd03ac47fb978a0fda3a9a9edc767ffcace588a597003ae693beacec08e94dc2"
+      },
+      "err": "EventValidationError"
+    },
+    {
+      "name": "kind 1 rejected",
+      "event": {
+        "kind": 1,
+        "tags": [
+          [
+            "r",
+            "wss://a.example"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "id": "50915c0fe8ae943ea8984080a11f581574d11e9cba1d07d1148022ff263194e6",
+        "sig": "733d9e384f79dca8f073a48c720c7bade4519a5c848ed8ffb76e6b51228ab3d3d41caf920f3e434885c58742e23f15e33f7ebb406bc6cfc2aa36e5087f52475a"
+      },
+      "err": "EventValidationError"
+    }
+  ],
+  "build": [
+    {
+      "name": "all three markers",
+      "items": [
+        {
+          "url": "wss://a.example/",
+          "marker": "read"
+        },
+        {
+          "url": "wss://b.example/",
+          "marker": "write"
+        },
+        {
+          "url": "wss://c.example/",
+          "marker": "both"
+        }
+      ],
+      "relay_list": {
+        "kind": 10002,
+        "content": ""
+      },
+      "out_tags": [
+        [
+          "r",
+          "wss://a.example/",
+          "read"
+        ],
+        [
+          "r",
+          "wss://b.example/",
+          "write"
+        ],
+        [
+          "r",
+          "wss://c.example/"
+        ]
+      ],
+      "read": [
+        "wss://a.example/",
+        "wss://c.example/"
+      ],
+      "write": [
+        "wss://b.example/",
+        "wss://c.example/"
+      ]
+    },
+    {
+      "name": "read and write filter views",
+      "items": [
+        {
+          "url": "wss://ro.example/",
+          "marker": "read"
+        },
+        {
+          "url": "wss://wo.example/",
+          "marker": "write"
+        },
+        {
+          "url": "wss://rw.example/",
+          "marker": "both"
+        },
+        {
+          "url": "wss://rw2.example/",
+          "marker": "both"
+        }
+      ],
+      "relay_list": {
+        "kind": 10002,
+        "content": ""
+      },
+      "out_tags": [
+        [
+          "r",
+          "wss://ro.example/",
+          "read"
+        ],
+        [
+          "r",
+          "wss://wo.example/",
+          "write"
+        ],
+        [
+          "r",
+          "wss://rw.example/"
+        ],
+        [
+          "r",
+          "wss://rw2.example/"
+        ]
+      ],
+      "read": [
+        "wss://ro.example/",
+        "wss://rw.example/",
+        "wss://rw2.example/"
+      ],
+      "write": [
+        "wss://wo.example/",
+        "wss://rw.example/",
+        "wss://rw2.example/"
+      ]
+    },
+    {
+      "name": "empty items",
+      "items": [],
+      "relay_list": {
+        "kind": 10002,
+        "content": ""
+      },
+      "out_tags": [],
+      "read": [],
+      "write": []
+    },
+    {
+      "name": "unnormalizable item url is TS-only",
+      "items": [
+        {
+          "url": "not a url",
+          "marker": "read"
+        }
+      ],
+      "relay_list": {
+        "kind": 10002,
+        "content": ""
+      },
+      "out_tags": [
+        [
+          "r",
+          "not a url",
+          "read"
+        ]
+      ],
+      "read": [
+        "not a url"
+      ],
+      "write": [],
+      "rust": false
+    },
+    {
+      "name": "non-enum marker written verbatim is TS-only",
+      "items": [
+        {
+          "url": "wss://a.example/",
+          "marker": "bogus"
+        }
+      ],
+      "relay_list": {
+        "kind": 10002,
+        "content": ""
+      },
+      "out_tags": [
+        [
+          "r",
+          "wss://a.example/",
+          "bogus"
+        ]
+      ],
+      "read": [
+        "wss://a.example/"
+      ],
+      "write": [
+        "wss://a.example/"
+      ],
+      "rust": false
+    }
+  ]
+}

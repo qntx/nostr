@@ -20,6 +20,7 @@
 //! | `nip44`  | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
 //! | `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptOptions`, `encrypt`/`decrypt`) |
 //! | `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`  |
+//! | `nip65`  | no      | relay lists (`parse_relay_list`, `relay_list`, `read_relays`/`write_relays`) |
 //! | `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)    |
 //!
 //! ```
@@ -61,6 +62,8 @@ pub mod nip44;
 pub mod nip49;
 #[cfg(feature = "nip59")]
 pub mod nip59;
+#[cfg(feature = "nip65")]
+pub mod nip65;
 #[cfg(feature = "nip98")]
 pub mod nip98;
 
