@@ -13,6 +13,11 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr` and `packages
 
 - `nk-nips` `nip10` feature: NIP-10 thread references — `Quote`/`ThreadReferences`, `parse_thread_tags` (marked `root`/`reply`/`mention` tags, legacy positional fallback, `root`/`reply` back-fill, `q` quote tags in event-id and address form, author/relay-hint inheritance from `p` tags), and the marked-style builders `reply_tags`/`reply_to` (non-kind-1 parents rejected). Relay strings read from tags are kept verbatim; the caller relay hint is a normalized `RelayUrl`. Verified by both languages against `vectors/nip10/codec.json`, plus a seeded `nip10.thread` differential stream.
 - `nk-nips` `nip65` feature: NIP-65 relay lists — `RelayMarker`/`RelayListItem`, `parse_relay_list` (kind-10002 events only, `r` tags normalized via `RelayUrl::parse`, unnormalizable values skipped, duplicates removed by normalized URL keeping the first, `read`/`write` markers with everything else treated as both), `relay_list_tags`/`relay_list` (`both` emits an unmarked tag), and `read_relays`/`write_relays` marker views. Verified by both languages against `vectors/nip65/codec.json`.
+- `nk-nips` `nip51` feature: NIP-51 lists — the eight public list parsers (`parse_mute_list`, `parse_pin_list`, `parse_bookmark_list`, `parse_user_emoji_list`, `parse_relay_set`, `parse_favorite_relays`, `parse_emoji_set`, `parse_follow_pack`), the `mute_list`/`pin_list`/`bookmark_list` builders, and the NIP-44 private-tag flow `private_tags_plaintext`/`parse_private_tags` + `encrypt_private_tags_with_rng`/`encrypt_private_tags`/`decrypt_private_tags` (author encrypts to self, empty content means no private tags, foreign authors rejected before decryption). Private-tag plaintext with lone surrogates is rejected on both sides. Verified by both languages against `vectors/nip51/codec.json`.
+
+### Changed
+
+- `decryptPrivateTags` (NIP-51) now rejects decrypted private-tag plaintext containing lone UTF-16 surrogates (`\ud800`-style escapes `JSON.parse` accepts) with `EventValidationError("invalid NIP-51 private tags")`, matching `serde_json` on the Rust side (N10).
 
 ## [0.12.1] - 2026-10-10
 

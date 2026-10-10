@@ -10,7 +10,7 @@ import { EventValidationError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import { firstTagValue, getDTag, isTag, Tag } from "../core/tag.ts";
-import { assertHex32, isHex32, normalizeRelayUrls } from "../core/util.ts";
+import { assertHex32, hasLoneSurrogate, isHex32, normalizeRelayUrls } from "../core/util.ts";
 
 /**
  * Structural crypto used by NIP-51 private tags. Satisfied by NostrSigner when
@@ -152,6 +152,12 @@ export async function encryptPrivateTags(
   return crypto.nip44Encrypt(self, JSON.stringify(tags));
 }
 
+// `JSON.parse` accepts lone surrogates via `\ud800`-style escapes while
+// serde_json rejects them — check parsed strings so both sides agree (N10).
+function isCleanTag(tag: unknown): tag is Tag {
+  return isTag(tag) && tag.every((item) => !hasLoneSurrogate(item));
+}
+
 /** Decrypt NIP-51 `.content`. Empty content is no private tags, not ciphertext. */
 export async function decryptPrivateTags(
   crypto: Nip51Crypto,
@@ -172,7 +178,7 @@ export async function decryptPrivateTags(
   } catch (error) {
     throw new EventValidationError("invalid NIP-51 private tags", { cause: error });
   }
-  if (!Array.isArray(parsed) || !parsed.every(isTag)) {
+  if (!Array.isArray(parsed) || !parsed.every(isCleanTag)) {
     throw new EventValidationError("invalid NIP-51 private tags");
   }
   return parsed;
