@@ -21,6 +21,7 @@
 //! | `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Request`/`Response`) |
 //! | `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptOptions`, `encrypt`/`decrypt`) |
 //! | `nip51`  | no      | lists (`parse_mute_list`, …, NIP-44 private tags); needs `nip44`           |
+//! | `nip57`  | no      | Lightning zaps (`zap_request`, `parse_bolt11`, `validate_zap_receipt`)    |
 //! | `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`  |
 //! | `nip65`  | no      | relay lists (`parse_relay_list`, `relay_list`, `read_relays`/`write_relays`) |
 //! | `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)    |
@@ -68,6 +69,8 @@ pub mod nip46;
 pub mod nip49;
 #[cfg(feature = "nip51")]
 pub mod nip51;
+#[cfg(feature = "nip57")]
+pub mod nip57;
 #[cfg(feature = "nip59")]
 pub mod nip59;
 #[cfg(feature = "nip65")]

@@ -1,0 +1,1734 @@
+{
+  "schema": 1,
+  "capability": "nip57.zap",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.12.1"
+  },
+  "zap_request": [
+    {
+      "name": "profile zap with comment and lnurl",
+      "input": {
+        "pubkey": "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+      },
+      "amount": 21000,
+      "relays": [
+        "wss://relay-a.example/",
+        "wss://relay-b.example/"
+      ],
+      "comment": "great post",
+      "lnurl": "lnurl1provider0",
+      "out": {
+        "kind": 9734,
+        "created_at": 1700000000,
+        "content": "great post",
+        "tags": [
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "amount",
+            "21000"
+          ],
+          [
+            "relays",
+            "wss://relay-a.example/",
+            "wss://relay-b.example/"
+          ],
+          [
+            "lnurl",
+            "lnurl1provider0"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "profile zap minimal",
+      "input": {
+        "pubkey": "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+      },
+      "amount": 1,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "out": {
+        "kind": 9734,
+        "created_at": 1700000000,
+        "content": "",
+        "tags": [
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "amount",
+            "1"
+          ],
+          [
+            "relays",
+            "wss://relay-a.example/"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "profile zap empty lnurl string emits no tag",
+      "input": {
+        "pubkey": "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+      },
+      "amount": 500,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "lnurl": "",
+      "out": {
+        "kind": 9734,
+        "created_at": 1700000000,
+        "content": "",
+        "tags": [
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "amount",
+            "500"
+          ],
+          [
+            "relays",
+            "wss://relay-a.example/"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "event zap kind 1",
+      "input": {
+        "event": {
+          "kind": 1,
+          "tags": [
+            [
+              "t",
+              "nostr"
+            ]
+          ],
+          "content": "",
+          "created_at": 1700000000,
+          "pubkey": "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d",
+          "id": "407f97935fc7ae147d74e7c2ce2704df3f3821c3534302ac944952520f9f56ab",
+          "sig": "e7a780b527bb4a1ae3ace6dd98059673fce46c5df381f56eb7ce8b2680c842ba9eefb42398f40a2682d39a96d20219e403ed64d7731a7ba15cbeb17052052976"
+        }
+      },
+      "amount": 21000,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "out": {
+        "kind": 9734,
+        "created_at": 1700000000,
+        "content": "",
+        "tags": [
+          [
+            "p",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ],
+          [
+            "amount",
+            "21000"
+          ],
+          [
+            "relays",
+            "wss://relay-a.example/"
+          ],
+          [
+            "e",
+            "407f97935fc7ae147d74e7c2ce2704df3f3821c3534302ac944952520f9f56ab"
+          ],
+          [
+            "k",
+            "1"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "event zap addressable emits a and k",
+      "input": {
+        "event": {
+          "kind": 30023,
+          "tags": [
+            [
+              "d",
+              "article-1"
+            ],
+            [
+              "title",
+              "hello"
+            ]
+          ],
+          "content": "",
+          "created_at": 1700000000,
+          "pubkey": "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d",
+          "id": "c176e316ae2b146c152316c2bff9fff89eea8a38100f9d1787c559d1730bfab0",
+          "sig": "cb8ab019cc202b0f7bdaab5822db4980920f5612121e593666cdb16508020847971d0c7504a474630d0c1e276a358b0145b04b08f34fe5851202900029ec4b20"
+        }
+      },
+      "amount": 21000,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "out": {
+        "kind": 9734,
+        "created_at": 1700000000,
+        "content": "",
+        "tags": [
+          [
+            "p",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ],
+          [
+            "amount",
+            "21000"
+          ],
+          [
+            "relays",
+            "wss://relay-a.example/"
+          ],
+          [
+            "e",
+            "c176e316ae2b146c152316c2bff9fff89eea8a38100f9d1787c559d1730bfab0"
+          ],
+          [
+            "a",
+            "30023:ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d:article-1"
+          ],
+          [
+            "k",
+            "30023"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "addressable event without d rejected",
+      "input": {
+        "event": {
+          "kind": 30023,
+          "tags": [
+            [
+              "title",
+              "hello"
+            ]
+          ],
+          "content": "",
+          "created_at": 1700000000,
+          "pubkey": "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d",
+          "id": "a42f48ade78c4e940ffd8387d9557c8a74451768f51358220b93b4405d1a37b5",
+          "sig": "634c0f56e1c8f9c3e5dbda6ff99a2478e6edd07f43b41d0a8aefed8acd9a3b844aa68f7400206a5edc31dcc8d1b4d148feb1b6e875e20deca78654d6fbf0e6b8"
+        }
+      },
+      "amount": 21000,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "err": "EventValidationError"
+    },
+    {
+      "name": "zero amount rejected",
+      "input": {
+        "pubkey": "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+      },
+      "amount": 0,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "err": "EventValidationError"
+    },
+    {
+      "name": "amount beyond safe integer rejected",
+      "input": {
+        "pubkey": "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+      },
+      "amount": 9007199254740992,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "err": "EventValidationError"
+    },
+    {
+      "name": "non-integer amount rejected (ts only)",
+      "rust": false,
+      "input": {
+        "pubkey": "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+      },
+      "amount": 1.5,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "err": "EventValidationError"
+    },
+    {
+      "name": "negative amount rejected (ts only)",
+      "rust": false,
+      "input": {
+        "pubkey": "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+      },
+      "amount": -5,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "err": "EventValidationError"
+    },
+    {
+      "name": "empty relays rejected",
+      "input": {
+        "pubkey": "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+      },
+      "amount": 1,
+      "relays": [],
+      "err": "EventValidationError"
+    },
+    {
+      "name": "non-hex pubkey kept verbatim (ts only)",
+      "rust": false,
+      "input": {
+        "pubkey": "not-hex"
+      },
+      "amount": 1,
+      "relays": [
+        "wss://relay-a.example/"
+      ],
+      "out": {
+        "kind": 9734,
+        "created_at": 1700000000,
+        "content": "",
+        "tags": [
+          [
+            "p",
+            "not-hex"
+          ],
+          [
+            "amount",
+            "1"
+          ],
+          [
+            "relays",
+            "wss://relay-a.example/"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "raw relay strings kept verbatim (ts only)",
+      "rust": false,
+      "input": {
+        "pubkey": "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+      },
+      "amount": 1,
+      "relays": [
+        "RELAY.EXAMPLE",
+        "not a url"
+      ],
+      "out": {
+        "kind": 9734,
+        "created_at": 1700000000,
+        "content": "",
+        "tags": [
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "amount",
+            "1"
+          ],
+          [
+            "relays",
+            "RELAY.EXAMPLE",
+            "not a url"
+          ]
+        ]
+      }
+    }
+  ],
+  "bolt11": [
+    {
+      "name": "full fields with amount and expiry",
+      "invoice": "lnbc210n1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4sdqdw3jhxapq0fshqhp5ehxumnwdehxumnwdehxumnwdehxumnwdehxumnwdehxumnwdehxsxqyz5vq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at8pg2zd",
+      "out": {
+        "amountMsats": 21000,
+        "description": "test zap",
+        "descriptionHash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 86400
+      }
+    },
+    {
+      "name": "no amount in hrp",
+      "invoice": "lnbc1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at9hhza4",
+      "out": {
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "multiplier milli",
+      "invoice": "lnbc10m1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2ate0j8hy",
+      "out": {
+        "amountMsats": 1000000000,
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "multiplier micro",
+      "invoice": "lnbc10u1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at205nh5",
+      "out": {
+        "amountMsats": 1000000,
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "multiplier nano",
+      "invoice": "lnbc10n1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at50v3hx",
+      "out": {
+        "amountMsats": 1000,
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "multiplier pico whole msats",
+      "invoice": "lnbc10p1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2ata0lqhj",
+      "out": {
+        "amountMsats": 1,
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "multiplier pico fractional dropped",
+      "invoice": "lnbc11p1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2ate6yj2x",
+      "out": {
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "no multiplier whole btc",
+      "invoice": "lnbc251pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atxrg7wy",
+      "out": {
+        "amountMsats": 2500000000000,
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "amount product beyond safe integer omitted",
+      "invoice": "lnbc90071992547410n1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atgp7cwe",
+      "out": {
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "amount digits beyond safe integer omitted",
+      "invoice": "lnbc90071992547409921pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atvrfner",
+      "out": {
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "uppercase invoice decodes",
+      "invoice": "LNBC210N1PJ48UGQPP54W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W4SDQDW3JHXAPQ0FSHQHP5EHXUMNWDEHXUMNWDEHXUMNWDEHXUMNWDEHXUMNWDEHXUMNWDEHXSXQYZ5VQ4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT4W46H2AT8PG2ZD",
+      "out": {
+        "amountMsats": 21000,
+        "description": "test zap",
+        "descriptionHash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 86400
+      }
+    },
+    {
+      "name": "duplicate fields keep the first",
+      "invoice": "lnbc1pj48ugqxqr8pqxqyz5vqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4spp5ehxumnwdehxumnwdehxumnwdehxumnwdehxumnwdehxumnwdehxs4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4ylf2g",
+      "out": {
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 7200
+      }
+    },
+    {
+      "name": "expiry beyond safe integer keeps 3600 (N8)",
+      "invoice": "lnbc1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4sxqtsqqqqqqqqqq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atr99y6f",
+      "out": {
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "explicit zero expiry",
+      "invoice": "lnbc1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4sxqpq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at8js0xj",
+      "out": {
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 0
+      }
+    },
+    {
+      "name": "description with invalid utf-8 dropped",
+      "invoice": "lnbc1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4sdq9lll064w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at8mc5lw",
+      "out": {
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "description longer than 5000-char invoice",
+      "invoice": "lnbc1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4sdqvwpskgerfdens77q0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc77q0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc77q0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc77q0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc77q0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc77q0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc0pu8s7rc4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atpdxkj3",
+      "out": {
+        "description": "padding",
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "tlv overrun truncates remaining fields",
+      "invoice": "lnbc1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4sxq24w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2aty5fgds",
+      "out": {
+        "paymentHash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": 1700000000,
+        "expiry": 3600
+      }
+    },
+    {
+      "name": "missing payment hash is not an invoice",
+      "invoice": "lnbc1pj48ugqdqvdehjq6rpwd5q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atdnkkv4"
+    },
+    {
+      "name": "non-ln hrp rejected",
+      "invoice": "xyz1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atrphlhx"
+    },
+    {
+      "name": "too few words rejected",
+      "invoice": "lnbc1pj48ugqwmqgzd"
+    },
+    {
+      "name": "bad checksum rejected",
+      "invoice": "lnbc210n1pj48ugqpp54w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w4sdqdw3jhxapq0fshqhp5ehxumnwdehxumnwdehxumnwdehxumnwdehxumnwdehxumnwdehxsxqyz5vq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at8pg2qq"
+    },
+    {
+      "name": "not bech32 at all",
+      "invoice": "lnbc1not a real invoice!!"
+    }
+  ],
+  "receipt": [
+    {
+      "name": "valid profile zap receipt",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp5y877mqxmx2gp4xy50a2uste45zm0hmtydrgtaxse7kx3k8kwy49q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atwgtyqk"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"],[\"P\",\"6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"492fdc33039afdb1765eefeb9f99f515fd25b589bcc15616d584929d6e082724\",\"sig\":\"382c272bc6b3b4d18fa8ef6d7dd0db33ef4a137d2b14f7afd22e8f81305de7f41f9a43a942efc2ca34dccb1cfc7ea5e54dda0dea5e05a42ff96c6e3085d1cb8c\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "ff2604ca56e3e5714f7fa283948bfc3a70d41793285a3fd736064a8d10abe47c",
+        "sig": "10344663782931591e197dbe3f2fb036b91b1d5407f3b3fe8f3d06d2a108b8d9b7404e18aae74c206d4f8f7978d42b04fee2552cd29209dd47181b08f5be0b9d"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "lnurl": "lnurl1provider0",
+      "result": {
+        "valid": true,
+        "request": {
+          "kind": 9734,
+          "tags": [
+            [
+              "p",
+              "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+            ],
+            [
+              "amount",
+              "21000"
+            ],
+            [
+              "relays",
+              "wss://zap.example/"
+            ],
+            [
+              "lnurl",
+              "lnurl1provider0"
+            ],
+            [
+              "P",
+              "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78"
+            ]
+          ],
+          "content": "",
+          "created_at": 1700000000,
+          "pubkey": "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d",
+          "id": "492fdc33039afdb1765eefeb9f99f515fd25b589bcc15616d584929d6e082724",
+          "sig": "382c272bc6b3b4d18fa8ef6d7dd0db33ef4a137d2b14f7afd22e8f81305de7f41f9a43a942efc2ca34dccb1cfc7ea5e54dda0dea5e05a42ff96c6e3085d1cb8c"
+        },
+        "amountMsats": 21000
+      }
+    },
+    {
+      "name": "valid receipt without invoice amount",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp59djuyvj87rurmn8lwync8eh7mek4ajgy5dnzwuh0kd5xqlju2mss4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at58cgd6"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"relays\",\"wss://zap.example/\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"16d5023161f585b6ec274cc4e170a5eb99e858f25211e815e93c2710da38b5a7\",\"sig\":\"083d60946da724928ca158e6e7586bae82ac0458171e49fbe26910b44f3bb27cbad4fa97b5b47504ad99e55181e5456dc0f49774a2e33fbbaeb0910dae4fe589\"}"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "eeae4ea7441b26f664e346c2249e7349b8bc75a2ddfc9ddabd964f864ee0ff4e",
+        "sig": "482a0e5a891110858c4c0077a910eed481fd58c8a862d9987a9919b6dd9bef4de3a93ff82d5887c22936a2174227ef7aed6c5c8dd4f5a9cab057e287b78542dd"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": true,
+        "request": {
+          "kind": 9734,
+          "tags": [
+            [
+              "p",
+              "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+            ],
+            [
+              "relays",
+              "wss://zap.example/"
+            ]
+          ],
+          "content": "",
+          "created_at": 1700000000,
+          "pubkey": "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d",
+          "id": "16d5023161f585b6ec274cc4e170a5eb99e858f25211e815e93c2710da38b5a7",
+          "sig": "083d60946da724928ca158e6e7586bae82ac0458171e49fbe26910b44f3bb27cbad4fa97b5b47504ad99e55181e5456dc0f49774a2e33fbbaeb0910dae4fe589"
+        }
+      }
+    },
+    {
+      "name": "valid event zap receipt",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52usfeeu7j7zqwtwmkkep820kvuhtmzj4w6fc0m2p945qe4dcwvxq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at7a2v28"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"e\",\"407f97935fc7ae147d74e7c2ce2704df3f3821c3534302ac944952520f9f56ab\"],[\"k\",\"1\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"7c8e57ba7b2c0138439b5fc5a6438a638929bd7f939a39b812f31144a97c9dcc\",\"sig\":\"20bceb32acf18a031e66df59cc9366237bd6600837123ff373cd404bf398b37ef272fb0294e0f8dea59506c783872613b8b75a1de40030a790d74c2c7035b914\"}"
+          ],
+          [
+            "p",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ],
+          [
+            "e",
+            "407f97935fc7ae147d74e7c2ce2704df3f3821c3534302ac944952520f9f56ab"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "5f324c987be559eab5cda866037a1d5c85da5418e4ab96ce4dba6d5b04597cd4",
+        "sig": "8d2a8b5e4f7c7eedbc56c554944f38328bd55f7949c0d59045f0231efcea62b2e88c1d650c609842301e893d329dd16179e5b35dd170ced9df8ba83e35f87342"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": true,
+        "request": {
+          "kind": 9734,
+          "tags": [
+            [
+              "p",
+              "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+            ],
+            [
+              "amount",
+              "21000"
+            ],
+            [
+              "relays",
+              "wss://zap.example/"
+            ],
+            [
+              "e",
+              "407f97935fc7ae147d74e7c2ce2704df3f3821c3534302ac944952520f9f56ab"
+            ],
+            [
+              "k",
+              "1"
+            ]
+          ],
+          "content": "",
+          "created_at": 1700000000,
+          "pubkey": "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d",
+          "id": "7c8e57ba7b2c0138439b5fc5a6438a638929bd7f939a39b812f31144a97c9dcc",
+          "sig": "20bceb32acf18a031e66df59cc9366237bd6600837123ff373cd404bf398b37ef272fb0294e0f8dea59506c783872613b8b75a1de40030a790d74c2c7035b914"
+        },
+        "amountMsats": 21000
+      }
+    },
+    {
+      "name": "signature does not verify",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atc5gc5p"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "tampered",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "b3753d416151f05c02075c25d48e2e8cca73e1f58a18bf4e33d5e15c6ca2b0b8",
+        "sig": "4de000385fdd4d5bb543282367bb5522ffd152208d346c2c105795de902db778fabc0eff02fedee56886bc70dc6bb0cd9d0c307b0cfcf186179cecb6b3e36ff5"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid receipt"
+      }
+    },
+    {
+      "name": "wrong kind is not a receipt",
+      "receipt": {
+        "kind": 9734,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atc5gc5p"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "703334c61c771417094b3a7a0fcc70f1f9e22d1122400679205c8c19a2e5b175",
+        "sig": "f8982ee0131671a9cc7703967358bc4e16fefb1889bac9aeaa1be88b751754a3800657885deb18f6c915919e6c85af462bbc00a546f0faa9510602ecc6a39193"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid receipt"
+      }
+    },
+    {
+      "name": "pubkey mismatch",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atc5gc5p"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "b3753d416151f05c02075c25d48e2e8cca73e1f58a18bf4e33d5e15c6ca2b0b8",
+        "sig": "4de000385fdd4d5bb543282367bb5522ffd152208d346c2c105795de902db778fabc0eff02fedee56886bc70dc6bb0cd9d0c307b0cfcf186179cecb6b3e36ff5"
+      },
+      "nostrPubkey": "1eafc5715a488cec873b85f397b6aeda16392e2ae1e24e7998737472d23ce451",
+      "result": {
+        "valid": false,
+        "reason": "pubkey mismatch"
+      }
+    },
+    {
+      "name": "description is not JSON",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp50n86r7lnjs8x7rqrwhv8crujxkjs298pfj6z000675rhnpajdn8s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atld7gyz"
+          ],
+          [
+            "description",
+            "not json"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "502f95dabf2686c7367e40d6e3212d265ecfab30d33f063330cdcbfc9cac92f2",
+        "sig": "2955c9e9dffd87fd41c794f74611f38a1be98ef71e81d830489fb21814549048ae04d50fdee7dbcaaa95e57c458279a9fb1175640de61f92a65ee4b8f19b8aea"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid zap request"
+      }
+    },
+    {
+      "name": "description kind is not 9734",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp5fwgdldfjq0w4pwzperwnq9kcsx4n0zzctnncu5fr74gkpanx2wgq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atgf6xzj"
+          ],
+          [
+            "description",
+            "{\"kind\":1,\"tags\":[],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ffbd29eb788e7afb676b7d3150a6aa0f74d18b51ce6e2d6185ab13235018fa6a\",\"sig\":\"2b60a7fd9c03a67ee14dbb886ea5900a6b3963845ba5958a96e653aeebbf0b3a7c27e029113261d960033cbadf7b04c07152d59cd656331a31ef630f4e55463c\"}"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "00d0b24769d781900e51ffd330bce27e377d5c5ca1974098b27ed834fab9441c",
+        "sig": "bf53686b67320de2533b5fd60bfee444d17baeaee9e6ee5402225e77aa7b1e5116bfa9c4a1c907d365eb82706b8175a637081f8b06ee839563ce0109a49c9af7"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid zap request"
+      }
+    },
+    {
+      "name": "description tag missing",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp5uwcvgs5clswpfxhm7nyfjmaeysn6us0yvjdexn9yjkv3k7zjhp2s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atn6xt3r"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "2ee3b9d0de510d1efb20ef3068aa3c932240d71284ceb459e529898355c61942",
+        "sig": "27b9e9e11ff6432dc8fe6bbb9946a8e2dd7acaf131f5266064c78194c626a177dddd2ed2050e3c125d79caea45627007f4007211319b285ca44e692addb58228"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid zap request"
+      }
+    },
+    {
+      "name": "request with zero p tags",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp5t8mz973c4r0tdtxcfwkedhtr9f7du4dds80zqfwknfnxd9mcnxks4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at048nyg"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"658a62ae7c6efb611509c8f6e872923890ca2f31ec61f89604c53698c4682bef\",\"sig\":\"6cab5d422bbc7bf70a2b32e5ed20307d673a9772e1b298fb9ecb90cb5af71740a5a0ce95540a7795ef6e89e957a588c0904ab07d8770f13d1df595918b59f5bf\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "114f12b35f96ad1ff17be79024c2898e85cf62afbe62f21fcbfbe32150dd2dad",
+        "sig": "c701aa964dc1c7df3e2b802117d4c92b8bfee8153acc3e689d58df3d6f0a0fefaeb6873e4d306dc5c09849889914581c30930fd896b107ec4d4841af22759559"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid p count"
+      }
+    },
+    {
+      "name": "request with two p tags",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp59u948z6yk47uvxga49h48ghj6v0w7sz0xrj09jaa66sy5va9ar2s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at2qe5gf"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"],[\"p\",\"1eafc5715a488cec873b85f397b6aeda16392e2ae1e24e7998737472d23ce451\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"0c1497628ea685b464575b2297f8cb89483607e2308a916b09666ffe30b58ac1\",\"sig\":\"ec87cd0b641b4cdf6388e3824b889ea5c29431aef487befe6a6f66290bde234fc4b659d00b388435aa826c5d8f4538f25c86308c9a9653d885b0343446925072\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "0c8991f934ff3ac743c9356798b7d0527ac5d72c8242c7ffb4e9a2f66f42d6e7",
+        "sig": "506958978ee612377636e8d4cf9195a36e94ec4fc759aa39e601f81a42ae0c9cc0cd756ca176d2d8d6268f97267982cf64b512faac80a5e792e2f32af2a4af15"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid p count"
+      }
+    },
+    {
+      "name": "request with two e tags",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp54645e4kc367ez2c3afv0y0cnvs4txyk8450zt4qsven5aqlds3hs4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at50fqxk"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"],[\"e\",\"407f97935fc7ae147d74e7c2ce2704df3f3821c3534302ac944952520f9f56ab\"],[\"e\",\"c176e316ae2b146c152316c2bff9fff89eea8a38100f9d1787c559d1730bfab0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"8878a7b96b66546b55b81bc5005f52b7998179dd97d2452c14868efb4b821255\",\"sig\":\"d71a62f5afbff60810763aaa9f837d35a352af10dddbff35daae6fc33e40ac418edd1a8ffdec9c43e227cdbd40a90e1b8c4f1020d0de4863190757aa1440b46d\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "e097f768f7e7c2b5f6176670f1b9a83b7eb38c77c679d2cfa1dace2ab88ce48f",
+        "sig": "7edecdc45282810c0f2741848a35fdd7c48157ce7eeb184ea8016d4895c2cd4a76b0ebd1bc8ec8e2c756ef3ad713aee8eee71fbb87eae809ea62710f2f5fb1f4"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "too many e tags"
+      }
+    },
+    {
+      "name": "request without relays tag",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp5plymnpx9mkr66z5kg3nmdcwvvz7tjqn4md802xlqfsn0tlza9pts4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atkgzsn2"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"07e9e9f1f2f4bb8c813362c92381404753872dde0c9cb851876d81177f24811e\",\"sig\":\"6b81c90b221b3f41f0312e9f582c6740e3e96a9dd91c53e5b3d48a4edeb6a047129990d910215f11fa653334ac1d54f38e4014c2766eec2da5ca13db033d9a3d\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "0916ea1f8a636692da75b7aa0d3c4ea6ed82ef8878c3a2c737e2d14e3406f526",
+        "sig": "838bb50bff70d46d9de5605f5a547435cb39cd9099524ceafe8fdd7ef61e1eda58e45d56d5d67e6c1489cff76e4dec57b867bf974d646d555d0fe97a03a79bc8"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "missing relays"
+      }
+    },
+    {
+      "name": "request with empty relays value",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp5upuj23fwx7kusucwajt2yefuny7jh22sqhjqm2tnwphxewjczelq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atg5qtmz"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"664265252685675dd3fa2a2853c0e29dfac2501c765099e03fd88e59e3c73051\",\"sig\":\"111175dbcfbbea96d433d877800c6413230eba3434b38c5f0a43d6eb9136e00242dce74a6341b4faadfb5881da85ea14277b262b16a26ad414d4dcb188c202f2\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "4e1e025aa5c04a4c4e506727b09364b73a118207532b4730e2234e3e909b7aff",
+        "sig": "b5c9859a7a73c7f3bc335331632671f4882ee841b410791d986a87a0b38eda52f145d0b15bec5baf62182464c402eaf770fa8096a2ddd3865572da19dd9c1178"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "missing relays"
+      }
+    },
+    {
+      "name": "request a tag unparsable",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp50c6nqtvgg3epxwn6ew7j5uwnzyfay7etl9daesfxvnyu0c9ysthq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atu22jaz"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"],[\"a\",\"not-an-address\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"96d0f4a20f4b8c8015bfc22f99ad30dd3b4e47acffa76a0d8eeea43d2c639d3c\",\"sig\":\"48a89556f6dda553bd88094c3971f8b800823d3838098516d7ee35a2bc122bcd40e1d4d9a09bb3d4783a762169f025f65d94c172d072b2d58cd050df83ac19c7\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "db0198dd399446a97cb927328481a0df49e45f9bcbc712c97c3ddc800ae7009e",
+        "sig": "ad39e30ec899f46d167a161d2dd532059b208f061177dcabb39b94fe13dfcea3cc843b997be2462ac0d71f3a763643556ad6e1a6395502afb404313bb28bb577"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid a"
+      }
+    },
+    {
+      "name": "request a tag non-addressable kind",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp5zymfwagcqvpnu2hfr508t56988qeat4x8j7kzxl89f3lqr50wymq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atge67jc"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"],[\"a\",\"1:ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d:id\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"4459a9cc4c73d0e1a5b676c1defd9ae3e4ad46b425452036370c0450b4259a22\",\"sig\":\"6715ab94ec31186208891a32458f358d904a3b33cc0837301abc3da0b9fd825efd344ebfaa242f203c6cb259e1e81578fec9ab42cb77a60094f1530462dd6234\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "2e48a0f22ff02d30fcb433f9571d84aaaa902b8a83374e25867ed2e322fa63be",
+        "sig": "96a5cd8dfd728f4c75adfc654eb54d4a10d9dabbd5e8f65e09a04b6ecebbac7172072777427c6bd2ef05b5bfa60b2f190915e65da20a183c65bbdcfbf669a57c"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid a"
+      }
+    },
+    {
+      "name": "request with two P tags",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp5p88u8v5cgudylz4lazn2tylh6xc4kxaka5wxfc8aydydmhufs2es4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at04nfta"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"],[\"P\",\"6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78\"],[\"P\",\"6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"c130b104b7b32dfd1dd1da668df50f4f7a857c694a981b7b28746769d91b902f\",\"sig\":\"a47d9e4ad7451f1fd7cbdf9d4c75c28a56593962309212ae3e60555e53d8b3c04390e9767a0a98ed1f1193d7a7b0cf292050f1fcb2630945cfddb072d93f107b\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "9d61e2fada63225baa72bff05fd17415345d4f00751e852b5102a5c507271566",
+        "sig": "36608543013db6b73b046c3a347d40f96b1bdbbfd2a300564ae697256abbd6e9679404279e92f5c04a6150cf159c624ba3173083724456b49a773edbf4ecf490"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "too many P tags"
+      }
+    },
+    {
+      "name": "request P mismatch",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp50n3d5m6lrlvjxtx9zrwcyyk0dnrvm5s8nv9vzaug6zjhtjpr5kws4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at8slcln"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"],[\"P\",\"1eafc5715a488cec873b85f397b6aeda16392e2ae1e24e7998737472d23ce451\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"8d0a917cdd53dd2f5783f4fab0677f6e85ede64b1807f4e701008342a5d246d8\",\"sig\":\"7983b9880a7ee5108f5c2131e6b545b8259a7170496b1be203b4a0d6fb4e1c2bd0073156e21798c22b2a4a397f1b910e82a1fb0469816b07e99077b2b49feadf\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "01e0607a223aa925dbe51d756115c5b504ec1b432f40d9a6bdb691c80a351c16",
+        "sig": "e49156e7684f5df938eaed3a9101e9540a05c93cead32b1c0f6092ffb8eec5eb11323fc49e9ad8bee40c7f1205745d20ca96eb84eb779c7e2bd792f10eb41ef6"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "request P mismatch"
+      }
+    },
+    {
+      "name": "missing bolt11 tag",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "ef7e70505bddae41240818cbdb7490a1f8835f94532b4f24d444b68915affcc8",
+        "sig": "a10d23e1d264b91c98b1a3f38ba631cd3e5ad6f953a0045997e3f4abf3fa0e792430bd451a89d00d3bac3bf1e5c60da176ef59683d352f79a75549023a980838"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "missing bolt11"
+      }
+    },
+    {
+      "name": "unparsable bolt11",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc1broken"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "9c23d7bc445f8f8f17ba0714a203e753c2a4c15b40b73f4c19393e5c28082677",
+        "sig": "ee2be96d9fc13ee42ba24efda62dc9b37c3926d12c102c6d9fdf528bcfe771620058358bb61f17cf80bbdbdfd89586293cedcba75c73b3aa27bd19bb051fcae1"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid bolt11"
+      }
+    },
+    {
+      "name": "bolt11 without description hash",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48ugqpp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at66nkvd"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "e729e14e506e3e81f1f755687a0f15dc1a17f4c8f4429a0d1c5e1908616116f9",
+        "sig": "2851ec1ec2cb018ce45ba33279cbaaf4a6af654e5001a362aeafac15bf4e6040bb94b353460e6c17fb9210c102f669a4435ce49823b43f05eddcbd306c05ceb1"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "invalid bolt11"
+      }
+    },
+    {
+      "name": "amount mismatch",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc100n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2ataz8vca"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "3e2bace6086e05d2f39a801a678f49d7abe20e53c44ef54ba4c8bff42f979353",
+        "sig": "4dac8c0ea6fb9eff1bd27f384756597357ef461258fd9f32d66f3a7dbec3ca98a516a2cf8cbef4e4328cff15632d2ec73b15607d88fc687ab0db59c873030b41"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "amount mismatch"
+      }
+    },
+    {
+      "name": "description hash mismatch",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48ugqpp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp57s0nlf39lufqmh98aazkhanrw8kw5g7p986wfservugpak63dnuq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atpzs933"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "53b845b566416f82d5d0e33423859121e4b386699504f73604f9c8526f03cecb",
+        "sig": "1f8086f6cf89826c97011e1d659eef5ac9c1fad5da5919f090c9ca0bdffdee03d67b3129946868c128bb3516e39119e3dfdcb5a6c664ec9c1c331d1b6ceaec0f"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "description hash mismatch"
+      }
+    },
+    {
+      "name": "lnurl mismatch",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atc5gc5p"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "b3753d416151f05c02075c25d48e2e8cca73e1f58a18bf4e33d5e15c6ca2b0b8",
+        "sig": "4de000385fdd4d5bb543282367bb5522ffd152208d346c2c105795de902db778fabc0eff02fedee56886bc70dc6bb0cd9d0c307b0cfcf186179cecb6b3e36ff5"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "lnurl": "lnurl1other",
+      "result": {
+        "valid": false,
+        "reason": "lnurl mismatch"
+      }
+    },
+    {
+      "name": "preimage mismatch",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atc5gc5p"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "7777777777777777777777777777777777777777777777777777777777777777"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "160e3aa4202cb758e48017f13f6ed12d19847ee74ea70ccfb09c467913b61a46",
+        "sig": "4bebe4e0ddd34d761a834b8b57ad785c9e873f4a8ce19fbe6c3ba006bee9ac09920f38bbcdf53e5e4776090adad35920a0604d79e4cd473017e7d2a10ddce167"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "preimage mismatch"
+      }
+    },
+    {
+      "name": "preimage invalid hex",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atc5gc5p"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "xyz-not-hex"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "99691fe59eb91564ccf08faf21c4de3ce84faf76c956c2903163916c29d0a5fd",
+        "sig": "cbdbe44540e9301942238c30f1d9c665e658cd41f165b61bbf28d6b5f627b2d3c1f6dbe2b1c972b531eb64c63c25dd849b6167f5da631790bc913f531a9b69d3"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "preimage mismatch"
+      }
+    },
+    {
+      "name": "receipt missing p",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atc5gc5p"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "01332e037d43861677b620c7f205593d30bbc8e71d5671d6742f34f365816cac",
+        "sig": "5ba5137dff7ec9c213b9af2add12adfd0ee937993a49b76beed0f1f5671e6ee022b982d4b8191d66d6ca4f69ac63e2b51835753e3781d2102f706b3c39aab41c"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "missing p"
+      }
+    },
+    {
+      "name": "receipt p does not match request p",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atc5gc5p"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "1eafc5715a488cec873b85f397b6aeda16392e2ae1e24e7998737472d23ce451"
+          ],
+          [
+            "P",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "83b42f4d682f6972832de63487ea18b1a12d1f4ee990e1be54e535d8f2a62616",
+        "sig": "cffd88bdb9732ba47e1a93c28a69a23a119b901d5b3fe4de69a19c644d0c7a1d1dba3e832972d99f71b14c62d48d62133a966596fe0da99a813ad93335b443c8"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "missing p"
+      }
+    },
+    {
+      "name": "receipt missing e",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52usfeeu7j7zqwtwmkkep820kvuhtmzj4w6fc0m2p945qe4dcwvxq4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at7a2v28"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"e\",\"407f97935fc7ae147d74e7c2ce2704df3f3821c3534302ac944952520f9f56ab\"],[\"k\",\"1\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"7c8e57ba7b2c0138439b5fc5a6438a638929bd7f939a39b812f31144a97c9dcc\",\"sig\":\"20bceb32acf18a031e66df59cc9366237bd6600837123ff373cd404bf398b37ef272fb0294e0f8dea59506c783872613b8b75a1de40030a790d74c2c7035b914\"}"
+          ],
+          [
+            "p",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "f3c3e63d760a22c2add308512417fb74c1c61b8c2336587d4f55075dbf2a4876",
+        "sig": "5601e67d82e21cc7eca7909fe9fc3261899bdbf50a215fad2cdfbce0bcd490f70ec2750b76b171c286b858b96ef3a84c9a6ef1cff0e43358d86feabc6d4f19b6"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "missing e"
+      }
+    },
+    {
+      "name": "receipt missing a",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp5c60z5tv3798jlf46xws279mkjlr2de63dl8mxwlgwryzfqajh72s4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atmzela8"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"e\",\"c176e316ae2b146c152316c2bff9fff89eea8a38100f9d1787c559d1730bfab0\"],[\"a\",\"30023:ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d:article-1\"],[\"k\",\"30023\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"0880babeecc365b9304a8a1f7f0766304561577cb637b231b6a8aa0bebeca161\",\"sig\":\"e068fc8d50f1da1e56b84b5b9d83cc15b0469d0d86944f41bd5f29427853b6cdf716de72195c88aebaaf6c4a525d580261b7a1ed4e8fe1540c29959306b3048b\"}"
+          ],
+          [
+            "p",
+            "ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d"
+          ],
+          [
+            "e",
+            "c176e316ae2b146c152316c2bff9fff89eea8a38100f9d1787c559d1730bfab0"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "c3185d1c1e5bcf3f7a9089ec151b9e194119fdb384b710945ad77401624bc817",
+        "sig": "d46946ba30bdf988ed8bdcb49299ddfc8efb96f4fe4543c50b48de5757d4dcaefd71956779b5f0a18c8db981dbb4b965646185e813ed2d00e3f8f28924440482"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "missing a"
+      }
+    },
+    {
+      "name": "receipt P does not match request pubkey",
+      "receipt": {
+        "kind": 9735,
+        "tags": [
+          [
+            "bolt11",
+            "lnbc210n1pj48utypp5gf0dfe9rdvcw5gdepcsuwykxf85zznpfkl40dqyf6ypecmj48pxqhp52etv3a5prdlvjgfhdl0j3znltrljyew7uddzn9t580wywn8af58q4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2atc5gc5p"
+          ],
+          [
+            "description",
+            "{\"kind\":9734,\"tags\":[[\"p\",\"438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3\"],[\"amount\",\"21000\"],[\"relays\",\"wss://zap.example/\"],[\"lnurl\",\"lnurl1provider0\"]],\"content\":\"\",\"created_at\":1700000000,\"pubkey\":\"ab5d2e79cfd621b1b027ffb24e2453ed7fb571ba9a841ff0e2473466cabd168d\",\"id\":\"ab2549fcc08731b2a2e51a99a9672fd787abe4dcd39aa9946eed88a85af26482\",\"sig\":\"f6e74b9b86d989fbf1537277ac65a4ddfc954175466447041d5212011c8f872cf849f8fead5131610432b500d63b871629fa32dddef5256c888c435945ce0645\"}"
+          ],
+          [
+            "preimage",
+            "4242424242424242424242424242424242424242424242424242424242424242"
+          ],
+          [
+            "p",
+            "438a4f623099e7c238970a8481b03d449fd45cc2c2185e739b28f28ce5342bb3"
+          ],
+          [
+            "P",
+            "1eafc5715a488cec873b85f397b6aeda16392e2ae1e24e7998737472d23ce451"
+          ]
+        ],
+        "content": "",
+        "created_at": 1700000000,
+        "pubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+        "id": "b54052eefe49cb279ea838c08b5f709d9f3a39c68d9a7941c6ba683b12a60a83",
+        "sig": "ad5d56f007648b46fc4c35de0afc0d37478f86f4385196c2ff59a986e98e5254fffd00591d8b126a993e5ac331406843254e9932b2de2d34650e55ffe692b5f4"
+      },
+      "nostrPubkey": "6aa3da9b5c1d61956076cb3014ffdaa0996bacdae29ba4b89e39b4088f86ec78",
+      "result": {
+        "valid": false,
+        "reason": "receipt P mismatch"
+      }
+    }
+  ]
+}

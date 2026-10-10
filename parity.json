@@ -579,14 +579,20 @@
     {
       "id": "nip57.zap",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK3",
       "ts": {
         "module": "packages/nostr/src/nips/nip57.ts",
-        "tests": ["packages/nostr/tests/nip57.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip57.test.ts",
+          "packages/nostr/tests/vectors/nip57.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip57.rs",
+        "tests": ["crates/nk-vectors/tests/nip57.rs"]
+      },
+      "vectors": ["vectors/nip57/codec.json"]
     },
     {
       "id": "nip65.relay-list",
