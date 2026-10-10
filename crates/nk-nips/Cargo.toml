@@ -25,6 +25,7 @@ clock   = ["std", "nk-core/clock"]
 # nonces; portable --no-default-features builds never see it.
 os-rng = ["std", "nk-core/os-rng", "dep:getrandom"]
 nip04  = ["dep:aes", "dep:base64ct", "dep:cbc", "dep:rand_core", "dep:secp256k1", "dep:zeroize"]
+nip10  = ["nip19"]
 nip13  = ["dep:sha2"]
 nip19  = ["dep:bech32", "dep:zeroize"]
 nip21  = ["nip19"]

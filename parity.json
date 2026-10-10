@@ -531,14 +531,20 @@
     {
       "id": "nip10.thread",
       "tier": "A",
-      "status": "ts-only",
+      "status": "stable",
       "milestone": "NK3",
       "ts": {
         "module": "packages/nostr/src/nips/nip10.ts",
-        "tests": ["packages/nostr/tests/nip10-21-27.test.ts"]
+        "tests": [
+          "packages/nostr/tests/nip10-21-27.test.ts",
+          "packages/nostr/tests/vectors/nip10.test.ts"
+        ]
       },
-      "rust": null,
-      "vectors": []
+      "rust": {
+        "module": "crates/nk-nips/src/nip10.rs",
+        "tests": ["crates/nk-vectors/tests/nip10.rs"]
+      },
+      "vectors": ["vectors/nip10/codec.json"]
     },
     {
       "id": "nip27.tokenize",
