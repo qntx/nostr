@@ -3,6 +3,7 @@
 //! canonical serialization used by REQ coalescing.
 
 use alloc::borrow::Cow;
+use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -14,7 +15,6 @@ use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::canonical::{self, Sink};
-use crate::detail::JsonSource;
 use crate::event::{Event, EventId};
 use crate::json::{
     self, Captured, MAX_SAFE_INTEGER, WireHexList, WireInt, WireStr, WireStrList, WireU16List,
@@ -39,7 +39,11 @@ pub enum Error {
     /// The wire JSON is malformed or fails a NIP-01 filter rule; the source
     /// message names the offending field.
     #[error("invalid JSON")]
-    InvalidJson(#[source] JsonSource),
+    InvalidJson {
+        /// The serde error naming the offending field.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
 }
 
 /// A NIP-01 single-letter tag condition key (`a`–`z`, `A`–`Z`).
@@ -410,7 +414,9 @@ impl Filter {
     /// [`Error::InvalidJson`] on any malformed input; the source message
     /// names the offending field.
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json).map_err(|e| Error::InvalidJson(JsonSource(e)))
+        serde_json::from_str(json).map_err(|e| Error::InvalidJson {
+            source: Box::new(e),
+        })
     }
 }
 

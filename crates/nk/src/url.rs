@@ -2,6 +2,7 @@
 //! ([NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md),
 //! [NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md)).
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
@@ -9,8 +10,6 @@ use core::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use url::Url;
-
-use crate::detail::UrlSource;
 
 /// The result type for this module.
 pub type Result<T, E = Error> = core::result::Result<T, E>;
@@ -21,7 +20,11 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 pub enum Error {
     /// The input is not a valid WHATWG URL.
     #[error("invalid URL")]
-    InvalidUrl(#[source] Option<UrlSource>),
+    InvalidUrl {
+        /// The parser failure.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
     /// The scheme is not `http`, `https`, `ws`, or `wss`.
     #[error("unsupported relay URL scheme: {scheme}:")]
     UnsupportedScheme {
@@ -29,6 +32,19 @@ pub enum Error {
         scheme: String,
     },
 }
+
+/// The [`Error::InvalidUrl`] source when rewriting `http:`/`https:` to
+/// `ws:`/`wss:` fails — `url::Url::set_scheme` reports no detail.
+#[derive(Debug)]
+struct SchemeRewrite;
+
+impl fmt::Display for SchemeRewrite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("could not rewrite the relay URL scheme")
+    }
+}
+
+impl core::error::Error for SchemeRewrite {}
 
 /// A normalized relay URL (`ws://` or `wss://`).
 ///
@@ -56,7 +72,9 @@ impl RelayUrl {
             prefixed = alloc::format!("wss://{input}");
             prefixed.as_str()
         };
-        let mut url = Url::parse(input).map_err(|e| Error::InvalidUrl(Some(UrlSource(e))))?;
+        let mut url = Url::parse(input).map_err(|e| Error::InvalidUrl {
+            source: Box::new(e),
+        })?;
         let rewrite = match url.scheme() {
             "http" => Some("ws"),
             "https" => Some("wss"),
@@ -68,8 +86,9 @@ impl RelayUrl {
             }
         };
         if let Some(target) = rewrite {
-            url.set_scheme(target)
-                .map_err(|()| Error::InvalidUrl(None))?;
+            url.set_scheme(target).map_err(|()| Error::InvalidUrl {
+                source: Box::new(SchemeRewrite),
+            })?;
         }
         url.set_path(&collapse_path(url.path()));
         sort_query(&mut url);

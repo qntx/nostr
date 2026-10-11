@@ -3,6 +3,7 @@
 //! the canonical serialization used for hashing.
 
 use alloc::borrow::Cow;
+use alloc::boxed::Box;
 use alloc::string::String;
 use core::cmp::Ordering;
 use core::fmt;
@@ -13,7 +14,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::canonical;
-use crate::detail::{HexSource, JsonSource};
 use crate::hex;
 use crate::json::{self, Captured, MAX_SAFE_INTEGER, WireCow, WireInt, WireStr, WireTags};
 use crate::key::PublicKey;
@@ -38,11 +38,19 @@ pub enum Error {
     },
     /// The input is not valid hexadecimal for the required width.
     #[error("invalid hex input")]
-    InvalidHex(#[source] HexSource),
+    InvalidHex {
+        /// The decoder failure.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
     /// The wire JSON is malformed or fails a NIP-01 shape rule; the source
     /// message names the offending field.
     #[error("invalid JSON")]
-    InvalidJson(#[source] JsonSource),
+    InvalidJson {
+        /// The serde error naming the offending field.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
     /// The stored id does not match the recomputed hash of the contents.
     #[error("event id does not match the event contents")]
     IdMismatch,
@@ -84,9 +92,11 @@ impl EventId {
     ///
     /// [`Error::InvalidHex`] when the input is not 64 hex characters.
     pub fn from_hex(hex: &str) -> Result<Self> {
-        Ok(Self(
-            hex::decode_caller(hex).map_err(|e| Error::InvalidHex(HexSource(e)))?,
-        ))
+        Ok(Self(hex::decode_caller(hex).map_err(|e| {
+            Error::InvalidHex {
+                source: Box::new(e),
+            }
+        })?))
     }
 
     /// SHA-256 of `canonical` — used by nk-wasm's `verify_serialized`.
@@ -173,9 +183,11 @@ impl Signature {
     ///
     /// [`Error::InvalidHex`] when the input is not 128 hex characters.
     pub fn from_hex(hex: &str) -> Result<Self> {
-        Ok(Self(
-            hex::decode_caller(hex).map_err(|e| Error::InvalidHex(HexSource(e)))?,
-        ))
+        Ok(Self(hex::decode_caller(hex).map_err(|e| {
+            Error::InvalidHex {
+                source: Box::new(e),
+            }
+        })?))
     }
 
     /// The raw signature bytes.
@@ -330,7 +342,9 @@ impl UnsignedEvent {
     /// [`Error::InvalidJson`] on any malformed input; the source message
     /// names the offending field.
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json).map_err(|e| Error::InvalidJson(JsonSource(e)))
+        serde_json::from_str(json).map_err(|e| Error::InvalidJson {
+            source: Box::new(e),
+        })
     }
 
     /// The event id: SHA-256 over the canonical serialization, written
@@ -636,7 +650,9 @@ impl Event {
     /// [`Error::InvalidJson`] on any malformed input; the source message
     /// names the offending field.
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json).map_err(|e| Error::InvalidJson(JsonSource(e)))
+        serde_json::from_str(json).map_err(|e| Error::InvalidJson {
+            source: Box::new(e),
+        })
     }
 
     /// NIP-01 newest-first order: `created_at` descending, `id` ascending

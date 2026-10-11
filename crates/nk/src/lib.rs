@@ -52,8 +52,6 @@ pub mod limits;
 
 pub mod builder;
 pub(crate) mod canonical;
-#[doc(hidden)]
-pub mod detail;
 pub mod event;
 pub mod filter;
 pub(crate) mod hex;

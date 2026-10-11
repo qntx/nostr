@@ -11,6 +11,7 @@
 
 use alloc::borrow::Cow;
 use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
@@ -20,7 +21,6 @@ use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::canonical;
-use crate::detail::JsonSource;
 use crate::event::{Event, EventId};
 use crate::filter::Filter;
 use crate::hex;
@@ -35,7 +35,11 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 pub enum Error {
     /// The wire text is not valid JSON.
     #[error("invalid JSON")]
-    InvalidJson(#[source] JsonSource),
+    InvalidJson {
+        /// The serde parse failure.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
     /// The wire value is not a non-empty JSON array whose first element is
     /// the message type string.
     #[error("message must be a non-empty JSON array")]
@@ -59,7 +63,7 @@ pub enum Error {
         ty: &'static str,
         /// The serde error describing the offending field.
         #[source]
-        source: JsonSource,
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
     },
     /// The subscription id length is outside `1..=64` scalar values.
     #[error("subscription id length {len} is outside 1..=64")]
@@ -369,7 +373,7 @@ fn parse_event(item: Option<&serde_json::Value>, ty: &'static str) -> Result<Eve
     };
     Event::deserialize(item).map_err(|e| Error::InvalidPayload {
         ty,
-        source: JsonSource(e),
+        source: Box::new(e),
     })
 }
 
@@ -379,7 +383,7 @@ fn parse_filter(item: Option<&serde_json::Value>, ty: &'static str) -> Result<Fi
     };
     Filter::deserialize(item).map_err(|e| Error::InvalidPayload {
         ty,
-        source: JsonSource(e),
+        source: Box::new(e),
     })
 }
 
@@ -406,8 +410,9 @@ fn count_result(value: &serde_json::Value) -> Option<CountResult> {
 
 /// Splits `raw` into the message type and the remaining items.
 fn parse_wire(raw: &str) -> Result<(String, Vec<serde_json::Value>)> {
-    let value: serde_json::Value =
-        serde_json::from_str(raw).map_err(|e| Error::InvalidJson(JsonSource(e)))?;
+    let value: serde_json::Value = serde_json::from_str(raw).map_err(|e| Error::InvalidJson {
+        source: Box::new(e),
+    })?;
     let serde_json::Value::Array(items) = value else {
         return Err(Error::NotAMessageArray);
     };

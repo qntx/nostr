@@ -6,6 +6,7 @@
 //! stack-allocated context per call under `no_std`. No public `_with_ctx`
 //! variants exist.
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use core::fmt;
 use core::str::FromStr;
@@ -13,7 +14,6 @@ use core::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zeroize::Zeroize;
 
-use crate::detail::HexSource;
 use crate::event::{Event, EventId, Signature, UnsignedEvent};
 use crate::hex;
 
@@ -38,7 +38,11 @@ pub enum Error {
     },
     /// The input is not valid hexadecimal for the required width.
     #[error("invalid hex input")]
-    InvalidHex(#[source] HexSource),
+    InvalidHex {
+        /// The decoder failure.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
     /// The bytes are not a valid secp256k1 secret scalar.
     #[error("invalid secret key")]
     InvalidSecretKey,
@@ -81,9 +85,11 @@ impl PublicKey {
     ///
     /// [`Error::InvalidHex`] when the input is not 64 hex characters.
     pub fn from_hex(hex: &str) -> Result<Self> {
-        Ok(Self(
-            hex::decode_caller(hex).map_err(|e| Error::InvalidHex(HexSource(e)))?,
-        ))
+        Ok(Self(hex::decode_caller(hex).map_err(|e| {
+            Error::InvalidHex {
+                source: Box::new(e),
+            }
+        })?))
     }
 
     /// The raw key bytes.
@@ -193,7 +199,9 @@ impl SecretKey {
     /// [`Error::InvalidHex`] when the input is not 64 hex characters;
     /// [`Error::InvalidSecretKey`] when it is not a valid secret scalar.
     pub fn from_hex(hex: &str) -> Result<Self> {
-        Self::from_bytes(hex::decode_caller(hex).map_err(|e| Error::InvalidHex(HexSource(e)))?)
+        Self::from_bytes(hex::decode_caller(hex).map_err(|e| Error::InvalidHex {
+            source: Box::new(e),
+        })?)
     }
 
     /// Draws 32-byte candidates from `rng` until one is a valid scalar.
@@ -574,7 +582,7 @@ mod tests {
     fn secret_key_from_hex_reports_hex_errors() {
         assert!(matches!(
             SecretKey::from_hex("zz").unwrap_err(),
-            Error::InvalidHex(_)
+            Error::InvalidHex { .. }
         ));
         assert!(matches!(
             SecretKey::from_hex(&"00".repeat(32)).unwrap_err(),
