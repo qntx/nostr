@@ -64,19 +64,10 @@ if (import.meta.main) {
       writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
     }
 
-    // Cargo.lock must record the new workspace version. bumpp runs the
-    // `execute` hook without a shell — `&&` would reach bun as arguments —
-    // so the refresh is spawned here instead of chained in bump.config.ts.
-    const update = spawnSync("cargo", ["update", "--workspace"], { stdio: "inherit" });
-    if (update.status !== 0) {
-      const why =
-        update.error === undefined ? `exit code ${String(update.status)}` : update.error.message;
-      console.error(`sync-versions: cargo update --workspace failed: ${why}`);
-      process.exitCode = 1;
-    }
-
     // bun.lock mirrors the workspace versions under `workspaces`; refresh
-    // the lockfile without touching dependencies.
+    // the lockfile without touching dependencies. bumpp runs the `execute`
+    // hook without a shell — `&&` would reach bun as arguments — so the
+    // refresh is spawned here instead of chained in bump.config.ts.
     const lock = spawnSync("bun", ["install", "--lockfile-only"], { stdio: "inherit" });
     if (lock.status !== 0) {
       const why =

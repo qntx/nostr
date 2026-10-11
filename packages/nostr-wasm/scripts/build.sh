@@ -46,9 +46,9 @@ fi
 export AR_wasm32_unknown_unknown="${AR_wasm32_unknown_unknown:-llvm-ar}"
 export CFLAGS_wasm32_unknown_unknown="${CFLAGS_wasm32_unknown_unknown:---target=wasm32-unknown-unknown -Wno-implicit-function-declaration}"
 
-cargo build --target wasm32-unknown-unknown --release -p nk-wasm
+cargo build --target wasm32-unknown-unknown --release -p qntx-nostr-wasm
 
-wasm="${root}/target/wasm32-unknown-unknown/release/nk_wasm.wasm"
+wasm="${root}/target/wasm32-unknown-unknown/release/qntx_nostr_wasm.wasm"
 test -f "${wasm}" || { echo "cargo did not emit ${wasm}" >&2; exit 1; }
 # rustc emits SIMD, bulk-memory and friends; allow every feature the module uses.
 wasm-opt -Oz --all-features "${wasm}" -o "${wasm}"
@@ -61,4 +61,4 @@ if [[ "${gz_size}" -gt "${WASM_GZIP_BUDGET}" ]]; then
   echo "wasm gzip size ${gz_size} exceeds the ${WASM_GZIP_BUDGET} byte budget" >&2
   exit 1
 fi
-cp "${wasm}" "${pkg}/src/nk_wasm.wasm"
+cp "${wasm}" "${pkg}/src/nostr_wasm.wasm"

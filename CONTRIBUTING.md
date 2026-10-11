@@ -3,8 +3,7 @@
 ## Prerequisites
 
 - **Bun 1.4** — package scripts, tests, and tooling.
-- **Rust 1.99** — via `rust-toolchain.toml` (kept in sync with
-  `[workspace.package].rust-version`; includes the `wasm32-unknown-unknown`
+- **Rust** — via `rust-toolchain.toml` (includes the `wasm32-unknown-unknown`
   target).
 - **LLVM clang** for `wasm32-unknown-unknown` — `secp256k1-sys` needs a
   wasm-capable clang; Apple clang will not work.
@@ -12,13 +11,6 @@
   ```bash
   brew install llvm
   export CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang"
-  ```
-
-- **Optional**, for local portable builds: Xcode, the Android NDK, and the iOS
-  and Android rustup targets. CI runs these builds.
-
-  ```bash
-  rustup target add aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android x86_64-linux-android
   ```
 
 - `cargo-deny` for the supply-chain check (`cargo install cargo-deny`).
@@ -29,14 +21,17 @@
 packages/nostr/       @qntx/nostr — pure-TypeScript library (core, nips,
                       signer, relay, storage, store, loaders, gossip, client,
                       testing); builds with vp pack, no Rust toolchain needed
-packages/nostr-wasm/  @qntx/nostr-wasm — JS bindings of crates/nk-wasm
+packages/nostr-wasm/  @qntx/nostr-wasm — JS bindings of crates/wasm
 packages/nostr-native/ @qntx/nostr-native — React Native Nitro C++ backend
                       over vendored libsecp256k1 (iOS/Android)
-crates/               nk-* Rust crates (one crate per TypeScript layer)
+crates/wasm/          qntx-nostr-wasm — raw-byte WebAssembly ABI
+                      (secp256k1 + sha2 only)
+crates/interop/       qntx-nostr-interop — runs vectors/ and the TS
+                      differential streams against rust-nostr
 vectors/              shared cross-language test vectors (see vectors/README.md)
 parity.json           capability ledger consumed by scripts/parity/check.ts
-scripts/              repo tooling (check-version, check-layers, sync-versions,
-                      parity/); script tests run under the root vp test
+scripts/              repo tooling (check-version, sync-versions, parity/);
+                      script tests run under the root vp test
 ```
 
 ## Local gate
@@ -45,11 +40,10 @@ Run before opening a pull request:
 
 ```bash
 bun run lint && bun run typecheck && bun run test   # lint includes taplo,
-                                                    # version, layer and
+                                                    # version and
                                                     # parity checks
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 cargo test --workspace --all-features
 cargo deny check
 cd packages/nostr-wasm
@@ -71,10 +65,11 @@ and `docs/meta.json` stubs.
 
 ## Versioning and release
 
-npm and crates versions are lockstep. `bump.config.ts` bumps both
-`packages/*/package.json` files and `Cargo.toml` together and runs
+Only the npm packages carry a release version; the crates under `crates/` are
+unpublished (`version = "0.0.0"`) and are not versioned with them.
+`bump.config.ts` bumps the `packages/*/package.json` files and runs
 `bun scripts/sync-versions.ts`, which syncs internal `@qntx/*` ranges and
-refreshes `Cargo.lock` via `cargo update --workspace`; `release` runs
+refreshes `bun.lock` via `bun install --lockfile-only`; `release` runs
 `bumpp`, which pushes a
 `release/vX.Y.Z` branch and opens the release pull request via `gh`.
 After the release PR merges, tag the merge commit and push the tag:
@@ -83,7 +78,8 @@ After the release PR merges, tag the merge commit and push the tag:
 git tag -a vX.Y.Z <merge-sha> -m vX.Y.Z && git push origin vX.Y.Z
 ```
 
-`scripts/check-version.ts` fails the lint gate when they drift.
+`scripts/check-version.ts` fails the lint gate when the internal `@qntx/*`
+ranges or bun.lock workspace entries drift from the manifests.
 
 ## License
 

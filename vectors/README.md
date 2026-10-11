@@ -1,8 +1,11 @@
 # vectors/
 
-Shared cross-language test vectors. Both the TypeScript tests (`tests/vectors/`,
-`tests/nip44.test.ts`) and the Rust `nk-*` crates must pass against the same
-files, which makes byte-level parity checkable.
+Shared cross-language test vectors. The TypeScript tests (`tests/vectors/`,
+`tests/nip44.test.ts`) are the reference run; `crates/interop` replays the
+same files against rust-nostr's public API and records factual differences in
+`crates/interop/divergences.json` (unlisted divergences and stale entries
+fail). Capabilities with no rust-nostr counterpart are marked `rust: null` in
+`parity.json`.
 
 ## Layout
 

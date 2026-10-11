@@ -22,7 +22,7 @@ const platformNeutralImports = {
 };
 
 // One-directional layer graph for packages/nostr/src — mirrors
-// AGENTS.md "Architecture invariants" and ALLOWED in scripts/check-layers.ts.
+// AGENTS.md "Architecture invariants" describes the same graph.
 const LAYERS = {
   core: [],
   nips: ["core"],

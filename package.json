@@ -13,11 +13,11 @@
   ],
   "type": "module",
   "scripts": {
-    "lint": "vp check && taplo fmt --check && bun scripts/check-version.ts && bun scripts/check-layers.ts && bun scripts/check-features.ts && bun scripts/parity/check.ts",
+    "lint": "vp check && taplo fmt --check && bun scripts/check-version.ts && bun scripts/parity/check.ts",
     "typecheck": "vp run -r typecheck && tsc --noEmit",
     "build": "vp run -r build",
     "test": "vp run -r test && vp test",
-    "test:parity": "bun packages/nostr/scripts/parity/diff.ts --seed 42 --count 2000 --out target/parity && NK_DIFF_DIR=target/parity cargo test -p nk-vectors --test diff -- --ignored",
+    "test:parity": "bun packages/nostr/scripts/parity/diff.ts --seed 42 --count 2000 --out target/parity && INTEROP_DIFF_DIR=target/parity cargo test -p qntx-nostr-interop --test diff -- --ignored",
     "release": "bumpp",
     "prepare": "vp config"
   },
