@@ -10,7 +10,7 @@ const mapReader =
     files.get(p) ?? "";
 
 function cap(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
+  const c: Record<string, unknown> = {
     id: "core.example",
     tier: "B",
     status: "ts-only",
@@ -21,6 +21,12 @@ function cap(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     vectors: [],
     ...overrides,
   };
+  // rustNote is only valid with rust: null; an explicit rust object drops
+  // the default note unless the override sets one on purpose.
+  if (overrides["rust"] !== null && overrides["rust"] !== undefined && !("rustNote" in overrides)) {
+    delete c["rustNote"];
+  }
+  return c;
 }
 
 function parity(caps: Array<Record<string, unknown>>): unknown {
@@ -99,7 +105,7 @@ describe("parity check", () => {
 
   test("rejects rustNote alongside a rust object", () => {
     const errors = checkParity(
-      parity([cap({ rust: { api: "nostr::Event", tests: ["tests/x.rs"] } })]),
+      parity([cap({ rust: { api: "nostr::Event", tests: ["tests/x.rs"] }, rustNote: "kept" })]),
       [],
       TRUE,
       EMPTY,
