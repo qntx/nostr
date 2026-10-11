@@ -10,7 +10,7 @@
 
 ## Architecture invariants
 
-- One-directional layering inside `packages/nostr/src`: `core` is the leaf; `nips/*` and `storage` may only import `core`; `signer` adds `nips`; `store` adds `storage`; `relay` adds `nips`/`signer`; `gossip` adds `nips`; `loaders` and `testing` consume the mid layers; `client` composes everything. `nips/*` must never import `relay`, `signer`, `storage`, or `client`. The acceleration backends are the separate `packages/nostr-wasm` and `packages/nostr-native` packages, which may only import `@qntx/nostr/core`; `packages/nostr-native` is React Native–only by design and may additionally import `react-native-nitro-modules`, an explicit exception to the platform-neutral rule. The TypeScript layer graph is enforced by lint (`LAYERS` in `vite.config.ts`).
+- One-directional layering inside `packages/nostr/src`: `core` is the leaf; `nips/*` and `storage` may only import `core`; `signer` adds `nips`; `store` adds `storage`; `relay` adds `nips`/`signer`; `gossip` adds `nips`; `loaders` and `testing` consume the mid layers; `client` composes everything. `nips/*` must never import `relay`, `signer`, `storage`, or `client`. The acceleration backends are the separate `packages/nostr-wasm` and `packages/nostr-native` packages, which may only import `@qntx/nostr/core`; `packages/nostr-native` is React Native–only by design and may additionally import `react-native-nitro-modules`, an explicit exception to the platform-neutral rule. `packages/nostr-native/cpp` is the single C core (vendored libsecp256k1 + `nostr_core.c`) shared by `@qntx/nostr-native` (React Native, Nitro) and `@qntx/nostr-wasm` (wasm32 build in `packages/nostr-wasm/c`); only the wasm build forces 64-bit wide multiplication (`USE_FORCE_WIDEMUL_INT64`): wasm32 has no 64×64→128 multiply, and the int128 field code is 3–4× slower there. The TypeScript layer graph is enforced by lint (`LAYERS` in `vite.config.ts`).
 - All I/O is injected (WebSocket, fetch, storage drivers); `packages/*/src/` holds no ambient singletons.
 - `packages/*/src/` is platform-neutral: no Node-only or browser-only globals and no `node:*` imports outside the declared lint exceptions (`packages/nostr/src/testing/serve.ts`, `packages/nostr-wasm/src/load.ts`).
 
@@ -21,7 +21,6 @@ Runtime dependencies (`@noble/*`, `@scure/base`) use caret ranges so consumers c
 ## Rust
 
 - The Rust side does not implement the protocol. Rust consumers use rust-nostr (`nostr`, `nostr-sdk`, ...) from crates.io; this repository does not fork or copy it, and upstream defects go upstream as issues or pull requests.
-- `crates/wasm` (`qntx-nostr-wasm`) is the WebAssembly ABI behind `@qntx/nostr-wasm`. It depends only on `secp256k1` and `sha2`, builds for `wasm32-unknown-unknown`, and is the only place `unsafe` is allowed (ABI module, with safety comments).
 - `crates/interop` (`qntx-nostr-interop`) runs the shared vectors in `vectors/` and the TS differential streams against rust-nostr. Only protocol behavior is compared. Known divergences are listed in `crates/interop/divergences.json`; unlisted divergences and stale entries fail the tests.
 - Rust crates are not published and are not versioned with the npm packages.
 - Follow the Rust API Guidelines. No panics and no `unwrap`/`expect` outside tests.

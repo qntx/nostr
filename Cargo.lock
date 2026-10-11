@@ -735,7 +735,7 @@ dependencies = [
  "opaquerr",
  "rand 0.10.3",
  "scrypt",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "serde_json",
  "unicode-normalization",
@@ -861,20 +861,11 @@ dependencies = [
  "base64",
  "nostr",
  "proptest",
- "secp256k1 0.30.0",
+ "secp256k1",
  "serde",
  "serde_json",
  "sha2",
  "url",
-]
-
-[[package]]
-name = "qntx-nostr-wasm"
-version = "0.0.0"
-dependencies = [
- "secp256k1 0.33.1",
- "serde_json",
- "sha2",
 ]
 
 [[package]]
@@ -1014,16 +1005,7 @@ checksum = "b50c5943d326858130af85e049f2661ba3c78b26589b8ab98e65e80ae44a1252"
 dependencies = [
  "bitcoin_hashes 0.14.101",
  "rand 0.8.8",
- "secp256k1-sys 0.10.1",
-]
-
-[[package]]
-name = "secp256k1"
-version = "0.33.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7f404a8dab7a7a5a631e741d8699aa9c8e1d689fc26ccf897c7187565490b69"
-dependencies = [
- "secp256k1-sys 0.14.1",
+ "secp256k1-sys",
 ]
 
 [[package]]
@@ -1031,15 +1013,6 @@ name = "secp256k1-sys"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4387882333d3aa8cb20530a17c69a3752e97837832f34f6dccc760e715001d9"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "secp256k1-sys"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6b2992d4a3cd244539a7d5d0966aadbe5ca7fb868a5d7e38c29499b9e709bbd"
 dependencies = [
  "cc",
 ]

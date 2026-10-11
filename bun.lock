@@ -73,6 +73,7 @@
         "@arethetypeswrong/cli": "0.18.5",
         "@noble/curves": "2.4.0",
         "@qntx/nostr": "0.12.1",
+        "@qntx/nostr-native": "0.12.1",
         "@qntx/tsconfig": "1.0.1",
         "@types/node": "26.6.3",
         "binaryen": "132.0.0",

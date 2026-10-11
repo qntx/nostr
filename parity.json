@@ -1041,15 +1041,13 @@
           "packages/nostr-wasm/tests/node-load.test.ts"
         ]
       },
-      "rust": {
-        "api": "crates/wasm (qntx-nostr-wasm) nostr_* raw-byte exports",
-        "tests": ["crates/wasm/tests/abi.rs", "packages/nostr-wasm/tests/abi.test.ts"]
-      },
       "vectors": [
         "vectors/bip340/official.csv",
         "vectors/core/event-sign.json",
         "vectors/core/event-serialize.json"
-      ]
+      ],
+      "rust": null,
+      "rustNote": "the wasm ABI is C now: packages/nostr-wasm/c/nostr_wasm.c over the shared nostr_core.c in packages/nostr-native/cpp; no rust-nostr counterpart to compare"
     },
     {
       "id": "wasm.loader",

@@ -24,6 +24,7 @@ const keys = Keys.fromSecretKey(secretKey, signing);
 - React Native with the New Architecture (Nitro Modules 0.37.x), iOS and Android only.
 - Expo projects need a dev client / prebuild — the module compiles from source and cannot run in Expo Go.
 - libsecp256k1 v0.8.0 is vendored under `vendor/secp256k1` (MIT, see `vendor/secp256k1/COPYING`); its symbols are namespaced `nostr_native_secp256k1_*`, so the module links alongside other copies of libsecp256k1 in the same app.
+- `cpp/nostr_core.c` is the platform-independent half of this package (context-in, status-code-out `nostr_core_*` functions over the vendored library); `@qntx/nostr-wasm` builds the same file for wasm32.
 
 ## License
 

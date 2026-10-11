@@ -1,6 +1,7 @@
 import {
   bytesToHex as nobleBytesToHex,
   hexToBytes as nobleHexToBytes,
+  randomBytes as nobleRandomBytes,
 } from "@noble/hashes/utils.js";
 
 import { HexError, UrlError } from "./error.ts";
@@ -15,6 +16,11 @@ const HEX64_RE = /^[0-9a-f]{128}$/;
 /** Lowercase hex encode. */
 export function bytesToHex(bytes: Uint8Array): string {
   return nobleBytesToHex(bytes);
+}
+
+/** Cryptographically secure random bytes (Web Crypto under the hood). */
+export function randomBytes(length: number): Uint8Array {
+  return nobleRandomBytes(length);
 }
 
 /** Decode lowercase or mixed-case hex to bytes. */

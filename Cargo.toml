@@ -12,16 +12,9 @@ authors      = ["QNTX <https://qntx.org>"]
 
 [workspace.dependencies]
 nostr      = { version = "0.45.5", default-features = false }
-secp256k1  = { version = "0.33", default-features = false }
 serde      = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
 serde_json = { version = "1.0.151", default-features = false, features = ["alloc"] }
 sha2       = { version = "0.11", default-features = false }
-
-[profile.release]
-codegen-units = 1
-lto           = "thin"
-panic         = "abort"
-strip         = true
 
 [profile.dev]
 debug     = true
@@ -33,10 +26,6 @@ opt-level = 2
 [profile.ci]
 debug    = false
 inherits = "dev"
-
-[profile.bench]
-debug    = true
-inherits = "release"
 
 [workspace.lints.rust]
 unsafe_code                   = "deny"

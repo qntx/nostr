@@ -1,13 +1,15 @@
-import { CryptoError } from "@qntx/nostr/core";
+import { CryptoError, randomBytes } from "@qntx/nostr/core";
 
 /**
- * Byte-ABI version 2 surface exported by `nostr_wasm.wasm` (`crates/wasm/src/abi.rs`). All inputs
- * are caller-written regions of a single scratch buffer; status codes are 0 ok/verified, 1
- * verification failed, 2 invalid input.
+ * Byte-ABI version 3 surface exported by `nostr_wasm.wasm` (`packages/nostr-wasm/c/nostr_wasm.c`
+ * over the shared `nostr_core.c` in `packages/nostr-native/cpp`). All inputs are caller-written
+ * regions of a single scratch buffer; status codes are 0 ok/verified, 1 verification failed, 2
+ * invalid input. `nostr_init` must succeed once with a 32-byte seed before the crypto ops run.
  */
 export type CryptoWasmExports = {
   memory: WebAssembly.Memory;
   nostr_abi_version: () => number;
+  nostr_init: (seed: number) => number;
   nostr_buffer: (len: number) => number;
   nostr_verify: (id: number, pubkey: number, sig: number) => number;
   nostr_verify_serialized: (
@@ -21,7 +23,9 @@ export type CryptoWasmExports = {
   nostr_public_key: (seckey: number, outPubkey: number) => number;
 };
 
-export const NOSTR_ABI_VERSION = 2;
+export const NOSTR_ABI_VERSION = 3;
+
+const SEED_LEN = 32;
 
 const ID_LEN = 32;
 const PUBKEY_LEN = 32;
@@ -52,6 +56,7 @@ function asExports(raw: WebAssembly.Exports): CryptoWasmExports {
   return {
     memory: requireMemory(raw["memory"]),
     nostr_abi_version: requireFn(raw["nostr_abi_version"], "nostr_abi_version"),
+    nostr_init: requireFn(raw["nostr_init"], "nostr_init"),
     nostr_buffer: requireFn(raw["nostr_buffer"], "nostr_buffer"),
     nostr_verify: requireFn(raw["nostr_verify"], "nostr_verify"),
     nostr_verify_serialized: requireFn(raw["nostr_verify_serialized"], "nostr_verify_serialized"),
@@ -177,5 +182,13 @@ export async function instantiateCryptoWasm(
       `unsupported nostr_wasm ABI version ${String(version)}, expected ${NOSTR_ABI_VERSION}`,
     );
   }
-  return asExports(instance.exports);
+  const exports = asExports(instance.exports);
+  // Seed the context: 32 bytes of fresh randomness into the scratch buffer; the C side
+  // randomizes the context and wipes the seed region on every path.
+  const { ptr, view } = scratch(exports, SEED_LEN);
+  view.set(randomBytes(SEED_LEN), 0);
+  if (exports.nostr_init(ptr) !== 0) {
+    throw new CryptoError("nostr_init failed to randomize the wasm context");
+  }
+  return exports;
 }

@@ -17,7 +17,7 @@ Pod::Spec.new do |s|
     # Implementation (C core + C++ HybridObject)
     "cpp/**/*.{h,hpp,c,cpp}",
     # Vendored libsecp256k1: headers plus the two precomputed-table TUs. secp256k1.c is
-    # intentionally not here — cpp/nostr_native.c includes it as a single translation unit.
+    # intentionally not here — cpp/nostr_core.c includes it as a single translation unit.
     "vendor/secp256k1/include/**/*.h",
     "vendor/secp256k1/src/**/*.h",
     "vendor/secp256k1/src/precomputed_ecmult.c",

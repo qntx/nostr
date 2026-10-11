@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Cargo workspace lives at the repo root; the artifact lands in this package's src/.
+# Builds nostr_wasm.wasm from the shared libsecp256k1 C core in packages/nostr-native/cpp
+# (nostr_core.c + nostr_wasm.c + the two precomputed-table TUs), clang + wasm-ld only,
+# then wasm-opt. The artifact lands in this package's src/.
 pkg="$(cd "$(dirname "$0")/.." && pwd)"
-root="$(cd "${pkg}/../.." && pwd)"
-cd "$root"
+native="$(cd "${pkg}/../nostr-native" && pwd)"
+cd "$pkg"
 
 need() { command -v "$1" >/dev/null || { echo "missing $1" >&2; exit 1; }; }
-need rustc
-need cargo
 # binaryen (devDependency) provides wasm-opt on PATH inside bun/npm scripts.
 need wasm-opt
-
-if ! rustup target list --installed | grep -qx "wasm32-unknown-unknown"; then
-  echo "rustup target wasm32-unknown-unknown is not installed" >&2
-  exit 1
-fi
 
 wasm_cc_hint() {
   echo "set CC_wasm32_unknown_unknown to a wasm-capable clang" >&2
@@ -23,13 +18,7 @@ wasm_cc_hint() {
   echo "  CI:    CC_wasm32_unknown_unknown=clang" >&2
 }
 
-# secp256k1-sys: clang must accept --target=wasm32-unknown-unknown (not Apple clang).
-if [[ -z "${CC_wasm32_unknown_unknown:-}" ]]; then
-  wasm_cc_hint
-  exit 1
-fi
-
-cc_wasm="${CC_wasm32_unknown_unknown}"
+cc_wasm="${CC_wasm32_unknown_unknown:-clang}"
 cc_ver="$("${cc_wasm}" --version 2>/dev/null | head -n 1 || true)"
 if echo "${cc_ver}" | grep -q "Apple clang"; then
   echo "CC_wasm32_unknown_unknown is Apple clang (no wasm backend): ${cc_wasm}" >&2
@@ -42,23 +31,53 @@ if ! "${cc_wasm}" --print-targets 2>/dev/null | grep -q wasm32; then
   wasm_cc_hint
   exit 1
 fi
+if ! "${cc_wasm}" --target=wasm32-unknown-unknown -nostdlib -Wl,--version \
+      -x c /dev/null -o /dev/null 2>/dev/null | grep -qi "lld"; then
+  echo "wasm-ld is not reachable from ${cc_wasm}" >&2
+  wasm_cc_hint
+  exit 1
+fi
 
-export AR_wasm32_unknown_unknown="${AR_wasm32_unknown_unknown:-llvm-ar}"
-export CFLAGS_wasm32_unknown_unknown="${CFLAGS_wasm32_unknown_unknown:---target=wasm32-unknown-unknown -Wno-implicit-function-declaration}"
+out="${pkg}/src/nostr_wasm.wasm"
+tmp="$(mktemp -d)"
+trap 'rm -rf "${tmp}"' EXIT
 
-cargo build --target wasm32-unknown-unknown --release -p qntx-nostr-wasm
+# The stub libc headers in c/include come first; nostr_core.h picks up the vendored
+# secp256k1 headers relative to its own directory. nostr_core.c is the single TU that
+# includes vendor/secp256k1/src/secp256k1.c — the precomputed tables are separate TUs.
+"${cc_wasm}" \
+  --target=wasm32-unknown-unknown \
+  -O3 -flto -nostdlib -mbulk-memory \
+  -I"${pkg}/c/include" \
+  -I"${native}/cpp" \
+  -I"${native}/vendor/secp256k1/include" \
+  -DENABLE_MODULE_EXTRAKEYS=1 \
+  -DENABLE_MODULE_SCHNORRSIG=1 \
+  -DUSE_FORCE_WIDEMUL_INT64=1 \
+  -DECMULT_WINDOW_SIZE=4 \
+  -DCOMB_BLOCKS=2 \
+  -DCOMB_TEETH=5 \
+  -DUSE_EXTERNAL_DEFAULT_CALLBACKS=1 \
+  -Wno-unused-function \
+  -Wl,--no-entry -Wl,--gc-sections -Wl,--strip-all -Wl,-z,stack-size=65536 \
+  -Wl,--export-memory \
+  "${native}/cpp/nostr_core.c" \
+  "${pkg}/c/nostr_wasm.c" \
+  "${native}/vendor/secp256k1/src/precomputed_ecmult.c" \
+  "${native}/vendor/secp256k1/src/precomputed_ecmult_gen.c" \
+  -o "${tmp}/nostr_wasm.wasm"
 
-wasm="${root}/target/wasm32-unknown-unknown/release/qntx_nostr_wasm.wasm"
-test -f "${wasm}" || { echo "cargo did not emit ${wasm}" >&2; exit 1; }
-# rustc emits SIMD, bulk-memory and friends; allow every feature the module uses.
-wasm-opt -Oz --all-features "${wasm}" -o "${wasm}"
+wasm-opt -O3 --all-features "${tmp}/nostr_wasm.wasm" -o "${out}"
 
-# Size budget: measured gzip size rounded up to the next 50 KiB. Bump only after
-# re-measuring a legitimate growth (N19).
-WASM_GZIP_BUDGET=102400
-gz_size="$(gzip -cn "${wasm}" | wc -c | tr -d ' ')"
+# Size budget: gzip size must stay under the N19 acceleration budget.
+WASM_GZIP_BUDGET=51200
+gz_size="$(gzip -cn "${out}" | wc -c | tr -d ' ')"
 if [[ "${gz_size}" -gt "${WASM_GZIP_BUDGET}" ]]; then
   echo "wasm gzip size ${gz_size} exceeds the ${WASM_GZIP_BUDGET} byte budget" >&2
   exit 1
 fi
-cp "${wasm}" "${pkg}/src/nostr_wasm.wasm"
+br_size=""
+if command -v brotli >/dev/null; then
+  br_size="$(brotli -cq 11 "${out}" | wc -c | tr -d ' ')"
+fi
+echo "nostr_wasm.wasm: $(wc -c <"${out}" | tr -d ' ') B raw, ${gz_size} B gzip${br_size:+, ${br_size} B brotli}"

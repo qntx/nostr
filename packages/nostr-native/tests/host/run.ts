@@ -305,12 +305,14 @@ function basename(path: string): string {
 /**
  * Symbol guard: React Native pods are statically linked into one binary, so the module must not
  * export unprefixed `secp256k1_*` symbols — they would collide with any other pod embedding
- * libsecp256k1 (the vendor script namespaces every identifier to `nostr_native_secp256k1_`).
- * Compiles the production configuration (no NOSTR_NATIVE_TEST, same -D module flags) of every
- * native translation unit and fails if a defined external symbol lacks the `nostr_native_` prefix.
+ * libsecp256k1 (the vendor script namespaces every identifier to `nostr_native_secp256k1_`; the
+ * shared core adds the `nostr_core_` prefix). Compiles the production configuration (no
+ * NOSTR_NATIVE_TEST, same -D module flags) of every native translation unit and fails if a defined
+ * external symbol lacks the `nostr_native_` prefix.
  */
 function checkSymbolNamespace(buildDir: string): void {
   const sources = [
+    join(packageDir, "cpp", "nostr_core.c"),
     join(packageDir, "cpp", "nostr_native.c"),
     join(packageDir, "vendor/secp256k1/src/precomputed_ecmult.c"),
     join(packageDir, "vendor/secp256k1/src/precomputed_ecmult_gen.c"),
@@ -343,15 +345,17 @@ function checkSymbolNamespace(buildDir: string): void {
       // Mach-O prefixes C symbols with one leading underscore.
       const name = process.platform === "darwin" && raw.startsWith("_") ? raw.slice(1) : raw;
       exported += 1;
-      if (!name.startsWith("nostr_native_")) {
+      if (!name.startsWith("nostr_native_") && !name.startsWith("nostr_core_")) {
         offenders.push(`${name} (${basename(source)})`);
       }
     }
   }
   if (offenders.length > 0) {
-    throw new Error(`exported symbols missing the nostr_native_ prefix: ${offenders.join(", ")}`);
+    throw new Error(
+      `exported symbols missing the nostr_native_/nostr_core_ prefix: ${offenders.join(", ")}`,
+    );
   }
-  console.log(`symbol guard: ${exported} exported symbols checked, all nostr_native_*`);
+  console.log(`symbol guard: ${exported} exported symbols checked, all nostr_*`);
 }
 
 function main(): void {
@@ -386,6 +390,7 @@ function main(): void {
       "-DNOSTR_NATIVE_TEST",
       `-I${join(packageDir, "cpp")}`,
       `-I${hostDir}`,
+      join(packageDir, "cpp", "nostr_core.c"),
       join(packageDir, "cpp", "nostr_native.c"),
       join(packageDir, "vendor/secp256k1/src/precomputed_ecmult.c"),
       join(packageDir, "vendor/secp256k1/src/precomputed_ecmult_gen.c"),
