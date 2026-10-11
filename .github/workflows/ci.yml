@@ -22,14 +22,21 @@ jobs:
     # bun run test → vp run -r test + repo-level scripts/*.test.ts
 
   wasm:
-    # Local reusable workflow: ci-wasm@v2 requires a Rust cdylib in the
-    # workspace, which no longer exists (the artifact is built with clang).
-    uses: ./.github/workflows/ci-wasm.yml
+    uses: qntx/workflows/.github/workflows/ci-wasm.yml@v2
     permissions:
       contents: read
     with:
+      language: c
+      rust-checks: false
+      package-manager: bun
       working-directory: packages/nostr-wasm
+      install-directory: .
+      dist-export: .
       bench: true
+      # test:parity replays the differential streams through crates/interop;
+      # rustup on the runner picks up rust-toolchain.toml on demand.
+      scripts: test:parity
+      scripts-directory: .
 
   rust:
     uses: qntx/workflows/.github/workflows/ci-rust.yml@v2

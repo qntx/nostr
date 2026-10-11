@@ -20,9 +20,9 @@ docs/*
 !docs/index.mdx
 !docs/meta.json
 
-# Rust / wasm artifacts (built by packages/nostr-wasm/scripts/build.sh)
+# wasm artifacts (built by packages/nostr-wasm/scripts/build.sh)
 /target
-packages/nostr-wasm/src/nk_wasm.wasm
+packages/nostr-wasm/src/nostr_wasm.wasm
 
 # Hermes smoke bundle (built by packages/nostr/scripts/hermes-smoke.ts)
 .hermes-smoke.iife.js

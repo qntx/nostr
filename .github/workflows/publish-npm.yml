@@ -38,6 +38,8 @@ jobs:
       id-token: write
     with:
       package-manager: bun
-      # wasm: false — the reusable wasm path requires a Rust cdylib, which no
-      # longer exists; the .wasm artifact is committed and ships via vp pack.
+      wasm: true
+      language: c
+      dist-export: .
       working-directory: packages/nostr-wasm
+      timeout-minutes: 30

@@ -50,8 +50,7 @@
     "test:wasm": "vp test",
     "bench:wasm": "BENCH=1 vp test tests/bench.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.src.json",
-    "check:pkg": "vp run @qntx/nostr#build && vp pack && publint && attw --pack . --profile esm-only",
-    "build": "vp pack"
+    "check:pkg": "vp run @qntx/nostr#build && vp pack && publint && attw --pack . --profile esm-only"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
