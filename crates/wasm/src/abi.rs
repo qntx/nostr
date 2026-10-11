@@ -194,8 +194,8 @@ pub unsafe extern "C" fn nostr_public_key(seckey: *mut u8, out_pubkey: *mut u8) 
     unsafe {
         out_pubkey
             .cast::<[u8; 32]>()
-            .write(public_key.to_byte_array())
-    };
+            .write(public_key.to_byte_array());
+    }
     OK
 }
 

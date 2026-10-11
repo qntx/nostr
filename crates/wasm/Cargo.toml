@@ -1,21 +1,21 @@
 [package]
-name = "qntx-nostr-wasm"
-publish = false
-description = "nostr_* byte-ABI for @qntx/nostr-wasm — BIP-340 verify/sign and public key without wasm-bindgen."
-version = "0.0.0"
-edition.workspace = true
+name                   = "qntx-nostr-wasm"
+publish                = false
+description            = "nostr_* byte-ABI for @qntx/nostr-wasm — BIP-340 verify/sign and public key without wasm-bindgen."
+version                = "0.0.0"
+edition.workspace      = true
 rust-version.workspace = true
-license.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+authors.workspace      = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 secp256k1 = { workspace = true, features = ["lowmemory"] }
-sha2 = { workspace = true }
+sha2      = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["std"] }

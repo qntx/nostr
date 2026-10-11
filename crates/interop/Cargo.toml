@@ -1,24 +1,24 @@
 [package]
-name = "qntx-nostr-interop"
-publish = false
-description = "Shared-vector and differential-stream runner: executes the JSON cases under vectors/ against rust-nostr's public API."
-version = "0.0.0"
-edition.workspace = true
+name                   = "qntx-nostr-interop"
+publish                = false
+description            = "Shared-vector and differential-stream runner: executes the JSON cases under vectors/ against rust-nostr's public API."
+version                = "0.0.0"
+edition.workspace      = true
 rust-version.workspace = true
-license.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+authors.workspace      = true
 
 [dev-dependencies]
-base64 = "0.22"
-nostr = { workspace = true, features = ["std", "os-rng", "nip04", "nip44", "nip46", "nip49", "nip59", "nip98"] }
-proptest = "1.11"
-secp256k1 = "0.30"
-serde = { workspace = true }
-url = "2.5"
+base64     = "0.22"
+nostr      = { workspace = true, features = ["std", "os-rng", "nip04", "nip44", "nip46", "nip49", "nip59", "nip98"] }
+proptest   = "1.11"
+secp256k1  = "0.30"
+serde      = { workspace = true }
+url        = "2.5"
 serde_json = { workspace = true, features = ["std"] }
-sha2 = { workspace = true }
+sha2       = { workspace = true }
 
 [lints]
 workspace = true
