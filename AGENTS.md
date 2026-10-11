@@ -22,6 +22,7 @@ Runtime dependencies (`@noble/*`, `@scure/base`) use caret ranges so consumers c
 
 - The Rust side does not implement the protocol. Rust consumers use rust-nostr (`nostr`, `nostr-sdk`, ...) from crates.io; this repository does not fork or copy it, and upstream defects go upstream as issues or pull requests.
 - `crates/interop` (`qntx-nostr-interop`) runs the shared vectors in `vectors/` and the TS differential streams against rust-nostr. Only protocol behavior is compared. Known divergences are listed in `crates/interop/divergences.json`; unlisted divergences and stale entries fail the tests.
+- `crates/interop` is a standalone Cargo project (test targets only, no library): its `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `rustfmt.toml`, `clippy.toml`, and `deny.toml` all live inside it. The repository root has no Cargo files.
 - Rust crates are not published and are not versioned with the npm packages.
 - Follow the Rust API Guidelines. No panics and no `unwrap`/`expect` outside tests.
 - Shared test vectors live in `vectors/` (see `vectors/README.md`) and every capability is tracked in `parity.json`.
@@ -35,10 +36,12 @@ Local gate before a pull request:
 bun run lint && bun run typecheck && bun run test   # lint includes taplo,
                                                     # version and
                                                     # parity checks
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
+cd crates/interop
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 cargo deny check
+cd ../..
 cd packages/nostr-wasm
 CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" bun run build:wasm
 bun run test:wasm

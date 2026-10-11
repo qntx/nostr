@@ -20,8 +20,10 @@ docs/*
 !docs/index.mdx
 !docs/meta.json
 
-# wasm artifacts (built by packages/nostr-wasm/scripts/build.sh)
-/target
+# wasm artifacts (built by packages/nostr-wasm/scripts/build.sh) and
+# Rust build output (crates/interop is a standalone Cargo project; the
+# parity streams also generate under target/parity)
+target/
 packages/nostr-wasm/src/nostr_wasm.wasm
 
 # Hermes smoke bundle (built by packages/nostr/scripts/hermes-smoke.ts)
