@@ -14,49 +14,49 @@
 #include "hash_impl.h"
 #include "precomputed_ecmult_gen.h"
 
-static void secp256k1_ecmult_gen_context_build(secp256k1_ecmult_gen_context *ctx, const secp256k1_hash_ctx *hash_ctx) {
-    secp256k1_ecmult_gen_blind(ctx, hash_ctx, NULL);
+static void nostr_native_secp256k1_ecmult_gen_context_build(nostr_native_secp256k1_ecmult_gen_context *ctx, const nostr_native_secp256k1_hash_ctx *hash_ctx) {
+    nostr_native_secp256k1_ecmult_gen_blind(ctx, hash_ctx, NULL);
     ctx->built = 1;
 }
 
-static int secp256k1_ecmult_gen_context_is_built(const secp256k1_ecmult_gen_context* ctx) {
+static int nostr_native_secp256k1_ecmult_gen_context_is_built(const nostr_native_secp256k1_ecmult_gen_context* ctx) {
     return ctx->built;
 }
 
-static void secp256k1_ecmult_gen_context_clear(secp256k1_ecmult_gen_context *ctx) {
+static void nostr_native_secp256k1_ecmult_gen_context_clear(nostr_native_secp256k1_ecmult_gen_context *ctx) {
     ctx->built = 0;
-    secp256k1_scalar_clear(&ctx->scalar_offset);
-    secp256k1_ge_clear(&ctx->ge_offset);
-    secp256k1_fe_clear(&ctx->proj_blind);
+    nostr_native_secp256k1_scalar_clear(&ctx->scalar_offset);
+    nostr_native_secp256k1_ge_clear(&ctx->ge_offset);
+    nostr_native_secp256k1_fe_clear(&ctx->proj_blind);
 }
 
 /* Compute the scalar (2^COMB_BITS - 1) / 2, the difference between the gn argument to
- * secp256k1_ecmult_gen, and the scalar whose encoding the table lookup bits are drawn
+ * nostr_native_secp256k1_ecmult_gen, and the scalar whose encoding the table lookup bits are drawn
  * from (before applying blinding). */
-static void secp256k1_ecmult_gen_scalar_diff(secp256k1_scalar* diff) {
+static void nostr_native_secp256k1_ecmult_gen_scalar_diff(nostr_native_secp256k1_scalar* diff) {
     int i;
 
     /* Compute scalar -1/2. */
-    secp256k1_scalar neghalf;
-    secp256k1_scalar_half(&neghalf, &secp256k1_scalar_one);
-    secp256k1_scalar_negate(&neghalf, &neghalf);
+    nostr_native_secp256k1_scalar neghalf;
+    nostr_native_secp256k1_scalar_half(&neghalf, &nostr_native_secp256k1_scalar_one);
+    nostr_native_secp256k1_scalar_negate(&neghalf, &neghalf);
 
     /* Compute offset = 2^(COMB_BITS - 1). */
-    *diff = secp256k1_scalar_one;
+    *diff = nostr_native_secp256k1_scalar_one;
     for (i = 0; i < COMB_BITS - 1; ++i) {
-        secp256k1_scalar_add(diff, diff, diff);
+        nostr_native_secp256k1_scalar_add(diff, diff, diff);
     }
 
     /* The result is the sum 2^(COMB_BITS - 1) + (-1/2). */
-    secp256k1_scalar_add(diff, diff, &neghalf);
+    nostr_native_secp256k1_scalar_add(diff, diff, &neghalf);
 }
 
-static void secp256k1_ecmult_gen_gej(const secp256k1_ecmult_gen_context *ctx, secp256k1_gej *r, const secp256k1_scalar *gn) {
+static void nostr_native_secp256k1_ecmult_gen_gej(const nostr_native_secp256k1_ecmult_gen_context *ctx, nostr_native_secp256k1_gej *r, const nostr_native_secp256k1_scalar *gn) {
     uint32_t comb_off;
-    secp256k1_ge add;
-    secp256k1_fe neg;
-    secp256k1_ge_storage adds;
-    secp256k1_scalar d;
+    nostr_native_secp256k1_ge add;
+    nostr_native_secp256k1_fe neg;
+    nostr_native_secp256k1_ge_storage adds;
+    nostr_native_secp256k1_scalar d;
     /* Array of uint32_t values large enough to store COMB_BITS bits. Only the bottom
      * 8 are ever nonzero, but having the zero padding at the end if COMB_BITS>256
      * avoids the need to deal with out-of-bounds reads from a scalar. */
@@ -107,14 +107,14 @@ static void secp256k1_ecmult_gen_gej(const secp256k1_ecmult_gen_context *ctx, se
      */
 
     /* Compute the scalar d = (gn + ctx->scalar_offset). */
-    secp256k1_scalar_add(&d, &ctx->scalar_offset, gn);
+    nostr_native_secp256k1_scalar_add(&d, &ctx->scalar_offset, gn);
     /* Convert to recoded array. */
     for (i = 0; i < 8 && i < ((COMB_BITS + 31) >> 5); ++i) {
-        recoded[i] = secp256k1_scalar_get_bits_limb32(&d, 32 * i, 32);
+        recoded[i] = nostr_native_secp256k1_scalar_get_bits_limb32(&d, 32 * i, 32);
     }
-    secp256k1_scalar_clear(&d);
+    nostr_native_secp256k1_scalar_clear(&d);
 
-    /* In secp256k1_ecmult_gen_prec_table we have precomputed sums of the
+    /* In nostr_native_secp256k1_ecmult_gen_prec_table we have precomputed sums of the
      * (2*d[i]-1) * 2^(i-1) * G points, for various combinations of i positions.
      * We rewrite our equation in terms of these table entries.
      *
@@ -185,7 +185,7 @@ static void secp256k1_ecmult_gen_gej(const secp256k1_ecmult_gen_context *ctx, se
      * entry from the second half is needed, we look up its bit-flipped version instead, and negate
      * it.
      *
-     * secp256k1_ecmult_gen_prec_table[b][index] stores the table(b, m) entries. Index
+     * nostr_native_secp256k1_ecmult_gen_prec_table[b][index] stores the table(b, m) entries. Index
      * is the relevant mask(b) bits of m packed together without gaps. */
 
     /* Outer loop: iterate over comb_off from COMB_SPACING - 1 down to 0. */
@@ -216,7 +216,7 @@ static void secp256k1_ecmult_gen_gej(const secp256k1_ecmult_gen_context *ctx, se
                  * which ensures that bitdata doesn't lose entropy. This relies on the
                  * rotation being atomic, i.e., the compiler emitting an actual rot
                  * instruction. */
-                uint32_t bitdata = secp256k1_rotr32(recoded[bit_pos >> 5], bit_pos & 0x1f);
+                uint32_t bitdata = nostr_native_secp256k1_rotr32(recoded[bit_pos >> 5], bit_pos & 0x1f);
 
                 /* Clear the bit at position tooth, but sssh, don't tell clang. */
                 uint32_t volatile vmask = ~(1 << tooth);
@@ -245,103 +245,103 @@ static void secp256k1_ecmult_gen_gej(const secp256k1_ecmult_gen_context *ctx, se
              *    (https://eprint.iacr.org/2005/271.pdf)
              */
             for (index = 0; index < COMB_POINTS; ++index) {
-                secp256k1_ge_storage_cmov(&adds, &secp256k1_ecmult_gen_prec_table[block][index], index == abs);
+                nostr_native_secp256k1_ge_storage_cmov(&adds, &nostr_native_secp256k1_ecmult_gen_prec_table[block][index], index == abs);
             }
 
             /* Set add=adds or add=-adds, in constant time, based on sign. */
-            secp256k1_ge_from_storage(&add, &adds);
-            secp256k1_fe_negate(&neg, &add.y, 1);
-            secp256k1_fe_cmov(&add.y, &neg, sign);
+            nostr_native_secp256k1_ge_from_storage(&add, &adds);
+            nostr_native_secp256k1_fe_negate(&neg, &add.y, 1);
+            nostr_native_secp256k1_fe_cmov(&add.y, &neg, sign);
 
             /* Add the looked up and conditionally negated value to r. */
             if (EXPECT(first, 0)) {
                 /* If this is the first table lookup, we can skip addition. */
-                secp256k1_gej_set_ge(r, &add);
+                nostr_native_secp256k1_gej_set_ge(r, &add);
                 /* Give the entry a random Z coordinate to blind intermediary results. */
-                secp256k1_gej_rescale(r, &ctx->proj_blind);
+                nostr_native_secp256k1_gej_rescale(r, &ctx->proj_blind);
                 first = 0;
             } else {
-                secp256k1_gej_add_ge(r, r, &add);
+                nostr_native_secp256k1_gej_add_ge(r, r, &add);
             }
         }
 
         /* Double the result, except in the last iteration. */
         if (comb_off-- == 0) break;
-        secp256k1_gej_double(r, r);
+        nostr_native_secp256k1_gej_double(r, r);
     }
 
     /* Correct for the scalar_offset added at the start (ge_offset = b*G, while b was
      * subtracted from the input scalar gn). */
-    secp256k1_gej_add_ge(r, r, &ctx->ge_offset);
+    nostr_native_secp256k1_gej_add_ge(r, r, &ctx->ge_offset);
 
     /* Cleanup. */
-    secp256k1_fe_clear(&neg);
-    secp256k1_ge_clear(&add);
-    secp256k1_memclear_explicit(&adds, sizeof(adds));
-    secp256k1_memclear_explicit(&recoded, sizeof(recoded));
+    nostr_native_secp256k1_fe_clear(&neg);
+    nostr_native_secp256k1_ge_clear(&add);
+    nostr_native_secp256k1_memclear_explicit(&adds, sizeof(adds));
+    nostr_native_secp256k1_memclear_explicit(&recoded, sizeof(recoded));
 }
 
-SECP256K1_INLINE static void secp256k1_ecmult_gen_ge(const secp256k1_ecmult_gen_context *ctx, secp256k1_ge *r, const secp256k1_scalar *a) {
-    secp256k1_gej rj;
-    secp256k1_ecmult_gen_gej(ctx, &rj, a);
-    secp256k1_ge_set_gej(r, &rj);
+SECP256K1_INLINE static void nostr_native_secp256k1_ecmult_gen_ge(const nostr_native_secp256k1_ecmult_gen_context *ctx, nostr_native_secp256k1_ge *r, const nostr_native_secp256k1_scalar *a) {
+    nostr_native_secp256k1_gej rj;
+    nostr_native_secp256k1_ecmult_gen_gej(ctx, &rj, a);
+    nostr_native_secp256k1_ge_set_gej(r, &rj);
     /* Jacobian coordinates resulting from our multiplication algorithm could potentially leak
      * information about the secret input scalar, so clear the memory out to be on the safe side. */
-    secp256k1_gej_clear(&rj);
+    nostr_native_secp256k1_gej_clear(&rj);
 }
 
-/* Setup blinding values for secp256k1_ecmult_gen. */
-static void secp256k1_ecmult_gen_blind(secp256k1_ecmult_gen_context *ctx, const secp256k1_hash_ctx *hash_ctx, const unsigned char *seed32) {
-    secp256k1_scalar b;
-    secp256k1_scalar diff;
-    secp256k1_fe f;
+/* Setup blinding values for nostr_native_secp256k1_ecmult_gen. */
+static void nostr_native_secp256k1_ecmult_gen_blind(nostr_native_secp256k1_ecmult_gen_context *ctx, const nostr_native_secp256k1_hash_ctx *hash_ctx, const unsigned char *seed32) {
+    nostr_native_secp256k1_scalar b;
+    nostr_native_secp256k1_scalar diff;
+    nostr_native_secp256k1_fe f;
     unsigned char nonce32[32];
-    secp256k1_rfc6979_hmac_sha256 rng;
+    nostr_native_secp256k1_rfc6979_hmac_sha256 rng;
     unsigned char keydata[64];
 
     /* Compute the (2^COMB_BITS - 1)/2 term once. */
-    secp256k1_ecmult_gen_scalar_diff(&diff);
+    nostr_native_secp256k1_ecmult_gen_scalar_diff(&diff);
 
     if (seed32 == NULL) {
         /* When seed is NULL, reset the final point and blinding value. */
-        secp256k1_ge_neg(&ctx->ge_offset, &secp256k1_ge_const_g);
-        secp256k1_scalar_add(&ctx->scalar_offset, &secp256k1_scalar_one, &diff);
-        ctx->proj_blind = secp256k1_fe_one;
+        nostr_native_secp256k1_ge_neg(&ctx->ge_offset, &nostr_native_secp256k1_ge_const_g);
+        nostr_native_secp256k1_scalar_add(&ctx->scalar_offset, &nostr_native_secp256k1_scalar_one, &diff);
+        ctx->proj_blind = nostr_native_secp256k1_fe_one;
         return;
     }
     /* The prior blinding value (if not reset) is chained forward by including it in the hash. */
-    secp256k1_scalar_get_b32(keydata, &ctx->scalar_offset);
+    nostr_native_secp256k1_scalar_get_b32(keydata, &ctx->scalar_offset);
     /** Using a CSPRNG allows a failure free interface, avoids needing large amounts of random data,
      *   and guards against weak or adversarial seeds.  This is a simpler and safer interface than
      *   asking the caller for blinding values directly and expecting them to retry on failure.
      */
     VERIFY_CHECK(seed32 != NULL);
     memcpy(keydata + 32, seed32, 32);
-    secp256k1_rfc6979_hmac_sha256_initialize(hash_ctx, &rng, keydata, 64);
-    secp256k1_memclear_explicit(keydata, sizeof(keydata));
+    nostr_native_secp256k1_rfc6979_hmac_sha256_initialize(hash_ctx, &rng, keydata, 64);
+    nostr_native_secp256k1_memclear_explicit(keydata, sizeof(keydata));
 
     /* Compute projective blinding factor (cannot be 0). */
-    secp256k1_rfc6979_hmac_sha256_generate(hash_ctx, &rng, nonce32, 32);
-    secp256k1_fe_set_b32_mod(&f, nonce32);
-    secp256k1_fe_cmov(&f, &secp256k1_fe_one, secp256k1_fe_normalizes_to_zero(&f));
+    nostr_native_secp256k1_rfc6979_hmac_sha256_generate(hash_ctx, &rng, nonce32, 32);
+    nostr_native_secp256k1_fe_set_b32_mod(&f, nonce32);
+    nostr_native_secp256k1_fe_cmov(&f, &nostr_native_secp256k1_fe_one, nostr_native_secp256k1_fe_normalizes_to_zero(&f));
     ctx->proj_blind = f;
 
     /* For a random blinding value b, set scalar_offset=diff-b, ge_offset=bG */
-    secp256k1_rfc6979_hmac_sha256_generate(hash_ctx, &rng, nonce32, 32);
-    secp256k1_scalar_set_b32(&b, nonce32, NULL);
+    nostr_native_secp256k1_rfc6979_hmac_sha256_generate(hash_ctx, &rng, nonce32, 32);
+    nostr_native_secp256k1_scalar_set_b32(&b, nonce32, NULL);
     /* The blinding value cannot be zero, as that would mean ge_offset = infinity,
-     * which secp256k1_gej_add_ge cannot handle. */
-    secp256k1_scalar_cmov(&b, &secp256k1_scalar_one, secp256k1_scalar_is_zero(&b));
-    secp256k1_rfc6979_hmac_sha256_finalize(&rng);
-    secp256k1_ecmult_gen_ge(ctx, &ctx->ge_offset, &b);
-    secp256k1_scalar_negate(&b, &b);
-    secp256k1_scalar_add(&ctx->scalar_offset, &b, &diff);
+     * which nostr_native_secp256k1_gej_add_ge cannot handle. */
+    nostr_native_secp256k1_scalar_cmov(&b, &nostr_native_secp256k1_scalar_one, nostr_native_secp256k1_scalar_is_zero(&b));
+    nostr_native_secp256k1_rfc6979_hmac_sha256_finalize(&rng);
+    nostr_native_secp256k1_ecmult_gen_ge(ctx, &ctx->ge_offset, &b);
+    nostr_native_secp256k1_scalar_negate(&b, &b);
+    nostr_native_secp256k1_scalar_add(&ctx->scalar_offset, &b, &diff);
 
     /* Clean up. */
-    secp256k1_memclear_explicit(nonce32, sizeof(nonce32));
-    secp256k1_scalar_clear(&b);
-    secp256k1_fe_clear(&f);
-    secp256k1_rfc6979_hmac_sha256_clear(&rng);
+    nostr_native_secp256k1_memclear_explicit(nonce32, sizeof(nonce32));
+    nostr_native_secp256k1_scalar_clear(&b);
+    nostr_native_secp256k1_fe_clear(&f);
+    nostr_native_secp256k1_rfc6979_hmac_sha256_clear(&rng);
 }
 
 #endif /* SECP256K1_ECMULT_GEN_IMPL_H */

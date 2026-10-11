@@ -24,7 +24,7 @@
 __attribute__((__unavailable__("Don't call this function. It only exists because STATIC_ASSERT cannot be used outside a function.")))
 # endif
 #endif
-static void secp256k1_assumption_checker(void) {
+static void nostr_native_secp256k1_assumption_checker(void) {
     /* Bytes are 8 bits. */
     STATIC_ASSERT(CHAR_BIT == 8);
 

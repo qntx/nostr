@@ -15,79 +15,79 @@
 #include "group.h"
 #include "ecmult_gen.h"
 
-static int secp256k1_eckey_pubkey_parse(secp256k1_ge *elem, const unsigned char *pub, size_t size) {
+static int nostr_native_secp256k1_eckey_pubkey_parse(nostr_native_secp256k1_ge *elem, const unsigned char *pub, size_t size) {
     if (size == 33 && (pub[0] == SECP256K1_TAG_PUBKEY_EVEN || pub[0] == SECP256K1_TAG_PUBKEY_ODD)) {
-        secp256k1_fe x;
-        return secp256k1_fe_set_b32_limit(&x, pub+1) && secp256k1_ge_set_xo_var(elem, &x, pub[0] == SECP256K1_TAG_PUBKEY_ODD);
+        nostr_native_secp256k1_fe x;
+        return nostr_native_secp256k1_fe_set_b32_limit(&x, pub+1) && nostr_native_secp256k1_ge_set_xo_var(elem, &x, pub[0] == SECP256K1_TAG_PUBKEY_ODD);
     } else if (size == 65 && (pub[0] == SECP256K1_TAG_PUBKEY_UNCOMPRESSED || pub[0] == SECP256K1_TAG_PUBKEY_HYBRID_EVEN || pub[0] == SECP256K1_TAG_PUBKEY_HYBRID_ODD)) {
-        secp256k1_fe x, y;
-        if (!secp256k1_fe_set_b32_limit(&x, pub+1) || !secp256k1_fe_set_b32_limit(&y, pub+33)) {
+        nostr_native_secp256k1_fe x, y;
+        if (!nostr_native_secp256k1_fe_set_b32_limit(&x, pub+1) || !nostr_native_secp256k1_fe_set_b32_limit(&y, pub+33)) {
             return 0;
         }
-        secp256k1_ge_set_xy(elem, &x, &y);
+        nostr_native_secp256k1_ge_set_xy(elem, &x, &y);
         if ((pub[0] == SECP256K1_TAG_PUBKEY_HYBRID_EVEN || pub[0] == SECP256K1_TAG_PUBKEY_HYBRID_ODD) &&
-            secp256k1_fe_is_odd(&y) != (pub[0] == SECP256K1_TAG_PUBKEY_HYBRID_ODD)) {
+            nostr_native_secp256k1_fe_is_odd(&y) != (pub[0] == SECP256K1_TAG_PUBKEY_HYBRID_ODD)) {
             return 0;
         }
-        return secp256k1_ge_is_valid_var(elem);
+        return nostr_native_secp256k1_ge_is_valid_var(elem);
     } else {
         return 0;
     }
 }
 
-static void secp256k1_eckey_pubkey_serialize33(secp256k1_ge *elem, unsigned char *pub33) {
-    VERIFY_CHECK(!secp256k1_ge_is_infinity(elem));
+static void nostr_native_secp256k1_eckey_pubkey_serialize33(nostr_native_secp256k1_ge *elem, unsigned char *pub33) {
+    VERIFY_CHECK(!nostr_native_secp256k1_ge_is_infinity(elem));
 
-    secp256k1_fe_normalize_var(&elem->x);
-    secp256k1_fe_normalize_var(&elem->y);
-    pub33[0] = secp256k1_fe_is_odd(&elem->y) ? SECP256K1_TAG_PUBKEY_ODD : SECP256K1_TAG_PUBKEY_EVEN;
-    secp256k1_fe_get_b32(&pub33[1], &elem->x);
+    nostr_native_secp256k1_fe_normalize_var(&elem->x);
+    nostr_native_secp256k1_fe_normalize_var(&elem->y);
+    pub33[0] = nostr_native_secp256k1_fe_is_odd(&elem->y) ? SECP256K1_TAG_PUBKEY_ODD : SECP256K1_TAG_PUBKEY_EVEN;
+    nostr_native_secp256k1_fe_get_b32(&pub33[1], &elem->x);
 }
 
-static void secp256k1_eckey_pubkey_serialize65(secp256k1_ge *elem, unsigned char *pub65) {
-    VERIFY_CHECK(!secp256k1_ge_is_infinity(elem));
+static void nostr_native_secp256k1_eckey_pubkey_serialize65(nostr_native_secp256k1_ge *elem, unsigned char *pub65) {
+    VERIFY_CHECK(!nostr_native_secp256k1_ge_is_infinity(elem));
 
-    secp256k1_fe_normalize_var(&elem->x);
-    secp256k1_fe_normalize_var(&elem->y);
+    nostr_native_secp256k1_fe_normalize_var(&elem->x);
+    nostr_native_secp256k1_fe_normalize_var(&elem->y);
     pub65[0] = SECP256K1_TAG_PUBKEY_UNCOMPRESSED;
-    secp256k1_fe_get_b32(&pub65[1], &elem->x);
-    secp256k1_fe_get_b32(&pub65[33], &elem->y);
+    nostr_native_secp256k1_fe_get_b32(&pub65[1], &elem->x);
+    nostr_native_secp256k1_fe_get_b32(&pub65[33], &elem->y);
 }
 
-static int secp256k1_eckey_privkey_tweak_add(secp256k1_scalar *key, const secp256k1_scalar *tweak) {
-    secp256k1_scalar_add(key, key, tweak);
-    return !secp256k1_scalar_is_zero(key);
+static int nostr_native_secp256k1_eckey_privkey_tweak_add(nostr_native_secp256k1_scalar *key, const nostr_native_secp256k1_scalar *tweak) {
+    nostr_native_secp256k1_scalar_add(key, key, tweak);
+    return !nostr_native_secp256k1_scalar_is_zero(key);
 }
 
-static int secp256k1_eckey_pubkey_tweak_add(secp256k1_ge *key, const secp256k1_scalar *tweak) {
-    secp256k1_gej pt;
-    secp256k1_gej_set_ge(&pt, key);
-    secp256k1_ecmult(&pt, &pt, &secp256k1_scalar_one, tweak);
+static int nostr_native_secp256k1_eckey_pubkey_tweak_add(nostr_native_secp256k1_ge *key, const nostr_native_secp256k1_scalar *tweak) {
+    nostr_native_secp256k1_gej pt;
+    nostr_native_secp256k1_gej_set_ge(&pt, key);
+    nostr_native_secp256k1_ecmult(&pt, &pt, &nostr_native_secp256k1_scalar_one, tweak);
 
-    if (secp256k1_gej_is_infinity(&pt)) {
+    if (nostr_native_secp256k1_gej_is_infinity(&pt)) {
         return 0;
     }
-    secp256k1_ge_set_gej(key, &pt);
+    nostr_native_secp256k1_ge_set_gej(key, &pt);
     return 1;
 }
 
-static int secp256k1_eckey_privkey_tweak_mul(secp256k1_scalar *key, const secp256k1_scalar *tweak) {
+static int nostr_native_secp256k1_eckey_privkey_tweak_mul(nostr_native_secp256k1_scalar *key, const nostr_native_secp256k1_scalar *tweak) {
     int ret;
-    ret = !secp256k1_scalar_is_zero(tweak);
+    ret = !nostr_native_secp256k1_scalar_is_zero(tweak);
 
-    secp256k1_scalar_mul(key, key, tweak);
+    nostr_native_secp256k1_scalar_mul(key, key, tweak);
     return ret;
 }
 
-static int secp256k1_eckey_pubkey_tweak_mul(secp256k1_ge *key, const secp256k1_scalar *tweak) {
-    secp256k1_gej pt;
-    if (secp256k1_scalar_is_zero(tweak)) {
+static int nostr_native_secp256k1_eckey_pubkey_tweak_mul(nostr_native_secp256k1_ge *key, const nostr_native_secp256k1_scalar *tweak) {
+    nostr_native_secp256k1_gej pt;
+    if (nostr_native_secp256k1_scalar_is_zero(tweak)) {
         return 0;
     }
 
-    secp256k1_gej_set_ge(&pt, key);
-    secp256k1_ecmult(&pt, &pt, tweak, NULL);
-    secp256k1_ge_set_gej(key, &pt);
+    nostr_native_secp256k1_gej_set_ge(&pt, key);
+    nostr_native_secp256k1_ecmult(&pt, &pt, tweak, NULL);
+    nostr_native_secp256k1_ge_set_gej(key, &pt);
     return 1;
 }
 

@@ -5,6 +5,16 @@
  * extrakeys and schnorrsig modules, precomputed tables). Tests, benches, table generators,
  * assembly, build files, and unused modules are dropped — upgrading the pinned version is a single
  * reviewed diff of this script's output.
+ *
+ * After copying, every `secp256k1_` identifier in the vendored sources is renamed to
+ * `nostr_native_secp256k1_` (public API, internal objects like `secp256k1_context_static`, and the
+ * precomputed tables alike): React Native pods are statically linked into one binary, so an
+ * unprefixed copy collides with any other pod embedding libsecp256k1 — duplicate-symbol link
+ * errors, or worse, silent binding to the other version when only one archive member is pulled.
+ * Hidden visibility does not prevent that (hidden symbols still collide in a static link), so the
+ * vendored copy must not export `secp256k1_*` at all. Same approach as rust-secp256k1's vendoring.
+ * `#include` lines keep their spelling so file names (`secp256k1_extrakeys.h`, `secp256k1.c`, …)
+ * stay resolvable; `SECP256K1_*` macro names are uppercase and untouched.
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -13,6 +23,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -82,6 +93,39 @@ function copyFiltered(srcDir: string, destDir: string, rel: string): number {
   return copied;
 }
 
+/**
+ * Rename `secp256k1_` to `nostr_native_secp256k1_` in every vendored .c/.h (see the header
+ * comment). Lines starting with `#include` are left alone so the unchanged file names keep
+ * resolving.
+ */
+function namespaceSymbols(dir: string): number {
+  let rewritten = 0;
+  for (const name of readdirSync(dir)) {
+    const child = join(dir, name);
+    if (statSync(child).isDirectory()) {
+      rewritten += namespaceSymbols(child);
+      continue;
+    }
+    if (!/\.[ch]$/.test(name)) {
+      continue;
+    }
+    const source = readFileSync(child, "utf8");
+    const namespaced = source
+      .split("\n")
+      .map((line) =>
+        line.trimStart().startsWith("#include")
+          ? line
+          : line.replaceAll("secp256k1_", "nostr_native_secp256k1_"),
+      )
+      .join("\n");
+    if (namespaced !== source) {
+      writeFileSync(child, namespaced);
+      rewritten += 1;
+    }
+  }
+  return rewritten;
+}
+
 async function main(): Promise<void> {
   const response = await fetch(TARBALL_URL);
   if (!response.ok) {
@@ -109,6 +153,7 @@ async function main(): Promise<void> {
       recursive: true,
     });
     const copied = copyFiltered(join(extracted, "src"), join(vendorDir, "src"), "");
+    const namespaced = namespaceSymbols(vendorDir);
 
     writeFileSync(
       join(vendorDir, "vendored.json"),
@@ -119,7 +164,8 @@ async function main(): Promise<void> {
       )}\n`,
     );
     console.log(
-      `vendored secp256k1 v${VERSION}: ${copied} src files + include/ + COPYING → ${vendorDir}`,
+      `vendored secp256k1 v${VERSION}: ${copied} src files + include/ + COPYING, ` +
+        `${namespaced} files namespaced to nostr_native_secp256k1_* → ${vendorDir}`,
     );
   } finally {
     rmSync(work, { recursive: true, force: true });

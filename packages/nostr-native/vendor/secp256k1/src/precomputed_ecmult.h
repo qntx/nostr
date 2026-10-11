@@ -25,12 +25,12 @@ extern "C" {
 #    else
 #        error No known generator for the specified exhaustive test group order.
 #    endif
-static secp256k1_ge_storage secp256k1_pre_g[ECMULT_TABLE_SIZE(WINDOW_G)];
-static secp256k1_ge_storage secp256k1_pre_g_128[ECMULT_TABLE_SIZE(WINDOW_G)];
+static nostr_native_secp256k1_ge_storage nostr_native_secp256k1_pre_g[ECMULT_TABLE_SIZE(WINDOW_G)];
+static nostr_native_secp256k1_ge_storage nostr_native_secp256k1_pre_g_128[ECMULT_TABLE_SIZE(WINDOW_G)];
 #else /* !defined(EXHAUSTIVE_TEST_ORDER) */
 #    define WINDOW_G ECMULT_WINDOW_SIZE
-SECP256K1_LOCAL_VAR const secp256k1_ge_storage secp256k1_pre_g[ECMULT_TABLE_SIZE(WINDOW_G)];
-SECP256K1_LOCAL_VAR const secp256k1_ge_storage secp256k1_pre_g_128[ECMULT_TABLE_SIZE(WINDOW_G)];
+SECP256K1_LOCAL_VAR const nostr_native_secp256k1_ge_storage nostr_native_secp256k1_pre_g[ECMULT_TABLE_SIZE(WINDOW_G)];
+SECP256K1_LOCAL_VAR const nostr_native_secp256k1_ge_storage nostr_native_secp256k1_pre_g_128[ECMULT_TABLE_SIZE(WINDOW_G)];
 #endif /* defined(EXHAUSTIVE_TEST_ORDER) */
 
 #ifdef __cplusplus

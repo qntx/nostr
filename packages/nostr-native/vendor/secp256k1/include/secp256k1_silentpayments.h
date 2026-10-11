@@ -46,11 +46,11 @@ extern "C" {
  *  `unlabeled_spend_pubkey` is used to indicate when the unlabeled spend public key
  *  must be used.
  */
-typedef struct secp256k1_silentpayments_recipient {
-    secp256k1_pubkey scan_pubkey;
-    secp256k1_pubkey spend_pubkey;
+typedef struct nostr_native_secp256k1_silentpayments_recipient {
+    nostr_native_secp256k1_pubkey scan_pubkey;
+    nostr_native_secp256k1_pubkey spend_pubkey;
     size_t index;
-} secp256k1_silentpayments_recipient;
+} nostr_native_secp256k1_silentpayments_recipient;
 
 /** Create Silent Payments outputs for recipient(s).
  *
@@ -85,13 +85,13 @@ typedef struct secp256k1_silentpayments_recipient {
  *               adversarially chosen recipient spend public key.)
  *
  *  Args:                ctx: pointer to a context object
- *                            (not secp256k1_context_static).
+ *                            (not nostr_native_secp256k1_context_static).
  *  Out:   generated_outputs: pointer to an array of pointers to xonly public keys,
  *                            one per recipient.
  *                            The outputs are ordered to match the original
  *                            ordering of the recipient objects, i.e.,
  *                            `generated_outputs[0]` is the generated output
- *                            for the `secp256k1_silentpayments_recipient` object
+ *                            for the `nostr_native_secp256k1_silentpayments_recipient` object
  *                            with index = 0.
  *  In:           recipients: pointer to an array of pointers to Silent Payments
  *                            recipients, where each recipient is a scan public
@@ -117,13 +117,13 @@ typedef struct secp256k1_silentpayments_recipient {
  *                            used)
  *                 n_seckeys: the size of the seckeys array.
  */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_sender_create_outputs(
-    const secp256k1_context *ctx,
-    secp256k1_xonly_pubkey **generated_outputs,
-    const secp256k1_silentpayments_recipient **recipients,
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int nostr_native_secp256k1_silentpayments_sender_create_outputs(
+    const nostr_native_secp256k1_context *ctx,
+    nostr_native_secp256k1_xonly_pubkey **generated_outputs,
+    const nostr_native_secp256k1_silentpayments_recipient **recipients,
     size_t n_recipients,
     const unsigned char *outpoint_smallest36,
-    const secp256k1_keypair * const *keypairs,
+    const nostr_native_secp256k1_keypair * const *keypairs,
     size_t n_keypairs,
     const unsigned char * const *seckeys,
     size_t n_seckeys
@@ -132,12 +132,12 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_sender_c
 /** Opaque data structure that holds a Silent Payments label.
  *
  *  Guaranteed to be 68 bytes in size. Serialized and parsed with
- *  `secp256k1_silentpayments_recipient_label_serialize` and
- *  `secp256k1_silentpayments_recipient_label_parse`.
+ *  `nostr_native_secp256k1_silentpayments_recipient_label_serialize` and
+ *  `nostr_native_secp256k1_silentpayments_recipient_label_parse`.
  */
-typedef struct secp256k1_silentpayments_label {
+typedef struct nostr_native_secp256k1_silentpayments_label {
     unsigned char data[68];
-} secp256k1_silentpayments_label;
+} nostr_native_secp256k1_silentpayments_label;
 
 /** Parse a Silent Payments label.
  *
@@ -146,9 +146,9 @@ typedef struct secp256k1_silentpayments_label {
  *  Out:   label: pointer to a label object
  *  In:     in33: pointer to the 33-byte label to be parsed
  */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_label_parse(
-    const secp256k1_context *ctx,
-    secp256k1_silentpayments_label *label,
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int nostr_native_secp256k1_silentpayments_recipient_label_parse(
+    const nostr_native_secp256k1_context *ctx,
+    nostr_native_secp256k1_silentpayments_label *label,
     const unsigned char *in33
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
@@ -159,10 +159,10 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
  *  Out:   out33: pointer to a 33-byte array to store the serialized label
  *  In:    label: pointer to the label
  */
-SECP256K1_API int secp256k1_silentpayments_recipient_label_serialize(
-    const secp256k1_context *ctx,
+SECP256K1_API int nostr_native_secp256k1_silentpayments_recipient_label_serialize(
+    const nostr_native_secp256k1_context *ctx,
     unsigned char *out33,
-    const secp256k1_silentpayments_label *label
+    const nostr_native_secp256k1_silentpayments_label *label
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
 /** Create Silent Payments label tweak and label.
@@ -188,15 +188,15 @@ SECP256K1_API int secp256k1_silentpayments_recipient_label_serialize(
  * the change label (m = 0) and avoid distributing labeled addresses.
  *
  *  Args:                ctx: pointer to a context object
- *                            (not secp256k1_context_static)
+ *                            (not nostr_native_secp256k1_context_static)
  *  Out:               label: pointer to the resulting label
  *             label_tweak32: pointer to the 32 byte label tweak
  *  In:           scan_key32: pointer to the recipient's 32 byte scan key
  *                         m: integer for the m-th label (0 is used for change outputs)
  */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_label_create(
-    const secp256k1_context *ctx,
-    secp256k1_silentpayments_label *label,
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int nostr_native_secp256k1_silentpayments_recipient_label_create(
+    const nostr_native_secp256k1_context *ctx,
+    nostr_native_secp256k1_silentpayments_label *label,
     unsigned char *label_tweak32,
     const unsigned char *scan_key32,
     uint32_t m
@@ -222,11 +222,11 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
  *  In:   unlabeled_spend_pubkey: pointer to the recipient's unlabeled spend public key
  *                         label: pointer to the recipient's label
  */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_create_labeled_spend_pubkey(
-    const secp256k1_context *ctx,
-    secp256k1_pubkey *labeled_spend_pubkey,
-    const secp256k1_pubkey *unlabeled_spend_pubkey,
-    const secp256k1_silentpayments_label *label
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int nostr_native_secp256k1_silentpayments_recipient_create_labeled_spend_pubkey(
+    const nostr_native_secp256k1_context *ctx,
+    nostr_native_secp256k1_pubkey *labeled_spend_pubkey,
+    const nostr_native_secp256k1_pubkey *unlabeled_spend_pubkey,
+    const nostr_native_secp256k1_silentpayments_label *label
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
 
 /** Opaque data structure that holds Silent Payments prevouts summary data.
@@ -235,11 +235,11 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
  *  guaranteed to be portable between different platforms or versions. It is
  *  however guaranteed to be 101 bytes in size, and can be safely copied/moved.
  *  This structure does not contain secret data. It can be created with
- *  `secp256k1_silentpayments_recipient_prevouts_summary_create`.
+ *  `nostr_native_secp256k1_silentpayments_recipient_prevouts_summary_create`.
  */
-typedef struct secp256k1_silentpayments_prevouts_summary {
+typedef struct nostr_native_secp256k1_silentpayments_prevouts_summary {
     unsigned char data[101];
-} secp256k1_silentpayments_prevouts_summary;
+} nostr_native_secp256k1_silentpayments_prevouts_summary;
 
 /** Compute Silent Payments prevouts summary from prevout public keys and transaction
  *  inputs.
@@ -277,13 +277,13 @@ typedef struct secp256k1_silentpayments_prevouts_summary {
  *                             inputs are used)
  *                  n_pubkeys: the size of the pubkeys array.
  */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_prevouts_summary_create(
-    const secp256k1_context *ctx,
-    secp256k1_silentpayments_prevouts_summary *prevouts_summary,
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int nostr_native_secp256k1_silentpayments_recipient_prevouts_summary_create(
+    const nostr_native_secp256k1_context *ctx,
+    nostr_native_secp256k1_silentpayments_prevouts_summary *prevouts_summary,
     const unsigned char *outpoint_smallest36,
-    const secp256k1_xonly_pubkey * const *xonly_pubkeys,
+    const nostr_native_secp256k1_xonly_pubkey * const *xonly_pubkeys,
     size_t n_xonly_pubkeys,
-    const secp256k1_pubkey * const *pubkeys,
+    const nostr_native_secp256k1_pubkey * const *pubkeys,
     size_t n_pubkeys
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
@@ -294,8 +294,8 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
  *  key-value store called the "label cache".
  *
  *  For creating the label cache data,
- *  `secp256k1_silentpayments_recipient_label_create` and
- *  `secp256k1_silentpayments_recipient_label_serialize` can be used.
+ *  `nostr_native_secp256k1_silentpayments_recipient_label_create` and
+ *  `nostr_native_secp256k1_silentpayments_recipient_label_serialize` can be used.
  *
  *  Returns: pointer to the 32-byte label tweak if there is a match.
  *           NULL pointer if there is no match.
@@ -304,7 +304,7 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
  *                     (computed during scanning)
  *      label_context: pointer to the recipient's label cache.
  */
-typedef const unsigned char* (*secp256k1_silentpayments_label_lookup)(const unsigned char* label33, const void* label_context);
+typedef const unsigned char* (*nostr_native_secp256k1_silentpayments_label_lookup)(const unsigned char* label33, const void* label_context);
 
 /** Found outputs struct
  *
@@ -317,12 +317,12 @@ typedef const unsigned char* (*secp256k1_silentpayments_label_lookup)(const unsi
  *             label: the label used. If found_with_label = false, this is set to
  *                    an invalid value.
  */
-typedef struct secp256k1_silentpayments_found_output {
-    secp256k1_xonly_pubkey output;
+typedef struct nostr_native_secp256k1_silentpayments_found_output {
+    nostr_native_secp256k1_xonly_pubkey output;
     unsigned char tweak[32];
     int found_with_label;
-    secp256k1_silentpayments_label label;
-} secp256k1_silentpayments_found_output;
+    nostr_native_secp256k1_silentpayments_label label;
+} nostr_native_secp256k1_silentpayments_found_output;
 
 /** Scan for Silent Payments transaction outputs.
  *
@@ -338,8 +338,8 @@ typedef struct secp256k1_silentpayments_found_output {
  *  valid until the next call to `label_lookup` or until the function returns,
  *  whichever comes first. It is not retained beyond that.
  *
- *  For creating the label cache, `secp256k1_silentpayments_recipient_label_create`
- *  and `secp256k1_silentpayments_recipient_label_serialize` can be used.
+ *  For creating the label cache, `nostr_native_secp256k1_silentpayments_recipient_label_create`
+ *  and `nostr_native_secp256k1_silentpayments_recipient_label_serialize` can be used.
  *
  *  Note:
  *  Scanning is bounded by SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT and may
@@ -363,9 +363,9 @@ typedef struct secp256k1_silentpayments_found_output {
  *                               in their original transaction (vout) order
  *                 n_tx_outputs: the size of the tx_outputs array.
  *                   scan_key32: pointer to the recipient's 32 byte scan key. The scan
- *                               key is valid if it passes secp256k1_ec_seckey_verify
+ *                               key is valid if it passes nostr_native_secp256k1_ec_seckey_verify
  *             prevouts_summary: pointer to the transaction prevouts summary data (see
- *                               `secp256k1_silentpayments_recipient_prevouts_summary_create`).
+ *                               `nostr_native_secp256k1_silentpayments_recipient_prevouts_summary_create`).
  *       unlabeled_spend_pubkey: pointer to the recipient's unlabeled spend public key
  *                 label_lookup: pointer to a callback function for looking up
  *                               a label value. This function takes a serialized 33-byte
@@ -376,16 +376,16 @@ typedef struct secp256k1_silentpayments_found_output {
  *                label_context: pointer to a label context object (NULL if
  *                               labels are not used or context is not needed)
  */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_scan_outputs(
-    const secp256k1_context *ctx,
-    secp256k1_silentpayments_found_output **found_outputs,
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int nostr_native_secp256k1_silentpayments_recipient_scan_outputs(
+    const nostr_native_secp256k1_context *ctx,
+    nostr_native_secp256k1_silentpayments_found_output **found_outputs,
     uint32_t *n_found_outputs,
-    const secp256k1_xonly_pubkey * const *tx_outputs,
+    const nostr_native_secp256k1_xonly_pubkey * const *tx_outputs,
     size_t n_tx_outputs,
     const unsigned char *scan_key32,
-    const secp256k1_silentpayments_prevouts_summary *prevouts_summary,
-    const secp256k1_pubkey *unlabeled_spend_pubkey,
-    secp256k1_silentpayments_label_lookup label_lookup,
+    const nostr_native_secp256k1_silentpayments_prevouts_summary *prevouts_summary,
+    const nostr_native_secp256k1_pubkey *unlabeled_spend_pubkey,
+    nostr_native_secp256k1_silentpayments_label_lookup label_lookup,
     const void *label_context
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4) SECP256K1_ARG_NONNULL(6) SECP256K1_ARG_NONNULL(7) SECP256K1_ARG_NONNULL(8);
 

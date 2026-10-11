@@ -298,6 +298,62 @@ function generateVectors(): string {
   ].join("\n");
 }
 
+function basename(path: string): string {
+  return path.split("/").pop() ?? path;
+}
+
+/**
+ * Symbol guard: React Native pods are statically linked into one binary, so the module must not
+ * export unprefixed `secp256k1_*` symbols — they would collide with any other pod embedding
+ * libsecp256k1 (the vendor script namespaces every identifier to `nostr_native_secp256k1_`).
+ * Compiles the production configuration (no NOSTR_NATIVE_TEST, same -D module flags) of every
+ * native translation unit and fails if a defined external symbol lacks the `nostr_native_` prefix.
+ */
+function checkSymbolNamespace(buildDir: string): void {
+  const sources = [
+    join(packageDir, "cpp", "nostr_native.c"),
+    join(packageDir, "vendor/secp256k1/src/precomputed_ecmult.c"),
+    join(packageDir, "vendor/secp256k1/src/precomputed_ecmult_gen.c"),
+  ];
+  const offenders: string[] = [];
+  let exported = 0;
+  for (const source of sources) {
+    const object = join(buildDir, `${basename(source)}.o`);
+    execFileSync("cc", [
+      "-std=c11",
+      "-O1",
+      "-c",
+      "-D_DEFAULT_SOURCE",
+      "-DENABLE_MODULE_EXTRAKEYS",
+      "-DENABLE_MODULE_SCHNORRSIG",
+      `-I${join(packageDir, "cpp")}`,
+      `-I${join(packageDir, "vendor/secp256k1/include")}`,
+      `-I${join(packageDir, "vendor/secp256k1/src")}`,
+      source,
+      "-o",
+      object,
+    ]);
+    // nm -g -P prints "name type value" identically on GNU and macOS/llvm nm.
+    const listing = execFileSync("nm", ["-g", "-P", object], { encoding: "utf8" });
+    for (const row of listing.split("\n")) {
+      const [raw, type] = row.split(/\s+/);
+      if (raw === undefined || raw === "" || type === "U") {
+        continue; // blank row or undefined symbol
+      }
+      // Mach-O prefixes C symbols with one leading underscore.
+      const name = process.platform === "darwin" && raw.startsWith("_") ? raw.slice(1) : raw;
+      exported += 1;
+      if (!name.startsWith("nostr_native_")) {
+        offenders.push(`${name} (${basename(source)})`);
+      }
+    }
+  }
+  if (offenders.length > 0) {
+    throw new Error(`exported symbols missing the nostr_native_ prefix: ${offenders.join(", ")}`);
+  }
+  console.log(`symbol guard: ${exported} exported symbols checked, all nostr_native_*`);
+}
+
 function main(): void {
   const header = generateVectors();
   const headerPath = join(hostDir, "vectors.generated.h");
@@ -307,6 +363,7 @@ function main(): void {
   );
 
   const buildDir = mkdtempSync(join(tmpdir(), "nostr-native-host-"));
+  checkSymbolNamespace(buildDir);
   const binary = join(buildDir, "host-test");
   execFileSync(
     "cc",

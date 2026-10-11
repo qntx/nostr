@@ -29,7 +29,7 @@
 #define SECP256K1_N_H_2 ((uint64_t)0xFFFFFFFFFFFFFFFFULL)
 #define SECP256K1_N_H_3 ((uint64_t)0x7FFFFFFFFFFFFFFFULL)
 
-SECP256K1_INLINE static void secp256k1_scalar_set_int(secp256k1_scalar *r, unsigned int v) {
+SECP256K1_INLINE static void nostr_native_secp256k1_scalar_set_int(nostr_native_secp256k1_scalar *r, unsigned int v) {
     r->d[0] = v;
     r->d[1] = 0;
     r->d[2] = 0;
@@ -38,7 +38,7 @@ SECP256K1_INLINE static void secp256k1_scalar_set_int(secp256k1_scalar *r, unsig
     SECP256K1_SCALAR_VERIFY(r);
 }
 
-SECP256K1_INLINE static uint32_t secp256k1_scalar_get_bits_limb32(const secp256k1_scalar *a, unsigned int offset, unsigned int count) {
+SECP256K1_INLINE static uint32_t nostr_native_secp256k1_scalar_get_bits_limb32(const nostr_native_secp256k1_scalar *a, unsigned int offset, unsigned int count) {
     SECP256K1_SCALAR_VERIFY(a);
     VERIFY_CHECK(count > 0 && count <= 32);
     VERIFY_CHECK(offset <= 256 - count);
@@ -47,7 +47,7 @@ SECP256K1_INLINE static uint32_t secp256k1_scalar_get_bits_limb32(const secp256k
     return (a->d[offset >> 6] >> (offset & 0x3F)) & (0xFFFFFFFF >> (32 - count));
 }
 
-SECP256K1_INLINE static uint32_t secp256k1_scalar_get_bits_var(const secp256k1_scalar *a, unsigned int offset, unsigned int count) {
+SECP256K1_INLINE static uint32_t nostr_native_secp256k1_scalar_get_bits_var(const nostr_native_secp256k1_scalar *a, unsigned int offset, unsigned int count) {
     SECP256K1_SCALAR_VERIFY(a);
     VERIFY_CHECK(count > 0 && count <= 32);
     VERIFY_CHECK(offset <= 256 - count);
@@ -61,7 +61,7 @@ SECP256K1_INLINE static uint32_t secp256k1_scalar_get_bits_var(const secp256k1_s
     }
 }
 
-SECP256K1_INLINE static int secp256k1_scalar_check_overflow(const secp256k1_scalar *a) {
+SECP256K1_INLINE static int nostr_native_secp256k1_scalar_check_overflow(const nostr_native_secp256k1_scalar *a) {
     int yes = 0;
     int no = 0;
     no |= (a->d[3] < SECP256K1_N_3); /* No need for a > check. */
@@ -73,84 +73,84 @@ SECP256K1_INLINE static int secp256k1_scalar_check_overflow(const secp256k1_scal
     return yes;
 }
 
-SECP256K1_INLINE static int secp256k1_scalar_reduce(secp256k1_scalar *r, unsigned int overflow) {
-    secp256k1_uint128 t;
+SECP256K1_INLINE static int nostr_native_secp256k1_scalar_reduce(nostr_native_secp256k1_scalar *r, unsigned int overflow) {
+    nostr_native_secp256k1_uint128 t;
     VERIFY_CHECK(overflow <= 1);
 
-    secp256k1_u128_from_u64(&t, r->d[0]);
-    secp256k1_u128_accum_u64(&t, overflow * SECP256K1_N_C_0);
-    r->d[0] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, r->d[1]);
-    secp256k1_u128_accum_u64(&t, overflow * SECP256K1_N_C_1);
-    r->d[1] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, r->d[2]);
-    secp256k1_u128_accum_u64(&t, overflow * SECP256K1_N_C_2);
-    r->d[2] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, r->d[3]);
-    r->d[3] = secp256k1_u128_to_u64(&t);
+    nostr_native_secp256k1_u128_from_u64(&t, r->d[0]);
+    nostr_native_secp256k1_u128_accum_u64(&t, overflow * SECP256K1_N_C_0);
+    r->d[0] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, r->d[1]);
+    nostr_native_secp256k1_u128_accum_u64(&t, overflow * SECP256K1_N_C_1);
+    r->d[1] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, r->d[2]);
+    nostr_native_secp256k1_u128_accum_u64(&t, overflow * SECP256K1_N_C_2);
+    r->d[2] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, r->d[3]);
+    r->d[3] = nostr_native_secp256k1_u128_to_u64(&t);
 
     SECP256K1_SCALAR_VERIFY(r);
     return overflow;
 }
 
-static int secp256k1_scalar_add(secp256k1_scalar *r, const secp256k1_scalar *a, const secp256k1_scalar *b) {
+static int nostr_native_secp256k1_scalar_add(nostr_native_secp256k1_scalar *r, const nostr_native_secp256k1_scalar *a, const nostr_native_secp256k1_scalar *b) {
     int overflow;
-    secp256k1_uint128 t;
+    nostr_native_secp256k1_uint128 t;
     SECP256K1_SCALAR_VERIFY(a);
     SECP256K1_SCALAR_VERIFY(b);
 
-    secp256k1_u128_from_u64(&t, a->d[0]);
-    secp256k1_u128_accum_u64(&t, b->d[0]);
-    r->d[0] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, a->d[1]);
-    secp256k1_u128_accum_u64(&t, b->d[1]);
-    r->d[1] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, a->d[2]);
-    secp256k1_u128_accum_u64(&t, b->d[2]);
-    r->d[2] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, a->d[3]);
-    secp256k1_u128_accum_u64(&t, b->d[3]);
-    r->d[3] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    overflow = secp256k1_u128_to_u64(&t) + secp256k1_scalar_check_overflow(r);
+    nostr_native_secp256k1_u128_from_u64(&t, a->d[0]);
+    nostr_native_secp256k1_u128_accum_u64(&t, b->d[0]);
+    r->d[0] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, a->d[1]);
+    nostr_native_secp256k1_u128_accum_u64(&t, b->d[1]);
+    r->d[1] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, a->d[2]);
+    nostr_native_secp256k1_u128_accum_u64(&t, b->d[2]);
+    r->d[2] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, a->d[3]);
+    nostr_native_secp256k1_u128_accum_u64(&t, b->d[3]);
+    r->d[3] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    overflow = nostr_native_secp256k1_u128_to_u64(&t) + nostr_native_secp256k1_scalar_check_overflow(r);
     VERIFY_CHECK(overflow == 0 || overflow == 1);
-    secp256k1_scalar_reduce(r, overflow);
+    nostr_native_secp256k1_scalar_reduce(r, overflow);
 
     SECP256K1_SCALAR_VERIFY(r);
     return overflow;
 }
 
-static void secp256k1_scalar_cadd_bit(secp256k1_scalar *r, unsigned int bit, int flag) {
-    secp256k1_uint128 t;
+static void nostr_native_secp256k1_scalar_cadd_bit(nostr_native_secp256k1_scalar *r, unsigned int bit, int flag) {
+    nostr_native_secp256k1_uint128 t;
     volatile int vflag = flag;
     VERIFY_CHECK(flag == 0 || flag == 1);
     SECP256K1_SCALAR_VERIFY(r);
     VERIFY_CHECK(bit < 256);
 
     bit += ((uint32_t) vflag - 1) & 0x100;  /* forcing (bit >> 6) > 3 makes this a noop */
-    secp256k1_u128_from_u64(&t, r->d[0]);
-    secp256k1_u128_accum_u64(&t, ((uint64_t)((bit >> 6) == 0)) << (bit & 0x3F));
-    r->d[0] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, r->d[1]);
-    secp256k1_u128_accum_u64(&t, ((uint64_t)((bit >> 6) == 1)) << (bit & 0x3F));
-    r->d[1] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, r->d[2]);
-    secp256k1_u128_accum_u64(&t, ((uint64_t)((bit >> 6) == 2)) << (bit & 0x3F));
-    r->d[2] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, r->d[3]);
-    secp256k1_u128_accum_u64(&t, ((uint64_t)((bit >> 6) == 3)) << (bit & 0x3F));
-    r->d[3] = secp256k1_u128_to_u64(&t);
+    nostr_native_secp256k1_u128_from_u64(&t, r->d[0]);
+    nostr_native_secp256k1_u128_accum_u64(&t, ((uint64_t)((bit >> 6) == 0)) << (bit & 0x3F));
+    r->d[0] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, r->d[1]);
+    nostr_native_secp256k1_u128_accum_u64(&t, ((uint64_t)((bit >> 6) == 1)) << (bit & 0x3F));
+    r->d[1] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, r->d[2]);
+    nostr_native_secp256k1_u128_accum_u64(&t, ((uint64_t)((bit >> 6) == 2)) << (bit & 0x3F));
+    r->d[2] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, r->d[3]);
+    nostr_native_secp256k1_u128_accum_u64(&t, ((uint64_t)((bit >> 6) == 3)) << (bit & 0x3F));
+    r->d[3] = nostr_native_secp256k1_u128_to_u64(&t);
 
     SECP256K1_SCALAR_VERIFY(r);
-    VERIFY_CHECK(secp256k1_u128_hi_u64(&t) == 0);
+    VERIFY_CHECK(nostr_native_secp256k1_u128_hi_u64(&t) == 0);
 }
 
-static void secp256k1_scalar_set_b32(secp256k1_scalar *r, const unsigned char *b32, int *overflow) {
+static void nostr_native_secp256k1_scalar_set_b32(nostr_native_secp256k1_scalar *r, const unsigned char *b32, int *overflow) {
     int over;
-    r->d[0] = secp256k1_read_be64(&b32[24]);
-    r->d[1] = secp256k1_read_be64(&b32[16]);
-    r->d[2] = secp256k1_read_be64(&b32[8]);
-    r->d[3] = secp256k1_read_be64(&b32[0]);
-    over = secp256k1_scalar_reduce(r, secp256k1_scalar_check_overflow(r));
+    r->d[0] = nostr_native_secp256k1_read_be64(&b32[24]);
+    r->d[1] = nostr_native_secp256k1_read_be64(&b32[16]);
+    r->d[2] = nostr_native_secp256k1_read_be64(&b32[8]);
+    r->d[3] = nostr_native_secp256k1_read_be64(&b32[0]);
+    over = nostr_native_secp256k1_scalar_reduce(r, nostr_native_secp256k1_scalar_check_overflow(r));
     if (overflow) {
         *overflow = over;
     }
@@ -158,43 +158,43 @@ static void secp256k1_scalar_set_b32(secp256k1_scalar *r, const unsigned char *b
     SECP256K1_SCALAR_VERIFY(r);
 }
 
-static void secp256k1_scalar_get_b32(unsigned char *bin, const secp256k1_scalar* a) {
+static void nostr_native_secp256k1_scalar_get_b32(unsigned char *bin, const nostr_native_secp256k1_scalar* a) {
     SECP256K1_SCALAR_VERIFY(a);
 
-    secp256k1_write_be64(&bin[0],  a->d[3]);
-    secp256k1_write_be64(&bin[8],  a->d[2]);
-    secp256k1_write_be64(&bin[16], a->d[1]);
-    secp256k1_write_be64(&bin[24], a->d[0]);
+    nostr_native_secp256k1_write_be64(&bin[0],  a->d[3]);
+    nostr_native_secp256k1_write_be64(&bin[8],  a->d[2]);
+    nostr_native_secp256k1_write_be64(&bin[16], a->d[1]);
+    nostr_native_secp256k1_write_be64(&bin[24], a->d[0]);
 }
 
-SECP256K1_INLINE static int secp256k1_scalar_is_zero(const secp256k1_scalar *a) {
+SECP256K1_INLINE static int nostr_native_secp256k1_scalar_is_zero(const nostr_native_secp256k1_scalar *a) {
     SECP256K1_SCALAR_VERIFY(a);
 
     return (a->d[0] | a->d[1] | a->d[2] | a->d[3]) == 0;
 }
 
-static void secp256k1_scalar_negate(secp256k1_scalar *r, const secp256k1_scalar *a) {
-    uint64_t nonzero = 0xFFFFFFFFFFFFFFFFULL * (secp256k1_scalar_is_zero(a) == 0);
-    secp256k1_uint128 t;
+static void nostr_native_secp256k1_scalar_negate(nostr_native_secp256k1_scalar *r, const nostr_native_secp256k1_scalar *a) {
+    uint64_t nonzero = 0xFFFFFFFFFFFFFFFFULL * (nostr_native_secp256k1_scalar_is_zero(a) == 0);
+    nostr_native_secp256k1_uint128 t;
     SECP256K1_SCALAR_VERIFY(a);
 
-    secp256k1_u128_from_u64(&t, ~a->d[0]);
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_0 + 1);
-    r->d[0] = secp256k1_u128_to_u64(&t) & nonzero; secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, ~a->d[1]);
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_1);
-    r->d[1] = secp256k1_u128_to_u64(&t) & nonzero; secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, ~a->d[2]);
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_2);
-    r->d[2] = secp256k1_u128_to_u64(&t) & nonzero; secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, ~a->d[3]);
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_3);
-    r->d[3] = secp256k1_u128_to_u64(&t) & nonzero;
+    nostr_native_secp256k1_u128_from_u64(&t, ~a->d[0]);
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_0 + 1);
+    r->d[0] = nostr_native_secp256k1_u128_to_u64(&t) & nonzero; nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, ~a->d[1]);
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_1);
+    r->d[1] = nostr_native_secp256k1_u128_to_u64(&t) & nonzero; nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, ~a->d[2]);
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_2);
+    r->d[2] = nostr_native_secp256k1_u128_to_u64(&t) & nonzero; nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, ~a->d[3]);
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_3);
+    r->d[3] = nostr_native_secp256k1_u128_to_u64(&t) & nonzero;
 
     SECP256K1_SCALAR_VERIFY(r);
 }
 
-static void secp256k1_scalar_half(secp256k1_scalar *r, const secp256k1_scalar *a) {
+static void nostr_native_secp256k1_scalar_half(nostr_native_secp256k1_scalar *r, const nostr_native_secp256k1_scalar *a) {
     /* Writing `/` for field division and `//` for integer division, we compute
      *
      *   a/2 = (a - (a&1))/2 + (a&1)/2
@@ -210,38 +210,38 @@ static void secp256k1_scalar_half(secp256k1_scalar *r, const secp256k1_scalar *a
      * Together they sum to (n-3)//2 + (n+1)//2 = (2n-2)//2 = n - 1, which is less than n.
      */
     uint64_t mask = -(uint64_t)(a->d[0] & 1U);
-    secp256k1_uint128 t;
+    nostr_native_secp256k1_uint128 t;
     SECP256K1_SCALAR_VERIFY(a);
 
-    secp256k1_u128_from_u64(&t, (a->d[0] >> 1) | (a->d[1] << 63));
-    secp256k1_u128_accum_u64(&t, (SECP256K1_N_H_0 + 1U) & mask);
-    r->d[0] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, (a->d[1] >> 1) | (a->d[2] << 63));
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_H_1 & mask);
-    r->d[1] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, (a->d[2] >> 1) | (a->d[3] << 63));
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_H_2 & mask);
-    r->d[2] = secp256k1_u128_to_u64(&t); secp256k1_u128_rshift(&t, 64);
-    r->d[3] = secp256k1_u128_to_u64(&t) + (a->d[3] >> 1) + (SECP256K1_N_H_3 & mask);
+    nostr_native_secp256k1_u128_from_u64(&t, (a->d[0] >> 1) | (a->d[1] << 63));
+    nostr_native_secp256k1_u128_accum_u64(&t, (SECP256K1_N_H_0 + 1U) & mask);
+    r->d[0] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, (a->d[1] >> 1) | (a->d[2] << 63));
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_H_1 & mask);
+    r->d[1] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, (a->d[2] >> 1) | (a->d[3] << 63));
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_H_2 & mask);
+    r->d[2] = nostr_native_secp256k1_u128_to_u64(&t); nostr_native_secp256k1_u128_rshift(&t, 64);
+    r->d[3] = nostr_native_secp256k1_u128_to_u64(&t) + (a->d[3] >> 1) + (SECP256K1_N_H_3 & mask);
 #ifdef VERIFY
     /* The line above only computed the bottom 64 bits of r->d[3]; redo the computation
      * in full 128 bits to make sure the top 64 bits are indeed zero. */
-    secp256k1_u128_accum_u64(&t, a->d[3] >> 1);
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_H_3 & mask);
-    secp256k1_u128_rshift(&t, 64);
-    VERIFY_CHECK(secp256k1_u128_to_u64(&t) == 0);
+    nostr_native_secp256k1_u128_accum_u64(&t, a->d[3] >> 1);
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_H_3 & mask);
+    nostr_native_secp256k1_u128_rshift(&t, 64);
+    VERIFY_CHECK(nostr_native_secp256k1_u128_to_u64(&t) == 0);
 
     SECP256K1_SCALAR_VERIFY(r);
 #endif
 }
 
-SECP256K1_INLINE static int secp256k1_scalar_is_one(const secp256k1_scalar *a) {
+SECP256K1_INLINE static int nostr_native_secp256k1_scalar_is_one(const nostr_native_secp256k1_scalar *a) {
     SECP256K1_SCALAR_VERIFY(a);
 
     return ((a->d[0] ^ 1) | a->d[1] | a->d[2] | a->d[3]) == 0;
 }
 
-static int secp256k1_scalar_is_high(const secp256k1_scalar *a) {
+static int nostr_native_secp256k1_scalar_is_high(const nostr_native_secp256k1_scalar *a) {
     int yes = 0;
     int no = 0;
     SECP256K1_SCALAR_VERIFY(a);
@@ -255,28 +255,28 @@ static int secp256k1_scalar_is_high(const secp256k1_scalar *a) {
     return yes;
 }
 
-static int secp256k1_scalar_cond_negate(secp256k1_scalar *r, int flag) {
+static int nostr_native_secp256k1_scalar_cond_negate(nostr_native_secp256k1_scalar *r, int flag) {
     /* If we are flag = 0, mask = 00...00 and this is a no-op;
-     * if we are flag = 1, mask = 11...11 and this is identical to secp256k1_scalar_negate */
+     * if we are flag = 1, mask = 11...11 and this is identical to nostr_native_secp256k1_scalar_negate */
     volatile int vflag = flag;
     uint64_t mask = -vflag;
-    uint64_t nonzero = (secp256k1_scalar_is_zero(r) != 0) - 1;
-    secp256k1_uint128 t;
+    uint64_t nonzero = (nostr_native_secp256k1_scalar_is_zero(r) != 0) - 1;
+    nostr_native_secp256k1_uint128 t;
     VERIFY_CHECK(flag == 0 || flag == 1);
     SECP256K1_SCALAR_VERIFY(r);
 
-    secp256k1_u128_from_u64(&t, r->d[0] ^ mask);
-    secp256k1_u128_accum_u64(&t, (SECP256K1_N_0 + 1) & mask);
-    r->d[0] = secp256k1_u128_to_u64(&t) & nonzero; secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, r->d[1] ^ mask);
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_1 & mask);
-    r->d[1] = secp256k1_u128_to_u64(&t) & nonzero; secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, r->d[2] ^ mask);
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_2 & mask);
-    r->d[2] = secp256k1_u128_to_u64(&t) & nonzero; secp256k1_u128_rshift(&t, 64);
-    secp256k1_u128_accum_u64(&t, r->d[3] ^ mask);
-    secp256k1_u128_accum_u64(&t, SECP256K1_N_3 & mask);
-    r->d[3] = secp256k1_u128_to_u64(&t) & nonzero;
+    nostr_native_secp256k1_u128_from_u64(&t, r->d[0] ^ mask);
+    nostr_native_secp256k1_u128_accum_u64(&t, (SECP256K1_N_0 + 1) & mask);
+    r->d[0] = nostr_native_secp256k1_u128_to_u64(&t) & nonzero; nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, r->d[1] ^ mask);
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_1 & mask);
+    r->d[1] = nostr_native_secp256k1_u128_to_u64(&t) & nonzero; nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, r->d[2] ^ mask);
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_2 & mask);
+    r->d[2] = nostr_native_secp256k1_u128_to_u64(&t) & nonzero; nostr_native_secp256k1_u128_rshift(&t, 64);
+    nostr_native_secp256k1_u128_accum_u64(&t, r->d[3] ^ mask);
+    nostr_native_secp256k1_u128_accum_u64(&t, SECP256K1_N_3 & mask);
+    r->d[3] = nostr_native_secp256k1_u128_to_u64(&t) & nonzero;
 
     SECP256K1_SCALAR_VERIFY(r);
     return 2 * (mask == 0) - 1;
@@ -288,10 +288,10 @@ static int secp256k1_scalar_cond_negate(secp256k1_scalar *r, int flag) {
 #define muladd(a,b) { \
     uint64_t tl, th; \
     { \
-        secp256k1_uint128 t; \
-        secp256k1_u128_mul(&t, a, b); \
-        th = secp256k1_u128_hi_u64(&t);  /* at most 0xFFFFFFFFFFFFFFFE */ \
-        tl = secp256k1_u128_to_u64(&t); \
+        nostr_native_secp256k1_uint128 t; \
+        nostr_native_secp256k1_u128_mul(&t, a, b); \
+        th = nostr_native_secp256k1_u128_hi_u64(&t);  /* at most 0xFFFFFFFFFFFFFFFE */ \
+        tl = nostr_native_secp256k1_u128_to_u64(&t); \
     } \
     c0 += tl;                 /* overflow is handled on the next line */ \
     th += (c0 < tl);          /* at most 0xFFFFFFFFFFFFFFFF */ \
@@ -304,10 +304,10 @@ static int secp256k1_scalar_cond_negate(secp256k1_scalar *r, int flag) {
 #define muladd_fast(a,b) { \
     uint64_t tl, th; \
     { \
-        secp256k1_uint128 t; \
-        secp256k1_u128_mul(&t, a, b); \
-        th = secp256k1_u128_hi_u64(&t);  /* at most 0xFFFFFFFFFFFFFFFE */ \
-        tl = secp256k1_u128_to_u64(&t); \
+        nostr_native_secp256k1_uint128 t; \
+        nostr_native_secp256k1_u128_mul(&t, a, b); \
+        th = nostr_native_secp256k1_u128_hi_u64(&t);  /* at most 0xFFFFFFFFFFFFFFFE */ \
+        tl = nostr_native_secp256k1_u128_to_u64(&t); \
     } \
     c0 += tl;                 /* overflow is handled on the next line */ \
     th += (c0 < tl);          /* at most 0xFFFFFFFFFFFFFFFF */ \
@@ -348,7 +348,7 @@ static int secp256k1_scalar_cond_negate(secp256k1_scalar *r, int flag) {
     VERIFY_CHECK(c2 == 0); \
 }
 
-static void secp256k1_scalar_reduce_512(secp256k1_scalar *r, const uint64_t *l) {
+static void nostr_native_secp256k1_scalar_reduce_512(nostr_native_secp256k1_scalar *r, const uint64_t *l) {
 #ifdef USE_ASM_X86_64
     /* Reduce 512 bits into 385. */
     uint64_t m0, m1, m2, m3, m4, m5, m6;
@@ -603,7 +603,7 @@ static void secp256k1_scalar_reduce_512(secp256k1_scalar *r, const uint64_t *l) 
     SECP256K1_CHECKMEM_MSAN_DEFINE(&c, sizeof(c));
 
 #else
-    secp256k1_uint128 c128;
+    nostr_native_secp256k1_uint128 c128;
     uint64_t c, c0, c1, c2;
     uint64_t n0 = l[4], n1 = l[5], n2 = l[6], n3 = l[7];
     uint64_t m0, m1, m2, m3, m4, m5;
@@ -661,25 +661,25 @@ static void secp256k1_scalar_reduce_512(secp256k1_scalar *r, const uint64_t *l) 
 
     /* Reduce 258 bits into 256. */
     /* r[0..3] = p[0..3] + p[4] * SECP256K1_N_C. */
-    secp256k1_u128_from_u64(&c128, p0);
-    secp256k1_u128_accum_mul(&c128, SECP256K1_N_C_0, p4);
-    r->d[0] = secp256k1_u128_to_u64(&c128); secp256k1_u128_rshift(&c128, 64);
-    secp256k1_u128_accum_u64(&c128, p1);
-    secp256k1_u128_accum_mul(&c128, SECP256K1_N_C_1, p4);
-    r->d[1] = secp256k1_u128_to_u64(&c128); secp256k1_u128_rshift(&c128, 64);
-    secp256k1_u128_accum_u64(&c128, p2);
-    secp256k1_u128_accum_u64(&c128, p4);
-    r->d[2] = secp256k1_u128_to_u64(&c128); secp256k1_u128_rshift(&c128, 64);
-    secp256k1_u128_accum_u64(&c128, p3);
-    r->d[3] = secp256k1_u128_to_u64(&c128);
-    c = secp256k1_u128_hi_u64(&c128);
+    nostr_native_secp256k1_u128_from_u64(&c128, p0);
+    nostr_native_secp256k1_u128_accum_mul(&c128, SECP256K1_N_C_0, p4);
+    r->d[0] = nostr_native_secp256k1_u128_to_u64(&c128); nostr_native_secp256k1_u128_rshift(&c128, 64);
+    nostr_native_secp256k1_u128_accum_u64(&c128, p1);
+    nostr_native_secp256k1_u128_accum_mul(&c128, SECP256K1_N_C_1, p4);
+    r->d[1] = nostr_native_secp256k1_u128_to_u64(&c128); nostr_native_secp256k1_u128_rshift(&c128, 64);
+    nostr_native_secp256k1_u128_accum_u64(&c128, p2);
+    nostr_native_secp256k1_u128_accum_u64(&c128, p4);
+    r->d[2] = nostr_native_secp256k1_u128_to_u64(&c128); nostr_native_secp256k1_u128_rshift(&c128, 64);
+    nostr_native_secp256k1_u128_accum_u64(&c128, p3);
+    r->d[3] = nostr_native_secp256k1_u128_to_u64(&c128);
+    c = nostr_native_secp256k1_u128_hi_u64(&c128);
 #endif
 
     /* Final reduction of r. */
-    secp256k1_scalar_reduce(r, c + secp256k1_scalar_check_overflow(r));
+    nostr_native_secp256k1_scalar_reduce(r, c + nostr_native_secp256k1_scalar_check_overflow(r));
 }
 
-static void secp256k1_scalar_mul_512(uint64_t *l8, const secp256k1_scalar *a, const secp256k1_scalar *b) {
+static void nostr_native_secp256k1_scalar_mul_512(uint64_t *l8, const nostr_native_secp256k1_scalar *a, const nostr_native_secp256k1_scalar *b) {
 #ifdef USE_ASM_X86_64
     const uint64_t *pb = b->d;
     __asm__ __volatile__(
@@ -856,18 +856,18 @@ static void secp256k1_scalar_mul_512(uint64_t *l8, const secp256k1_scalar *a, co
 #undef extract
 #undef extract_fast
 
-static void secp256k1_scalar_mul(secp256k1_scalar *r, const secp256k1_scalar *a, const secp256k1_scalar *b) {
+static void nostr_native_secp256k1_scalar_mul(nostr_native_secp256k1_scalar *r, const nostr_native_secp256k1_scalar *a, const nostr_native_secp256k1_scalar *b) {
     uint64_t l[8];
     SECP256K1_SCALAR_VERIFY(a);
     SECP256K1_SCALAR_VERIFY(b);
 
-    secp256k1_scalar_mul_512(l, a, b);
-    secp256k1_scalar_reduce_512(r, l);
+    nostr_native_secp256k1_scalar_mul_512(l, a, b);
+    nostr_native_secp256k1_scalar_reduce_512(r, l);
 
     SECP256K1_SCALAR_VERIFY(r);
 }
 
-static void secp256k1_scalar_split_128(secp256k1_scalar *r1, secp256k1_scalar *r2, const secp256k1_scalar *k) {
+static void nostr_native_secp256k1_scalar_split_128(nostr_native_secp256k1_scalar *r1, nostr_native_secp256k1_scalar *r2, const nostr_native_secp256k1_scalar *k) {
     SECP256K1_SCALAR_VERIFY(k);
 
     r1->d[0] = k->d[0];
@@ -883,14 +883,14 @@ static void secp256k1_scalar_split_128(secp256k1_scalar *r1, secp256k1_scalar *r
     SECP256K1_SCALAR_VERIFY(r2);
 }
 
-SECP256K1_INLINE static int secp256k1_scalar_eq(const secp256k1_scalar *a, const secp256k1_scalar *b) {
+SECP256K1_INLINE static int nostr_native_secp256k1_scalar_eq(const nostr_native_secp256k1_scalar *a, const nostr_native_secp256k1_scalar *b) {
     SECP256K1_SCALAR_VERIFY(a);
     SECP256K1_SCALAR_VERIFY(b);
 
     return ((a->d[0] ^ b->d[0]) | (a->d[1] ^ b->d[1]) | (a->d[2] ^ b->d[2]) | (a->d[3] ^ b->d[3])) == 0;
 }
 
-SECP256K1_INLINE static void secp256k1_scalar_mul_shift_var(secp256k1_scalar *r, const secp256k1_scalar *a, const secp256k1_scalar *b, unsigned int shift) {
+SECP256K1_INLINE static void nostr_native_secp256k1_scalar_mul_shift_var(nostr_native_secp256k1_scalar *r, const nostr_native_secp256k1_scalar *a, const nostr_native_secp256k1_scalar *b, unsigned int shift) {
     uint64_t l[8];
     unsigned int shiftlimbs;
     unsigned int shiftlow;
@@ -899,7 +899,7 @@ SECP256K1_INLINE static void secp256k1_scalar_mul_shift_var(secp256k1_scalar *r,
     SECP256K1_SCALAR_VERIFY(b);
     VERIFY_CHECK(shift >= 256);
 
-    secp256k1_scalar_mul_512(l, a, b);
+    nostr_native_secp256k1_scalar_mul_512(l, a, b);
     shiftlimbs = shift >> 6;
     shiftlow = shift & 0x3F;
     shifthigh = 64 - shiftlow;
@@ -907,12 +907,12 @@ SECP256K1_INLINE static void secp256k1_scalar_mul_shift_var(secp256k1_scalar *r,
     r->d[1] = shift < 448 ? (l[1 + shiftlimbs] >> shiftlow | (shift < 384 && shiftlow ? (l[2 + shiftlimbs] << shifthigh) : 0)) : 0;
     r->d[2] = shift < 384 ? (l[2 + shiftlimbs] >> shiftlow | (shift < 320 && shiftlow ? (l[3 + shiftlimbs] << shifthigh) : 0)) : 0;
     r->d[3] = shift < 320 ? (l[3 + shiftlimbs] >> shiftlow) : 0;
-    secp256k1_scalar_cadd_bit(r, 0, (l[(shift - 1) >> 6] >> ((shift - 1) & 0x3f)) & 1);
+    nostr_native_secp256k1_scalar_cadd_bit(r, 0, (l[(shift - 1) >> 6] >> ((shift - 1) & 0x3f)) & 1);
 
     SECP256K1_SCALAR_VERIFY(r);
 }
 
-static SECP256K1_INLINE void secp256k1_scalar_cmov(secp256k1_scalar *r, const secp256k1_scalar *a, int flag) {
+static SECP256K1_INLINE void nostr_native_secp256k1_scalar_cmov(nostr_native_secp256k1_scalar *r, const nostr_native_secp256k1_scalar *a, int flag) {
     uint64_t mask0, mask1;
     volatile int vflag = flag;
     VERIFY_CHECK(flag == 0 || flag == 1);
@@ -929,10 +929,10 @@ static SECP256K1_INLINE void secp256k1_scalar_cmov(secp256k1_scalar *r, const se
     SECP256K1_SCALAR_VERIFY(r);
 }
 
-static void secp256k1_scalar_from_signed62(secp256k1_scalar *r, const secp256k1_modinv64_signed62 *a) {
+static void nostr_native_secp256k1_scalar_from_signed62(nostr_native_secp256k1_scalar *r, const nostr_native_secp256k1_modinv64_signed62 *a) {
     const uint64_t a0 = a->v[0], a1 = a->v[1], a2 = a->v[2], a3 = a->v[3], a4 = a->v[4];
 
-    /* The output from secp256k1_modinv64{_var} should be normalized to range [0,modulus), and
+    /* The output from nostr_native_secp256k1_modinv64{_var} should be normalized to range [0,modulus), and
      * have limbs in [0,2^62). The modulus is < 2^256, so the top limb must be below 2^(256-62*4).
      */
     VERIFY_CHECK(a0 >> 62 == 0);
@@ -949,7 +949,7 @@ static void secp256k1_scalar_from_signed62(secp256k1_scalar *r, const secp256k1_
     SECP256K1_SCALAR_VERIFY(r);
 }
 
-static void secp256k1_scalar_to_signed62(secp256k1_modinv64_signed62 *r, const secp256k1_scalar *a) {
+static void nostr_native_secp256k1_scalar_to_signed62(nostr_native_secp256k1_modinv64_signed62 *r, const nostr_native_secp256k1_scalar *a) {
     const uint64_t M62 = UINT64_MAX >> 2;
     const uint64_t a0 = a->d[0], a1 = a->d[1], a2 = a->d[2], a3 = a->d[3];
     SECP256K1_SCALAR_VERIFY(a);
@@ -961,42 +961,42 @@ static void secp256k1_scalar_to_signed62(secp256k1_modinv64_signed62 *r, const s
     r->v[4] =  a3 >> 56;
 }
 
-static const secp256k1_modinv64_modinfo secp256k1_const_modinfo_scalar = {
+static const nostr_native_secp256k1_modinv64_modinfo nostr_native_secp256k1_const_modinfo_scalar = {
     {{0x3FD25E8CD0364141LL, 0x2ABB739ABD2280EELL, -0x15LL, 0, 256}},
     0x34F20099AA774EC1LL
 };
 
-static void secp256k1_scalar_inverse(secp256k1_scalar *r, const secp256k1_scalar *x) {
-    secp256k1_modinv64_signed62 s;
+static void nostr_native_secp256k1_scalar_inverse(nostr_native_secp256k1_scalar *r, const nostr_native_secp256k1_scalar *x) {
+    nostr_native_secp256k1_modinv64_signed62 s;
 #ifdef VERIFY
-    int zero_in = secp256k1_scalar_is_zero(x);
+    int zero_in = nostr_native_secp256k1_scalar_is_zero(x);
 #endif
     SECP256K1_SCALAR_VERIFY(x);
 
-    secp256k1_scalar_to_signed62(&s, x);
-    secp256k1_modinv64(&s, &secp256k1_const_modinfo_scalar);
-    secp256k1_scalar_from_signed62(r, &s);
+    nostr_native_secp256k1_scalar_to_signed62(&s, x);
+    nostr_native_secp256k1_modinv64(&s, &nostr_native_secp256k1_const_modinfo_scalar);
+    nostr_native_secp256k1_scalar_from_signed62(r, &s);
 
     SECP256K1_SCALAR_VERIFY(r);
-    VERIFY_CHECK(secp256k1_scalar_is_zero(r) == zero_in);
+    VERIFY_CHECK(nostr_native_secp256k1_scalar_is_zero(r) == zero_in);
 }
 
-static void secp256k1_scalar_inverse_var(secp256k1_scalar *r, const secp256k1_scalar *x) {
-    secp256k1_modinv64_signed62 s;
+static void nostr_native_secp256k1_scalar_inverse_var(nostr_native_secp256k1_scalar *r, const nostr_native_secp256k1_scalar *x) {
+    nostr_native_secp256k1_modinv64_signed62 s;
 #ifdef VERIFY
-    int zero_in = secp256k1_scalar_is_zero(x);
+    int zero_in = nostr_native_secp256k1_scalar_is_zero(x);
 #endif
     SECP256K1_SCALAR_VERIFY(x);
 
-    secp256k1_scalar_to_signed62(&s, x);
-    secp256k1_modinv64_var(&s, &secp256k1_const_modinfo_scalar);
-    secp256k1_scalar_from_signed62(r, &s);
+    nostr_native_secp256k1_scalar_to_signed62(&s, x);
+    nostr_native_secp256k1_modinv64_var(&s, &nostr_native_secp256k1_const_modinfo_scalar);
+    nostr_native_secp256k1_scalar_from_signed62(r, &s);
 
     SECP256K1_SCALAR_VERIFY(r);
-    VERIFY_CHECK(secp256k1_scalar_is_zero(r) == zero_in);
+    VERIFY_CHECK(nostr_native_secp256k1_scalar_is_zero(r) == zero_in);
 }
 
-SECP256K1_INLINE static int secp256k1_scalar_is_even(const secp256k1_scalar *a) {
+SECP256K1_INLINE static int nostr_native_secp256k1_scalar_is_even(const nostr_native_secp256k1_scalar *a) {
     SECP256K1_SCALAR_VERIFY(a);
 
     return !(a->d[0] & 1);

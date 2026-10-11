@@ -26,7 +26,7 @@
  * COMB_SPACING * COMB_TEETH consecutive bits in the input.
  *
  * The size of the precomputed table is COMB_BLOCKS * (1 << (COMB_TEETH - 1))
- * secp256k1_ge_storages.
+ * nostr_native_secp256k1_ge_storages.
  *
  * The number of point additions equals COMB_BLOCKS * COMB_SPACING. Each point
  * addition involves a cmov from (1 << (COMB_TEETH - 1)) table entries and a
@@ -36,7 +36,7 @@
 
 #if defined(EXHAUSTIVE_TEST_ORDER)
 /* We need to control these values for exhaustive tests because
- * the table cannot have infinities in them (secp256k1_ge_storage
+ * the table cannot have infinities in them (nostr_native_secp256k1_ge_storage
  * doesn't support infinities) */
 #  undef COMB_BLOCKS
 #  undef COMB_TEETH
@@ -125,21 +125,21 @@ typedef struct {
      *
      * This expression lets us use scalar blinding and optimize the comb precomputation. See
      * ecmult_gen_impl.h for more details. */
-    secp256k1_scalar scalar_offset;
-    secp256k1_ge ge_offset;
+    nostr_native_secp256k1_scalar scalar_offset;
+    nostr_native_secp256k1_ge ge_offset;
 
     /* Factor used for projective blinding. This value is used to rescale the Z
      * coordinate of the first table lookup. */
-    secp256k1_fe proj_blind;
-} secp256k1_ecmult_gen_context;
+    nostr_native_secp256k1_fe proj_blind;
+} nostr_native_secp256k1_ecmult_gen_context;
 
-static void secp256k1_ecmult_gen_context_build(secp256k1_ecmult_gen_context* ctx, const secp256k1_hash_ctx *hash_ctx);
-static void secp256k1_ecmult_gen_context_clear(secp256k1_ecmult_gen_context* ctx);
+static void nostr_native_secp256k1_ecmult_gen_context_build(nostr_native_secp256k1_ecmult_gen_context* ctx, const nostr_native_secp256k1_hash_ctx *hash_ctx);
+static void nostr_native_secp256k1_ecmult_gen_context_clear(nostr_native_secp256k1_ecmult_gen_context* ctx);
 
 /** Multiply with the generator: R = a*G */
-static void secp256k1_ecmult_gen_gej(const secp256k1_ecmult_gen_context* ctx, secp256k1_gej *r, const secp256k1_scalar *a);
-static void secp256k1_ecmult_gen_ge(const secp256k1_ecmult_gen_context* ctx, secp256k1_ge *r, const secp256k1_scalar *a);
+static void nostr_native_secp256k1_ecmult_gen_gej(const nostr_native_secp256k1_ecmult_gen_context* ctx, nostr_native_secp256k1_gej *r, const nostr_native_secp256k1_scalar *a);
+static void nostr_native_secp256k1_ecmult_gen_ge(const nostr_native_secp256k1_ecmult_gen_context* ctx, nostr_native_secp256k1_ge *r, const nostr_native_secp256k1_scalar *a);
 
-static void secp256k1_ecmult_gen_blind(secp256k1_ecmult_gen_context *ctx, const secp256k1_hash_ctx *hash_ctx, const unsigned char *seed32);
+static void nostr_native_secp256k1_ecmult_gen_blind(nostr_native_secp256k1_ecmult_gen_context *ctx, const nostr_native_secp256k1_hash_ctx *hash_ctx, const unsigned char *seed32);
 
 #endif /* SECP256K1_ECMULT_GEN_H */

@@ -31,7 +31,7 @@ typedef struct {
      *     (together these imply n[4] <= 2^48 - 1)
      */
     SECP256K1_FE_VERIFY_FIELDS
-} secp256k1_fe;
+} nostr_native_secp256k1_fe;
 
 /* Unpacks a constant into a overlapping multi-limbed FE element. */
 #define SECP256K1_FE_CONST_INNER(d7, d6, d5, d4, d3, d2, d1, d0) { \
@@ -44,7 +44,7 @@ typedef struct {
 
 typedef struct {
     uint64_t n[4];
-} secp256k1_fe_storage;
+} nostr_native_secp256k1_fe_storage;
 
 #define SECP256K1_FE_STORAGE_CONST(d7, d6, d5, d4, d3, d2, d1, d0) {{ \
     (d0) | (((uint64_t)(d1)) << 32), \
