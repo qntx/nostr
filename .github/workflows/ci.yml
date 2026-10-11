@@ -30,7 +30,6 @@ jobs:
     with:
       working-directory: packages/nostr-wasm
       bench: true
-      scripts-directory: .
 
   rust:
     uses: qntx/workflows/.github/workflows/ci-rust.yml@v2
