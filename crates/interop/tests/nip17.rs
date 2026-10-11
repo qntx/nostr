@@ -67,9 +67,6 @@ struct RelayParseCase {
     error: Option<String>,
 }
 
-const WRAP_UNEXPRESSIBLE: &str =
-    "deterministic multi-recipient gift wrapping is not exposed by rust-nostr";
-
 fn wrap_cases(check: &mut DivergenceCheck) {
     let vector: Vector = serde_json::from_str(CODEC).expect("parse codec.json");
     for (i, entry) in vector.wrap.iter().enumerate() {
@@ -79,29 +76,21 @@ fn wrap_cases(check: &mut DivergenceCheck) {
             .unwrap_or("?")
             .to_owned();
         let _ = i;
-        check.check(&name, false, WRAP_UNEXPRESSIBLE);
+        check.skip(&name);
     }
 }
 
 fn chat_cases(check: &mut DivergenceCheck) {
     let vector: Vector = serde_json::from_str(CODEC).expect("parse codec.json");
     for case in &vector.chat {
-        check.check(
-            &case.name,
-            false,
-            "kind-14 rumor construction is not exposed by rust-nostr",
-        );
+        check.skip(&case.name);
     }
 }
 
 fn normalize_cases(check: &mut DivergenceCheck) {
     let vector: Vector = serde_json::from_str(CODEC).expect("parse codec.json");
     for case in &vector.normalize {
-        check.check(
-            &case.name,
-            false,
-            "recipient normalization has no rust-nostr counterpart",
-        );
+        check.skip(&case.name);
     }
 }
 

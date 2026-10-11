@@ -140,21 +140,19 @@ fn zap_request_cases(check: &mut DivergenceCheck) {
     }
 }
 
-/// rust-nostr has no bolt11 invoice parser (that lives in lightning
-/// libraries) and no zap-receipt validator.
-const UNEXPRESSIBLE: &str = "no rust-nostr counterpart";
-
+// rust-nostr has no bolt11 invoice parser (that lives in lightning
+// libraries) and no zap-receipt validator, so those cases are skipped.
 fn bolt11_cases(check: &mut DivergenceCheck) {
     let codec: Codec = serde_json::from_str(CODEC).expect("parse codec.json");
     for case in &codec.bolt11 {
-        check.check(&format!("bolt11: {}", case.name), false, UNEXPRESSIBLE);
+        check.skip(&format!("bolt11: {}", case.name));
     }
 }
 
 fn receipt_cases(check: &mut DivergenceCheck) {
     let codec: Codec = serde_json::from_str(CODEC).expect("parse codec.json");
     for case in &codec.receipt {
-        check.check(&format!("receipt: {}", case.name), false, UNEXPRESSIBLE);
+        check.skip(&format!("receipt: {}", case.name));
     }
 }
 

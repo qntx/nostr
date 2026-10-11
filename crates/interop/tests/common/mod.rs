@@ -59,6 +59,7 @@ pub(crate) struct DivergenceCheck {
     capability: &'static str,
     diverged: BTreeSet<String>,
     seen: BTreeSet<String>,
+    skipped: BTreeSet<String>,
     got: BTreeMap<String, String>,
 }
 
@@ -70,6 +71,7 @@ impl DivergenceCheck {
             capability,
             diverged: BTreeSet::new(),
             seen: BTreeSet::new(),
+            skipped: BTreeSet::new(),
             got: BTreeMap::new(),
         }
     }
@@ -85,6 +87,13 @@ impl DivergenceCheck {
         }
     }
 
+    /// Marks `case` as not exercised: rust-nostr exposes no public API for
+    /// it, so there is no behavior to compare and it is neither an agreement
+    /// nor a divergence.
+    pub(crate) fn skip(&mut self, case: &str) {
+        self.skipped.insert(case.to_owned());
+    }
+
     /// Asserts the outcome matches the registry exactly.
     pub(crate) fn finish(&self) {
         if let Ok(path) = std::env::var("NK_INTEROP_RECORD_OUT") {
@@ -96,6 +105,14 @@ impl DivergenceCheck {
                 .append(true)
                 .open(&path)
                 .expect("record file opens");
+            for case in &self.seen {
+                writeln!(file, "{}\t__seen__\t{case}", self.capability)
+                    .expect("record line writes");
+            }
+            for case in &self.skipped {
+                writeln!(file, "{}\t__skipped__\t{case}", self.capability)
+                    .expect("record line writes");
+            }
             for case in &self.diverged {
                 let got = self.got.get(case).map_or("", String::as_str);
                 writeln!(file, "{}\t{case}\t{got}", self.capability).expect("record line writes");

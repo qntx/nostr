@@ -1,93 +1,69 @@
 [
   {
-    "capability": "core.kind.classify",
-    "case": "45",
+    "capability": "core.builder",
+    "case": "10",
     "side": "pending",
-    "reason": "rust-nostr output differs: regular=true replaceable=false ephemeral=false addressable=false class=regular"
+    "reason": "the input is not expressible through rust-nostr public types"
   },
   {
-    "capability": "core.kind.classify",
-    "case": "999",
+    "capability": "core.builder",
+    "case": "11",
     "side": "pending",
-    "reason": "rust-nostr output differs: regular=true replaceable=false ephemeral=false addressable=false class=regular"
+    "reason": "the decoded object differs from the vector expectation"
   },
   {
-    "capability": "core.filter.limit",
-    "case": "1",
+    "capability": "core.builder",
+    "case": "13",
     "side": "pending",
-    "reason": "Filter deserializes limit as None"
+    "reason": "the input is not expressible through rust-nostr public types"
   },
   {
-    "capability": "core.filter.limit",
-    "case": "12",
-    "side": "pending",
-    "reason": "Filter deserializes limit as Some(5)"
-  },
-  {
-    "capability": "core.filter.limit",
-    "case": "14",
-    "side": "pending",
-    "reason": "Filter deserializes limit as None"
-  },
-  {
-    "capability": "core.filter.limit",
-    "case": "15",
-    "side": "pending",
-    "reason": "Filter deserializes limit as None"
-  },
-  {
-    "capability": "core.filter.limit",
+    "capability": "core.builder",
     "case": "16",
     "side": "pending",
-    "reason": "Filter deserializes limit as None"
+    "reason": "the decoded object differs from the vector expectation"
   },
   {
-    "capability": "core.filter.limit",
-    "case": "17",
+    "capability": "core.builder",
+    "case": "18",
     "side": "pending",
-    "reason": "Filter deserializes limit as Some(10)"
+    "reason": "the decoded object differs from the vector expectation"
   },
   {
-    "capability": "core.filter.limit",
-    "case": "2",
+    "capability": "core.builder",
+    "case": "19",
     "side": "pending",
-    "reason": "Filter deserializes limit as None"
+    "reason": "the decoded object differs from the vector expectation"
   },
   {
-    "capability": "core.filter.limit",
-    "case": "3",
+    "capability": "core.builder",
+    "case": "20",
     "side": "pending",
-    "reason": "Filter deserializes limit as None"
+    "reason": "the decoded object differs from the vector expectation"
   },
   {
-    "capability": "core.filter.limit",
-    "case": "4",
+    "capability": "core.builder",
+    "case": "22",
     "side": "pending",
-    "reason": "Filter deserializes limit as None"
+    "reason": "the decoded object differs from the vector expectation"
   },
   {
-    "capability": "core.filter.limit",
-    "case": "6",
+    "capability": "core.builder",
+    "case": "23",
     "side": "pending",
-    "reason": "Filter deserializes limit as Some(10)"
+    "reason": "the decoded object differs from the vector expectation"
   },
   {
-    "capability": "core.filter.limit",
+    "capability": "core.builder",
     "case": "7",
     "side": "pending",
-    "reason": "Filter deserializes limit as None"
+    "reason": "the decoded object differs from the vector expectation"
   },
   {
-    "capability": "core.filter.limit",
+    "capability": "core.builder",
     "case": "8",
     "side": "pending",
-    "reason": "Filter deserializes limit as None"
-  },
-  {
-    "capability": "core.filter.limit",
-    "case": "9",
-    "side": "pending",
-    "reason": "Filter deserializes limit as None"
+    "reason": "the input is not expressible through rust-nostr public types"
   },
   {
     "capability": "core.event.signed-matches",
@@ -216,10 +192,82 @@
     "reason": "rust-nostr output differs: accepted, re-encodes as {\"id\":\"791e76a4715f1514309947f51c1d20a6f80698833ecc97b7b"
   },
   {
-    "capability": "core.tag.address",
-    "case": "3:1:90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23:with:colons",
+    "capability": "core.filter.limit",
+    "case": "1",
     "side": "pending",
-    "reason": "rust-nostr output differs: parsed kind=1 pubkey=90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868f"
+    "reason": "Filter deserializes limit as None"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "12",
+    "side": "pending",
+    "reason": "Filter deserializes limit as Some(5)"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "14",
+    "side": "pending",
+    "reason": "Filter deserializes limit as None"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "15",
+    "side": "pending",
+    "reason": "Filter deserializes limit as None"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "16",
+    "side": "pending",
+    "reason": "Filter deserializes limit as None"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "17",
+    "side": "pending",
+    "reason": "Filter deserializes limit as Some(10)"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "2",
+    "side": "pending",
+    "reason": "Filter deserializes limit as None"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "3",
+    "side": "pending",
+    "reason": "Filter deserializes limit as None"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "4",
+    "side": "pending",
+    "reason": "Filter deserializes limit as None"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "6",
+    "side": "pending",
+    "reason": "Filter deserializes limit as Some(10)"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "7",
+    "side": "pending",
+    "reason": "Filter deserializes limit as None"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "8",
+    "side": "pending",
+    "reason": "Filter deserializes limit as None"
+  },
+  {
+    "capability": "core.filter.limit",
+    "case": "9",
+    "side": "pending",
+    "reason": "Filter deserializes limit as None"
   },
   {
     "capability": "core.filter.match",
@@ -262,6 +310,18 @@
     "case": "6",
     "side": "pending",
     "reason": "Filter::match_event returns true where the vector disagrees"
+  },
+  {
+    "capability": "core.kind.classify",
+    "case": "45",
+    "side": "pending",
+    "reason": "rust-nostr output differs: regular=true replaceable=false ephemeral=false addressable=false class=regular"
+  },
+  {
+    "capability": "core.kind.classify",
+    "case": "999",
+    "side": "pending",
+    "reason": "rust-nostr output differs: regular=true replaceable=false ephemeral=false addressable=false class=regular"
   },
   {
     "capability": "core.message.client",
@@ -522,70 +582,10 @@
     "reason": "the emitted tag differs from the vector"
   },
   {
-    "capability": "core.builder",
-    "case": "10",
+    "capability": "core.tag.address",
+    "case": "3:1:90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23:with:colons",
     "side": "pending",
-    "reason": "the input is not expressible through rust-nostr public types"
-  },
-  {
-    "capability": "core.builder",
-    "case": "11",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "core.builder",
-    "case": "13",
-    "side": "pending",
-    "reason": "the input is not expressible through rust-nostr public types"
-  },
-  {
-    "capability": "core.builder",
-    "case": "16",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "core.builder",
-    "case": "18",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "core.builder",
-    "case": "19",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "core.builder",
-    "case": "20",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "core.builder",
-    "case": "22",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "core.builder",
-    "case": "23",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "core.builder",
-    "case": "7",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "core.builder",
-    "case": "8",
-    "side": "pending",
-    "reason": "the input is not expressible through rust-nostr public types"
+    "reason": "rust-nostr output differs: parsed kind=1 pubkey=90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868f"
   },
   {
     "capability": "core.tag.build",
@@ -619,138 +619,6 @@
   },
   {
     "capability": "nip10.thread",
-    "case": "NIP-01 four-tuple author at index 3 is positional",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "author inherits p-tag relay hints",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "author scanned index 4 then 3",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "empty marker is positional unmarked",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "empty tag array skipped",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "five-tuple author at index 4 with markers",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "invalid q tags skipped",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "marked reply back-fills root",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "marked root back-fills reply",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "marked root/reply with profiles and quotes",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "mention marker leaves positional unset",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "mention with root id is dropped",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "noise tags skipped",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "p tag validation",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "positional single unmarked e is both",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "positional two unmarked e tags",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "q address ignores index 3",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "q hex with author and relay",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "q mixed-case id and author",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "unknown marker is a mention only",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "uppercase hex id and author are lowercased",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "uppercase marker is not a marker",
-    "side": "pending",
-    "reason": "rust-nostr exposes no public whole-thread parse API for this input shape"
-  },
-  {
-    "capability": "nip10.thread",
     "case": "deep thread parent",
     "side": "pending",
     "reason": "the emitted tag list differs from the vector"
@@ -772,18 +640,6 @@
     "case": "non-kind-1 parent rejected",
     "side": "pending",
     "reason": "rust-nostr reply construction is infallible; the vector expects rejection"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "quote with author but no relay writes empty slot",
-    "side": "pending",
-    "reason": "TextNoteReplyBuilder cannot express quote e-tags from the vector input"
-  },
-  {
-    "capability": "nip10.thread",
-    "case": "quotes emit q tags and author p tags",
-    "side": "pending",
-    "reason": "TextNoteReplyBuilder cannot express quote e-tags from the vector input"
   },
   {
     "capability": "nip10.thread",
@@ -817,78 +673,6 @@
   },
   {
     "capability": "nip17.dm",
-    "case": "basic",
-    "side": "pending",
-    "reason": "standalone kind-14 rumor construction is not public in rust-nostr"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "empty-recipients",
-    "side": "pending",
-    "reason": "standalone kind-14 rumor construction is not public in rust-nostr"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "reply-and-subject",
-    "side": "pending",
-    "reason": "standalone kind-14 rumor construction is not public in rust-nostr"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "reply-no-relay",
-    "side": "pending",
-    "reason": "standalone kind-14 rumor construction is not public in rust-nostr"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "unnormalized-hint",
-    "side": "pending",
-    "reason": "standalone kind-14 rumor construction is not public in rust-nostr"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "duplicate-and-sender-in-list",
-    "side": "pending",
-    "reason": "nostr::nips::nip17 exposes no deterministic multi-recipient gift-wrap seam"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "random-timestamps-ephemeral",
-    "side": "pending",
-    "reason": "nostr::nips::nip17 exposes no deterministic multi-recipient gift-wrap seam"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "two-recipients-fixed",
-    "side": "pending",
-    "reason": "nostr::nips::nip17 exposes no deterministic multi-recipient gift-wrap seam"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "unnormalized-relay-hint",
-    "side": "pending",
-    "reason": "nostr::nips::nip17 exposes no deterministic multi-recipient gift-wrap seam"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "wrap-only-expiration",
-    "side": "pending",
-    "reason": "nostr::nips::nip17 exposes no deterministic multi-recipient gift-wrap seam"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "single-string",
-    "side": "pending",
-    "reason": "rust-nostr has no counterpart for the vector recipient normalization step"
-  },
-  {
-    "capability": "nip17.dm",
-    "case": "strings-and-objects-dedup",
-    "side": "pending",
-    "reason": "rust-nostr has no counterpart for the vector recipient normalization step"
-  },
-  {
-    "capability": "nip17.dm",
     "case": "build: dedup-and-skip-invalid",
     "side": "pending",
     "reason": "the input is not expressible through rust-nostr public types"
@@ -916,12 +700,6 @@
     "case": "parse: parse-wrong-kind",
     "side": "pending",
     "reason": "the extracted relay url list differs from the vector"
-  },
-  {
-    "capability": "nip19.codec",
-    "case": "official/3",
-    "side": "pending",
-    "reason": "the entity decodes but its fields differ from the vector record"
   },
   {
     "capability": "nip19.codec",
@@ -1032,6 +810,12 @@
     "reason": "re-encoded bech32 output differs from the vector"
   },
   {
+    "capability": "nip19.codec",
+    "case": "official/3",
+    "side": "pending",
+    "reason": "the entity decodes but its fields differ from the vector record"
+  },
+  {
     "capability": "nip21.uri",
     "case": "2",
     "side": "pending",
@@ -1138,342 +922,6 @@
     "case": "9",
     "side": "pending",
     "reason": "the emitted event differs from the vector (tags or order)"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/0",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/1",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/10",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/11",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/12",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/13",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/14",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/15",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/16",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/17",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/18",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/19",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/2",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/20",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/21",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/22",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/23",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/3",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/4",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/5",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/6",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/7",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/8",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "calc_padded_len/9",
-    "side": "pending",
-    "reason": "nip44 padding-length calculation is not public in rust-nostr"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/0",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/1",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/10",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/11",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/12",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/13",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/14",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/15",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/16",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/17",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/18",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/19",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/2",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/20",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/21",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/22",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/23",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/24",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/25",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/26",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/27",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/28",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/29",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/3",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/30",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/31",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/4",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/5",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/6",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/7",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/8",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
-  },
-  {
-    "capability": "nip44.v2",
-    "case": "get_message_keys/9",
-    "side": "pending",
-    "reason": "nip44 message-key derivation is internal in rust-nostr; no public API to compare"
   },
   {
     "capability": "nip44.v2",
@@ -1693,37 +1141,7 @@
   },
   {
     "capability": "nip46.codec",
-    "case": "extra fields ignored",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "round-trip unicode and escapes",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "error only",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "neither field",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "result only",
-    "side": "pending",
-    "reason": "the decoded object differs from the vector expectation"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "unicode and escapes",
+    "case": "comma-only perms",
     "side": "pending",
     "reason": "rust-nostr rejects where the vector expects success"
   },
@@ -1735,9 +1153,45 @@
   },
   {
     "capability": "nip46.codec",
+    "case": "empty perms list",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip46.codec",
     "case": "empty perms omitted",
     "side": "pending",
     "reason": "the formatted URI differs from the vector"
+  },
+  {
+    "capability": "nip46.codec",
+    "case": "empty relay kept",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip46.codec",
+    "case": "empty secret omitted",
+    "side": "pending",
+    "reason": "the formatted URI differs from the vector"
+  },
+  {
+    "capability": "nip46.codec",
+    "case": "error only",
+    "side": "pending",
+    "reason": "the decoded object differs from the vector expectation"
+  },
+  {
+    "capability": "nip46.codec",
+    "case": "extra fields ignored",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip46.codec",
+    "case": "first secret wins",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
   },
   {
     "capability": "nip46.codec",
@@ -1765,49 +1219,13 @@
   },
   {
     "capability": "nip46.codec",
-    "case": "reserved chars encoded",
+    "case": "neither field",
     "side": "pending",
-    "reason": "the formatted URI differs from the vector"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "uppercase client lowercased",
-    "side": "pending",
-    "reason": "the formatted URI differs from the vector"
+    "reason": "the decoded object differs from the vector expectation"
   },
   {
     "capability": "nip46.codec",
     "case": "opaque-path fallback",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "plus-decoded relay and encoded secret",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "comma-only perms",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "empty perms list",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "empty relay kept",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "first secret wins",
     "side": "pending",
     "reason": "rust-nostr rejects where the vector expects success"
   },
@@ -1819,25 +1237,25 @@
   },
   {
     "capability": "nip46.codec",
+    "case": "plus-decoded relay and encoded secret",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip46.codec",
     "case": "present-but-empty name kept",
     "side": "pending",
     "reason": "rust-nostr rejects where the vector expects success"
   },
   {
     "capability": "nip46.codec",
-    "case": "uppercase authority lowercased",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip46.codec",
-    "case": "empty secret omitted",
+    "case": "relays and secret",
     "side": "pending",
     "reason": "the formatted URI differs from the vector"
   },
   {
     "capability": "nip46.codec",
-    "case": "relays and secret",
+    "case": "reserved chars encoded",
     "side": "pending",
     "reason": "the formatted URI differs from the vector"
   },
@@ -1849,7 +1267,37 @@
   },
   {
     "capability": "nip46.codec",
+    "case": "result only",
+    "side": "pending",
+    "reason": "the decoded object differs from the vector expectation"
+  },
+  {
+    "capability": "nip46.codec",
+    "case": "round-trip unicode and escapes",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip46.codec",
+    "case": "unicode and escapes",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip46.codec",
     "case": "unicode relay",
+    "side": "pending",
+    "reason": "the formatted URI differs from the vector"
+  },
+  {
+    "capability": "nip46.codec",
+    "case": "uppercase authority lowercased",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip46.codec",
+    "case": "uppercase client lowercased",
     "side": "pending",
     "reason": "the formatted URI differs from the vector"
   },
@@ -1858,120 +1306,6 @@
     "case": "max_logn/5",
     "side": "pending",
     "reason": "operation returns output where the vector expects rejection"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: bookmark: events and verbatim addresses",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: bookmark: wrong kind",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: emoji set: d title emoji",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: emoji set: empty title is absent",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: emoji set: wrong kind",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: favorite relays: relay urls and 30002 coordinates only",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: favorite relays: wrong kind",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: follow pack: d and pubkeys",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: follow pack: wrong kind",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: mute: empty list",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: mute: public items and ignores",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: mute: wrong kind",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: pin: ids and ignores",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: pin: wrong kind",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: relay set: d, normalization, dedup, skips",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: relay set: missing d is empty",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: relay set: wrong kind",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: user emoji: sets and complete emoji only",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
-  },
-  {
-    "capability": "nip51.lists",
-    "case": "parse: user emoji: wrong kind",
-    "side": "pending",
-    "reason": "rust-nostr output differs: rust-nostr has no public whole-event list parser"
   },
   {
     "capability": "nip51.lists",
@@ -2002,324 +1336,6 @@
     "case": "decrypt: foreign author rejects",
     "side": "pending",
     "reason": "the emitted tag list differs from the vector"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: amount digits beyond safe integer omitted",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: amount product beyond safe integer omitted",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: bad checksum rejected",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: description longer than 5000-char invoice",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: description with invalid utf-8 dropped",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: duplicate fields keep the first",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: expiry beyond safe integer keeps 3600 (N8)",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: explicit zero expiry",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: full fields with amount and expiry",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: missing payment hash is not an invoice",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: multiplier micro",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: multiplier milli",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: multiplier nano",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: multiplier pico fractional dropped",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: multiplier pico whole msats",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: no amount in hrp",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: no multiplier whole btc",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: non-ln hrp rejected",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: not bech32 at all",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: tlv overrun truncates remaining fields",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: too few words rejected",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "bolt11: uppercase invoice decodes",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: amount mismatch",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: bolt11 without description hash",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: description hash mismatch",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: description is not JSON",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: description kind is not 9734",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: description tag missing",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: lnurl mismatch",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: missing bolt11 tag",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: preimage invalid hex",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: preimage mismatch",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: pubkey mismatch",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: receipt P does not match request pubkey",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: receipt missing a",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: receipt missing e",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: receipt missing p",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: receipt p does not match request p",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: request P mismatch",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: request a tag non-addressable kind",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: request a tag unparsable",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: request with empty relays value",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: request with two P tags",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: request with two e tags",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: request with two p tags",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: request with zero p tags",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: request without relays tag",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: signature does not verify",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: unparsable bolt11",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: valid event zap receipt",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: valid profile zap receipt",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: valid receipt without invoice amount",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
-  },
-  {
-    "capability": "nip57.zap",
-    "case": "receipt: wrong kind is not a receipt",
-    "side": "pending",
-    "reason": "the capability has no rust-nostr public counterpart"
   },
   {
     "capability": "nip57.zap",
@@ -2374,66 +1390,6 @@
     "case": "zero amount rejected",
     "side": "pending",
     "reason": "the emitted tag list differs from the vector"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "fixed-basic",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "fixed-ephemeral",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "fixed-full",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "random-seal-and-wrap",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "random-wrap-only",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "seal-fixed",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "seal-random",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "seal-wrap-only",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "wrap-fixed",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
-  },
-  {
-    "capability": "nip59.wrap",
-    "case": "wrap-random-ephemeral",
-    "side": "pending",
-    "reason": "rust-nostr does not expose deterministic gift-wrap construction; this case cannot be exercised"
   },
   {
     "capability": "nip59.wrap",
@@ -2497,6 +1453,18 @@
   },
   {
     "capability": "nip98.http-auth",
+    "case": "auth/3",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip98.http-auth",
+    "case": "auth/4",
+    "side": "pending",
+    "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip98.http-auth",
     "case": "unpack/2",
     "side": "pending",
     "reason": "rust-nostr rejects where the vector expects success"
@@ -2522,18 +1490,6 @@
   {
     "capability": "nip98.http-auth",
     "case": "unpack/6",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip98.http-auth",
-    "case": "auth/3",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip98.http-auth",
-    "case": "auth/4",
     "side": "pending",
     "reason": "rust-nostr rejects where the vector expects success"
   },

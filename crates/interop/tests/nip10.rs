@@ -78,11 +78,7 @@ fn parse_cases(check: &mut DivergenceCheck) {
         }
         // rust-nostr exposes `Marker`/`Nip10Tag` for building but no public
         // thread reconstruction from a tag list.
-        check.check(
-            &case.name,
-            false,
-            "no public thread-parse API in rust-nostr",
-        );
+        check.skip(&case.name);
     }
 }
 
@@ -114,13 +110,14 @@ fn reply_cases(check: &mut DivergenceCheck) {
         if !case.rust {
             continue;
         }
-        let got;
-        let agrees;
         if !case.quotes.is_empty() {
             // `TextNoteReplyBuilder` has no quote support.
-            agrees = false;
-            got = "quotes not expressible in TextNoteReplyBuilder".to_owned();
-        } else if let Some(expect) = &case.reply_to {
+            check.skip(&case.name);
+            continue;
+        }
+        let got;
+        let agrees;
+        if let Some(expect) = &case.reply_to {
             if let Some(builder) = reply_builder(case, &expect.content) {
                 let unsigned = builder
                     .custom_created_at(Timestamp::from_secs(0))

@@ -179,13 +179,8 @@ fn official_get_message_keys(check: &mut DivergenceCheck) {
     // rust-nostr derives message keys internally inside
     // `v2::encrypt_to_bytes_with_nonce`; `MessageKeys` is a private type, so
     // the per-key rows cannot be replayed through the public API.
-    for (i, row) in vector.v2.valid.get_message_keys.keys.iter().enumerate() {
-        let _ = row;
-        check.check(
-            &format!("get_message_keys/{i}"),
-            false,
-            "message-key derivation is not public in rust-nostr",
-        );
+    for (i, _) in vector.v2.valid.get_message_keys.keys.iter().enumerate() {
+        check.skip(&format!("get_message_keys/{i}"));
     }
 }
 
@@ -193,11 +188,7 @@ fn official_calc_padded_len(check: &mut DivergenceCheck) {
     let vector: OfficialVectors = serde_json::from_str(OFFICIAL).expect("valid JSON");
     // `calc_padding` is private in rust-nostr's `nips::nip44::v2`.
     for (i, _) in vector.v2.valid.calc_padded_len.iter().enumerate() {
-        check.check(
-            &format!("calc_padded_len/{i}"),
-            false,
-            "padding-length calculation is not public in rust-nostr",
-        );
+        check.skip(&format!("calc_padded_len/{i}"));
     }
 }
 
