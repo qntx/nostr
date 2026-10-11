@@ -19,8 +19,8 @@ function asStrings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
-/** One side (ts or rust) of a capability entry: `null` or `{ module, tests }`. */
-function sidePaths(side: unknown): { module: string | undefined; tests: string[] } {
+/** The `ts` side of a capability entry: `{ module, tests }`. */
+function tsPaths(side: unknown): { module: string | undefined; tests: string[] } {
   const record = asRecord(side);
   const { module } = record;
   return {
@@ -77,11 +77,40 @@ export function checkParity(
       }
     }
 
-    const ts = sidePaths(cap["ts"]);
-    const rust = sidePaths(cap["rust"]);
+    const ts = tsPaths(cap["ts"]);
+
+    // `rust` is either null (capability is not exercised against rust-nostr,
+    // `rustNote` explains why) or `{ api, tests }` where `api` names the
+    // rust-nostr path used (free text, not a file) and `tests` lists the
+    // runner files under crates/interop.
+    const rustValue = cap["rust"];
+    const { rustNote } = cap;
+    const rust: { api: string | undefined; tests: string[] } = { api: undefined, tests: [] };
+    if (rustValue === null || rustValue === undefined) {
+      if (typeof rustNote !== "string" || rustNote === "") {
+        errors.push(`${label}: rust is null but rustNote is missing or empty`);
+      }
+    } else if (isRecord(rustValue)) {
+      const { api } = rustValue;
+      if (typeof api !== "string" || api === "") {
+        errors.push(`${label}: rust.api must be a non-empty string naming the rust-nostr path`);
+      } else {
+        rust.api = api;
+      }
+      rust.tests = asStrings(rustValue["tests"]);
+      if (rust.tests.length === 0) {
+        errors.push(`${label}: rust.tests must list at least one runner file`);
+      }
+      if (rustNote !== undefined) {
+        errors.push(`${label}: rustNote is only allowed when rust is null`);
+      }
+    } else {
+      errors.push(`${label}: rust must be null or an object`);
+    }
+
     const testFiles = [...ts.tests, ...rust.tests];
 
-    for (const path of [ts.module, rust.module, ...testFiles]) {
+    for (const path of [ts.module, ...testFiles]) {
       if (typeof path === "string" && !fileExists(path)) {
         errors.push(`${label}: referenced path does not exist: ${path}`);
       }
@@ -104,23 +133,16 @@ export function checkParity(
         errors.push(`${label}: vector file does not exist: ${vector}`);
         continue;
       }
-      // A "stable" capability means both sides run the file; each side's
-      // own test list must cite it, not just some test file somewhere.
-      if (status === "stable") {
-        if (!citedBy(ts.tests, vector)) {
-          errors.push(`${label}: vector ${vector} is not referenced by any ts test file`);
-        }
-        if (!citedBy(rust.tests, vector)) {
-          errors.push(`${label}: vector ${vector} is not referenced by any rust test file`);
-        }
-      } else if (!citedBy(testFiles, vector)) {
+      // `status` is the TS status only; a listed vector must be cited by at
+      // least one test file on either side.
+      if (!citedBy(testFiles, vector)) {
         errors.push(`${label}: vector ${vector} is not referenced by any of its test files`);
       }
     }
 
     if (status === "stable") {
-      if (ts.tests.length === 0 || rust.tests.length === 0) {
-        errors.push(`${label}: "stable" requires non-empty ts.tests and rust.tests`);
+      if (ts.tests.length === 0) {
+        errors.push(`${label}: "stable" requires non-empty ts.tests`);
       }
       if (tier === "A" && vectors.length === 0) {
         errors.push(`${label}: tier A "stable" requires at least one vector file`);

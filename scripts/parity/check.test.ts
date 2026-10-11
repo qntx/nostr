@@ -17,6 +17,7 @@ function cap(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     milestone: "NK1",
     ts: { module: "src/x.ts", tests: ["tests/x.test.ts"] },
     rust: null,
+    rustNote: "no rust-nostr counterpart",
     vectors: [],
     ...overrides,
   };
@@ -61,21 +62,58 @@ describe("parity check", () => {
     ]);
   });
 
-  test("rejects stable without tests on both sides", () => {
+  test("rejects stable without ts tests", () => {
     const errors = checkParity(
-      parity([cap({ status: "stable", rust: { module: null, tests: [] } })]),
+      parity([cap({ status: "stable", ts: { module: "src/x.ts", tests: [] } })]),
       [],
       TRUE,
       EMPTY,
     );
     expect(errors).toStrictEqual([
-      'capability "core.example": "stable" requires non-empty ts.tests and rust.tests',
+      'capability "core.example": "stable" requires non-empty ts.tests',
+    ]);
+  });
+
+  test("rejects rust null without rustNote", () => {
+    const c = cap();
+    delete c["rustNote"];
+    const errors = checkParity(parity([c]), [], TRUE, EMPTY);
+    expect(errors).toStrictEqual([
+      'capability "core.example": rust is null but rustNote is missing or empty',
+    ]);
+  });
+
+  test("rejects a rust object without an api", () => {
+    const errors = checkParity(parity([cap({ rust: { tests: ["tests/x.rs"] } })]), [], TRUE, EMPTY);
+    expect(errors).toStrictEqual([
+      'capability "core.example": rust.api must be a non-empty string naming the rust-nostr path',
+    ]);
+  });
+
+  test("rejects a rust object without tests", () => {
+    const errors = checkParity(parity([cap({ rust: { api: "nostr::Event" } })]), [], TRUE, EMPTY);
+    expect(errors).toStrictEqual([
+      'capability "core.example": rust.tests must list at least one runner file',
+    ]);
+  });
+
+  test("rejects rustNote alongside a rust object", () => {
+    const errors = checkParity(
+      parity([cap({ rust: { api: "nostr::Event", tests: ["tests/x.rs"] } })]),
+      [],
+      TRUE,
+      EMPTY,
+    );
+    expect(errors).toStrictEqual([
+      'capability "core.example": rustNote is only allowed when rust is null',
     ]);
   });
 
   test("requires a vector for stable tier A", () => {
     const errors = checkParity(
-      parity([cap({ tier: "A", status: "stable", rust: { module: null, tests: ["rust/x.rs"] } })]),
+      parity([
+        cap({ tier: "A", status: "stable", rust: { api: "nostr::x", tests: ["rust/x.rs"] } }),
+      ]),
       [],
       TRUE,
       EMPTY,
@@ -126,65 +164,16 @@ describe("parity check", () => {
     expect(errors).toStrictEqual([]);
   });
 
-  test("rejects a stable vector cited only by ts tests", () => {
+  test("accepts a vector cited only by rust tests (rust: null capability keeps ts vectors)", () => {
     const c = cap({
       status: "stable",
-      rust: { module: "src/x.rs", tests: ["tests/x.rs"] },
-      vectors: ["vectors/core/x.json"],
-    });
-    const files = new Map([
-      ["src/x.ts", ""],
-      ["tests/x.test.ts", "x.json"],
-      ["src/x.rs", ""],
-      ["tests/x.rs", "no citation"],
-      ["vectors/core/x.json", "{}"],
-    ]);
-    const errors = checkParity(
-      parity([c]),
-      ["vectors/core/x.json"],
-      (p) => files.has(p),
-      mapReader(files),
-    );
-    expect(errors).toStrictEqual([
-      'capability "core.example": vector vectors/core/x.json is not referenced by any rust test file',
-    ]);
-  });
-
-  test("rejects a stable vector cited only by rust tests", () => {
-    const c = cap({
-      status: "stable",
-      rust: { module: "src/x.rs", tests: ["tests/x.rs"] },
+      rust: { api: "nostr::x", tests: ["tests/x.rs"] },
       vectors: ["vectors/core/x.json"],
     });
     const files = new Map([
       ["src/x.ts", ""],
       ["tests/x.test.ts", "no citation"],
-      ["src/x.rs", ""],
       ["tests/x.rs", "x.json"],
-      ["vectors/core/x.json", "{}"],
-    ]);
-    const errors = checkParity(
-      parity([c]),
-      ["vectors/core/x.json"],
-      (p) => files.has(p),
-      mapReader(files),
-    );
-    expect(errors).toStrictEqual([
-      'capability "core.example": vector vectors/core/x.json is not referenced by any ts test file',
-    ]);
-  });
-
-  test("accepts a stable vector cited by both ts and rust tests", () => {
-    const c = cap({
-      status: "stable",
-      rust: { module: "src/x.rs", tests: ["tests/x.rs"] },
-      vectors: ["vectors/core/x.json"],
-    });
-    const files = new Map([
-      ["src/x.ts", ""],
-      ["tests/x.test.ts", "x.json"],
-      ["src/x.rs", ""],
-      ["tests/x.rs", "vectors/core/x.json"],
       ["vectors/core/x.json", "{}"],
     ]);
     const errors = checkParity(

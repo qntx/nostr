@@ -10,11 +10,9 @@
         "module": "packages/nostr/src/core/util.ts",
         "tests": ["packages/nostr/tests/core.test.ts", "packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": {
-        "module": "crates/nk/src/hex.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/hex.json"]
+      "rust": null,
+      "vectors": ["vectors/core/hex.json"],
+      "rustNote": "rust-nostr has no standalone hex codec surface; nothing to compare the TS codec against"
     },
     {
       "id": "core.url.normalize",
@@ -25,11 +23,9 @@
         "module": "packages/nostr/src/core/util.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
       },
-      "rust": {
-        "module": "crates/nk/src/url.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/url-normalize.json"]
+      "rust": null,
+      "vectors": ["vectors/core/url-normalize.json"],
+      "rustNote": "rust-nostr parses relay URLs (nostr::RelayUrl) but exposes no normalization API"
     },
     {
       "id": "core.kind.classify",
@@ -41,8 +37,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/kind.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::Kind",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/kind-classify.json"]
     },
@@ -56,8 +52,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/tag.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::Tag / nostr::event::builder::EventBuilder",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/tag-build.json"]
     },
@@ -71,8 +67,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/tag.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::nips::nip19::Coordinate",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/tag-address.json"]
     },
@@ -86,8 +82,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/event.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::Event::{from_json, verify}",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-validate.json"]
     },
@@ -101,8 +97,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/event.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::Event::{as_json, from_json}",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-serialize.json"]
     },
@@ -116,8 +112,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/event.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::UnsignedEvent::compute_id",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-serialize.json"]
     },
@@ -131,8 +127,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/event.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::Event (Ord)",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-order.json"]
     },
@@ -146,8 +142,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/event.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::Event::verify",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/event-signed-matches.json"]
     },
@@ -164,8 +160,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/key.rs",
-        "tests": ["crates/nk-vectors/tests/bip340.rs"]
+        "api": "secp256k1::XOnlyPublicKey / nostr::Keys",
+        "tests": ["crates/interop/tests/bip340.rs"]
       },
       "vectors": ["vectors/bip340/official.csv"]
     },
@@ -182,8 +178,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/key.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk-vectors/tests/bip340.rs"]
+        "api": "nostr::Keys / nostr::signer::SignEvent",
+        "tests": ["crates/interop/tests/core.rs", "crates/interop/tests/bip340.rs"]
       },
       "vectors": ["vectors/core/event-sign.json", "vectors/bip340/official.csv"]
     },
@@ -200,8 +196,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/event.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk-vectors/tests/bip340.rs"]
+        "api": "nostr::Event::verify",
+        "tests": ["crates/interop/tests/core.rs", "crates/interop/tests/bip340.rs"]
       },
       "vectors": ["vectors/bip340/official.csv"]
     },
@@ -215,8 +211,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/filter.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::Filter::match_event",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/filter-match.json"]
     },
@@ -230,8 +226,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/filter.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::Filter (deserialization)",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/filter-limit.json"]
     },
@@ -244,11 +240,9 @@
         "module": "packages/nostr/src/core/filter.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": {
-        "module": "crates/nk/src/filter.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/filter-canonicalize.json"]
+      "rust": null,
+      "vectors": ["vectors/core/filter-canonicalize.json"],
+      "rustNote": "nostr::Filter exposes no canonicalization API"
     },
     {
       "id": "core.filter.fingerprint",
@@ -259,11 +253,9 @@
         "module": "packages/nostr/src/core/filter.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
-      "rust": {
-        "module": "crates/nk/src/filter.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/filter-fingerprint.json"]
+      "rust": null,
+      "vectors": ["vectors/core/filter-fingerprint.json"],
+      "rustNote": "nostr::Filter exposes no fingerprinting API"
     },
     {
       "id": "core.message.client",
@@ -275,8 +267,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/message.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::ClientMessage",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/message-client.json"]
     },
@@ -290,8 +282,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/message.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::RelayMessage",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/message-relay.json"]
     },
@@ -305,8 +297,8 @@
         "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/message.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs", "crates/nk/src/message.rs"]
+        "api": "nostr::SubscriptionId",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/message-client.json", "vectors/core/message-relay.json"]
     },
@@ -319,11 +311,9 @@
         "module": "packages/nostr/src/core/message.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/count.test.ts"]
       },
-      "rust": {
-        "module": "crates/nk/src/message.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/count-hll.json"]
+      "rust": null,
+      "vectors": ["vectors/core/count-hll.json"],
+      "rustNote": "rust-nostr has no COUNT / HyperLogLog implementation to compare"
     },
     {
       "id": "core.builder",
@@ -338,8 +328,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/builder.rs",
-        "tests": ["crates/nk-vectors/tests/core.rs"]
+        "api": "nostr::EventBuilder",
+        "tests": ["crates/interop/tests/core.rs"]
       },
       "vectors": ["vectors/core/builder.json"]
     },
@@ -356,8 +346,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip19.rs",
-        "tests": ["crates/nk-vectors/tests/nip19.rs"]
+        "api": "nostr::nips::nip19::{Nip19, FromBech32, ToBech32}",
+        "tests": ["crates/interop/tests/nip19.rs"]
       },
       "vectors": ["vectors/nip19/codec.json", "vectors/nip19/official.json"]
     },
@@ -374,8 +364,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip21.rs",
-        "tests": ["crates/nk-vectors/tests/nip21.rs"]
+        "api": "nostr::nips::nip21::Nip21",
+        "tests": ["crates/interop/tests/nip21.rs"]
       },
       "vectors": ["vectors/nip21/uri.json"]
     },
@@ -389,8 +379,8 @@
         "tests": ["packages/nostr/tests/nip44.test.ts"]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip44.rs",
-        "tests": ["crates/nk-vectors/tests/nip44.rs"]
+        "api": "nostr::nips::nip44::{ConversationKey, encrypt_to_bytes, decrypt_to_bytes}",
+        "tests": ["crates/interop/tests/nip44.rs"]
       },
       "vectors": [
         "vectors/nip44/official.json",
@@ -411,8 +401,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip04.rs",
-        "tests": ["crates/nk-vectors/tests/nip04.rs"]
+        "api": "nostr::nips::nip04::{encrypt_with_iv, decrypt}",
+        "tests": ["crates/interop/tests/nip04.rs"]
       },
       "vectors": ["vectors/nip04/codec.json"]
     },
@@ -429,8 +419,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip49.rs",
-        "tests": ["crates/nk-vectors/tests/nip49.rs"]
+        "api": "nostr::nips::nip49::EncryptedSecretKey",
+        "tests": ["crates/interop/tests/nip49.rs"]
       },
       "vectors": [
         "vectors/nip49/official.json",
@@ -451,8 +441,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip13.rs",
-        "tests": ["crates/nk-vectors/tests/nip13.rs"]
+        "api": "nostr::nips::nip13::{get_leading_zero_bits, EventBuilder::pow}",
+        "tests": ["crates/interop/tests/nip13.rs"]
       },
       "vectors": ["vectors/nip13/codec.json"]
     },
@@ -469,8 +459,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip42.rs",
-        "tests": ["crates/nk-vectors/tests/nip42.rs"]
+        "api": "nostr::nips::nip42 / nostr::EventBuilder::auth",
+        "tests": ["crates/interop/tests/nip42.rs"]
       },
       "vectors": ["vectors/nip42/codec.json"]
     },
@@ -487,8 +477,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip98.rs",
-        "tests": ["crates/nk-vectors/tests/nip98.rs"]
+        "api": "nostr::nips::nip98::{HttpData, verify_auth_header, unpack_token}",
+        "tests": ["crates/interop/tests/nip98.rs"]
       },
       "vectors": ["vectors/nip98/codec.json"]
     },
@@ -505,8 +495,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip59.rs",
-        "tests": ["crates/nk-vectors/tests/nip59.rs"]
+        "api": "nostr::nips::nip59::UnwrappedGift",
+        "tests": ["crates/interop/tests/nip59.rs"]
       },
       "vectors": ["vectors/nip59/codec.json"]
     },
@@ -523,8 +513,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip17.rs",
-        "tests": ["crates/nk-vectors/tests/nip17.rs"]
+        "api": "nostr::nips::nip17::{PrivateDirectMessageBuilder, extract_relay_list}",
+        "tests": ["crates/interop/tests/nip17.rs"]
       },
       "vectors": ["vectors/nip17/codec.json"]
     },
@@ -541,8 +531,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip10.rs",
-        "tests": ["crates/nk-vectors/tests/nip10.rs"]
+        "api": "nostr::nips::nip10::TextNoteReplyBuilder",
+        "tests": ["crates/interop/tests/nip10.rs"]
       },
       "vectors": ["vectors/nip10/codec.json"]
     },
@@ -558,11 +548,9 @@
           "packages/nostr/tests/vectors/nip27.test.ts"
         ]
       },
-      "rust": {
-        "module": "crates/nk/src/nips/nip27.rs",
-        "tests": ["crates/nk-vectors/tests/nip27.rs"]
-      },
-      "vectors": ["vectors/nip27/codec.json"]
+      "rust": null,
+      "vectors": ["vectors/nip27/codec.json"],
+      "rustNote": "rust-nostr parses entity mentions internally but exposes no token/block stream; runner dropped"
     },
     {
       "id": "nip51.lists",
@@ -577,8 +565,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip51.rs",
-        "tests": ["crates/nk-vectors/tests/nip51.rs"]
+        "api": "nostr::nips::nip51",
+        "tests": ["crates/interop/tests/nip51.rs"]
       },
       "vectors": ["vectors/nip51/codec.json"]
     },
@@ -595,8 +583,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip57.rs",
-        "tests": ["crates/nk-vectors/tests/nip57.rs"]
+        "api": "nostr::nips::nip57::{ZapRequestData, Nip57Tag, ZapReceipt}",
+        "tests": ["crates/interop/tests/nip57.rs"]
       },
       "vectors": ["vectors/nip57/codec.json"]
     },
@@ -613,8 +601,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip65.rs",
-        "tests": ["crates/nk-vectors/tests/nip65.rs"]
+        "api": "nostr::nips::nip65::{extract_relay_list, RelayList}",
+        "tests": ["crates/interop/tests/nip65.rs"]
       },
       "vectors": ["vectors/nip65/codec.json"]
     },
@@ -628,7 +616,8 @@
         "tests": ["packages/nostr/tests/nip77.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "negentropy lives in the nostr-relay-* crates, outside the protocol vector comparison in V1"
     },
     {
       "id": "nip46.codec",
@@ -643,8 +632,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk/src/nips/nip46.rs",
-        "tests": ["crates/nk-vectors/tests/nip46.rs"]
+        "api": "nostr::nips::nip46::{NostrConnectUri, NostrConnectMessage}",
+        "tests": ["crates/interop/tests/nip46.rs"]
       },
       "vectors": ["vectors/nip46/codec.json"]
     },
@@ -658,7 +647,8 @@
         "tests": ["packages/nostr/tests/nip05.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "nip11.info",
@@ -670,7 +660,8 @@
         "tests": ["packages/nostr/tests/nip11.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "blossom.client",
@@ -682,7 +673,8 @@
         "tests": ["packages/nostr/tests/blossom.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "signer.keys",
@@ -694,7 +686,8 @@
         "tests": ["packages/nostr/tests/signing-backend.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "signer.delegated",
@@ -706,7 +699,8 @@
         "tests": ["packages/nostr/tests/delegated-signer.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "signer.nip46",
@@ -718,7 +712,8 @@
         "tests": ["packages/nostr/tests/nip46.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "signer.nip07",
@@ -730,7 +725,8 @@
         "tests": ["packages/nostr/tests/nip07.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "gossip.route",
@@ -742,7 +738,8 @@
         "tests": ["packages/nostr/tests/loaders-gossip.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "relay.url.insecure",
@@ -754,7 +751,8 @@
         "tests": ["packages/nostr/tests/relay.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "relay.connection",
@@ -766,7 +764,8 @@
         "tests": ["packages/nostr/tests/relay.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "relay.subscription",
@@ -778,7 +777,8 @@
         "tests": ["packages/nostr/tests/relay.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "relay.publish",
@@ -793,7 +793,8 @@
         ]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "relay.auth",
@@ -805,7 +806,8 @@
         "tests": ["packages/nostr/tests/lazy-auth.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "relay.count",
@@ -817,7 +819,8 @@
         "tests": ["packages/nostr/tests/count.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "relay.negentropy",
@@ -829,7 +832,8 @@
         "tests": ["packages/nostr/tests/relay.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "relay.pool",
@@ -844,7 +848,8 @@
         ]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "testing.fake-relay",
@@ -859,7 +864,8 @@
         ]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "storage.memory",
@@ -871,7 +877,8 @@
         "tests": ["packages/nostr/tests/event-store-conformance.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "storage.sqlite",
@@ -883,7 +890,8 @@
         "tests": ["packages/nostr/tests/sqlite-store.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "storage.indexeddb",
@@ -895,7 +903,8 @@
         "tests": ["packages/nostr/tests/indexeddb-store.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "store.reactive",
@@ -907,7 +916,8 @@
         "tests": ["packages/nostr/tests/reactive-store.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "loaders.replaceable",
@@ -919,7 +929,8 @@
         "tests": ["packages/nostr/tests/event-loader.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "loaders.event",
@@ -931,7 +942,8 @@
         "tests": ["packages/nostr/tests/event-loader.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "loaders.profile",
@@ -943,7 +955,8 @@
         "tests": ["packages/nostr/tests/loaders-gossip.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "loaders.lists",
@@ -955,7 +968,8 @@
         "tests": ["packages/nostr/tests/loaders-gossip.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "loaders.outbox",
@@ -967,7 +981,8 @@
         "tests": ["packages/nostr/tests/outbox.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "client.core",
@@ -979,7 +994,8 @@
         "tests": ["packages/nostr/tests/client.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "client.dm",
@@ -991,7 +1007,8 @@
         "tests": ["packages/nostr/tests/client-nip17.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "client.sync",
@@ -1003,7 +1020,8 @@
         "tests": ["packages/nostr/tests/client.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
     },
     {
       "id": "wasm.backend",
@@ -1020,8 +1038,8 @@
         ]
       },
       "rust": {
-        "module": "crates/nk-wasm/src/abi.rs",
-        "tests": ["crates/nk-wasm/tests/abi.rs"]
+        "api": "crates/wasm (qntx-nostr-wasm) nostr_* raw-byte exports",
+        "tests": ["crates/wasm/tests/abi.rs", "packages/nostr-wasm/tests/abi.test.ts"]
       },
       "vectors": [
         "vectors/bip340/official.csv",
@@ -1039,7 +1057,8 @@
         "tests": ["packages/nostr-wasm/tests/node-load.test.ts"]
       },
       "rust": null,
-      "vectors": []
+      "vectors": [],
+      "rustNote": "wasm module loading is TS-side; no Rust counterpart to compare"
     }
   ]
 }

@@ -10,7 +10,7 @@
 
 ## Architecture invariants
 
-- One-directional layering inside `packages/nostr/src`: `core` is the leaf; `nips/*` and `storage` may only import `core`; `signer` adds `nips`; `store` adds `storage`; `relay` adds `nips`/`signer`; `gossip` adds `nips`; `loaders` and `testing` consume the mid layers; `client` composes everything. `nips/*` must never import `relay`, `signer`, `storage`, or `client`. The acceleration backends are the separate `packages/nostr-wasm` and `packages/nostr-native` packages, which may only import `@qntx/nostr/core`; `packages/nostr-native` is React Native–only by design and may additionally import `react-native-nitro-modules`, an explicit exception to the platform-neutral rule. The TypeScript layer graph is enforced by lint (`LAYERS` in `vite.config.ts`); the Rust side mirrors it and is enforced by `scripts/check-layers.ts`.
+- One-directional layering inside `packages/nostr/src`: `core` is the leaf; `nips/*` and `storage` may only import `core`; `signer` adds `nips`; `store` adds `storage`; `relay` adds `nips`/`signer`; `gossip` adds `nips`; `loaders` and `testing` consume the mid layers; `client` composes everything. `nips/*` must never import `relay`, `signer`, `storage`, or `client`. The acceleration backends are the separate `packages/nostr-wasm` and `packages/nostr-native` packages, which may only import `@qntx/nostr/core`; `packages/nostr-native` is React Native–only by design and may additionally import `react-native-nitro-modules`, an explicit exception to the platform-neutral rule. The TypeScript layer graph is enforced by lint (`LAYERS` in `vite.config.ts`).
 - All I/O is injected (WebSocket, fetch, storage drivers); `packages/*/src/` holds no ambient singletons.
 - `packages/*/src/` is platform-neutral: no Node-only or browser-only globals and no `node:*` imports outside the declared lint exceptions (`packages/nostr/src/testing/serve.ts`, `packages/nostr-wasm/src/load.ts`).
 
@@ -18,13 +18,14 @@
 
 Runtime dependencies (`@noble/*`, `@scure/base`) use caret ranges so consumers can deduplicate them against the rest of their dependency tree; devDependencies stay exact-pinned for reproducible builds. Review upstream changelogs on every bump.
 
-## Rust crates
+## Rust
 
-- `nk` is the leaf protocol crate (core types plus every NIP behind its own feature); higher-level crates land per milestone: `nk-database` (`EventStore` trait, memory store), `nk-sqlite`, `nk-gossip` (outbox/inbox routing), `nk-sdk` (relays, clients, signers composition), `nk-connect` (NIP-46 remote signing), and `nk-blossom`. Dependency direction is one-way toward `nk` and is enforced by `scripts/check-layers.ts`. Internal `nk-*` workspace dependencies are declared `default-features = false`; dependents enable and forward features explicitly (Cargo feature unification would otherwise mask minimal-configuration breakage).
-- `nk` is `no_std` + `alloc` and sans-IO; `nk-database` and `nk-gossip` are portable `std`; `nk-sqlite` uses `std` (it only needs to build for iOS/Android); `nk-wasm` is the wasm binding crate. All of these P-level crates must build for `wasm32-unknown-unknown` with `--no-default-features` and for the iOS/Android toolchain targets. `std` (default), `clock`, and `os-rng` are additive features; OS entropy and wall clock live behind them.
-- Follow the Rust API Guidelines. No third-party types in public APIs. No panics and no `unwrap`/`expect` in library code. `unsafe` only inside `nk-wasm`'s ABI module.
-- Shared test vectors live in `vectors/` (see `vectors/README.md`) and every capability is tracked in `parity.json`; both languages run the same files.
-- npm and crates versions are lockstep: `bump.config.ts` bumps `packages/*/package.json` + `Cargo.toml` together, `scripts/check-version.ts` guards drift (including the `@qntx/nostr-wasm` peer/dev ranges on `@qntx/nostr`).
+- The Rust side does not implement the protocol. Rust consumers use rust-nostr (`nostr`, `nostr-sdk`, ...) from crates.io; this repository does not fork or copy it, and upstream defects go upstream as issues or pull requests.
+- `crates/wasm` (`qntx-nostr-wasm`) is the WebAssembly ABI behind `@qntx/nostr-wasm`. It depends only on `secp256k1` and `sha2`, builds for `wasm32-unknown-unknown`, and is the only place `unsafe` is allowed (ABI module, with safety comments).
+- `crates/interop` (`qntx-nostr-interop`) runs the shared vectors in `vectors/` and the TS differential streams against rust-nostr. Only protocol behavior is compared. Known divergences are listed in `crates/interop/divergences.json`; unlisted divergences and stale entries fail the tests.
+- Rust crates are not published and are not versioned with the npm packages.
+- Follow the Rust API Guidelines. No panics and no `unwrap`/`expect` outside tests.
+- Shared test vectors live in `vectors/` (see `vectors/README.md`) and every capability is tracked in `parity.json`.
 - TOML is formatted by taplo (`.taplo.toml`, aligned `=`); run `taplo fmt`, and keep `taplo fmt --check` green in `bun run lint`.
 
 ## Commands
@@ -33,11 +34,10 @@ Local gate before a pull request:
 
 ```bash
 bun run lint && bun run typecheck && bun run test   # lint includes taplo,
-                                                    # version, layer and
+                                                    # version and
                                                     # parity checks
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 cargo test --workspace --all-features
 cargo deny check
 cd packages/nostr-wasm

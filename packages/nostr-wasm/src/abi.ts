@@ -1,27 +1,27 @@
 import { CryptoError } from "@qntx/nostr/core";
 
 /**
- * Byte-ABI version 1 surface exported by `nk_wasm.wasm` (`crates/nk-wasm/src/abi.rs`). All inputs
+ * Byte-ABI version 2 surface exported by `nostr_wasm.wasm` (`crates/wasm/src/abi.rs`). All inputs
  * are caller-written regions of a single scratch buffer; status codes are 0 ok/verified, 1
  * verification failed, 2 invalid input.
  */
 export type CryptoWasmExports = {
   memory: WebAssembly.Memory;
-  nk_abi_version: () => number;
-  nk_buffer: (len: number) => number;
-  nk_verify: (id: number, pubkey: number, sig: number) => number;
-  nk_verify_serialized: (
+  nostr_abi_version: () => number;
+  nostr_buffer: (len: number) => number;
+  nostr_verify: (id: number, pubkey: number, sig: number) => number;
+  nostr_verify_serialized: (
     ser: number,
     serLen: number,
     id: number,
     pubkey: number,
     sig: number,
   ) => number;
-  nk_sign: (id: number, seckey: number, aux: number, outSig: number) => number;
-  nk_public_key: (seckey: number, outPubkey: number) => number;
+  nostr_sign: (id: number, seckey: number, aux: number, outSig: number) => number;
+  nostr_public_key: (seckey: number, outPubkey: number) => number;
 };
 
-export const NK_ABI_VERSION = 1;
+export const NOSTR_ABI_VERSION = 2;
 
 const ID_LEN = 32;
 const PUBKEY_LEN = 32;
@@ -51,21 +51,21 @@ function requireFn<T extends (...args: number[]) => unknown>(
 function asExports(raw: WebAssembly.Exports): CryptoWasmExports {
   return {
     memory: requireMemory(raw["memory"]),
-    nk_abi_version: requireFn(raw["nk_abi_version"], "nk_abi_version"),
-    nk_buffer: requireFn(raw["nk_buffer"], "nk_buffer"),
-    nk_verify: requireFn(raw["nk_verify"], "nk_verify"),
-    nk_verify_serialized: requireFn(raw["nk_verify_serialized"], "nk_verify_serialized"),
-    nk_sign: requireFn(raw["nk_sign"], "nk_sign"),
-    nk_public_key: requireFn(raw["nk_public_key"], "nk_public_key"),
+    nostr_abi_version: requireFn(raw["nostr_abi_version"], "nostr_abi_version"),
+    nostr_buffer: requireFn(raw["nostr_buffer"], "nostr_buffer"),
+    nostr_verify: requireFn(raw["nostr_verify"], "nostr_verify"),
+    nostr_verify_serialized: requireFn(raw["nostr_verify_serialized"], "nostr_verify_serialized"),
+    nostr_sign: requireFn(raw["nostr_sign"], "nostr_sign"),
+    nostr_public_key: requireFn(raw["nostr_public_key"], "nostr_public_key"),
   };
 }
 
 /**
  * Reserve `total` bytes in the wasm scratch region and return a fresh view. The view is taken after
- * `nk_buffer` ran, so a growth inside it cannot leave a detached view in the caller's hands.
+ * `nostr_buffer` ran, so a growth inside it cannot leave a detached view in the caller's hands.
  */
 function scratch(exports: CryptoWasmExports, total: number): { ptr: number; view: Uint8Array } {
-  const ptr = exports.nk_buffer(total) >>> 0;
+  const ptr = exports.nostr_buffer(total) >>> 0;
   return { ptr, view: new Uint8Array(exports.memory.buffer, ptr, total) };
 }
 
@@ -89,7 +89,7 @@ export function wasmVerify(
   view.set(id, 0);
   view.set(pubkey, ID_LEN);
   view.set(sig, ID_LEN + PUBKEY_LEN);
-  return exports.nk_verify(ptr, ptr + ID_LEN, ptr + ID_LEN + PUBKEY_LEN) === 0;
+  return exports.nostr_verify(ptr, ptr + ID_LEN, ptr + ID_LEN + PUBKEY_LEN) === 0;
 }
 
 export function wasmVerifySerialized(
@@ -109,7 +109,7 @@ export function wasmVerifySerialized(
   view.set(pubkey, serLen + ID_LEN);
   view.set(sig, serLen + ID_LEN + PUBKEY_LEN);
   return (
-    exports.nk_verify_serialized(
+    exports.nostr_verify_serialized(
       ptr,
       serLen,
       ptr + serLen,
@@ -134,7 +134,7 @@ export function wasmSign(
   view.set(id, 0);
   view.set(seckey, ID_LEN);
   view.set(aux, ID_LEN + SECKEY_LEN);
-  const status = exports.nk_sign(ptr, ptr + ID_LEN, ptr + ID_LEN + SECKEY_LEN, ptr + outOffset);
+  const status = exports.nostr_sign(ptr, ptr + ID_LEN, ptr + ID_LEN + SECKEY_LEN, ptr + outOffset);
   if (status !== 0) {
     return new Uint8Array(0);
   }
@@ -148,7 +148,7 @@ export function wasmSign(
 export function wasmPublicKey(exports: CryptoWasmExports, seckey: Uint8Array): Uint8Array {
   const { ptr, view } = scratch(exports, SECKEY_LEN + PUBKEY_LEN);
   view.set(seckey, 0);
-  const status = exports.nk_public_key(ptr, ptr + SECKEY_LEN);
+  const status = exports.nostr_public_key(ptr, ptr + SECKEY_LEN);
   if (status !== 0) {
     return new Uint8Array(0);
   }
@@ -156,9 +156,9 @@ export function wasmPublicKey(exports: CryptoWasmExports, seckey: Uint8Array): U
 }
 
 /**
- * Compile and instantiate `nk_wasm.wasm`. The module must declare no imports and must implement ABI
- * version {@link NK_ABI_VERSION} — a mismatch means the artifact predates or postdates this loader
- * and instantiation fails.
+ * Compile and instantiate `nostr_wasm.wasm`. The module must declare no imports and must implement
+ * ABI version {@link NOSTR_ABI_VERSION} — a mismatch means the artifact predates or postdates this
+ * loader and instantiation fails.
  */
 export async function instantiateCryptoWasm(
   bytes: ArrayBuffer | ArrayBufferView,
@@ -166,13 +166,15 @@ export async function instantiateCryptoWasm(
   const module = await WebAssembly.compile(bytes);
   const imports = WebAssembly.Module.imports(module);
   if (imports.length > 0) {
-    throw new TypeError(`nk_wasm module must not import anything, got ${imports.length} imports`);
+    throw new TypeError(
+      `nostr_wasm module must not import anything, got ${imports.length} imports`,
+    );
   }
   const instance = await WebAssembly.instantiate(module, {});
-  const version = requireFn(instance.exports["nk_abi_version"], "nk_abi_version")();
-  if (version !== NK_ABI_VERSION) {
+  const version = requireFn(instance.exports["nostr_abi_version"], "nostr_abi_version")();
+  if (version !== NOSTR_ABI_VERSION) {
     throw new CryptoError(
-      `unsupported nk_wasm ABI version ${String(version)}, expected ${NK_ABI_VERSION}`,
+      `unsupported nostr_wasm ABI version ${String(version)}, expected ${NOSTR_ABI_VERSION}`,
     );
   }
   return asExports(instance.exports);

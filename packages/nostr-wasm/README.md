@@ -1,6 +1,6 @@
 # @qntx/nostr-wasm
 
-WebAssembly-accelerated cryptography for [`@qntx/nostr`](https://www.npmjs.com/package/@qntx/nostr) (BIP-340 signing and event verification), built from the `nk-wasm` Rust crate.
+WebAssembly-accelerated cryptography for [`@qntx/nostr`](https://www.npmjs.com/package/@qntx/nostr) (BIP-340 signing and event verification), built from the `crates/wasm` (`qntx-nostr-wasm`) Rust crate.
 
 ```bash
 npm install @qntx/nostr-wasm @qntx/nostr

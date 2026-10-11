@@ -1,4 +1,4 @@
-# cargo-deny configuration for the nk-* workspace.
+# cargo-deny configuration for the Rust workspace.
 #
 # Run with `cargo deny check` to enforce supply-chain hygiene:
 # - advisories: every transitive dependency must be free of known CVEs
