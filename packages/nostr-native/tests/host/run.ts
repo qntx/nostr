@@ -326,7 +326,7 @@ function main(): void {
       "-D_DEFAULT_SOURCE",
       "-DENABLE_MODULE_EXTRAKEYS",
       "-DENABLE_MODULE_SCHNORRSIG",
-      "-DQNTX_NOSTR_NATIVE_TEST",
+      "-DNOSTR_NATIVE_TEST",
       `-I${join(packageDir, "cpp")}`,
       `-I${hostDir}`,
       join(packageDir, "cpp", "nostr_native.c"),

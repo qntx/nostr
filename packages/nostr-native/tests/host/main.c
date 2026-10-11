@@ -69,18 +69,18 @@ int main(void) {
   unsigned char sig[64];
 
   for (i = 0; i < sizeof(SHA256_CASES) / sizeof(SHA256_CASES[0]); i++) {
-    qntx_nostr_test_sha256(SHA256_CASES[i].data, SHA256_CASES[i].len, out);
+    nostr_native_test_sha256(SHA256_CASES[i].data, SHA256_CASES[i].len, out);
     check(memcmp(out, SHA256_CASES[i].expected, 32), 0, SHA256_CASES[i].name);
   }
 
   for (i = 0; i < sizeof(SCHNORR_CASES) / sizeof(SCHNORR_CASES[0]); i++) {
-    check(qntx_nostr_test_schnorr_verify(SCHNORR_CASES[i].msg, SCHNORR_CASES[i].msglen,
+    check(nostr_native_test_schnorr_verify(SCHNORR_CASES[i].msg, SCHNORR_CASES[i].msglen,
                                     SCHNORR_CASES[i].pubkey, SCHNORR_CASES[i].sig),
           SCHNORR_CASES[i].expected, SCHNORR_CASES[i].name);
   }
 
   for (i = 0; i < sizeof(EVENT_CASES) / sizeof(EVENT_CASES[0]); i++) {
-    check(qntx_nostr_verify_serialized(EVENT_CASES[i].serialized, EVENT_CASES[i].len,
+    check(nostr_native_verify_serialized(EVENT_CASES[i].serialized, EVENT_CASES[i].len,
                                         EVENT_CASES[i].id, EVENT_CASES[i].pubkey,
                                         EVENT_CASES[i].sig),
           EVENT_CASES[i].expected, EVENT_CASES[i].name);
@@ -88,29 +88,29 @@ int main(void) {
 
   /* Sign: C must reproduce the expected signature and x-only public key byte-for-byte. */
   for (i = 0; i < sizeof(SIGN_CASES) / sizeof(SIGN_CASES[0]); i++) {
-    check(qntx_nostr_sign(SIGN_CASES[i].msg, SIGN_CASES[i].seckey, SIGN_CASES[i].aux,
+    check(nostr_native_sign(SIGN_CASES[i].msg, SIGN_CASES[i].seckey, SIGN_CASES[i].aux,
                            sig),
           1, SIGN_CASES[i].name);
     check(memcmp(sig, SIGN_CASES[i].sig, 64), 0, SIGN_CASES[i].name);
-    check(qntx_nostr_public_key(SIGN_CASES[i].seckey, out), 1, SIGN_CASES[i].name);
+    check(nostr_native_public_key(SIGN_CASES[i].seckey, out), 1, SIGN_CASES[i].name);
     check(memcmp(out, SIGN_CASES[i].pubkey, 32), 0, SIGN_CASES[i].name);
   }
 
   /* Invalid secret keys (zero, n, n+1, all-0xff) must fail both entry points. */
   for (i = 0; i < sizeof(BAD_SECKEYS) / sizeof(BAD_SECKEYS[0]); i++) {
-    check(qntx_nostr_public_key(BAD_SECKEYS[i].seckey, out), 0, BAD_SECKEYS[i].name);
-    check(qntx_nostr_sign(EVENT_CASES[0].id, BAD_SECKEYS[i].seckey,
+    check(nostr_native_public_key(BAD_SECKEYS[i].seckey, out), 0, BAD_SECKEYS[i].name);
+    check(nostr_native_sign(EVENT_CASES[0].id, BAD_SECKEYS[i].seckey,
                            SIGN_CASES[0].aux, sig),
           0, BAD_SECKEYS[i].name);
   }
 
   /* Robustness: NULL inputs must return 0, never crash. */
-  check(qntx_nostr_verify_serialized(NULL, 0, NULL, NULL, NULL), 0, "null-args");
-  check(qntx_nostr_verify_serialized(EVENT_CASES[0].serialized, EVENT_CASES[0].len,
+  check(nostr_native_verify_serialized(NULL, 0, NULL, NULL, NULL), 0, "null-args");
+  check(nostr_native_verify_serialized(EVENT_CASES[0].serialized, EVENT_CASES[0].len,
                                       NULL, EVENT_CASES[0].pubkey, EVENT_CASES[0].sig),
         0, "null-id");
-  check(qntx_nostr_public_key(NULL, out), 0, "null-seckey-pk");
-  check(qntx_nostr_sign(NULL, NULL, NULL, sig), 0, "null-sign");
+  check(nostr_native_public_key(NULL, out), 0, "null-seckey-pk");
+  check(nostr_native_sign(NULL, NULL, NULL, sig), 0, "null-sign");
 
   /* Informational throughput: ~2s of verifies of one valid event. */
   {
@@ -121,7 +121,7 @@ int main(void) {
     do {
       int j;
       for (j = 0; j < 100; j++) {
-        qntx_nostr_verify_serialized(v->serialized, v->len, v->id, v->pubkey, v->sig);
+        nostr_native_verify_serialized(v->serialized, v->len, v->id, v->pubkey, v->sig);
       }
       iterations += 100;
       elapsed = monotonic_seconds() - start;

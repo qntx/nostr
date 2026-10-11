@@ -20,10 +20,10 @@
  * self test; randomizing with an arc4random seed blinds ecmult_gen against side-channel leakage
  * of the secret key while signing. Every public entry point calls this first.
  */
-static secp256k1_context *qntx_ctx;
-static pthread_once_t qntx_ctx_once = PTHREAD_ONCE_INIT;
+static secp256k1_context *module_ctx;
+static pthread_once_t module_ctx_once = PTHREAD_ONCE_INIT;
 
-static void qntx_init_context(void) {
+static void init_module_context(void) {
   unsigned char seed[32];
   secp256k1_context *created = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
   if (created == NULL) {
@@ -34,22 +34,22 @@ static void qntx_init_context(void) {
     abort();
   }
   secp256k1_memclear_explicit(seed, sizeof(seed));
-  qntx_ctx = created;
+  module_ctx = created;
 }
 
-static secp256k1_context *qntx_context(void) {
-  pthread_once(&qntx_ctx_once, qntx_init_context);
-  return qntx_ctx;
+static secp256k1_context *module_context(void) {
+  pthread_once(&module_ctx_once, init_module_context);
+  return module_ctx;
 }
 
-int qntx_nostr_verify_serialized(const unsigned char *serialized, size_t len,
+int nostr_native_verify_serialized(const unsigned char *serialized, size_t len,
                                   const unsigned char id[32],
                                   const unsigned char pubkey[32],
                                   const unsigned char sig[64]) {
   unsigned char digest[32];
   secp256k1_sha256 sha;
   secp256k1_xonly_pubkey parsed;
-  secp256k1_context *ctx = qntx_context();
+  secp256k1_context *ctx = module_context();
   const secp256k1_hash_ctx *hash_ctx;
   size_t i;
 
@@ -73,11 +73,11 @@ int qntx_nostr_verify_serialized(const unsigned char *serialized, size_t len,
   return secp256k1_schnorrsig_verify(ctx, sig, id, 32, &parsed);
 }
 
-int qntx_nostr_public_key(const unsigned char seckey[32], unsigned char out_xonly[32]) {
+int nostr_native_public_key(const unsigned char seckey[32], unsigned char out_xonly[32]) {
   secp256k1_keypair keypair;
   secp256k1_xonly_pubkey pubkey;
   int ok;
-  secp256k1_context *ctx = qntx_context();
+  secp256k1_context *ctx = module_context();
 
   if (seckey == NULL || out_xonly == NULL) {
     return 0;
@@ -90,11 +90,11 @@ int qntx_nostr_public_key(const unsigned char seckey[32], unsigned char out_xonl
   return ok;
 }
 
-int qntx_nostr_sign(const unsigned char id[32], const unsigned char seckey[32],
+int nostr_native_sign(const unsigned char id[32], const unsigned char seckey[32],
                      const unsigned char aux_rand[32], unsigned char out_sig[64]) {
   secp256k1_keypair keypair;
   int ok;
-  secp256k1_context *ctx = qntx_context();
+  secp256k1_context *ctx = module_context();
 
   if (id == NULL || seckey == NULL || aux_rand == NULL || out_sig == NULL) {
     return 0;
@@ -106,10 +106,10 @@ int qntx_nostr_sign(const unsigned char id[32], const unsigned char seckey[32],
   return ok;
 }
 
-#ifdef QNTX_NOSTR_NATIVE_TEST
+#ifdef NOSTR_NATIVE_TEST
 
-void qntx_nostr_test_sha256(const unsigned char *data, size_t len, unsigned char out32[32]) {
-  secp256k1_context *ctx = qntx_context();
+void nostr_native_test_sha256(const unsigned char *data, size_t len, unsigned char out32[32]) {
+  secp256k1_context *ctx = module_context();
   const secp256k1_hash_ctx *hash_ctx = secp256k1_get_hash_context(ctx);
   secp256k1_sha256 sha;
   secp256k1_sha256_initialize(&sha);
@@ -117,9 +117,9 @@ void qntx_nostr_test_sha256(const unsigned char *data, size_t len, unsigned char
   secp256k1_sha256_finalize(hash_ctx, &sha, out32);
 }
 
-int qntx_nostr_test_schnorr_verify(const unsigned char *msg, size_t msglen,
+int nostr_native_test_schnorr_verify(const unsigned char *msg, size_t msglen,
                               const unsigned char pubkey[32], const unsigned char sig[64]) {
-  secp256k1_context *ctx = qntx_context();
+  secp256k1_context *ctx = module_context();
   secp256k1_xonly_pubkey parsed;
   if (!secp256k1_xonly_pubkey_parse(ctx, &parsed, pubkey)) {
     return 0;

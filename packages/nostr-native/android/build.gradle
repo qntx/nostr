@@ -19,18 +19,18 @@ def isNewArchitectureEnabled() {
 
 apply plugin: "com.android.library"
 apply plugin: 'org.jetbrains.kotlin.android'
-apply from: '../nitrogen/generated/android/QntxNostrNative+autolinking.gradle'
+apply from: '../nitrogen/generated/android/NostrNative+autolinking.gradle'
 
 if (isNewArchitectureEnabled()) {
   apply plugin: "com.facebook.react"
 }
 
 def getExtOrDefault(name) {
-  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties["QntxNostrNative_" + name]
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties["NostrNative_" + name]
 }
 
 def getExtOrIntegerDefault(name) {
-  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["QntxNostrNative_" + name]).toInteger()
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["NostrNative_" + name]).toInteger()
 }
 
 android {

@@ -9,7 +9,7 @@ import com.facebook.react.BaseReactPackage;
 
 import java.util.HashMap;
 
-public class QntxNostrNativePackage extends BaseReactPackage {
+public class NostrNativePackage extends BaseReactPackage {
   @Nullable
   @Override
   public NativeModule getModule(String name, ReactApplicationContext reactContext) {
@@ -24,6 +24,6 @@ public class QntxNostrNativePackage extends BaseReactPackage {
   }
 
   static {
-    QntxNostrNativeOnLoad.initializeNative();
+    NostrNativeOnLoad.initializeNative();
   }
 }

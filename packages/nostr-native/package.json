@@ -31,7 +31,7 @@
     "vendor",
     "nitro.json",
     "react-native.config.js",
-    "QntxNostrNative.podspec",
+    "NostrNative.podspec",
     "LICENSE-MIT",
     "LICENSE-APACHE"
   ],

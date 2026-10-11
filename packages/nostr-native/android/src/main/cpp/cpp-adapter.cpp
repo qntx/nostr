@@ -1,4 +1,4 @@
-#include "QntxNostrNativeOnLoad.hpp"
+#include "NostrNativeOnLoad.hpp"
 #include <fbjni/fbjni.h>
 #include <jni.h>
 

@@ -2,11 +2,11 @@
   "$schema": "https://nitro.margelo.com/nitro.schema.json",
   "cxxNamespace": ["nostrnative"],
   "ios": {
-    "iosModuleName": "QntxNostrNative"
+    "iosModuleName": "NostrNative"
   },
   "android": {
     "androidNamespace": ["nostrnative"],
-    "androidCxxLibName": "QntxNostrNative"
+    "androidCxxLibName": "NostrNative"
   },
   "autolinking": {
     "NostrNative": {

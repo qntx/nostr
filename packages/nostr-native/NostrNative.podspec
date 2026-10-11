@@ -3,7 +3,7 @@ require "json"
 package = JSON.parse(File.read(File.join(__dir__, "package.json")))
 
 Pod::Spec.new do |s|
-  s.name         = "QntxNostrNative"
+  s.name         = "NostrNative"
   s.version      = package["version"]
   s.summary      = package["description"]
   s.homepage     = package["homepage"]
@@ -28,7 +28,7 @@ Pod::Spec.new do |s|
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) ENABLE_MODULE_EXTRAKEYS=1 ENABLE_MODULE_SCHNORRSIG=1",
   }
 
-  load 'nitrogen/generated/ios/QntxNostrNative+autolinking.rb'
+  load 'nitrogen/generated/ios/NostrNative+autolinking.rb'
   add_nitrogen_files(s)
 
   s.dependency 'React-jsi'

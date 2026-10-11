@@ -13,7 +13,7 @@ bool HybridNostrNative::verifySerialized(
   if (id->size() != 32 || pubkey->size() != 32 || sig->size() != 64) {
     return false;
   }
-  return qntx_nostr_verify_serialized(serializedUtf8->data(), serializedUtf8->size(),
+  return nostr_native_verify_serialized(serializedUtf8->data(), serializedUtf8->size(),
                                      id->data(), pubkey->data(), sig->data()) != 0;
 }
 
@@ -23,7 +23,7 @@ std::shared_ptr<ArrayBuffer> HybridNostrNative::publicKey(
     throw std::invalid_argument("secretKey must be 32 bytes");
   }
   auto out = ArrayBuffer::allocate(32);
-  if (!qntx_nostr_public_key(secretKey->data(), out->data())) {
+  if (!nostr_native_public_key(secretKey->data(), out->data())) {
     throw std::invalid_argument("invalid secret key");
   }
   return out;
@@ -43,7 +43,7 @@ std::shared_ptr<ArrayBuffer> HybridNostrNative::sign(
     throw std::invalid_argument("auxRand must be 32 bytes");
   }
   auto out = ArrayBuffer::allocate(64);
-  if (!qntx_nostr_sign(id->data(), secretKey->data(), auxRand->data(), out->data())) {
+  if (!nostr_native_sign(id->data(), secretKey->data(), auxRand->data(), out->data())) {
     throw std::invalid_argument("invalid secret key");
   }
   return out;
