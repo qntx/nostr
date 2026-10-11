@@ -7,7 +7,12 @@ import { defineConfig } from "bumpp";
 // are run by sync-versions — bumpp spawns `execute` without a shell, so the
 // string must stay a single command with no shell operators.
 const config: ReturnType<typeof defineConfig> = defineConfig({
-  files: ["packages/nostr/package.json", "packages/nostr-wasm/package.json", "Cargo.toml"],
+  files: [
+    "packages/nostr/package.json",
+    "packages/nostr-wasm/package.json",
+    "packages/nostr-native/package.json",
+    "Cargo.toml",
+  ],
   execute: "bun scripts/sync-versions.ts",
   // execute rewrites Cargo.lock and the internal ranges; commit them too.
   all: true,

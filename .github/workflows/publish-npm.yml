@@ -1,6 +1,7 @@
 # Caller owns on:. Pin at @v2.
 # OIDC. Do not pass NPM_TOKEN. Do not set environment, runs-on, or steps.
-# Required check-runs on a tag: nostr / publish and nostr-wasm / publish.
+# Required check-runs on a tag: nostr / publish, nostr-wasm / publish and
+# nostr-native / publish.
 name: Publish
 
 on:
@@ -20,6 +21,15 @@ jobs:
     with:
       package-manager: bun
       working-directory: packages/nostr
+
+  nostr-native:
+    uses: qntx/workflows/.github/workflows/publish-npm.yml@v2
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      package-manager: bun
+      working-directory: packages/nostr-native
 
   nostr-wasm:
     uses: qntx/workflows/.github/workflows/publish-npm.yml@v2

@@ -30,6 +30,8 @@ packages/nostr/       @qntx/nostr — pure-TypeScript library (core, nips,
                       signer, relay, storage, store, loaders, gossip, client,
                       testing); builds with vp pack, no Rust toolchain needed
 packages/nostr-wasm/  @qntx/nostr-wasm — JS bindings of crates/nk-wasm
+packages/nostr-native/ @qntx/nostr-native — React Native Nitro C++ backend
+                      over vendored libsecp256k1 (iOS/Android)
 crates/               nk-* Rust crates (one crate per TypeScript layer)
 vectors/              shared cross-language test vectors (see vectors/README.md)
 parity.json           capability ledger consumed by scripts/parity/check.ts

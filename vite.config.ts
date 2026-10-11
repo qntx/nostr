@@ -68,18 +68,19 @@ function layerImports(layer: keyof typeof LAYERS) {
   };
 }
 
-// The wasm package may reach into @qntx/nostr only through the core leaf.
+// The acceleration packages (nostr-wasm, nostr-native) may reach into
+// @qntx/nostr only through the core leaf.
 const nostrCoreOnlyImports = {
   paths: [
     {
       name: "@qntx/nostr",
-      message: "the wasm package may only import @qntx/nostr/core",
+      message: "the acceleration packages may only import @qntx/nostr/core",
     },
   ],
   patterns: [
     {
       group: ["@qntx/nostr/**", "!@qntx/nostr/core"],
-      message: "the wasm package may only import @qntx/nostr/core",
+      message: "the acceleration packages may only import @qntx/nostr/core",
     },
   ],
 };
@@ -110,7 +111,13 @@ const config: UserConfig = defineConfig({
   },
   lint: merge(lintConfig, {
     // merge() concatenates arrays onto the preset's own ignorePatterns.
-    ignorePatterns: ["3rdparty/**", "target/**", "packages/nostr/.hermes-smoke.iife.js"],
+    ignorePatterns: [
+      "3rdparty/**",
+      "target/**",
+      "packages/nostr/.hermes-smoke.iife.js",
+      "packages/nostr-native/vendor/**",
+      "packages/nostr-native/nitrogen/generated/**",
+    ],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
     rules: {
       "vite-plus/prefer-vite-plus-imports": "error",
@@ -136,6 +143,8 @@ const config: UserConfig = defineConfig({
           "packages/nostr/scripts/**",
           "scripts/**",
           "packages/nostr-wasm/tests/**",
+          "packages/nostr-native/scripts/**",
+          "packages/nostr-native/tests/**",
         ],
         rules: {
           // Bench and maintenance scripts print their results.
@@ -176,7 +185,7 @@ const config: UserConfig = defineConfig({
       },
       ...layerOverrides,
       {
-        files: ["packages/nostr-wasm/src/**"],
+        files: ["packages/nostr-wasm/src/**", "packages/nostr-native/src/**"],
         rules: {
           "eslint/no-restricted-imports": [
             "error",
@@ -185,6 +194,31 @@ const config: UserConfig = defineConfig({
               patterns: [...platformNeutralImports.patterns, ...nostrCoreOnlyImports.patterns],
             },
           ],
+        },
+      },
+      {
+        // Nitrogen parses `interface` + method signatures; the preset's type-
+        // alias and property-signature styles would break the generated glue.
+        files: ["packages/nostr-native/src/specs/**"],
+        rules: {
+          "typescript/consistent-type-definitions": "off",
+          "typescript/method-signature-style": "off",
+        },
+      },
+      {
+        // react-native.config.js is consumed by the RN CLI as CommonJS.
+        files: ["packages/nostr-native/react-native.config.js"],
+        rules: {
+          "import/no-commonjs": "off",
+          "unicorn/prefer-module": "off",
+        },
+      },
+      {
+        // The host C suite files are tests; the preset relaxes the same rule
+        // for `*.test.*` only.
+        files: ["packages/nostr-native/tests/**"],
+        rules: {
+          "typescript/no-non-null-assertion": "off",
         },
       },
       {
@@ -230,6 +264,8 @@ const config: UserConfig = defineConfig({
       // stay byte-frozen.
       "**/*.toml",
       "vectors/**",
+      "packages/nostr-native/vendor/**",
+      "packages/nostr-native/nitrogen/generated/**",
     ],
   },
   run: { cache: process.env["CI"] === undefined || process.env["CI"] === "" },
