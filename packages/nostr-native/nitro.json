@@ -1,0 +1,19 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["nostrnative"],
+  "ios": {
+    "iosModuleName": "NostrNative"
+  },
+  "android": {
+    "androidNamespace": ["nostrnative"],
+    "androidCxxLibName": "NostrNative"
+  },
+  "autolinking": {
+    "NostrNative": {
+      "all": {
+        "language": "c++",
+        "implementationClassName": "HybridNostrNative"
+      }
+    }
+  }
+}

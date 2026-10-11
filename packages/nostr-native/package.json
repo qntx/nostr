@@ -1,0 +1,88 @@
+{
+  "name": "@qntx/nostr-native",
+  "version": "0.12.1",
+  "description": "Native libsecp256k1 (Nitro) verification and signing backend for @qntx/nostr on React Native",
+  "keywords": [
+    "bip340",
+    "nitro",
+    "nostr",
+    "react-native",
+    "secp256k1"
+  ],
+  "homepage": "https://github.com/qntx/nostr#readme",
+  "bugs": {
+    "url": "https://github.com/qntx/nostr/issues"
+  },
+  "license": "MIT OR Apache-2.0",
+  "author": "QuantX <x@qntx.org>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qntx/nostr.git",
+    "directory": "packages/nostr-native"
+  },
+  "files": [
+    "dist",
+    "cpp",
+    "android/build.gradle",
+    "android/CMakeLists.txt",
+    "android/gradle.properties",
+    "android/src",
+    "nitrogen/generated",
+    "vendor",
+    "nitro.json",
+    "react-native.config.js",
+    "NostrNative.podspec",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.src.json",
+    "test": "bun tests/host/run.ts",
+    "codegen": "nitrogen",
+    "vendor:secp256k1": "bun scripts/vendor-secp256k1.ts",
+    "check:pkg": "vp run @qntx/nostr#build && vp pack && publint && attw --pack . --profile esm-only"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@qntx/nostr": "0.12.1",
+    "@qntx/tsconfig": "1.0.1",
+    "@types/node": "26.6.3",
+    "nitrogen": "0.37.1",
+    "publint": "0.3.24",
+    "react-native-nitro-modules": "0.37.1",
+    "typescript": "7.0.2",
+    "vite-plus": "1.0.0"
+  },
+  "peerDependencies": {
+    "@qntx/nostr": "^0.12.1",
+    "react-native": "*",
+    "react-native-nitro-modules": "^0.37.1"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "bun",
+      "version": "1.4.0",
+      "onFail": "ignore"
+    }
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

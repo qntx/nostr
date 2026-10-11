@@ -27,3 +27,7 @@ packages/nostr-wasm/src/nk_wasm.wasm
 # Hermes smoke bundle (built by packages/nostr/scripts/hermes-smoke.ts)
 .hermes-smoke.iife.js
 .vitest/
+
+# nostr-native: generated host-test vectors header and Android CMake scratch
+packages/nostr-native/tests/host/vectors.generated.h
+packages/nostr-native/android/.cxx

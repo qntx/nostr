@@ -1,0 +1,6 @@
+{
+  "name": "libsecp256k1",
+  "version": "0.8.0",
+  "license": "MIT",
+  "url": "https://github.com/bitcoin-core/secp256k1/archive/refs/tags/v0.8.0.tar.gz"
+}
