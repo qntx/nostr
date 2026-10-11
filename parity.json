@@ -23,9 +23,11 @@
         "module": "packages/nostr/src/core/util.ts",
         "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
       },
-      "rust": null,
-      "vectors": ["vectors/core/url-normalize.json"],
-      "rustNote": "rust-nostr parses relay URLs (nostr::RelayUrl) but exposes no normalization API"
+      "rust": {
+        "api": "nostr::RelayUrl::parse",
+        "tests": ["crates/interop/tests/core.rs"]
+      },
+      "vectors": ["vectors/core/url-normalize.json"]
     },
     {
       "id": "core.kind.classify",
@@ -441,7 +443,7 @@
         ]
       },
       "rust": {
-        "api": "nostr::nips::nip13::{get_leading_zero_bits, EventBuilder::pow}",
+        "api": "nostr::nips::nip13::{get_leading_zero_bits, SingleThreadPow}",
         "tests": ["crates/interop/tests/nip13.rs"]
       },
       "vectors": ["vectors/nip13/codec.json"]
@@ -459,7 +461,7 @@
         ]
       },
       "rust": {
-        "api": "nostr::nips::nip42 / nostr::EventBuilder::auth",
+        "api": "nostr::nips::nip42::{ClientAuthentication, MachineReadablePrefix}",
         "tests": ["crates/interop/tests/nip42.rs"]
       },
       "vectors": ["vectors/nip42/codec.json"]
@@ -477,7 +479,7 @@
         ]
       },
       "rust": {
-        "api": "nostr::nips::nip98::{HttpData, verify_auth_header, unpack_token}",
+        "api": "nostr::nips::nip98::{HttpData, verify_auth_header}",
         "tests": ["crates/interop/tests/nip98.rs"]
       },
       "vectors": ["vectors/nip98/codec.json"]
@@ -513,7 +515,7 @@
         ]
       },
       "rust": {
-        "api": "nostr::nips::nip17::{PrivateDirectMessageBuilder, extract_relay_list}",
+        "api": "nostr::nips::nip17::{InboxRelayList, extract_relay_list}",
         "tests": ["crates/interop/tests/nip17.rs"]
       },
       "vectors": ["vectors/nip17/codec.json"]
@@ -548,9 +550,11 @@
           "packages/nostr/tests/vectors/nip27.test.ts"
         ]
       },
-      "rust": null,
-      "vectors": ["vectors/nip27/codec.json"],
-      "rustNote": "rust-nostr parses entity mentions internally but exposes no token/block stream; runner dropped"
+      "rust": {
+        "api": "nostr::parser::NostrParser",
+        "tests": ["crates/interop/tests/nip27.rs", "crates/interop/tests/diff.rs"]
+      },
+      "vectors": ["vectors/nip27/codec.json"]
     },
     {
       "id": "nip51.lists",
@@ -565,7 +569,7 @@
         ]
       },
       "rust": {
-        "api": "nostr::nips::nip51",
+        "api": "nostr::nips::nip51::{MuteList, PinnedNotes, Bookmarks}",
         "tests": ["crates/interop/tests/nip51.rs"]
       },
       "vectors": ["vectors/nip51/codec.json"]
@@ -583,7 +587,7 @@
         ]
       },
       "rust": {
-        "api": "nostr::nips::nip57::{ZapRequestData, Nip57Tag, ZapReceipt}",
+        "api": "nostr::nips::nip57::ZapRequestData",
         "tests": ["crates/interop/tests/nip57.rs"]
       },
       "vectors": ["vectors/nip57/codec.json"]
@@ -632,7 +636,7 @@
         ]
       },
       "rust": {
-        "api": "nostr::nips::nip46::{NostrConnectUri, NostrConnectMessage}",
+        "api": "nostr::nips::nip46::{NostrConnectUri, NostrConnectMetadata, NostrConnectMessage}",
         "tests": ["crates/interop/tests/nip46.rs"]
       },
       "vectors": ["vectors/nip46/codec.json"]

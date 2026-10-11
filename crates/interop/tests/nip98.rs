@@ -49,6 +49,10 @@ struct AuthCase {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(
+    dead_code,
+    reason = "rust-nostr has no public token-unpack entry point; the cases are skipped"
+)]
 struct UnpackCase {
     token: String,
     event: Option<serde_json::Value>,
@@ -132,31 +136,10 @@ fn auth_event_token_header(check: &mut DivergenceCheck) {
 
 fn unpack_token_cases(check: &mut DivergenceCheck) {
     let vector: Vector = serde_json::from_str(CODEC).expect("valid JSON");
-    for (i, case) in vector.unpack.iter().enumerate() {
-        // The vector `token` is either a bare base64 event or the full
-        // `Nostr <base64>` header value.
-        let encoded = case
-            .token
-            .split_once(' ')
-            .map_or(case.token.as_str(), |(prefix, rest)| {
-                if prefix == "Nostr" { rest } else { "" }
-            });
-        let outcome: Option<Event> = general_purpose::STANDARD
-            .decode(encoded)
-            .ok()
-            .and_then(|bytes| Event::from_json(&bytes).ok());
-        let agrees = match (&case.event, &case.error, &outcome) {
-            (Some(expected), _, Some(event)) => {
-                serde_json::to_value(event).ok().as_ref() == Some(expected)
-            }
-            (None, Some(_), None) => true,
-            _ => false,
-        };
-        let got = outcome.map_or_else(
-            || "rejected".to_owned(),
-            |event| format!("event={:?}", event.id),
-        );
-        check.check(&format!("unpack/{i}"), agrees, &got);
+    // rust-nostr has no public token-unpack entry point: the base64 decode
+    // and prefix check are private inside `verify_auth_header`.
+    for (i, _) in vector.unpack.iter().enumerate() {
+        check.skip(&format!("unpack/{i}"));
     }
 }
 

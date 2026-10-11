@@ -164,24 +164,10 @@ fn event_zap_target(
     Option<Coordinate>,
 )> {
     let event = serde_json::from_value::<nostr::prelude::Event>(raw.clone()).ok()?;
-    if u64::from(event.kind.as_u16()) >= 30000 && u64::from(event.kind.as_u16()) < 40000 {
-        let coordinate = Coordinate {
-            kind: event.kind,
-            public_key: event.pubkey,
-            identifier: d_tag(&event).unwrap_or_default(),
-        };
-        Some((event.pubkey, None, Some(coordinate)))
-    } else {
-        Some((event.pubkey, Some(event.id), None))
+    match event.coordinate() {
+        Some(coordinate) => Some((event.pubkey, None, Some(coordinate))),
+        None => Some((event.pubkey, Some(event.id), None)),
     }
-}
-
-fn d_tag(event: &nostr::prelude::Event) -> Option<String> {
-    event
-        .tags
-        .iter()
-        .find(|tag| tag.as_slice().first().is_some_and(|t| t == "d"))
-        .and_then(|tag| tag.as_slice().get(1).cloned())
 }
 
 #[test]

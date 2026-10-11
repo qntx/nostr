@@ -618,6 +618,138 @@
     "reason": "the emitted tag differs from the vector"
   },
   {
+    "capability": "core.url.normalize",
+    "case": "0",
+    "side": "pending",
+    "reason": "rejected"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "1",
+    "side": "pending",
+    "reason": "rejected"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "14",
+    "side": "pending",
+    "reason": "wss://a.example//a///b/"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "15",
+    "side": "pending",
+    "reason": "wss://a.example//"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "16",
+    "side": "pending",
+    "reason": "wss://a.example///"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "17",
+    "side": "pending",
+    "reason": "wss://a.example/?b=2&a=1&a=0"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "18",
+    "side": "pending",
+    "reason": "wss://a.example/?a=1&a=2&b=0&a=3"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "2",
+    "side": "pending",
+    "reason": "wss://a.example"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "21",
+    "side": "pending",
+    "reason": "wss://a.example/?q=a%20b"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "22",
+    "side": "pending",
+    "reason": "wss://a.example/?"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "23",
+    "side": "pending",
+    "reason": "wss://a.example/?#x"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "24",
+    "side": "pending",
+    "reason": "wss://a.example/path#frag"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "26",
+    "side": "pending",
+    "reason": "wss://a.example"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "27",
+    "side": "pending",
+    "reason": "rejected"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "28",
+    "side": "pending",
+    "reason": "wss://u:p@a.example"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "3",
+    "side": "pending",
+    "reason": "rejected"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "31",
+    "side": "pending",
+    "reason": "wss://xn--bcher-kva.example"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "4",
+    "side": "pending",
+    "reason": "rejected"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "5",
+    "side": "pending",
+    "reason": "rejected"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "6",
+    "side": "pending",
+    "reason": "rejected"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "7",
+    "side": "pending",
+    "reason": "rejected"
+  },
+  {
+    "capability": "core.url.normalize",
+    "case": "8",
+    "side": "pending",
+    "reason": "rejected"
+  },
+  {
     "capability": "nip10.thread",
     "case": "deep thread parent",
     "side": "pending",
@@ -850,6 +982,342 @@
     "case": "7",
     "side": "pending",
     "reason": "rust-nostr rejects where the vector expects success"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "adjacent references merge no text",
+    "side": "pending",
+    "reason": "[{\"text\":\"nostr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63mnostr:note1424242424242424242424242424242424242424242424242424qv3q9y6\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "audio extension",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/song.FLAC\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "bare astral after ok",
+    "side": "pending",
+    "reason": "[{\"text\":\"npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m😀\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "bare naddr legacy",
+    "side": "pending",
+    "reason": "[{\"text\":\"naddr1qvzqqqr4gupzpq35r7yzkm4te5460u00jz4djcw0qa90zku7739qn7wj4ralhe4zqqykzun5d93kcefdxyskr8vy\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "bare nevent legacy",
+    "side": "pending",
+    "reason": "[{\"text\":\"nevent1qvzqqqqqqypzpq35r7yzkm4te5460u00jz4djcw0qa90zku7739qn7wj4ralhe4zqy8hwumn8ghj7u3wv4uxzmtsd3jsqg924242424242424242424242424242424242424242424242424gc0a90r\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "bare note legacy",
+    "side": "pending",
+    "reason": "[{\"text\":\"at note1424242424242424242424242424242424242424242424242424qv3q9y6 end\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "bare nprofile legacy",
+    "side": "pending",
+    "reason": "[{\"text\":\"nprofile1qyg8wumn8ghj7u339ejhsctdwpkx2qgswaehxw309aerytn90psk6urvv5qzpq35r7yzkm4te5460u00jz4djcw0qa90zku7739qn7wj4ralhe4z9mgrjp\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "bare npub legacy",
+    "side": "pending",
+    "reason": "[{\"text\":\"npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "bare uppercase prefix legacy",
+    "side": "pending",
+    "reason": "[{\"text\":\"NPUB1SG6PLZPTD64U62A878HEP2KEV88SWJH3TW00GJSFL8F237LMU63Q0UF63M\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "emoji hit and miss",
+    "side": "pending",
+    "reason": "[{\"text\":\"hi :wave: and :wave2:\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "emoji kelvin shortcode",
+    "side": "pending",
+    "reason": "[{\"text\":\":K:\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "emoji later duplicate wins",
+    "side": "pending",
+    "reason": "[{\"text\":\":dup:\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "failed candidate resumes inside its span",
+    "side": "pending",
+    "reason": "[{\"text\":\"see \",\"type\":\"text\"},{\"type\":\"url\",\"url\":\"https://x/wss://a.b\"},{\"text\":\" now\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "hashtag after astral",
+    "side": "pending",
+    "reason": "[{\"text\":\"😀#tag\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "hashtag before astral",
+    "side": "pending",
+    "reason": "[{\"type\":\"hashtag\",\"value\":\"tag😀\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "hashtag beyond 42 is text",
+    "side": "pending",
+    "reason": "[{\"type\":\"hashtag\",\"value\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "hashtag preceded by hash",
+    "side": "pending",
+    "reason": "[{\"text\":\"##tag\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "hashtag trailing punctuation",
+    "side": "pending",
+    "reason": "[{\"type\":\"hashtag\",\"value\":\"tag\"},{\"text\":\".#next\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "host without dot",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://localhost/x\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "http url",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"http://a.b/\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "image by extension",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/pic.png\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "image extension before query",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/f.png?w=100\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "image uppercase extension",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/PIC.PNG\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "imeta key must equal trimmed url",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/f.png\"},{\"text\":\".\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "imeta mime wins over extension",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/f.png\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "imeta mime without slash",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/f\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "imeta non-media mime falls to extension",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/f.png\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "imeta uppercase base falls to extension",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/f.png\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice amount",
+    "side": "pending",
+    "reason": "[{\"text\":\"lnbc2100n1xyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice amount multiplier",
+    "side": "pending",
+    "reason": "[{\"text\":\"lnbc10m1xyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice astral after ok",
+    "side": "pending",
+    "reason": "[{\"text\":\"lnbc1xyz😀\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice backtracks separator",
+    "side": "pending",
+    "reason": "[{\"text\":\"lnbc101xyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice currencies",
+    "side": "pending",
+    "reason": "[{\"text\":\"lntbs1xyz lnbcrt1xyz lntb1xyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice digit-1 splits amount",
+    "side": "pending",
+    "reason": "[{\"text\":\"lnbc21xyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice kelvin in data",
+    "side": "pending",
+    "reason": "[{\"text\":\"lnbc1Kyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice lightning prefix stripped",
+    "side": "pending",
+    "reason": "[{\"text\":\"LIGHTNING:lnbc1xyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice multiplier",
+    "side": "pending",
+    "reason": "[{\"text\":\"lnbc1m1xyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice no-amount with multiplier-shaped data",
+    "side": "pending",
+    "reason": "[{\"text\":\"lnbc1uxyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice plain",
+    "side": "pending",
+    "reason": "[{\"text\":\"lnbc1xyz\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice prefix and body folded",
+    "side": "pending",
+    "reason": "[{\"text\":\"lightſghtning:LNBC1XYZ\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "invoice uppercase",
+    "side": "pending",
+    "reason": "[{\"text\":\"LNBC1XYZ\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "ipv6 host has no dot",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://[::1]/x\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "kelvin in host stays text-adjacent",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.k/x\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "mixed stream",
+    "side": "pending",
+    "reason": "[{\"text\":\"gm \",\"type\":\"text\"},{\"bare\":false,\"pointer\":{\"pubkey\":\"82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2\",\"relays\":[],\"type\":\"profile\"},\"type\":\"reference\"},{\"text\":\" check \",\"type\":\"text\"},{\"type\":\"url\",\"url\":\"https://a.b/pic.png\"},{\"text\":\" and \",\"type\":\"text\"},{\"type\":\"url\",\"url\":\"wss://r.x/\"},{\"text\":\" pay lnbc10u1xyz \",\"type\":\"text\"},{\"type\":\"hashtag\",\"value\":\"nostr\"},{\"text\":\" :wave: end\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "nostr long-s scheme",
+    "side": "pending",
+    "reason": "[{\"text\":\"noſtr:npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "nostr uppercase scheme and prefix",
+    "side": "pending",
+    "reason": "[{\"text\":\"NOSTR:NPUB1SG6PLZPTD64U62A878HEP2KEV88SWJH3TW00GJSFL8F237LMU63Q0UF63M\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "relay host without dot",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"wss://localhost/\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "relay ignores imeta",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"wss://a.b/f\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "uppercase scheme",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/x\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "url balanced bracket kept",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/[x\"},{\"text\":\"]\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "url balanced parens kept",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/(x\"},{\"text\":\")\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "url nested unbalanced",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/(x\"},{\"text\":\"))\",\"type\":\"text\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "url trailing semicolon colon quote",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/x;:'\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "video extension",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"https://a.b/v.webm\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "ws relay",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"ws://a.b/socket\"}]"
+  },
+  {
+    "capability": "nip27.tokenize",
+    "case": "wss relay",
+    "side": "pending",
+    "reason": "[{\"type\":\"url\",\"url\":\"wss://relay.example/\"}]"
   },
   {
     "capability": "nip42.auth-event",
@@ -1460,36 +1928,6 @@
   {
     "capability": "nip98.http-auth",
     "case": "auth/4",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip98.http-auth",
-    "case": "unpack/2",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip98.http-auth",
-    "case": "unpack/3",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip98.http-auth",
-    "case": "unpack/4",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip98.http-auth",
-    "case": "unpack/5",
-    "side": "pending",
-    "reason": "rust-nostr rejects where the vector expects success"
-  },
-  {
-    "capability": "nip98.http-auth",
-    "case": "unpack/6",
     "side": "pending",
     "reason": "rust-nostr rejects where the vector expects success"
   },

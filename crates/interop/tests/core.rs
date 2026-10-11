@@ -79,6 +79,10 @@ const EVENT_ORDER: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../vectors/core/event-order.json"
 ));
+const URL_NORMALIZE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/core/url-normalize.json"
+));
 const EVENT_SIGNED_MATCHES: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../vectors/core/event-signed-matches.json"
@@ -264,22 +268,12 @@ fn event_validate() {
 #[derive(Debug, Deserialize)]
 struct EventSerializeCase {
     unsigned: UnsignedEvent,
+    #[allow(
+        dead_code,
+        reason = "the preimage bytes are never exposed by rust-nostr; only compute_id is compared"
+    )]
     serialized: String,
     id: String,
-}
-
-/// The NIP-01 id preimage `[0, pubkey, created_at, kind, tags, content]` as
-/// compact JSON — the exact string rust-nostr hashes inside `compute_id`.
-fn preimage_json(unsigned: &UnsignedEvent) -> String {
-    serde_json::to_string(&(
-        0_u8,
-        &unsigned.pubkey,
-        unsigned.created_at,
-        unsigned.kind,
-        &unsigned.tags,
-        &unsigned.content,
-    ))
-    .expect("unsigned event serializes")
 }
 
 #[test]
@@ -292,14 +286,11 @@ fn event_serialize() {
         serde_json::from_str(EVENT_SERIALIZE).expect("event-serialize.json must parse");
     let mut check = DivergenceCheck::new("core.event.serialize");
     for (index, case) in vector.cases.iter().enumerate() {
-        let preimage = preimage_json(&case.unsigned);
+        // The preimage bytes are never exposed: `compute_id` builds and
+        // hashes them internally, so only the `id` half is comparable.
         let id = case.unsigned.compute_id().to_hex();
-        let agrees = preimage == case.serialized && id == case.id;
-        check.check(
-            &index.to_string(),
-            agrees,
-            &format!("preimage {preimage}, id {id}"),
-        );
+        check.check(&format!("{index}:id"), id == case.id, &format!("id {id}"));
+        check.skip(&format!("{index}:preimage"));
     }
     check.finish();
 }
@@ -702,13 +693,33 @@ enum EventOrderCase {
     },
     #[serde(rename = "item")]
     Item {
+        #[allow(
+            dead_code,
+            reason = "rust-nostr exposes no public ascending-order comparator"
+        )]
         events: Vec<Event>,
+        #[allow(
+            dead_code,
+            reason = "rust-nostr exposes no public ascending-order comparator"
+        )]
         order: Vec<String>,
     },
     #[serde(rename = "winner")]
     Winner {
+        #[allow(
+            dead_code,
+            reason = "rust-nostr exposes no public replaceable-winner rule"
+        )]
         candidate: Box<Event>,
+        #[allow(
+            dead_code,
+            reason = "rust-nostr exposes no public replaceable-winner rule"
+        )]
         incumbent: Box<Event>,
+        #[allow(
+            dead_code,
+            reason = "rust-nostr exposes no public replaceable-winner rule"
+        )]
         wins: bool,
     },
 }
@@ -722,37 +733,34 @@ fn event_order() {
     let vector: Vector = serde_json::from_str(EVENT_ORDER).expect("event-order.json must parse");
     let mut check = DivergenceCheck::new("core.event.order");
     for (index, case) in vector.cases.iter().enumerate() {
-        let agrees = match case {
+        match case {
+            // `nostr::Event`'s `Ord` is newest-first (created_at desc, id asc).
             EventOrderCase::Sort { events, order } => {
                 let mut sorted = events.clone();
-                sorted.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(a.id.cmp(&b.id)));
-                sorted
+                sorted.sort();
+                let agrees = sorted
                     .iter()
                     .map(|event| event.id.to_hex())
                     .collect::<Vec<_>>()
-                    == *order
+                    == *order;
+                check.check(
+                    &index.to_string(),
+                    agrees,
+                    &format!(
+                        "order={:?}",
+                        sorted
+                            .iter()
+                            .map(|event| event.id.to_hex())
+                            .collect::<Vec<_>>()
+                    ),
+                );
             }
-            EventOrderCase::Item { events, order } => {
-                let mut sorted = events.clone();
-                sorted.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
-                sorted
-                    .iter()
-                    .map(|event| event.id.to_hex())
-                    .collect::<Vec<_>>()
-                    == *order
+            // rust-nostr exposes no public ascending-order comparator or
+            // replaceable-event winner rule.
+            EventOrderCase::Item { .. } | EventOrderCase::Winner { .. } => {
+                check.skip(&index.to_string());
             }
-            EventOrderCase::Winner {
-                candidate,
-                incumbent,
-                wins,
-            } => {
-                (candidate.created_at > incumbent.created_at
-                    || (candidate.created_at == incumbent.created_at
-                        && candidate.id < incumbent.id))
-                    == *wins
-            }
-        };
-        check.check(&index.to_string(), agrees, "");
+        }
     }
     check.finish();
 }
@@ -790,6 +798,37 @@ fn event_signed_matches() {
             |result| format!("matched={result}"),
         );
         check.check(&index.to_string(), outcome == Some(case.matches), &got);
+    }
+    check.finish();
+}
+
+#[derive(Debug, Deserialize)]
+struct UrlNormalizeCase {
+    input: String,
+    output: Option<String>,
+    error: Option<String>,
+}
+
+#[test]
+fn url_normalize() {
+    #[derive(Deserialize)]
+    struct Vector {
+        cases: Vec<UrlNormalizeCase>,
+    }
+    let vector: Vector =
+        serde_json::from_str(URL_NORMALIZE).expect("url-normalize.json must parse");
+    let mut check = DivergenceCheck::new("core.url.normalize");
+    for (index, case) in vector.cases.iter().enumerate() {
+        let outcome = RelayUrl::parse(&case.input)
+            .ok()
+            .map(|url| url.as_str().to_owned());
+        let agrees = match (&case.output, &case.error, &outcome) {
+            (Some(expected), _, Some(got)) => expected == got,
+            (None, Some(_), None) => true,
+            _ => false,
+        };
+        let got = outcome.unwrap_or_else(|| "rejected".to_owned());
+        check.check(&index.to_string(), agrees, &got);
     }
     check.finish();
 }

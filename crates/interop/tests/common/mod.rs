@@ -11,6 +11,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::LazyLock;
 
+use nostr::nips::nip21::Nip21;
+use nostr::parser::{NostrParser, Token};
 use serde::Deserialize;
 
 /// A registered divergence between the vector expectation and rust-nostr's
@@ -295,4 +297,84 @@ pub(crate) fn entity_from_json(entity: &EntityJson) -> Result<Nip19, ()> {
             )))
         }
     }
+}
+
+/// Maps a decoded `Nip21` entity to the vector's `pointer` shape.
+fn nip21_pointer(entity: &Nip21) -> serde_json::Value {
+    match entity {
+        Nip21::Pubkey(public_key) => serde_json::json!({
+            "type": "profile",
+            "pubkey": public_key.to_hex(),
+            "relays": [],
+        }),
+        Nip21::Profile(profile) => serde_json::json!({
+            "type": "profile",
+            "pubkey": profile.public_key.to_hex(),
+            "relays": relay_json(&profile.relays),
+        }),
+        Nip21::EventId(id) => serde_json::json!({
+            "type": "event",
+            "id": id.to_hex(),
+            "relays": [],
+            "author": null,
+            "kind": null,
+        }),
+        Nip21::Event(event) => serde_json::json!({
+            "type": "event",
+            "id": event.event_id.to_hex(),
+            "relays": relay_json(&event.relays),
+            "author": event.author.map(|public_key| public_key.to_hex()),
+            "kind": event.kind.map(|kind| u64::from(kind.as_u16())),
+        }),
+        Nip21::Coordinate(coordinate) => serde_json::json!({
+            "type": "address",
+            "identifier": coordinate.coordinate.identifier,
+            "pubkey": coordinate.coordinate.public_key.to_hex(),
+            "kind": u64::from(coordinate.coordinate.kind.as_u16()),
+            "relays": relay_json(&coordinate.relays),
+        }),
+    }
+}
+
+/// Runs `nostr::parser::NostrParser` over `text` and renders the token stream
+/// as vector blocks: consecutive `Text`/`Whitespace`/`LineBreak` tokens merge
+/// into one `text` block; `Nostr`/`Url`/`Hashtag` map to `reference`/`url`/
+/// `hashtag`. Block kinds rust-nostr cannot produce (emoji, invoice, relay,
+/// media classification, bare-bech32 references) simply diverge.
+fn flush_text(acc: &mut String, out: &mut Vec<serde_json::Value>) {
+    if !acc.is_empty() {
+        out.push(serde_json::json!({"type": "text", "text": acc.as_str()}));
+        acc.clear();
+    }
+}
+
+pub(crate) fn content_blocks(text: &str) -> serde_json::Value {
+    let mut blocks: Vec<serde_json::Value> = Vec::new();
+    let mut text_acc = String::new();
+    let flush = flush_text;
+    for token in NostrParser::new().parse(text) {
+        match token {
+            Token::Text(piece) => text_acc.push_str(piece),
+            Token::Whitespace => text_acc.push(' '),
+            Token::LineBreak => text_acc.push('\n'),
+            Token::Url(url) => {
+                flush(&mut text_acc, &mut blocks);
+                blocks.push(serde_json::json!({"type": "url", "url": url.as_str()}));
+            }
+            Token::Hashtag(tag) => {
+                flush(&mut text_acc, &mut blocks);
+                blocks.push(serde_json::json!({"type": "hashtag", "value": tag}));
+            }
+            Token::Nostr(entity) => {
+                flush(&mut text_acc, &mut blocks);
+                blocks.push(serde_json::json!({
+                    "type": "reference",
+                    "bare": false,
+                    "pointer": nip21_pointer(&entity),
+                }));
+            }
+        }
+    }
+    flush(&mut text_acc, &mut blocks);
+    serde_json::Value::Array(blocks)
 }

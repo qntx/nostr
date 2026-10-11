@@ -9,9 +9,9 @@
 //! cases are generated, so they cannot be registered in `divergences.json`;
 //! mismatches are reported, not asserted.
 //!
-//! Capabilities with no rust-nostr counterpart (`core.filter.canonicalize`,
-//! `nip10.thread`, `nip27.tokenize`) have no replay here; `parity.json`
-//! records them as `rust: null`.
+//! Streams with no public rust-nostr counterpart (`core.filter.canonicalize`,
+//! `core.event.serialize`, `nip10.thread`) have no replay here;
+//! `parity.json` records the counterpart-less capabilities as `rust: null`.
 //!
 //! Every test is `#[ignore]` so the regular `cargo test --workspace` does not
 //! pass vacuously without inputs; run with `INTEROP_DIFF_DIR=<dir> cargo test
@@ -185,24 +185,9 @@ const fn json_str(s: String) -> serde_json::Value {
     serde_json::Value::String(s)
 }
 
-#[test]
-#[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
-fn diff_event_serialize() {
-    replay("core.event.serialize", |input| {
-        // NIP-01 id preimage: `[0, pubkey, created_at, kind, tags, content]`.
-        let unsigned: UnsignedEvent = serde_json::from_str(input).ok()?;
-        serde_json::to_string(&(
-            0,
-            unsigned.pubkey.to_hex(),
-            unsigned.created_at.as_secs(),
-            unsigned.kind.as_u16(),
-            &unsigned.tags,
-            &unsigned.content,
-        ))
-        .ok()
-        .map(json_str)
-    });
-}
+// `core.event.serialize` is not replayed: the stream output is the NIP-01
+// id preimage `[0, pubkey, created_at, kind, tags, content]`, whose bytes
+// rust-nostr never exposes (`compute_id` builds and hashes it internally).
 
 #[test]
 #[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
@@ -367,6 +352,22 @@ fn diff_nip19_codec() {
         Nip19::from_bech32(&req.input?)
             .ok()
             .map(|entity| serde_json::to_value(entity_json(&entity)).expect("entity serializes"))
+    });
+}
+
+/// `nip27.tokenize` inputs are `{"content": …, "tags"?: …, "legacy"?: …,
+/// "imeta"?: …}`; the extra fields have no `NostrParserOptions` counterpart
+/// and are ignored — whatever rust-nostr produces diverges on its own.
+#[test]
+#[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
+fn diff_nip27_tokenize() {
+    replay("nip27.tokenize", |input| {
+        #[derive(Deserialize)]
+        struct TokenizeInput {
+            content: String,
+        }
+        let req: TokenizeInput = serde_json::from_str(input).ok()?;
+        Some(common::content_blocks(&req.content))
     });
 }
 
