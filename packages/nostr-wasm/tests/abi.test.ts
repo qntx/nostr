@@ -86,6 +86,35 @@ describe("nostr byte ABI contract", () => {
     // A normal call afterwards must still read the new buffer correctly.
     expect(wasmVerify(exports, BIP340_V0_MSG, BIP340_V0_PK, BIP340_V0_SIG)).toBe(true);
   });
+
+  test("ops return 2 before nostr_init succeeds", async () => {
+    // Bypass the loader's init step and call the exports raw.
+    const instance = await WebAssembly.instantiate(await WebAssembly.compile(bytes), {});
+    const raw = instance.exports;
+    const buffer = raw["nostr_buffer"] as (len: number) => number;
+    const memory = raw["memory"] as WebAssembly.Memory;
+    const verify = raw["nostr_verify"] as (...args: number[]) => number;
+    const verifySer = raw["nostr_verify_serialized"] as (...args: number[]) => number;
+    const sign = raw["nostr_sign"] as (...args: number[]) => number;
+    const publicKey = raw["nostr_public_key"] as (...args: number[]) => number;
+    const ptr = buffer(32 + 32 + 64 + 64 + 32);
+    expect(verify(ptr, ptr + 32, ptr + 64)).toBe(2);
+    expect(verifySer(ptr, 4, ptr + 4, ptr + 36, ptr + 68)).toBe(2);
+    expect(sign(ptr, ptr + 32, ptr + 64, ptr + 96)).toBe(2);
+    expect(publicKey(ptr, ptr + 32)).toBe(2);
+    expect(memory.buffer.byteLength).toBeGreaterThan(0);
+  });
+
+  test("nostr_init wipes the seed region and re-randomizes", async () => {
+    const exports = await instantiateCryptoWasm(bytes);
+    const ptr = exports.nostr_buffer(32);
+    const seed = new Uint8Array(exports.memory.buffer, ptr, 32);
+    seed.fill(0xa5);
+    expect(exports.nostr_init(ptr)).toBe(0);
+    expect(new Uint8Array(exports.memory.buffer, ptr, 32)).toStrictEqual(new Uint8Array(32));
+    // A second call re-randomizes the same context; ops still work.
+    expect(wasmVerify(exports, BIP340_V0_MSG, BIP340_V0_PK, BIP340_V0_SIG)).toBe(true);
+  });
 });
 
 const vectorsDir = join(import.meta.dirname, "../../../vectors");

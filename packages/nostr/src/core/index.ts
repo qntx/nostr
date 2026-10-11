@@ -25,6 +25,7 @@ export {
   isHex64,
   normalizeRelayUrls,
   normalizeURL,
+  randomBytes,
 } from "./util.ts";
 
 export {

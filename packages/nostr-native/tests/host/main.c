@@ -2,6 +2,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "nostr_core.h"
 #include "nostr_native.h"
 
 typedef struct {
@@ -111,6 +112,52 @@ int main(void) {
         0, "null-id");
   check(nostr_native_public_key(NULL, out), 0, "null-seckey-pk");
   check(nostr_native_sign(NULL, NULL, NULL, sig), 0, "null-sign");
+
+  /* nostr_core status codes: 0 ok, 1 verification failed, 2 invalid input. */
+  {
+    nostr_native_secp256k1_context *ctx = nostr_native_test_context();
+    const event_case *v = &EVENT_CASES[0];
+    unsigned char bad_pubkey[32];
+    unsigned char bad_sig[64];
+    unsigned char bad_id[32];
+    memcpy(bad_pubkey, v->pubkey, 32);
+    memcpy(bad_sig, v->sig, 64);
+    memcpy(bad_id, v->id, 32);
+    /* 0: a valid event verifies through the core entry point. */
+    check(nostr_core_verify_serialized(ctx, v->serialized, v->len, v->id, v->pubkey,
+                                       v->sig),
+          NOSTR_CORE_OK, "core-verify-ok");
+    /* 1: a claimed id that does not match sha256(serialized) fails the id check. */
+    bad_id[0] = (unsigned char)(bad_id[0] + 1);
+    check(nostr_core_verify_serialized(ctx, v->serialized, v->len, bad_id, v->pubkey,
+                                       v->sig),
+          NOSTR_CORE_VERIFY_FAILED, "core-id-mismatch");
+    /* 1: a valid point with a bad signature. */
+    bad_sig[7] = (unsigned char)(bad_sig[7] + 1);
+    check(nostr_core_verify(ctx, v->id, v->pubkey, bad_sig), NOSTR_CORE_VERIFY_FAILED,
+          "core-bad-sig");
+    /* 2: x >= field order is not an x-only point. */
+    memset(bad_pubkey, 0xff, 32);
+    check(nostr_core_verify(ctx, v->id, bad_pubkey, v->sig), NOSTR_CORE_INVALID_INPUT,
+          "core-invalid-point");
+    /* 2: invalid secret keys for both secret-key entry points. */
+    check(nostr_core_sign(ctx, v->id, BAD_SECKEYS[0].seckey, SIGN_CASES[0].aux, sig),
+          NOSTR_CORE_INVALID_INPUT, "core-sign-bad-seckey");
+    check(nostr_core_public_key(ctx, BAD_SECKEYS[0].seckey, out), NOSTR_CORE_INVALID_INPUT,
+          "core-pubkey-bad-seckey");
+    /* 2: NULL arguments on every entry point. */
+    check(nostr_core_verify(ctx, NULL, v->pubkey, v->sig), NOSTR_CORE_INVALID_INPUT,
+          "core-null-verify");
+    check(nostr_core_verify_serialized(ctx, NULL, 0, v->id, v->pubkey, v->sig),
+          NOSTR_CORE_INVALID_INPUT, "core-null-serialized");
+    check(nostr_core_verify_serialized(NULL, v->serialized, v->len, v->id, v->pubkey,
+                                       v->sig),
+          NOSTR_CORE_INVALID_INPUT, "core-null-ctx");
+    check(nostr_core_sign(ctx, NULL, SIGN_CASES[0].seckey, SIGN_CASES[0].aux, sig),
+          NOSTR_CORE_INVALID_INPUT, "core-null-sign");
+    check(nostr_core_public_key(ctx, NULL, out), NOSTR_CORE_INVALID_INPUT,
+          "core-null-pubkey");
+  }
 
   /* Informational throughput: ~2s of verifies of one valid event. */
   {

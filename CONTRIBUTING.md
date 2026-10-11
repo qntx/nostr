@@ -3,10 +3,9 @@
 ## Prerequisites
 
 - **Bun 1.4** — package scripts, tests, and tooling.
-- **Rust** — via `rust-toolchain.toml` (includes the `wasm32-unknown-unknown`
-  target).
-- **LLVM clang** for `wasm32-unknown-unknown` — `secp256k1-sys` needs a
-  wasm-capable clang; Apple clang will not work.
+- **Rust** — via `rust-toolchain.toml` (interop crate only).
+- **LLVM clang** for `wasm32-unknown-unknown` — `@qntx/nostr-wasm` compiles the
+  shared C core with a wasm-capable clang; Apple clang will not work.
 
   ```bash
   brew install llvm
@@ -21,11 +20,11 @@
 packages/nostr/       @qntx/nostr — pure-TypeScript library (core, nips,
                       signer, relay, storage, store, loaders, gossip, client,
                       testing); builds with vp pack, no Rust toolchain needed
-packages/nostr-wasm/  @qntx/nostr-wasm — JS bindings of crates/wasm
+packages/nostr-wasm/  @qntx/nostr-wasm — wasm32 build of the shared C core
+                      (packages/nostr-wasm/c) plus JS bindings
 packages/nostr-native/ @qntx/nostr-native — React Native Nitro C++ backend
-                      over vendored libsecp256k1 (iOS/Android)
-crates/wasm/          qntx-nostr-wasm — raw-byte WebAssembly ABI
-                      (secp256k1 + sha2 only)
+                      over vendored libsecp256k1 (iOS/Android); its
+                      cpp/nostr_core.c is the shared C core
 crates/interop/       qntx-nostr-interop — runs vectors/ and the TS
                       differential streams against rust-nostr
 vectors/              shared cross-language test vectors (see vectors/README.md)
