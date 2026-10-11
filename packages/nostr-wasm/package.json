@@ -58,9 +58,9 @@
     "@qntx/nostr": "0.12.1",
     "@qntx/nostr-native": "0.12.1",
     "@qntx/tsconfig": "1.0.1",
-    "@types/node": "26.6.3",
+    "@types/node": "26.6.4",
     "binaryen": "132.0.0",
-    "publint": "0.3.24",
+    "publint": "0.3.25",
     "typescript": "7.0.2",
     "vite-plus": "1.0.0"
   },
