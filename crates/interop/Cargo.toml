@@ -11,7 +11,7 @@ homepage     = "https://github.com/qntx/nostr"
 authors      = ["QNTX <https://qntx.org>"]
 
 [dev-dependencies]
-base64     = "0.22"
+base64     = "0.23"
 nostr      = { version = "0.45.5", default-features = false, features = ["std", "os-rng", "nip04", "nip44", "nip46", "nip49", "nip59", "nip98"] }
 proptest   = "1.11"
 secp256k1  = "0.30"
