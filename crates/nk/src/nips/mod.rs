@@ -80,9 +80,8 @@ const _: () = {
     assert_send_sync::<nip13::PowMiner>();
     #[cfg(feature = "nip49")]
     {
-        assert_send_sync::<nip49::EncryptOptions>();
+        assert_send_sync::<nip49::EncryptedSecretKey>();
         assert_send_sync::<nip49::KeySecurity>();
-        assert_send_sync::<nip49::Decrypted>();
     }
     #[cfg(feature = "nip51")]
     {
@@ -99,6 +98,7 @@ const _: () = {
     #[cfg(feature = "nip46")]
     {
         assert_send_sync::<nip46::BunkerUri>();
+        assert_send_sync::<nip46::Method>();
         assert_send_sync::<nip46::NostrConnectUri>();
         assert_send_sync::<nip46::Request>();
         assert_send_sync::<nip46::Response>();

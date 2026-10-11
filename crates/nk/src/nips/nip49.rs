@@ -7,18 +7,22 @@
 //! `dkLen = 32`) derives the cipher key from the NFKC-normalized UTF-8
 //! password; the key-security byte is the AEAD's associated data.
 //!
-//! [`decrypt`] takes an explicit `max_log_n` ceiling: scrypt needs
-//! `128 * r * 2^log_n` bytes of memory (4 GiB at `log_n = 22`), so a
-//! crafted `ncryptsec` could exhaust the caller. Payloads above the
-//! ceiling are rejected before scrypt runs.
+//! [`EncryptedSecretKey::decrypt`] takes an explicit `max_log_n` ceiling:
+//! scrypt needs `128 * r * 2^log_n` bytes of memory (4 GiB at
+//! `log_n = 22`), so a crafted `ncryptsec` could exhaust the caller.
+//! Payloads above the ceiling are rejected before scrypt runs.
 //!
 //! Secret material — the NFKC password bytes, the scrypt output, and
 //! every intermediate buffer — is zeroized after use.
 //!
 //! @see <https://github.com/nostr-protocol/nips/blob/master/49.md>
 
-use alloc::format;
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::string::String;
+
+use core::fmt;
+use core::str::FromStr;
 
 use crate::SecretKey;
 use bech32::Hrp;
@@ -27,12 +31,12 @@ use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use unicode_normalization::UnicodeNormalization;
 use zeroize::Zeroizing;
 
-use crate::nips::error::{Error, ErrorKind, Result};
+/// Default scrypt `log2(N)` work factor for new `ncryptsec` payloads.
+pub const DEFAULT_LOG_N: u8 = 16;
 
 const VERSION: u8 = 0x02;
 const LOG_N_MIN: u8 = 1;
 const LOG_N_MAX: u8 = 22;
-const LOG_N_DEFAULT: u8 = 16;
 const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 24;
 const SECRET_LEN: usize = 32;
@@ -43,12 +47,65 @@ const PAYLOAD_LEN: usize = CIPHERTEXT_INDEX + SECRET_LEN + TAG_LEN;
 
 const HRP_NCRYPTSEC: Hrp = Hrp::parse_unchecked("ncryptsec");
 
-fn nip49(message: impl Into<alloc::borrow::Cow<'static, str>>) -> Error {
-    Error::new(ErrorKind::Nip49, message)
+/// Errors produced by `ncryptsec` parsing, encryption, and decryption.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// The string is not valid bech32.
+    #[error("invalid bech32")]
+    Bech32 {
+        /// The decode failure.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
+    /// The human-readable prefix is not `ncryptsec`.
+    #[error("unexpected prefix {found}: expected ncryptsec")]
+    UnexpectedPrefix {
+        /// The prefix that was found.
+        found: String,
+    },
+    /// The decoded payload is not the 91-byte NIP-49 record.
+    #[error("invalid ncryptsec length: {found} bytes")]
+    InvalidLength {
+        /// The decoded payload length.
+        found: usize,
+    },
+    /// The payload version byte is not `0x02`.
+    #[error("unsupported ncryptsec version {version:#04x}")]
+    UnsupportedVersion {
+        /// The version byte that was found.
+        version: u8,
+    },
+    /// The key-security byte is not 0x00, 0x01, or 0x02.
+    #[error("invalid key security byte {byte:#04x}")]
+    InvalidKeySecurity {
+        /// The byte that was found.
+        byte: u8,
+    },
+    /// A `log_n` argument is outside `1..=22`.
+    #[error("invalid log_n {log_n}: expected 1-22")]
+    InvalidLogN {
+        /// The out-of-range value.
+        log_n: u8,
+    },
+    /// The payload's `log_n` exceeds the caller's `max_log_n` ceiling.
+    #[error("log_n {log_n} exceeds the maximum {max}")]
+    LogNTooLarge {
+        /// The payload's work factor.
+        log_n: u8,
+        /// The caller's ceiling.
+        max: u8,
+    },
+    /// Decryption failed — wrong password or tampered payload; the two
+    /// are intentionally indistinguishable.
+    #[error("failed to decrypt")]
+    Decryption,
+    /// The decrypted bytes are not a valid secp256k1 secret scalar.
+    #[error("invalid secret key")]
+    InvalidSecretKey,
 }
 
-/// The key-security byte recorded in an `ncryptsec` payload (TS
-/// `KeySecurityByte`).
+/// The key-security byte recorded in an `ncryptsec` payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum KeySecurity {
@@ -60,315 +117,417 @@ pub enum KeySecurity {
     Unknown = 0x02,
 }
 
-/// Options for [`encrypt_with`], [`encrypt_with_rng`], and [`encrypt`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct EncryptOptions {
-    log_n: u8,
-    key_security: KeySecurity,
-}
-
-impl EncryptOptions {
-    /// Defaults: `log_n` 16, [`KeySecurity::Unknown`].
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            log_n: LOG_N_DEFAULT,
-            key_security: KeySecurity::Unknown,
-        }
+fn check_log_n(log_n: u8) -> Result<(), Error> {
+    if !(LOG_N_MIN..=LOG_N_MAX).contains(&log_n) {
+        return Err(Error::InvalidLogN { log_n });
     }
-
-    /// Sets the scrypt `log2(N)` work factor.
-    ///
-    /// # Errors
-    ///
-    /// [`ErrorKind::Nip49`] when `log_n` is outside `1..=22`.
-    pub fn log_n(self, log_n: u8) -> Result<Self> {
-        if !(LOG_N_MIN..=LOG_N_MAX).contains(&log_n) {
-            return Err(nip49(format!(
-                "invalid logn {log_n}, expected integer {LOG_N_MIN}..{LOG_N_MAX}"
-            )));
-        }
-        Ok(Self { log_n, ..self })
-    }
-
-    /// Sets the key-security byte recorded in the payload.
-    #[must_use]
-    pub const fn key_security(self, ksb: KeySecurity) -> Self {
-        Self {
-            key_security: ksb,
-            ..self
-        }
-    }
-
-    /// The scrypt `log2(N)` work factor.
-    #[must_use]
-    pub const fn log_n_value(self) -> u8 {
-        self.log_n
-    }
-
-    /// The key-security byte.
-    #[must_use]
-    pub const fn key_security_byte(self) -> KeySecurity {
-        self.key_security
-    }
-}
-
-impl Default for EncryptOptions {
-    fn default() -> Self {
-        Self::new()
-    }
+    Ok(())
 }
 
 /// scrypt(`r = 8`, `p = 1`, `dkLen = 32`) over the NFKC-normalized UTF-8
 /// password. Both the password bytes and the derived key are zeroized
 /// after use.
-fn derive_key(password: &str, salt: &[u8; SALT_LEN], log_n: u8) -> Result<Zeroizing<[u8; 32]>> {
-    let params =
-        scrypt::Params::new(log_n, 8, 1).map_err(|_| nip49("invalid scrypt parameters"))?;
+fn derive_key(
+    password: &str,
+    salt: &[u8; SALT_LEN],
+    log_n: u8,
+) -> Result<Zeroizing<[u8; 32]>, Error> {
+    let params = scrypt::Params::new(log_n, 8, 1).map_err(|_| Error::InvalidLogN { log_n })?;
     let password_nfkc = Zeroizing::new(password.nfkc().collect::<String>().into_bytes());
     let mut key = Zeroizing::new([0u8; SECRET_LEN]);
-    scrypt::scrypt(&password_nfkc, salt, &params, key.as_mut())
-        .map_err(|_| nip49("scrypt failed"))?;
+    scrypt::scrypt(&password_nfkc, salt, &params, key.as_mut()).map_err(|_| Error::Decryption)?;
     Ok(key)
 }
 
-/// Encrypts `secret` to an `ncryptsec` string with the given `salt` and
-/// `nonce` — the deterministic form used by the shared vectors.
-///
-/// # Errors
-///
-/// [`ErrorKind::Nip49`] when the scrypt parameters or the AEAD fail
-/// (unreachable with the fixed NIP-49 layout).
-pub fn encrypt_with(
-    secret: &SecretKey,
-    password: &str,
-    options: EncryptOptions,
-    salt: &[u8; SALT_LEN],
-    nonce: &[u8; NONCE_LEN],
-) -> Result<String> {
-    let log_n = options.log_n;
-    let key = derive_key(password, salt, log_n)?;
-    let cipher =
-        XChaCha20Poly1305::new_from_slice(&*key).map_err(|_| nip49("invalid cipher key"))?;
-    let ksb = options.key_security as u8;
-    // The plaintext section holds `secret`'s bytes until encryption
-    // overwrites them in place — the guard wipes the whole record.
-    let mut payload_guard = Zeroizing::new([0u8; PAYLOAD_LEN]);
-    let payload = &mut *payload_guard;
-    payload[0] = VERSION;
-    payload[1] = log_n;
-    payload[2..2 + SALT_LEN].copy_from_slice(salt);
-    payload[2 + SALT_LEN..KSB_INDEX].copy_from_slice(nonce);
-    payload[KSB_INDEX] = ksb;
-    secret.with_secret_bytes(|bytes| {
-        payload[CIPHERTEXT_INDEX..CIPHERTEXT_INDEX + SECRET_LEN].copy_from_slice(bytes);
-    });
-    let tag = cipher
-        .encrypt_inout_detached(
-            &XNonce::from(*nonce),
-            &[ksb],
-            payload[CIPHERTEXT_INDEX..CIPHERTEXT_INDEX + SECRET_LEN]
-                .as_mut()
-                .into(),
-        )
-        .map_err(|_| nip49("encryption failed"))?;
-    payload[PAYLOAD_LEN - TAG_LEN..].copy_from_slice(tag.as_slice());
-    Ok(crate::nips::nip19::encode_bech32(
-        HRP_NCRYPTSEC,
-        &*payload_guard,
-    ))
+/// A parsed `ncryptsec`: the encrypted secret key plus the scrypt
+/// parameters and key-security byte recorded in the payload.
+#[derive(Clone, Copy, Debug)]
+pub struct EncryptedSecretKey {
+    log_n: u8,
+    salt: [u8; SALT_LEN],
+    nonce: [u8; NONCE_LEN],
+    key_security: KeySecurity,
+    /// The 32-byte ciphertext plus 16-byte Poly1305 tag.
+    ciphertext: [u8; SECRET_LEN + TAG_LEN],
 }
 
-/// Encrypts `secret`, drawing a 16-byte salt and 24-byte nonce from
-/// `rng` in that order.
-///
-/// # Errors
-///
-/// [`ErrorKind::Nip49`] on the same conditions as [`encrypt_with`].
-pub fn encrypt_with_rng<R>(
-    secret: &SecretKey,
-    password: &str,
-    options: EncryptOptions,
-    rng: &mut R,
-) -> Result<String>
-where
-    R: rand_core::CryptoRng + ?Sized,
-{
-    let mut salt = [0u8; SALT_LEN];
-    let mut nonce = [0u8; NONCE_LEN];
-    rng.fill_bytes(&mut salt);
-    rng.fill_bytes(&mut nonce);
-    encrypt_with(secret, password, options, &salt, &nonce)
-}
+impl EncryptedSecretKey {
+    /// Encrypts `secret` with the given `salt` and `nonce` — the
+    /// deterministic form used by the shared vectors.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidLogN`] when `log_n` is outside `1..=22`.
+    pub fn encrypt_with(
+        secret: &SecretKey,
+        password: &str,
+        log_n: u8,
+        key_security: KeySecurity,
+        salt: &[u8; SALT_LEN],
+        nonce: &[u8; NONCE_LEN],
+    ) -> Result<Self, Error> {
+        check_log_n(log_n)?;
+        let key = derive_key(password, salt, log_n)?;
+        let cipher = XChaCha20Poly1305::new_from_slice(&*key).map_err(|_| Error::Decryption)?;
+        let ksb = key_security as u8;
+        // The plaintext section holds `secret`'s bytes until encryption
+        // overwrites them in place — the guard wipes the whole buffer.
+        let mut plaintext_guard = Zeroizing::new([0u8; SECRET_LEN]);
+        secret.with_secret_bytes(|bytes| {
+            plaintext_guard.copy_from_slice(bytes);
+        });
+        let mut ciphertext = [0u8; SECRET_LEN + TAG_LEN];
+        ciphertext[..SECRET_LEN].copy_from_slice(&*plaintext_guard);
+        let tag = cipher
+            .encrypt_inout_detached(
+                &XNonce::from(*nonce),
+                &[ksb],
+                ciphertext[..SECRET_LEN].as_mut().into(),
+            )
+            .map_err(|_| Error::Decryption)?;
+        ciphertext[SECRET_LEN..].copy_from_slice(tag.as_slice());
+        Ok(Self {
+            log_n,
+            salt: *salt,
+            nonce: *nonce,
+            key_security,
+            ciphertext,
+        })
+    }
 
-/// Encrypts `secret` with OS entropy.
-///
-/// When the OS entropy source fails — the same contract as
-/// [`crate::SecretKey::generate`].
-///
-/// # Errors
-///
-/// [`ErrorKind::Nip49`] on the same conditions as [`encrypt_with`];
-/// panics if the OS RNG fails (see `getrandom::SysRng`).
-#[cfg(feature = "os-rng")]
-pub fn encrypt(secret: &SecretKey, password: &str, options: EncryptOptions) -> Result<String> {
-    encrypt_with_rng(
-        secret,
-        password,
-        options,
-        &mut rand_core::UnwrapErr(getrandom::SysRng),
-    )
-}
-
-/// A decrypted `ncryptsec`: the secret key plus the key-security byte
-/// recorded in the payload.
-#[derive(Debug)]
-pub struct Decrypted {
-    /// The recovered secret key.
-    pub secret_key: SecretKey,
-    /// The payload's key-security byte.
-    pub key_security: KeySecurity,
-}
-
-/// Decrypts an `ncryptsec` string, rejecting payloads whose `log_n`
-/// exceeds `max_log_n` **before** scrypt runs.
-///
-/// # Errors
-///
-/// [`ErrorKind::Nip49`] on `max_log_n` outside `1..=22`, malformed
-/// bech32, a wrong hrp/length/version, `log_n > max_log_n`, a
-/// key-security byte other than 0/1/2, a wrong password (AEAD
-/// authentication), or a decrypted value that is not a valid secret
-/// scalar — the latter carries the `nk` crypto error as `source`
-/// (ruling N3).
-pub fn decrypt(ncryptsec: &str, password: &str, max_log_n: u8) -> Result<Decrypted> {
-    if !(LOG_N_MIN..=LOG_N_MAX).contains(&max_log_n) {
-        return Err(nip49(format!(
-            "invalid maxLogN {max_log_n}, expected integer {LOG_N_MIN}..{LOG_N_MAX}"
-        )));
-    }
-    // Drop guards wipe every copy of key material on every path: the
-    // decoded payload, the fixed-size record, and the decrypted secret.
-    let (hrp, payload) =
-        crate::nips::nip19::decode_bech32(ncryptsec).ok_or_else(|| nip49("invalid ncryptsec"))?;
-    let payload = Zeroizing::new(payload);
-    if hrp != HRP_NCRYPTSEC {
-        return Err(nip49(format!("invalid prefix {hrp}, expected 'ncryptsec'")));
-    }
-    if payload.len() != PAYLOAD_LEN {
-        return Err(nip49("invalid ncryptsec length"));
-    }
-    // The length is fixed from here on: parse a stack record the compiler
-    // can bounds-check statically.
-    let mut record_guard = Zeroizing::new([0u8; PAYLOAD_LEN]);
-    record_guard.copy_from_slice(payload.as_slice());
-    drop(payload);
-    let record = &mut *record_guard;
-    let version = record[0];
-    if version != VERSION {
-        return Err(nip49(format!("invalid version {version}, expected 0x02")));
-    }
-    let log_n = record[1];
-    if log_n > max_log_n {
-        return Err(nip49(format!("logn {log_n} exceeds maxLogN {max_log_n}")));
-    }
-    let ksb = record[KSB_INDEX];
-    let key_security = match ksb {
-        0x00 => KeySecurity::Insecure,
-        0x01 => KeySecurity::Secure,
-        0x02 => KeySecurity::Unknown,
-        other => {
-            return Err(nip49(format!(
-                "invalid key security byte {other}, expected 0x00, 0x01, or 0x02"
-            )));
-        }
-    };
-    let mut salt = [0u8; SALT_LEN];
-    salt.copy_from_slice(&record[2..2 + SALT_LEN]);
-    let mut nonce = [0u8; NONCE_LEN];
-    nonce.copy_from_slice(&record[2 + SALT_LEN..KSB_INDEX]);
-    let key = derive_key(password, &salt, log_n)?;
-    let cipher =
-        XChaCha20Poly1305::new_from_slice(&*key).map_err(|_| nip49("invalid cipher key"))?;
-    let mut secret_guard = Zeroizing::new([0u8; SECRET_LEN]);
-    secret_guard.copy_from_slice(&record[CIPHERTEXT_INDEX..CIPHERTEXT_INDEX + SECRET_LEN]);
-    let mut tag = [0u8; TAG_LEN];
-    tag.copy_from_slice(&record[PAYLOAD_LEN - TAG_LEN..]);
-    drop(record_guard);
-    let secret = &mut *secret_guard;
-    if cipher
-        .decrypt_inout_detached(
-            &XNonce::from(nonce),
-            &[ksb],
-            secret.as_mut_slice().into(),
-            &tag.into(),
-        )
-        .is_err()
+    /// Encrypts `secret`, drawing a 16-byte salt and 24-byte nonce from
+    /// `rng` in that order.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidLogN`] on the same conditions as
+    /// [`EncryptedSecretKey::encrypt_with`].
+    pub fn encrypt_with_rng<R>(
+        secret: &SecretKey,
+        password: &str,
+        log_n: u8,
+        key_security: KeySecurity,
+        rng: &mut R,
+    ) -> Result<Self, Error>
+    where
+        R: rand_core::CryptoRng + ?Sized,
     {
-        return Err(nip49("failed to decrypt"));
+        let mut salt = [0u8; SALT_LEN];
+        let mut nonce = [0u8; NONCE_LEN];
+        rng.fill_bytes(&mut salt);
+        rng.fill_bytes(&mut nonce);
+        Self::encrypt_with(secret, password, log_n, key_security, &salt, &nonce)
     }
-    // `from_bytes` gets its own copy; the guard wipes the local on drop.
-    let secret_key = SecretKey::from_bytes(*secret)
-        .map_err(|e| Error::with_source(ErrorKind::Nip49, "invalid secret key", e))?;
-    Ok(Decrypted {
-        secret_key,
-        key_security,
-    })
+
+    /// Encrypts `secret` with OS entropy.
+    ///
+    /// When the OS entropy source fails — the same contract as
+    /// [`crate::SecretKey::generate`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidLogN`] on the same conditions as
+    /// [`EncryptedSecretKey::encrypt_with`]; panics if the OS RNG fails
+    /// (see `getrandom::SysRng`).
+    #[cfg(feature = "os-rng")]
+    pub fn encrypt(
+        secret: &SecretKey,
+        password: &str,
+        log_n: u8,
+        key_security: KeySecurity,
+    ) -> Result<Self, Error> {
+        Self::encrypt_with_rng(
+            secret,
+            password,
+            log_n,
+            key_security,
+            &mut rand_core::UnwrapErr(getrandom::SysRng),
+        )
+    }
+
+    /// The scrypt `log2(N)` work factor recorded in the payload.
+    #[must_use]
+    pub const fn log_n(&self) -> u8 {
+        self.log_n
+    }
+
+    /// The key-security byte recorded in the payload.
+    #[must_use]
+    pub const fn key_security(&self) -> KeySecurity {
+        self.key_security
+    }
+
+    /// Decrypts the payload, rejecting `log_n` values above `max_log_n`
+    /// **before** scrypt runs.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidLogN`] when `max_log_n` is outside `1..=22`,
+    /// [`Error::LogNTooLarge`] when the payload's `log_n` exceeds
+    /// `max_log_n`, [`Error::Decryption`] on a wrong password or tampered
+    /// payload (indistinguishable), and [`Error::InvalidSecretKey`] when
+    /// the decrypted bytes are not a valid secret scalar.
+    pub fn decrypt(&self, password: &str, max_log_n: u8) -> Result<SecretKey, Error> {
+        check_log_n(max_log_n)?;
+        if self.log_n > max_log_n {
+            return Err(Error::LogNTooLarge {
+                log_n: self.log_n,
+                max: max_log_n,
+            });
+        }
+        let key = derive_key(password, &self.salt, self.log_n)?;
+        let cipher = XChaCha20Poly1305::new_from_slice(&*key).map_err(|_| Error::Decryption)?;
+        let ksb = self.key_security as u8;
+        // The guard wipes the decrypted scalar on every path.
+        let mut secret_guard = Zeroizing::new([0u8; SECRET_LEN]);
+        secret_guard.copy_from_slice(&self.ciphertext[..SECRET_LEN]);
+        let mut tag = [0u8; TAG_LEN];
+        tag.copy_from_slice(&self.ciphertext[SECRET_LEN..]);
+        let secret = &mut *secret_guard;
+        if cipher
+            .decrypt_inout_detached(
+                &XNonce::from(self.nonce),
+                &[ksb],
+                secret.as_mut_slice().into(),
+                &tag.into(),
+            )
+            .is_err()
+        {
+            return Err(Error::Decryption);
+        }
+        // `from_bytes` gets its own copy; the guard wipes the local on drop.
+        SecretKey::from_bytes(*secret).map_err(|_| Error::InvalidSecretKey)
+    }
+}
+
+impl FromStr for EncryptedSecretKey {
+    type Err = Error;
+
+    /// Parses an `ncryptsec` string — checks the bech32 checksum, the hrp,
+    /// the payload length, the version byte, and the key-security byte.
+    /// The ciphertext is not authenticated until [`Self::decrypt`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Bech32`], [`Error::UnexpectedPrefix`],
+    /// [`Error::InvalidLength`], [`Error::UnsupportedVersion`], and
+    /// [`Error::InvalidKeySecurity`].
+    fn from_str(ncryptsec: &str) -> Result<Self, Error> {
+        let (hrp, payload) = crate::nips::nip19::decode_bech32(ncryptsec)
+            .map_err(|e| Error::Bech32 { source: e.into() })?;
+        if hrp != HRP_NCRYPTSEC {
+            return Err(Error::UnexpectedPrefix {
+                found: hrp.as_str().to_owned(),
+            });
+        }
+        let record: [u8; PAYLOAD_LEN] =
+            payload
+                .as_slice()
+                .try_into()
+                .map_err(|_| Error::InvalidLength {
+                    found: payload.len(),
+                })?;
+        let version = record[0];
+        if version != VERSION {
+            return Err(Error::UnsupportedVersion { version });
+        }
+        let byte = record[KSB_INDEX];
+        let key_security = match byte {
+            0x00 => KeySecurity::Insecure,
+            0x01 => KeySecurity::Secure,
+            0x02 => KeySecurity::Unknown,
+            _ => return Err(Error::InvalidKeySecurity { byte }),
+        };
+        let mut salt = [0u8; SALT_LEN];
+        salt.copy_from_slice(&record[2..2 + SALT_LEN]);
+        let mut nonce = [0u8; NONCE_LEN];
+        nonce.copy_from_slice(&record[2 + SALT_LEN..KSB_INDEX]);
+        let mut ciphertext = [0u8; SECRET_LEN + TAG_LEN];
+        ciphertext.copy_from_slice(&record[CIPHERTEXT_INDEX..]);
+        Ok(Self {
+            log_n: record[1],
+            salt,
+            nonce,
+            key_security,
+            ciphertext,
+        })
+    }
+}
+
+impl fmt::Display for EncryptedSecretKey {
+    /// Re-encodes the payload as an `ncryptsec1…` string.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut payload = [0u8; PAYLOAD_LEN];
+        payload[0] = VERSION;
+        payload[1] = self.log_n;
+        payload[2..2 + SALT_LEN].copy_from_slice(&self.salt);
+        payload[2 + SALT_LEN..KSB_INDEX].copy_from_slice(&self.nonce);
+        payload[KSB_INDEX] = self.key_security as u8;
+        payload[CIPHERTEXT_INDEX..].copy_from_slice(&self.ciphertext);
+        f.write_str(&crate::nips::nip19::encode_bech32(HRP_NCRYPTSEC, &payload))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        reason = "tests fail by panicking"
-    )]
+    #![allow(clippy::unwrap_used, clippy::panic, reason = "tests fail by panicking")]
+
+    use alloc::string::ToString;
 
     use core::error::Error as _;
 
-    use zeroize::Zeroize;
-
     use super::*;
 
-    const SECRET: [u8; 32] = [7u8; 32];
-    const SALT: [u8; 16] = [1u8; 16];
-    const NONCE: [u8; 24] = [2u8; 24];
+    const SALT: [u8; SALT_LEN] = [0x42; SALT_LEN];
+    const NONCE: [u8; NONCE_LEN] = [0x24; NONCE_LEN];
 
     fn secret() -> SecretKey {
-        SecretKey::from_bytes(SECRET).unwrap()
+        SecretKey::from_bytes([0x33; 32]).unwrap()
+    }
+
+    fn encrypted() -> EncryptedSecretKey {
+        EncryptedSecretKey::encrypt_with(
+            &secret(),
+            "hunter2",
+            LOG_N_MIN,
+            KeySecurity::Secure,
+            &SALT,
+            &NONCE,
+        )
+        .unwrap()
     }
 
     #[test]
-    fn encrypt_options_bounds() {
-        assert!(EncryptOptions::new().log_n(0).is_err());
-        assert!(EncryptOptions::new().log_n(23).is_err());
-        let options = EncryptOptions::new()
-            .log_n(2)
-            .unwrap()
-            .key_security(KeySecurity::Secure);
-        assert_eq!(options.log_n_value(), 2);
-        assert_eq!(options.key_security_byte(), KeySecurity::Secure);
-        assert_eq!(EncryptOptions::new().log_n_value(), 16, "TS default logn");
-        assert_eq!(
-            EncryptOptions::new().key_security_byte(),
-            KeySecurity::Unknown,
-            "TS default ksb"
-        );
-    }
-
-    #[test]
-    fn encrypt_with_roundtrips() {
-        let options = EncryptOptions::new()
-            .log_n(2)
-            .unwrap()
-            .key_security(KeySecurity::Insecure);
-        let code = encrypt_with(&secret(), "päss wörd", options, &SALT, &NONCE).unwrap();
+    fn round_trip() {
+        let key = encrypted();
+        assert_eq!(key.log_n(), LOG_N_MIN);
+        assert_eq!(key.key_security(), KeySecurity::Secure);
+        let code = key.to_string();
         assert!(code.starts_with("ncryptsec1"));
-        let out = decrypt(&code, "päss wörd", 22).unwrap();
-        out.secret_key
-            .with_secret_bytes(|bytes| assert_eq!(&SECRET, bytes));
-        assert_eq!(out.key_security, KeySecurity::Insecure);
+        let parsed = code.parse::<EncryptedSecretKey>().unwrap();
+        assert_eq!(parsed.log_n(), LOG_N_MIN);
+        assert_eq!(parsed.key_security(), KeySecurity::Secure);
+        let decrypted = parsed.decrypt("hunter2", LOG_N_MAX).unwrap();
+        assert_eq!(decrypted.with_secret_bytes(|b| *b), [0x33; 32]);
+    }
+
+    #[test]
+    fn deterministic_output_matches_payload_layout() {
+        let key = EncryptedSecretKey::encrypt_with(
+            &secret(),
+            "hunter2",
+            DEFAULT_LOG_N,
+            KeySecurity::Unknown,
+            &SALT,
+            &NONCE,
+        )
+        .unwrap();
+        let (hrp, payload) = crate::nips::nip19::decode_bech32(&key.to_string()).unwrap();
+        assert_eq!(hrp, HRP_NCRYPTSEC);
+        assert_eq!(payload.first(), Some(&VERSION));
+        assert_eq!(payload.get(1), Some(&DEFAULT_LOG_N));
+        assert_eq!(payload.get(KSB_INDEX), Some(&(KeySecurity::Unknown as u8)));
+    }
+
+    #[test]
+    fn encrypt_rejects_out_of_range_log_n() {
+        for log_n in [0, 23, u8::MAX] {
+            assert!(matches!(
+                EncryptedSecretKey::encrypt_with(
+                    &secret(),
+                    "pw",
+                    log_n,
+                    KeySecurity::Unknown,
+                    &SALT,
+                    &NONCE
+                ),
+                Err(Error::InvalidLogN { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn parse_rejects_malformed_input() {
+        // Not bech32.
+        let err = "not-ncryptsec".parse::<EncryptedSecretKey>().unwrap_err();
+        assert!(matches!(err, Error::Bech32 { .. }));
+        assert!(err.source().is_some());
+        // Wrong hrp — a valid npub string.
+        let npub = crate::nips::nip19::encode_bech32(Hrp::parse_unchecked("npub"), &[0x11; 32]);
+        assert!(matches!(
+            npub.parse::<EncryptedSecretKey>(),
+            Err(Error::UnexpectedPrefix { .. })
+        ));
+        // Wrong payload length.
+        let short = crate::nips::nip19::encode_bech32(HRP_NCRYPTSEC, &[0x02; 10]);
+        assert!(matches!(
+            short.parse::<EncryptedSecretKey>(),
+            Err(Error::InvalidLength { found: 10 })
+        ));
+        // Wrong version.
+        let mut payload = [0u8; PAYLOAD_LEN];
+        payload[0] = 0x01;
+        let bad_version = crate::nips::nip19::encode_bech32(HRP_NCRYPTSEC, &payload);
+        assert!(matches!(
+            bad_version.parse::<EncryptedSecretKey>(),
+            Err(Error::UnsupportedVersion { version: 0x01 })
+        ));
+        // Bad key-security byte.
+        payload[0] = VERSION;
+        payload[KSB_INDEX] = 0x07;
+        let bad_ksb = crate::nips::nip19::encode_bech32(HRP_NCRYPTSEC, &payload);
+        assert!(matches!(
+            bad_ksb.parse::<EncryptedSecretKey>(),
+            Err(Error::InvalidKeySecurity { byte: 0x07 })
+        ));
+    }
+
+    #[test]
+    fn decrypt_rejects_max_log_n_before_scrypt() {
+        let key = encrypted();
+        assert!(matches!(
+            key.decrypt("hunter2", 0),
+            Err(Error::InvalidLogN { log_n: 0 })
+        ));
+        // The payload carries LOG_N_MIN; a zero ceiling is still checked
+        // first, so max_log_n must be >= the payload's.
+        assert!(matches!(
+            key.decrypt("hunter2", 23),
+            Err(Error::InvalidLogN { log_n: 23 })
+        ));
+        // Payload log_n above the caller ceiling fails before scrypt.
+        let high = EncryptedSecretKey::encrypt_with(
+            &secret(),
+            "hunter2",
+            LOG_N_MIN + 1,
+            KeySecurity::Secure,
+            &SALT,
+            &NONCE,
+        )
+        .unwrap();
+        assert!(matches!(
+            high.decrypt("hunter2", LOG_N_MIN),
+            Err(Error::LogNTooLarge {
+                log_n: _,
+                max: LOG_N_MIN
+            })
+        ));
+    }
+
+    #[test]
+    fn decrypt_wrong_password_is_indistinguishable() {
+        let key = encrypted();
+        assert!(matches!(
+            key.decrypt("wrong", LOG_N_MAX),
+            Err(Error::Decryption)
+        ));
+        // A tampered tag fails the same way.
+        let mut tampered = key;
+        tampered.ciphertext[SECRET_LEN] ^= 0x01;
+        assert!(matches!(
+            tampered.decrypt("hunter2", LOG_N_MAX),
+            Err(Error::Decryption)
+        ));
     }
 
     #[test]
@@ -377,58 +536,55 @@ mod tests {
         let decomposed = "\u{212b}\u{2126}\u{1e9b}\u{0323}";
         let composed = decomposed.nfkc().collect::<String>();
         assert_ne!(decomposed, composed);
-        let options = EncryptOptions::new().log_n(1).unwrap();
-        let a = encrypt_with(&secret(), decomposed, options, &SALT, &NONCE).unwrap();
-        let b = encrypt_with(&secret(), &composed, options, &SALT, &NONCE).unwrap();
-        assert_eq!(a, b);
+        let a = EncryptedSecretKey::encrypt_with(
+            &secret(),
+            decomposed,
+            LOG_N_MIN,
+            KeySecurity::Unknown,
+            &SALT,
+            &NONCE,
+        )
+        .unwrap();
+        let b = EncryptedSecretKey::encrypt_with(
+            &secret(),
+            &composed,
+            LOG_N_MIN,
+            KeySecurity::Unknown,
+            &SALT,
+            &NONCE,
+        )
+        .unwrap();
+        assert_eq!(a.to_string(), b.to_string());
+        // Unicode passwords beyond ASCII work too.
+        let key = EncryptedSecretKey::encrypt_with(
+            &secret(),
+            "päss wörd",
+            LOG_N_MIN,
+            KeySecurity::Insecure,
+            &SALT,
+            &NONCE,
+        )
+        .unwrap();
+        let decrypted = key.decrypt("päss wörd", LOG_N_MAX).unwrap();
+        decrypted.with_secret_bytes(|bytes| assert_eq!(&[0x33; 32], bytes));
     }
 
     #[test]
-    fn decrypt_bounds_and_shape() {
-        let options = EncryptOptions::new().log_n(2).unwrap();
-        let code = encrypt_with(&secret(), "pw", options, &SALT, &NONCE).unwrap();
-        for max_log_n in [0u8, 23] {
-            let err = decrypt(&code, "pw", max_log_n).unwrap_err();
-            assert_eq!(err.kind(), ErrorKind::Nip49);
-        }
-        // log_n 2 > ceiling 1: rejected before scrypt.
-        assert_eq!(
-            decrypt(&code, "pw", 1).unwrap_err().kind(),
-            ErrorKind::Nip49
-        );
-        // Wrong password fails AEAD authentication.
-        assert_eq!(
-            decrypt(&code, "wrong", 22).unwrap_err().kind(),
-            ErrorKind::Nip49
-        );
-        // Not bech32 / wrong hrp.
-        for input in [
-            "garbage",
-            "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq2",
-        ] {
-            assert_eq!(
-                decrypt(input, "pw", 22).unwrap_err().kind(),
-                ErrorKind::Nip49
-            );
-        }
-    }
-
-    #[test]
-    fn decrypt_rejects_invalid_scalar_with_source() {
+    fn decrypt_rejects_invalid_scalar() {
         // A payload whose plaintext is the all-zero scalar: AEAD succeeds,
-        // the scalar check must fail with the nk error as source (N3).
-        let key = derive_key("pw", &SALT, 2).unwrap();
+        // the scalar check must fail.
+        let key = derive_key("pw", &SALT, LOG_N_MIN).unwrap();
         let cipher = XChaCha20Poly1305::new_from_slice(&*key).unwrap();
         let mut payload = [0u8; PAYLOAD_LEN];
         payload[0] = VERSION;
-        payload[1] = 2;
+        payload[1] = LOG_N_MIN;
         payload[2..2 + SALT_LEN].copy_from_slice(&SALT);
         payload[2 + SALT_LEN..KSB_INDEX].copy_from_slice(&NONCE);
-        payload[KSB_INDEX] = 0x02;
+        payload[KSB_INDEX] = KeySecurity::Unknown as u8;
         let tag = cipher
             .encrypt_inout_detached(
                 &XNonce::from(NONCE),
-                &[0x02],
+                &[KeySecurity::Unknown as u8],
                 payload[CIPHERTEXT_INDEX..CIPHERTEXT_INDEX + SECRET_LEN]
                     .as_mut()
                     .into(),
@@ -436,9 +592,10 @@ mod tests {
             .unwrap();
         payload[PAYLOAD_LEN - TAG_LEN..].copy_from_slice(tag.as_slice());
         let code = crate::nips::nip19::encode_bech32(HRP_NCRYPTSEC, &payload);
-        payload.zeroize();
-        let err = decrypt(&code, "pw", 22).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Nip49);
-        assert!(err.source().is_some(), "N3 carries the scalar error");
+        let parsed = code.parse::<EncryptedSecretKey>().unwrap();
+        assert!(matches!(
+            parsed.decrypt("pw", LOG_N_MAX),
+            Err(Error::InvalidSecretKey)
+        ));
     }
 }

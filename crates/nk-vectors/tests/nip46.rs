@@ -23,8 +23,7 @@
 mod common;
 
 use nk::PublicKey;
-use nk::nips::ErrorKind;
-use nk::nips::nip46::{BunkerUri, NostrConnectUri, Request, Response};
+use nk::nips::nip46::{BunkerUri, Method, NostrConnectUri, Request, Response};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(
@@ -162,7 +161,7 @@ fn pubkey(hex: &str, name: &str) -> PublicKey {
 
 fn bunker_json(uri: &BunkerUri) -> BunkerJson {
     BunkerJson {
-        pubkey: uri.pubkey.to_hex(),
+        pubkey: uri.remote_signer.to_hex(),
         relays: uri.relays.clone(),
         secret: uri.secret.clone(),
     }
@@ -170,13 +169,13 @@ fn bunker_json(uri: &BunkerUri) -> BunkerJson {
 
 fn connect_json(uri: &NostrConnectUri) -> ConnectJson {
     ConnectJson {
-        client_pubkey: uri.client_pubkey.to_hex(),
-        relays: uri.relays.clone(),
-        secret: uri.secret.clone(),
-        perms: uri.perms.clone(),
-        name: uri.name.clone(),
-        url: uri.url.clone(),
-        image: uri.image.clone(),
+        client_pubkey: uri.client().to_hex(),
+        relays: uri.relays().to_vec(),
+        secret: uri.secret().to_owned(),
+        perms: uri.perms().to_vec(),
+        name: uri.name().map(str::to_owned),
+        url: uri.url().map(str::to_owned),
+        image: uri.image().map(str::to_owned),
     }
 }
 
@@ -191,13 +190,13 @@ fn expect_nip46(err: Option<&str>, name: &str) {
 #[test]
 fn bunker_parse_cases() {
     for case in &codec().bunker_parse {
-        match (BunkerUri::parse(&case.uri), &case.out) {
-            (Some(uri), Some(expected)) => {
+        match (case.uri.parse::<BunkerUri>(), &case.out) {
+            (Ok(uri), Some(expected)) => {
                 assert_eq!(&bunker_json(&uri), expected, "{}", case.name);
             }
-            (None, None) => {}
-            (Some(uri), None) => panic!("{}: expected undefined, got {uri:?}", case.name),
-            (None, Some(_)) => panic!("{}: Rust rejected a valid bunker URI", case.name),
+            (Err(_), None) => {}
+            (Ok(uri), None) => panic!("{}: expected undefined, got {uri:?}", case.name),
+            (Err(_), Some(_)) => panic!("{}: Rust rejected a valid bunker URI", case.name),
         }
     }
 }
@@ -206,7 +205,7 @@ fn bunker_parse_cases() {
 fn bunker_encode_cases() {
     for case in &codec().bunker {
         let uri = BunkerUri {
-            pubkey: pubkey(&case.pubkey, &case.name),
+            remote_signer: pubkey(&case.pubkey, &case.name),
             relays: case.relays.clone(),
             secret: case.secret.clone(),
         };
@@ -217,13 +216,12 @@ fn bunker_encode_cases() {
 #[test]
 fn connect_parse_cases() {
     for case in &codec().connect_parse {
-        match (NostrConnectUri::parse(&case.uri), &case.out, &case.err) {
+        match (case.uri.parse::<NostrConnectUri>(), &case.out, &case.err) {
             (Ok(uri), Some(expected), _) => {
                 assert_eq!(&connect_json(&uri), expected, "{}", case.name);
             }
             (Err(error), _, Some(_)) => {
                 expect_nip46(case.err.as_deref(), &case.name);
-                assert_eq!(error.kind(), ErrorKind::Nip46, "{}", case.name);
                 // N11: error text must never carry the input URI.
                 assert!(
                     !error.to_string().contains(&case.uri),
@@ -250,36 +248,41 @@ fn connect_encode_cases() {
         // the error cases meaningful.
         let valid = input.client_pubkey.len() == 64
             && input.client_pubkey.bytes().all(|b| b.is_ascii_hexdigit());
-        let uri = if valid {
-            Some(NostrConnectUri {
-                client_pubkey: pubkey(&input.client_pubkey, &case.name),
-                relays: input.relays.clone(),
-                secret: input.secret.clone(),
-                perms: input.perms.clone().unwrap_or_default(),
-                name: input.name.clone(),
-                url: input.url.clone(),
-                image: input.image.clone(),
+        let uri = valid
+            .then(|| {
+                NostrConnectUri::new(
+                    pubkey(&input.client_pubkey, &case.name),
+                    input.relays.clone(),
+                    input.secret.clone(),
+                )
+                .ok()
+                .map(|uri| {
+                    let uri = uri.with_perms(input.perms.clone().unwrap_or_default());
+                    let uri = match &input.name {
+                        Some(name) => uri.with_name(name.clone()),
+                        None => uri,
+                    };
+                    let uri = match &input.url {
+                        Some(url) => uri.with_url(url.clone()),
+                        None => uri,
+                    };
+                    match &input.image {
+                        Some(image) => uri.with_image(image.clone()),
+                        None => uri,
+                    }
+                })
             })
-        } else {
-            None
-        };
+            .flatten();
         match (uri, &case.out, &case.err) {
             (Some(uri), Some(expected), _) => {
-                assert_eq!(
-                    &uri.to_uri().expect("valid uri encodes"),
-                    expected,
-                    "{}",
-                    case.name
-                );
+                assert_eq!(&uri.to_string(), expected, "{}", case.name);
             }
             (None, _, Some(_)) => {
-                // TS throws `invalid client pubkey` before touching the rest.
+                // Bad pubkey or missing secret/relays: all `Nip46Error`.
                 expect_nip46(case.err.as_deref(), &case.name);
             }
             (Some(uri), _, Some(_)) => {
-                expect_nip46(case.err.as_deref(), &case.name);
-                let error = uri.to_uri().expect_err("encode must fail");
-                assert_eq!(error.kind(), ErrorKind::Nip46, "{}", case.name);
+                panic!("{}: expected an error, constructed {uri:?}", case.name)
             }
             (None, Some(_), _) => panic!("{}: expected a URI, client was invalid", case.name),
             (Some(_) | None, None, None) => {
@@ -294,7 +297,7 @@ fn request_cases() {
     for case in &codec().request {
         let request = Request {
             id: case.request.id.clone(),
-            method: case.request.method.clone(),
+            method: Method::from(case.request.method.clone()),
             params: case.request.params.clone(),
         };
         assert_eq!(request.to_json(), case.json, "{}", case.name);
@@ -323,9 +326,8 @@ fn request_parse_cases() {
                     case.name
                 );
             }
-            (Err(error), _, Some(_)) => {
+            (Err(_), _, Some(_)) => {
                 expect_nip46(case.err.as_deref(), &case.name);
-                assert_eq!(error.kind(), ErrorKind::Nip46, "{}", case.name);
             }
             (Ok(_), None, _) => panic!("{}: expected error, got a request", case.name),
             (Err(error), Some(_), _) => {
@@ -370,9 +372,8 @@ fn response_parse_cases() {
                     case.name
                 );
             }
-            (Err(error), _, Some(_)) => {
+            (Err(_), _, Some(_)) => {
                 expect_nip46(case.err.as_deref(), &case.name);
-                assert_eq!(error.kind(), ErrorKind::Nip46, "{}", case.name);
             }
             (Ok(_), None, _) => panic!("{}: expected error, got a response", case.name),
             (Err(error), Some(_), _) => {

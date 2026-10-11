@@ -20,7 +20,6 @@
 
 mod common;
 
-use nk::nips::ErrorKind;
 use nk::nips::nip21::{self, NostrUri};
 use serde::Deserialize;
 
@@ -52,19 +51,23 @@ struct Vector {
 fn uri_vectors() {
     let vector: Vector = serde_json::from_str(URI).expect("valid JSON");
     for (i, case) in vector.cases.iter().enumerate() {
+        let parsed = NostrUri::parse(&case.input);
+        // `is_uri` tracks the URI shape: a well-shaped entity that fails
+        // NIP-19 decode still counts; a missing scheme or `nsec` does not.
         assert_eq!(
-            nip21::is_nostr_uri(&case.input),
             case.is_uri,
-            "case {i}: is_nostr_uri"
+            !matches!(
+                parsed,
+                Err(nip21::Error::MissingScheme | nip21::Error::SecretKey)
+            ),
+            "case {i}: is_uri"
         );
         if let Some(error) = &case.error {
             assert_eq!(error, "Nip21Error", "case {i}: unexpected error class");
-            let err = NostrUri::parse(&case.input).expect_err("case must fail");
-            assert_eq!(err.kind(), ErrorKind::Nip21, "case {i}");
+            assert!(parsed.is_err(), "case {i}: parse must fail");
             continue;
         }
-        let parsed =
-            NostrUri::parse(&case.input).unwrap_or_else(|e| panic!("case {i}: parse failed: {e}"));
+        let parsed = parsed.unwrap_or_else(|e| panic!("case {i}: parse failed: {e}"));
         assert_eq!(parsed.as_str(), case.value.as_deref().unwrap(), "case {i}");
         assert_eq!(parsed.to_string(), case.uri.as_deref().unwrap(), "case {i}");
         let decoded: common::EntityJson =

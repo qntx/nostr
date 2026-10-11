@@ -12,7 +12,22 @@ use core::fmt;
 use core::str::FromStr;
 
 use crate::nips::nip19;
-use crate::nips::{Error, ErrorKind, Result};
+
+/// Errors produced by parsing a `nostr:` URI.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// The URI does not start with the `nostr:` scheme or does not match
+    /// the NIP-21 shape `nostr:<hrp>1<bech32 data>`.
+    #[error("missing or malformed nostr: scheme")]
+    MissingScheme,
+    /// `nsec` entities are excluded from `nostr:` URIs by NIP-21.
+    #[error("nostr: URIs must not contain an nsec entity")]
+    SecretKey,
+    /// The entity part is not a valid NIP-19 bech32 entity.
+    #[error(transparent)]
+    Nip19(#[from] nip19::Error),
+}
 
 const SCHEME: &str = "nostr:";
 const NSEC: &str = "nsec1";
@@ -53,13 +68,6 @@ fn uri_entity(uri: &str) -> Option<&str> {
     Some(entity)
 }
 
-/// True when `value` has the `nostr:` URI shape and is not an `nsec`; the
-/// entity is not decoded (TS `isNostrURI`).
-#[must_use]
-pub fn is_nostr_uri(value: &str) -> bool {
-    uri_entity(value).is_some_and(|entity| !is_nsec(entity))
-}
-
 /// A parsed `nostr:` URI (NIP-21). `nsec` URIs are rejected.
 #[derive(Clone, Debug)]
 pub struct NostrUri {
@@ -69,28 +77,21 @@ pub struct NostrUri {
 }
 
 impl NostrUri {
-    /// Parses a `nostr:<bech32>` URI (TS `parseNostrURI`).
-    ///
-    /// Shape violations and `nsec` URIs produce [`ErrorKind::Nip21`]; a
-    /// well-shaped but undecodable entity also produces [`ErrorKind::Nip21`]
-    /// with the NIP-19 error as `source`.
+    /// Parses a `nostr:<bech32>` URI.
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Nip21`] on a malformed URI, an `nsec` entity, or a NIP-19
-    /// decode failure.
-    pub fn parse(uri: &str) -> Result<Self> {
+    /// [`Error::MissingScheme`] on a malformed URI, [`Error::SecretKey`] on
+    /// an `nsec` entity, and [`Error::Nip19`] on a well-shaped but
+    /// undecodable entity.
+    pub fn parse(uri: &str) -> Result<Self, Error> {
         let Some(entity) = uri_entity(uri) else {
-            return Err(Error::new(ErrorKind::Nip21, "invalid nostr URI"));
+            return Err(Error::MissingScheme);
         };
         if is_nsec(entity) {
-            return Err(Error::new(
-                ErrorKind::Nip21,
-                "NIP-21 identifiers exclude nsec",
-            ));
+            return Err(Error::SecretKey);
         }
-        let decoded = nip19::decode(entity)
-            .map_err(|error| Error::with_source(ErrorKind::Nip21, "invalid nostr URI", error))?;
+        let decoded = nip19::Entity::from_bech32(entity)?;
         Ok(Self {
             value: entity.into(),
             entity: decoded,
@@ -125,7 +126,8 @@ impl fmt::Display for NostrUri {
 impl FromStr for NostrUri {
     type Err = Error;
 
-    fn from_str(s: &str) -> Result<Self> {
+    /// Parses a `nostr:<bech32>` URI — identical to [`NostrUri::parse`].
+    fn from_str(s: &str) -> Result<Self, Error> {
         Self::parse(s)
     }
 }
@@ -145,75 +147,58 @@ mod tests {
     const NSEC: &str = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
 
     #[test]
-    fn parses_a_valid_uri() {
+    fn parse_round_trip() {
         let uri = NostrUri::parse(&format!("nostr:{NPUB}")).unwrap();
         assert_eq!(uri.as_str(), NPUB);
-        assert!(matches!(uri.entity(), nip19::Entity::Public(_)));
         assert_eq!(uri.to_string(), format!("nostr:{NPUB}"));
-        let via_from_str: NostrUri = format!("nostr:{NPUB}").parse().unwrap();
-        assert_eq!(via_from_str.as_str(), NPUB);
+        assert!(matches!(uri.entity(), nip19::Entity::Public(_)));
         assert!(matches!(uri.into_entity(), nip19::Entity::Public(_)));
+        assert!(format!("nostr:{NPUB}").parse::<NostrUri>().is_ok());
     }
 
     #[test]
-    fn scheme_is_case_insensitive() {
-        assert_eq!(
-            NostrUri::parse(&format!("NOSTR:{NPUB}")).unwrap().as_str(),
-            NPUB
-        );
-        assert!(is_nostr_uri(&format!("NoStR:{NPUB}")));
-        assert!(is_nostr_uri(&format!("nostr:{}", NPUB.to_uppercase())));
+    fn accepts_case_insensitive_scheme_and_upper_entity() {
+        assert!(NostrUri::parse(&format!("NOSTR:{NPUB}")).is_ok());
         assert!(NostrUri::parse(&format!("nostr:{}", NPUB.to_uppercase())).is_ok());
     }
 
     #[test]
-    fn nsec_is_rejected() {
-        let uri = format!("nostr:{NSEC}");
-        assert!(!is_nostr_uri(&uri));
-        let error = NostrUri::parse(&uri).unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::Nip21);
-        let upper = format!("nostr:{}", NSEC.to_uppercase());
-        assert!(!is_nostr_uri(&upper));
-        assert_eq!(
-            NostrUri::parse(&upper).unwrap_err().kind(),
-            ErrorKind::Nip21
-        );
+    fn rejects_nsec() {
+        let err = NostrUri::parse(&format!("nostr:{NSEC}")).unwrap_err();
+        assert!(matches!(err, Error::SecretKey));
+        // Also when only the shape matches (uppercase prefix).
+        assert!(matches!(
+            NostrUri::parse(&format!("nostr:{}", NSEC.to_uppercase())),
+            Err(Error::SecretKey)
+        ));
     }
 
     #[test]
-    fn malformed_inputs_reject() {
-        for uri in [
+    fn rejects_malformed_and_wrong_scheme() {
+        for input in [
             "",
+            "npub180cvv07",
+            "http://x",
             "nostr:",
-            NPUB,
-            "nostr:npub",
-            "nostr:npub1abc!",
-            "nostr:npub1 ab",
-            "https://npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
-            "nostr1npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+            "nostr:abc",
+            "nostr://abc",
+            "nostr:npub1bad!chars",
         ] {
-            assert!(!is_nostr_uri(uri), "{uri}");
-            assert_eq!(
-                NostrUri::parse(uri).unwrap_err().kind(),
-                ErrorKind::Nip21,
-                "{uri}"
-            );
-        }
-        // Shape-valid but undecodable: bad checksum and mixed case.
-        let bad_checksum = format!("nostr:{}x", &NPUB[..NPUB.len() - 1]);
-        let mixed =
-            String::from("nostr:nPuB180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6");
-        for uri in [bad_checksum, mixed] {
-            assert!(is_nostr_uri(&uri), "{uri}");
-            let error = NostrUri::parse(&uri).unwrap_err();
-            assert_eq!(error.kind(), ErrorKind::Nip21, "{uri}");
             assert!(
-                error.source().is_some_and(|s| {
-                    s.downcast_ref::<Error>()
-                        .is_some_and(|e| e.kind() == ErrorKind::Nip19)
-                }),
-                "{uri}: the NIP-19 error must be the source"
+                matches!(NostrUri::parse(input), Err(Error::MissingScheme)),
+                "{input}"
             );
         }
+    }
+
+    #[test]
+    fn rejects_undecodable_entity_with_nip19_source() {
+        // Shape is valid but the checksum is wrong.
+        let mut code = String::from(NPUB);
+        let last = code.pop().unwrap();
+        code.push(if last == 'q' { 'p' } else { 'q' });
+        let err = NostrUri::parse(&format!("nostr:{code}")).unwrap_err();
+        assert!(matches!(err, Error::Nip19(_)));
+        assert!(err.source().is_some());
     }
 }

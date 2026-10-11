@@ -5,7 +5,7 @@
 #![allow(dead_code, reason = "each test binary uses a subset")]
 
 use nk::nips::nip10::{Quote, ThreadReferences};
-use nk::nips::nip19::{self, AddressPointer, Entity, EventPointer, ProfilePointer};
+use nk::nips::nip19::{AddressPointer, Entity, EventPointer, ProfilePointer};
 use nk::nips::nip27::{ContentBlock, Reference};
 use nk::{EventId, Kind, PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
@@ -286,11 +286,11 @@ pub(crate) fn encode_entity(entity: &EntityJson) -> Result<String, &'static str>
             relays: relays.clone(),
         }
         .to_bech32(),
-        EntityJson::Nsec { secret } => Ok(nip19::encode_nsec(
-            &SecretKey::from_hex(secret).map_err(|_| hex_err_name())?,
-        )),
-        EntityJson::Npub { pubkey: pk } => Ok(nip19::encode_npub(&pubkey(pk)?)),
-        EntityJson::Note { id: event_id } => Ok(nip19::encode_note(&id(event_id)?)),
+        EntityJson::Nsec { secret } => Ok(SecretKey::from_hex(secret)
+            .map_err(|_| hex_err_name())?
+            .to_bech32()),
+        EntityJson::Npub { pubkey: pk } => Ok(pubkey(pk)?.to_bech32()),
+        EntityJson::Note { id: event_id } => Ok(id(event_id)?.to_bech32()),
     }
     .map_err(|_| "Nip19Error")
 }
