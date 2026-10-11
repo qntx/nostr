@@ -22,22 +22,14 @@ jobs:
     # bun run test → vp run -r test + repo-level scripts/*.test.ts
 
   wasm:
-    uses: qntx/workflows/.github/workflows/ci-wasm.yml@v2
+    # Local reusable workflow: ci-wasm@v2 requires a Rust cdylib in the
+    # workspace, which no longer exists (the artifact is built with clang).
+    uses: ./.github/workflows/ci-wasm.yml
     permissions:
       contents: read
     with:
-      package-manager: bun
-      # The workspace root owns Cargo.lock and node_modules.
       working-directory: packages/nostr-wasm
-      install-directory: .
-      cargo-directory: .
-      dist-export: .
       bench: true
-      # Rust gates live in the rust/rust-minimal jobs.
-      rust-checks: false
-      # Differential replay: the generator runs under bun, the interop diff
-      # test replays it through cargo. Runs at the workspace root.
-      scripts: test:parity
       scripts-directory: .
 
   rust:
