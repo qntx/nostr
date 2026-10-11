@@ -6,7 +6,7 @@ The protocol crate of the `nk-*` workspace: the platform-neutral (`no_std` + `al
 
 ## Core
 
-The crate root carries the core model: the opaque `Error`/`ErrorKind`, protocol limits, `Timestamp`, `RelayUrl` (WHATWG relay-URL normalization, byte-identical to the TS `normalizeURL`), `Kind`/`KindClass`, `PublicKey`, `Tag`/`Tags`/`EventAddress`, the `UnsignedEvent`/`Event` model with canonical NIP-01 serialization and SHA-256 event ids, `SecretKey`/`Keys` (BIP-340 Schnorr signing over `secp256k1`), `Signature::verify`/`Event::verify`, `SingleLetterTag`/`Filter`/`fingerprint` (NIP-01 filter matching, limits, and canonical serialization), `EventBuilder` with `ProfileMetadata`/`DeletionTarget` (NIP-09 deletion, NIP-18 reposts, NIP-25 reactions — tag shapes byte-identical to the TS `EventBuilder`), and `SubscriptionId`/`CountHll`/`CountResult`/`ClientMessage`/`RelayMessage` (NIP-01/NIP-42/NIP-45/NIP-77 wire messages, byte-identical encoding and strict parsing).
+The crate root carries the core model: per-module error enums (`key::Error`, `event::Error`, `tag::Error`, `url::Error`, `filter::Error`, `message::Error`, `builder::Error`), protocol limits, `Timestamp`, `RelayUrl` (WHATWG relay-URL normalization, byte-identical to the TS `normalizeURL`), `Kind`/`KindClass`, `PublicKey`, `Tag`/`Tags`/`EventAddress`, the `UnsignedEvent`/`Event` model with canonical NIP-01 serialization and SHA-256 event ids, `SecretKey`/`Keys` (BIP-340 Schnorr signing over `secp256k1`), `Signature::verify`/`Event::verify`, `SingleLetterTag`/`Filter`/`fingerprint` (NIP-01 filter matching, limits, and canonical serialization), `EventBuilder` with `ProfileMetadata`/`DeletionTarget` (NIP-09 deletion, NIP-18 reposts, NIP-25 reactions — tag shapes byte-identical to the TS `EventBuilder`), and `SubscriptionId`/`CountHll`/`CountResult`/`ClientMessage`/`RelayMessage` (NIP-01/NIP-42/NIP-45/NIP-77 wire messages with `from_json`/`to_json` plus `serde` support).
 
 ```rust,ignore
 use nk::{EventBuilder, Keys, SecretKey};
@@ -21,7 +21,7 @@ event.verify()?;
 
 ## NIPs
 
-`nk::nips` hosts the feature-gated NIP implementations, sharing an opaque `Error`/`ErrorKind` that is separate from the core one (a unified error lands later): `nip19` — the bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) byte-identical to the TS implementation; `nip21` — the `nostr:` URI scheme; `nip04` — the legacy AES-256-CBC encrypted-DM payload; `nip44` — NIP-44 v2 authenticated payload encryption with constant-time MAC verification; `nip49` — `ncryptsec` secret-key encryption; and the remaining NIPs listed in the feature table below.
+`nk::nips` hosts the feature-gated NIP implementations, sharing the NIP-layer `Error`/`ErrorKind` — separate from the per-module core errors: `nip19` — the bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) byte-identical to the TS implementation; `nip21` — the `nostr:` URI scheme; `nip04` — the legacy AES-256-CBC encrypted-DM payload; `nip44` — NIP-44 v2 authenticated payload encryption with constant-time MAC verification; `nip49` — `ncryptsec` secret-key encryption; and the remaining NIPs listed in the feature table below.
 
 ```rust,ignore
 use nk::nips::nip19;

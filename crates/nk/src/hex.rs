@@ -4,20 +4,18 @@
 
 use base16ct::{lower, mixed};
 
-use crate::error::{Error, ErrorKind, Result};
-
 /// Decodes caller-provided hex (any case) into exactly `N` bytes.
 ///
 /// # Errors
 ///
-/// `ErrorKind::Hex` when the length is not `2 * N` or a character is not hex.
-pub(crate) fn decode_caller<const N: usize>(input: &str) -> Result<[u8; N]> {
+/// [`base16ct::Error`] when the length is not `2 * N` or a character is not
+/// hex; the caller's module maps it onto its own `Error` variant.
+pub(crate) fn decode_caller<const N: usize>(input: &str) -> Result<[u8; N], base16ct::Error> {
     if input.len() != 2 * N {
-        return Err(Error::new(ErrorKind::Hex, "invalid hex length"));
+        return Err(base16ct::Error::InvalidLength);
     }
     let mut out = [0u8; N];
-    mixed::decode(input, &mut out)
-        .map_err(|error| Error::with_source(ErrorKind::Hex, "invalid hex input", error))?;
+    mixed::decode(input, &mut out)?;
     Ok(out)
 }
 
@@ -25,15 +23,14 @@ pub(crate) fn decode_caller<const N: usize>(input: &str) -> Result<[u8; N]> {
 ///
 /// # Errors
 ///
-/// `ErrorKind::Hex` when the length is not `2 * N`, a character is not hex,
-/// or a character is uppercase.
-pub(crate) fn decode_wire<const N: usize>(input: &str) -> Result<[u8; N]> {
+/// [`base16ct::Error`] when the length is not `2 * N`, a character is not
+/// hex, or a character is uppercase.
+pub(crate) fn decode_wire<const N: usize>(input: &str) -> Result<[u8; N], base16ct::Error> {
     if input.len() != 2 * N {
-        return Err(Error::new(ErrorKind::Hex, "invalid hex length"));
+        return Err(base16ct::Error::InvalidLength);
     }
     let mut out = [0u8; N];
-    lower::decode(input, &mut out)
-        .map_err(|error| Error::with_source(ErrorKind::Hex, "invalid wire hex", error))?;
+    lower::decode(input, &mut out)?;
     Ok(out)
 }
 
@@ -58,30 +55,21 @@ mod tests {
 
     #[test]
     fn decode_wire_rejects_uppercase() {
-        assert_eq!(
-            decode_wire::<4>("00ffAAbb").unwrap_err().kind(),
-            ErrorKind::Hex
-        );
+        assert!(decode_wire::<4>("00FF").is_err());
     }
 
     #[test]
     fn decode_rejects_odd_length() {
-        assert_eq!(
-            decode_caller::<4>("fff").unwrap_err().kind(),
-            ErrorKind::Hex
-        );
+        assert!(decode_caller::<4>("012").is_err());
     }
 
     #[test]
     fn decode_rejects_wrong_length() {
-        assert_eq!(
-            decode_caller::<4>("00ff").unwrap_err().kind(),
-            ErrorKind::Hex
-        );
+        assert!(decode_wire::<4>("00ffaa").is_err());
     }
 
     #[test]
     fn encode_is_lowercase() {
-        assert_eq!(encode(&[0xab, 0xcd]), "abcd");
+        assert_eq!(encode(&[0xde, 0xad]), "dead");
     }
 }

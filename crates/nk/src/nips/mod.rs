@@ -2,8 +2,8 @@
 //!
 //! Platform-neutral (`no_std` + `alloc`, sans-IO) counterparts of
 //! `@qntx/nostr`'s `nips` layer. `Error`/`ErrorKind`/`Result` here are the
-//! NIP-layer error types — a separate error from the crate-root one until
-//! the unified `nk::Error` arrives.
+//! NIP-layer error types; the crate-root modules each carry their own
+//! error enum.
 //!
 //! ```
 //! use nk::nips::ErrorKind;

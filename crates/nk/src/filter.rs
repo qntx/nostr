@@ -1,8 +1,9 @@
-//! NIP-01 subscription filters: matching, intrinsic limit bounds, and the
-//! canonical serialization used by REQ coalescing — the counterpart of
-//! `@qntx/nostr`'s `core/filter.ts` (NK-ADR-012).
+//! [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md)
+//! subscription filters: matching, intrinsic limit bounds, and the
+//! canonical serialization used by REQ coalescing.
 
 use alloc::borrow::Cow;
+use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -14,7 +15,6 @@ use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::canonical::{self, Sink};
-use crate::error::Result;
 use crate::event::{Event, EventId};
 use crate::json::{
     self, Captured, MAX_SAFE_INTEGER, WireHexList, WireInt, WireStr, WireStrList, WireU16List,
@@ -23,10 +23,33 @@ use crate::key::PublicKey;
 use crate::kind::Kind;
 use crate::time::Timestamp;
 
+/// The result type for this module.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+/// Why a filter operation failed.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// A tag-condition key is not a single ASCII letter.
+    #[error("invalid tag letter: {letter:?} is not a single ASCII letter")]
+    InvalidTagLetter {
+        /// The offending character.
+        letter: char,
+    },
+    /// The wire JSON is malformed or fails a NIP-01 filter rule; the source
+    /// message names the offending field.
+    #[error("invalid JSON")]
+    InvalidJson {
+        /// The serde error naming the offending field.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
+}
+
 /// A NIP-01 single-letter tag condition key (`a`–`z`, `A`–`Z`).
 ///
 /// Multi-letter `#xx` keys are outside the protocol and never reach this
-/// type; deserialization drops them, matching TS (NK-ADR-012 ruling 1).
+/// type; deserialization drops them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SingleLetterTag(u8);
 
@@ -48,10 +71,10 @@ impl SingleLetterTag {
 }
 
 impl TryFrom<char> for SingleLetterTag {
-    type Error = ();
+    type Error = Error;
 
-    fn try_from(letter: char) -> Result<Self, ()> {
-        Self::new(letter).ok_or(())
+    fn try_from(letter: char) -> Result<Self> {
+        Self::new(letter).ok_or(Error::InvalidTagLetter { letter })
     }
 }
 
@@ -61,12 +84,11 @@ impl fmt::Display for SingleLetterTag {
     }
 }
 
-/// A NIP-01 filter (TS `Filter`). List fields are sets: `None` leaves the
-/// field unconstrained while an empty set matches nothing.
+/// A NIP-01 filter. List fields are sets: `None` leaves the field
+/// unconstrained while an empty set matches nothing.
 ///
 /// `#e`/`#p` values are normalized to lowercase at construction and
-/// deserialization; matching compares event tag values case-insensitively,
-/// exactly like TS `matchFilter`.
+/// deserialization; matching compares event tag values case-insensitively.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Filter {
     ids: Option<BTreeSet<EventId>>,
@@ -170,7 +192,7 @@ impl Filter {
     }
 
     /// NIP-50 full-text search. Relays interpret it; local matching ignores
-    /// it just like TS `matchFilter`.
+    /// it.
     #[must_use]
     pub fn search<S>(mut self, query: S) -> Self
     where
@@ -233,7 +255,7 @@ impl Filter {
         self.search.as_deref()
     }
 
-    /// Local NIP-01 match (TS `matchFilter`); `search` is ignored.
+    /// Local NIP-01 match; `search` is ignored.
     ///
     /// `#e`/`#p` conditions compare the event tag value and the filter
     /// values case-insensitively; `since`/`until` bounds are inclusive.
@@ -274,15 +296,14 @@ impl Filter {
         true
     }
 
-    /// True when `event` matches any of `filters` (TS `matchFilters`, NIP-01
-    /// OR semantics).
+    /// True when `event` matches any of `filters` (NIP-01 OR semantics).
     #[must_use]
     pub fn matches_any(filters: &[Self], event: &Event) -> bool {
         filters.iter().any(|filter| filter.matches(event))
     }
 
-    /// Intrinsic upper bound implied by the filter alone (TS
-    /// `getFilterLimit`); `None` when unbounded.
+    /// Intrinsic upper bound implied by the filter alone; `None` when
+    /// unbounded.
     ///
     /// For kinds that are all replaceable or addressable and a non-empty
     /// author set, the bound is `authors * kinds * (#d or 1)` — sets are
@@ -318,10 +339,10 @@ impl Filter {
         limit
     }
 
-    /// The canonical serialization — TS `canonicalizeFilter` +
-    /// `JSON.stringify`: keys in UTF-16 sort order (`#` conditions first),
-    /// `None` fields omitted, hex lists lowercase-sorted, kinds ascending,
-    /// tag values sorted by UTF-16 code units.
+    /// The canonical serialization: keys in UTF-16 sort order (`#`
+    /// conditions first), `None` fields omitted, hex lists
+    /// lowercase-sorted, kinds ascending, tag values sorted by UTF-16 code
+    /// units.
     pub(crate) fn write_canonical(&self, out: &mut impl Sink) {
         out.push_char('{');
         let mut needs_comma = false;
@@ -372,12 +393,30 @@ impl Filter {
     }
 
     /// The canonical serialization as a `String` (see the `serde` impl);
-    /// equivalent to `serde_json` on this type and used by [`fingerprint`].
+    /// used by [`fingerprint`].
     #[must_use]
     pub fn canonical_json(&self) -> String {
         let mut out = String::new();
         self.write_canonical(&mut out);
         out
+    }
+
+    /// The wire JSON object — the canonical serialization.
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        self.canonical_json()
+    }
+
+    /// Parses the wire JSON object.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidJson`] on any malformed input; the source message
+    /// names the offending field.
+    pub fn from_json(json: &str) -> Result<Self> {
+        serde_json::from_str(json).map_err(|e| Error::InvalidJson {
+            source: Box::new(e),
+        })
     }
 }
 
@@ -388,7 +427,7 @@ fn push_field_sep(needs_comma: &mut bool, out: &mut impl Sink) {
     *needs_comma = true;
 }
 
-/// Tag values emitted in `JSON.stringify` order — UTF-16 code units, which
+/// Tag values emitted in canonical order — UTF-16 code units, which
 /// differs from the `BTreeSet` (UTF-8) order for non-BMP characters.
 fn sorted_tag_values(values: &BTreeSet<String>) -> Vec<&str> {
     let mut sorted: Vec<&str> = values.iter().map(String::as_str).collect();
@@ -468,7 +507,7 @@ where
         .collect()
 }
 
-/// Tag values serialized in UTF-16 order (matches `canonicalizeFilter`).
+/// Tag values serialized in UTF-16 order.
 struct Utf16Values<'a>(&'a BTreeSet<String>);
 
 impl Serialize for Utf16Values<'_> {
@@ -478,8 +517,8 @@ impl Serialize for Utf16Values<'_> {
 }
 
 impl Serialize for Filter {
-    /// The wire form: TS `canonicalizeFilter` + `JSON.stringify`, keys in
-    /// UTF-16 sort order with `#` conditions first.
+    /// The canonical wire form: keys in UTF-16 sort order with `#`
+    /// conditions first.
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut len = self.tags.len();
         for present in [
@@ -526,8 +565,8 @@ impl Serialize for Filter {
 }
 
 /// Parses a `#x` object key into a [`SingleLetterTag`]; `None` for
-/// non-`#` keys, multi-letter keys, and non-letter keys (all ignored per
-/// NIP-01 / NK-ADR-012 ruling 1).
+/// non-`#` keys, multi-letter keys, and non-letter keys — NIP-01 ignores
+/// all three shapes.
 fn single_letter_key(key: &str) -> Option<SingleLetterTag> {
     let letter = key.strip_prefix('#')?;
     let mut chars = letter.chars();
@@ -540,8 +579,8 @@ fn single_letter_key(key: &str) -> Option<SingleLetterTag> {
 
 /// Reads a wire-filter object (see [`Filter::deserialize`]). Each known
 /// field is captured leniently into a per-key slot so a duplicate key's
-/// last value wins even when an earlier value was invalid (`JSON.parse`
-/// semantics, NK-ADR-012 ruling 7); unknown keys drain via `IgnoredAny`.
+/// last value wins even when an earlier value was invalid; unknown keys
+/// drain via `IgnoredAny`.
 fn read_filter<'de, M: MapAccess<'de>>(mut map: M) -> Result<Filter, M::Error> {
     let mut ids = None;
     let mut authors = None;
@@ -632,7 +671,7 @@ fn build_tag_sets<E: DeError>(
 }
 
 impl<'de> Deserialize<'de> for Filter {
-    /// Wire-filter strictness (NK-ADR-012 ruling 4): `ids`/`authors` are
+    /// Wire-filter rules: `ids`/`authors` are
     /// arrays of 64-char hex (any case, stored lowercase), `kinds` integers
     /// in `0..=65535`, `since`/`until`/`limit` non-negative integers,
     /// `search` a string, `#<letter>` arrays of strings (`#e`/`#p`
@@ -657,9 +696,9 @@ impl<'de> Deserialize<'de> for Filter {
     }
 }
 
-/// Canonical identity for REQ coalescing (TS `filterFingerprint`): each
-/// filter canonically serialized, the strings sorted by UTF-16 code units
-/// and joined with `,` inside `[...]`.
+/// Canonical identity for REQ coalescing: each filter canonically
+/// serialized, the strings sorted by UTF-16 code units and joined with `,`
+/// inside `[...]`.
 #[must_use]
 pub fn fingerprint(filters: &[Filter]) -> String {
     let mut parts: Vec<String> = filters.iter().map(Filter::canonical_json).collect();
@@ -719,8 +758,11 @@ mod tests {
         assert!(SingleLetterTag::new('é').is_none());
         assert_eq!(letter('e').as_char(), 'e');
         assert_eq!(letter('A').to_string(), "A");
-        assert_eq!(SingleLetterTag::try_from('p'), Ok(letter('p')));
-        assert_eq!(SingleLetterTag::try_from('-'), Err(()));
+        assert_eq!(SingleLetterTag::try_from('p').unwrap(), letter('p'));
+        assert!(matches!(
+            SingleLetterTag::try_from('-'),
+            Err(Error::InvalidTagLetter { letter: '-' })
+        ));
     }
 
     #[test]

@@ -1,9 +1,11 @@
-//! NIP-01 event builders — the counterpart of `core/builder.ts`.
+//! Event builders —
+//! [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md),
+//! [NIP-09](https://github.com/nostr-protocol/nips/blob/master/09.md),
+//! [NIP-18](https://github.com/nostr-protocol/nips/blob/master/18.md),
+//! [NIP-25](https://github.com/nostr-protocol/nips/blob/master/25.md).
 //!
 //! `EventBuilder` collects kind, content, and tags and produces an
-//! [`UnsignedEvent`]; signing is left to `Keys` or a signer. Each
-//! constructor mirrors its TypeScript counterpart, including the tag
-//! shapes fixed by NIP-09, NIP-18, and NIP-25.
+//! [`UnsignedEvent`]; signing is left to `Keys` or a signer.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -11,7 +13,6 @@ use alloc::vec::Vec;
 use serde::{Deserialize, Serialize};
 
 use crate::canonical;
-use crate::error::{Error, ErrorKind, Result};
 use crate::event::{Event, EventId, UnsignedEvent};
 use crate::key::PublicKey;
 use crate::kind::Kind;
@@ -19,10 +20,27 @@ use crate::tag::{EventAddress, Tag};
 use crate::time::Timestamp;
 use crate::url::RelayUrl;
 
+/// The result type for this module.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+/// Why a builder could not produce an event.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// An addressable target has no `d` tag, so no coordinate can be built.
+    #[error("addressable event is missing d tag")]
+    MissingIdentifier,
+    /// The target kind is not valid for this builder.
+    #[error("invalid repost target kind {found}")]
+    InvalidTargetKind {
+        /// The target's kind.
+        found: Kind,
+    },
+}
+
 /// Kind-0 profile metadata (the content of a metadata event).
 ///
-/// Serializes with keys in declaration order and `None` fields omitted,
-/// matching `JSON.stringify` on an equally ordered TS object.
+/// Serializes with keys in declaration order and `None` fields omitted.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProfileMetadata {
     /// Display name.
@@ -56,7 +74,7 @@ pub struct ProfileMetadata {
 
 impl ProfileMetadata {
     /// `{"name":..,"display_name":..,..}` in declaration order, `None`
-    /// fields omitted, with `JSON.stringify` escaping.
+    /// fields omitted, with the canonical string escaping.
     fn to_json(&self) -> String {
         let mut out = String::from("{");
         let mut first = true;
@@ -91,8 +109,7 @@ impl ProfileMetadata {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DeletionTarget {
-    /// A bare event id; `kind` is emitted as a `k` tag when known
-    /// (TS `{ id, kind? }`).
+    /// A bare event id; `kind` is emitted as a `k` tag when known.
     Event {
         /// The event id to delete.
         id: EventId,
@@ -104,13 +121,13 @@ pub enum DeletionTarget {
     Address(EventAddress),
 }
 
-/// Fluent builder for unsigned events — TS `EventBuilder`.
+/// Fluent builder for unsigned events.
 ///
 /// # Example
 ///
 /// ```
 /// # use nk::{EventBuilder, Keys, SecretKey, Tag, Timestamp};
-/// # fn main() -> Result<(), nk::Error> {
+/// # fn main() -> Result<(), nk::key::Error> {
 /// let keys = Keys::new(SecretKey::from_bytes([1; 32])?);
 /// let unsigned = EventBuilder::text_note("hello")
 ///     .tag(Tag::hashtag("nostr"))
@@ -208,18 +225,14 @@ impl EventBuilder {
     ///
     /// # Errors
     ///
-    /// `EventValidation` when an addressable target has no `d` tag.
+    /// [`Error::MissingIdentifier`] when an addressable target has no `d`
+    /// tag.
     pub fn reaction<S>(target: &Event, content: S, relay_hint: Option<&RelayUrl>) -> Result<Self>
     where
         S: Into<String>,
     {
         let coord = if target.kind().is_addressable() {
-            let d = target.tags().identifier().ok_or_else(|| {
-                Error::new(
-                    ErrorKind::EventValidation,
-                    "addressable event is missing d tag",
-                )
-            })?;
+            let d = target.tags().identifier().ok_or(Error::MissingIdentifier)?;
             Some(EventAddress::new(target.kind(), target.pubkey(), d))
         } else {
             None
@@ -250,13 +263,14 @@ impl EventBuilder {
     ///
     /// # Errors
     ///
-    /// `EventValidation` when the target is not kind 1.
+    /// [`Error::InvalidTargetKind`] when the target is not kind 1; kind 1
+    /// targets use this method, other kinds use
+    /// [`EventBuilder::generic_repost`].
     pub fn repost(target: &Event, relay_hint: &RelayUrl) -> Result<Self> {
         if target.kind() != Kind::TEXT_NOTE {
-            return Err(Error::new(
-                ErrorKind::EventValidation,
-                "non-kind-1 uses EventBuilder::generic_repost",
-            ));
+            return Err(Error::InvalidTargetKind {
+                found: target.kind(),
+            });
         }
         let content = if protected(target) {
             String::new()
@@ -280,27 +294,24 @@ impl EventBuilder {
     ///
     /// # Errors
     ///
-    /// `EventValidation` when the target is kind 1, or addressable
-    /// without a `d` tag.
+    /// [`Error::InvalidTargetKind`] when the target is kind 1 — those use
+    /// [`EventBuilder::repost`]; [`Error::MissingIdentifier`] when the
+    /// target is addressable without a `d` tag.
     pub fn generic_repost(
         target: &Event,
         relay_hint: &RelayUrl,
         p_pubkey: Option<PublicKey>,
     ) -> Result<Self> {
         if target.kind() == Kind::TEXT_NOTE {
-            return Err(Error::new(
-                ErrorKind::EventValidation,
-                "kind 1 uses EventBuilder::repost",
-            ));
+            return Err(Error::InvalidTargetKind {
+                found: target.kind(),
+            });
         }
         let replaceable = target.kind().is_replaceable();
         let addressable = target.kind().is_addressable();
         let d = target.tags().identifier();
         if addressable && d.is_none() {
-            return Err(Error::new(
-                ErrorKind::EventValidation,
-                "addressable event is missing d tag",
-            ));
+            return Err(Error::MissingIdentifier);
         }
         let content = if protected(target) || replaceable || addressable {
             String::new()
@@ -366,7 +377,7 @@ fn protected(event: &Event) -> bool {
     event.tags().iter().any(|tag| tag.name() == "-")
 }
 
-/// `JSON.stringify(event)` — the signed wire object.
+/// The signed wire object in canonical field order and escaping.
 fn signed_json(event: &Event) -> String {
     let mut out = String::new();
     canonical::write_signed(event, &mut out);
@@ -565,7 +576,7 @@ mod tests {
     fn reaction_addressable_without_d_errors() {
         let target = sign(EventBuilder::new(Kind::new(30023), "v"));
         let err = EventBuilder::reaction(&target, "+", None).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::EventValidation);
+        assert!(matches!(err, Error::MissingIdentifier));
     }
 
     #[test]
@@ -597,7 +608,7 @@ mod tests {
     fn repost_rejects_non_kind_1() {
         let target = sign(EventBuilder::new(Kind::REACTION, "+"));
         let err = EventBuilder::repost(&target, &relay()).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::EventValidation);
+        assert!(matches!(err, Error::InvalidTargetKind { .. }));
     }
 
     #[test]
@@ -638,14 +649,14 @@ mod tests {
     fn generic_repost_rejects_kind_1() {
         let target = sign(EventBuilder::text_note("n"));
         let err = EventBuilder::generic_repost(&target, &relay(), None).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::EventValidation);
+        assert!(matches!(err, Error::InvalidTargetKind { .. }));
     }
 
     #[test]
     fn generic_repost_addressable_without_d_errors() {
         let target = sign(EventBuilder::new(Kind::new(34235), "v"));
         let err = EventBuilder::generic_repost(&target, &relay(), None).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::EventValidation);
+        assert!(matches!(err, Error::MissingIdentifier));
     }
 
     #[test]

@@ -239,8 +239,8 @@ pub(crate) fn blocks_json(blocks: &[ContentBlock<'_>]) -> serde_json::Value {
 }
 
 /// Builds a typed pointer/entity from the vector shape. Hex failures surface
-/// as `HexError` (`nk`'s `ErrorKind::Hex`), kinds above 65535 as
-/// `Nip19Error` — the classes the TS encoders throw for those inputs.
+/// as `HexError`, kinds above 65535 as `Nip19Error` — the classes the TS
+/// encoders throw for those inputs.
 pub(crate) fn encode_entity(entity: &EntityJson) -> Result<String, &'static str> {
     fn pubkey(hex: &str) -> Result<PublicKey, &'static str> {
         PublicKey::from_hex(hex).map_err(|_| hex_err_name())

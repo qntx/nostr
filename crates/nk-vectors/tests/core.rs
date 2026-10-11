@@ -15,9 +15,9 @@
 )]
 
 use nk::{
-    ClientMessage, CountHll, DeletionTarget, ErrorKind, Event, EventAddress, EventBuilder, EventId,
-    Filter, Keys, Kind, KindClass, ProfileMetadata, PublicKey, RelayMessage, RelayUrl, SecretKey,
-    Tag, Timestamp, UnsignedEvent, cmp_newest_first, cmp_oldest_first, fingerprint,
+    ClientMessage, CountHll, DeletionTarget, Event, EventAddress, EventBuilder, EventId, Filter,
+    Keys, Kind, KindClass, ProfileMetadata, PublicKey, RelayMessage, RelayUrl, SecretKey, Tag,
+    Timestamp, UnsignedEvent, fingerprint,
 };
 use serde::Deserialize;
 
@@ -106,10 +106,9 @@ fn url_normalize() {
                     "input {:?}: unexpected error kind in vector",
                     case.input
                 );
-                assert_eq!(
-                    RelayUrl::parse(&case.input).err().map(|error| error.kind()),
-                    Some(ErrorKind::Url),
-                    "input {:?}: expected ErrorKind::Url",
+                assert!(
+                    RelayUrl::parse(&case.input).is_err(),
+                    "input {:?}: expected a URL error",
                     case.input
                 );
             }
@@ -380,12 +379,9 @@ fn hex() {
                     case.input
                 );
                 if case.op == "caller" {
-                    assert_eq!(
-                        PublicKey::from_hex(&case.input)
-                            .err()
-                            .map(|error| error.kind()),
-                        Some(ErrorKind::Hex),
-                        "input {:?}: expected ErrorKind::Hex",
+                    assert!(
+                        PublicKey::from_hex(&case.input).is_err(),
+                        "input {:?}: expected a hex error",
                         case.input
                     );
                 } else {
@@ -612,7 +608,7 @@ struct BuilderVector {
     clippy::panic_in_result_fn,
     reason = "fixture-shape violations are generator bugs, not case results"
 )]
-fn build_case(case: &BuilderCase, index: usize) -> nk::Result<EventBuilder> {
+fn build_case(case: &BuilderCase, index: usize) -> nk::builder::Result<EventBuilder> {
     match case.op.as_str() {
         "text_note" => Ok(EventBuilder::text_note(
             case.content.clone().unwrap_or_default(),
@@ -746,7 +742,7 @@ struct MessageCase {
     error: Option<String>,
 }
 
-fn check_message_cases<M>(vector: &str, name: &str, parse: fn(&str) -> nk::Result<M>)
+fn check_message_cases<M>(vector: &str, name: &str, parse: fn(&str) -> nk::message::Result<M>)
 where
     M: MessageEncode,
 {
@@ -755,14 +751,13 @@ where
     for case in &vector.cases {
         match (parse(&case.raw), &case.error) {
             (Ok(msg), None) => assert_eq!(
-                &msg.encode(),
+                &msg.to_json(),
                 case.encoded.as_deref().unwrap_or(&case.raw),
                 "encode mismatch for {:?}",
                 case.raw
             ),
-            (Err(error), Some(expected)) => {
+            (Err(_), Some(expected)) => {
                 assert_eq!(expected.as_str(), "MessageError", "for {:?}", case.raw);
-                assert_eq!(error.kind(), ErrorKind::Message, "for {:?}", case.raw);
             }
             (Ok(_), Some(expected)) => panic!("{name}: expected {expected} for {:?}", case.raw),
             (Err(error), None) => panic!("{name}: unexpected {error} for {:?}", case.raw),
@@ -772,18 +767,18 @@ where
 
 /// Dispatch over the two message types without exposing a trait on them.
 trait MessageEncode {
-    fn encode(&self) -> String;
+    fn to_json(&self) -> String;
 }
 
 impl MessageEncode for ClientMessage<'_> {
-    fn encode(&self) -> String {
-        ClientMessage::encode(self)
+    fn to_json(&self) -> String {
+        ClientMessage::to_json(self)
     }
 }
 
 impl MessageEncode for RelayMessage<'_> {
-    fn encode(&self) -> String {
-        RelayMessage::encode(self)
+    fn to_json(&self) -> String {
+        RelayMessage::to_json(self)
     }
 }
 
@@ -808,9 +803,8 @@ fn builder() {
                     "case {index}: unsigned wire JSON mismatch"
                 );
             }
-            (Err(error), Some(class)) => {
+            (Err(_), Some(class)) => {
                 assert_eq!(class.as_str(), "EventValidationError", "case {index}");
-                assert_eq!(error.kind(), ErrorKind::EventValidation, "case {index}");
             }
             (Ok(_), Some(class)) => {
                 panic!("case {index}: expected {class}, built successfully")
@@ -823,14 +817,14 @@ fn builder() {
 #[test]
 fn message_client() {
     check_message_cases(MESSAGE_CLIENT, "message-client.json", |raw| {
-        ClientMessage::parse(raw)
+        ClientMessage::from_json(raw)
     });
 }
 
 #[test]
 fn message_relay() {
     check_message_cases(MESSAGE_RELAY, "message-relay.json", |raw| {
-        RelayMessage::parse(raw)
+        RelayMessage::from_json(raw)
     });
 }
 
@@ -852,11 +846,11 @@ fn count_hll() {
         serde_json::from_str(COUNT_HLL).expect("count-hll.json must parse");
     assert!(!vector.cases.is_empty(), "count-hll.json has no cases");
     for case in &vector.cases {
-        let merged: Result<CountHll, ErrorKind> =
+        let merged: nk::message::Result<CountHll> =
             case.inputs
                 .iter()
                 .try_fold(CountHll::zero(), |mut acc, input| {
-                    let sketch: CountHll = input.parse().map_err(|e: nk::Error| e.kind())?;
+                    let sketch: CountHll = input.parse()?;
                     acc.merge(&sketch);
                     Ok(acc)
                 });
@@ -865,12 +859,11 @@ fn count_hll() {
                 merged.to_string(),
                 case.output.as_deref().expect("valid case has output")
             ),
-            (Err(kind), Some(expected)) => {
+            (Err(_), Some(expected)) => {
                 assert_eq!(expected.as_str(), "MessageError");
-                assert_eq!(kind, ErrorKind::Message);
             }
             (Ok(_), Some(expected)) => panic!("expected {expected} for {:?}", case.inputs),
-            (Err(kind), None) => panic!("unexpected {kind:?} for {:?}", case.inputs),
+            (Err(error), None) => panic!("unexpected {error} for {:?}", case.inputs),
         }
     }
 }
@@ -1038,13 +1031,13 @@ fn event_order() {
         match case {
             EventOrderCase::Sort { events, order } => {
                 let mut sorted = events.clone();
-                sorted.sort_by(cmp_newest_first);
+                sorted.sort_by(Event::cmp_newest_first);
                 let ids: Vec<String> = sorted.iter().map(|e| e.id().to_hex()).collect();
                 assert_eq!(&ids, order, "cmp_newest_first order mismatch");
             }
             EventOrderCase::Item { events, order } => {
                 let mut sorted = events.clone();
-                sorted.sort_by(cmp_oldest_first);
+                sorted.sort_by(Event::cmp_oldest_first);
                 let ids: Vec<String> = sorted.iter().map(|e| e.id().to_hex()).collect();
                 assert_eq!(&ids, order, "cmp_oldest_first order mismatch");
             }

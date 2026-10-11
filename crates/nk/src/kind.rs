@@ -1,5 +1,5 @@
-//! NIP-01 event kinds and their storage classification — the counterpart of
-//! `@qntx/nostr`'s `core/kind.ts`.
+//! [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md) event
+//! kinds and their storage classification.
 
 use core::fmt;
 
@@ -14,7 +14,7 @@ pub struct Kind(u16);
 
 impl<'de> Deserialize<'de> for Kind {
     /// Accepts any integer-valued JSON number (`1e3`, `1.0`, `-0`) in
-    /// `0..=65535` (NK-ADR-012 ruling 8).
+    /// `0..=65535`.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         json::de_u16(deserializer).map(Self)
     }

@@ -161,6 +161,9 @@ mod tests {
         let wrapped = Error::with_source(ErrorKind::Nip19, "invalid payload", lower);
         assert_eq!(wrapped.kind(), ErrorKind::Nip19);
         let source = wrapped.source().unwrap();
-        assert_eq!(source.to_string(), "hex: invalid event id length");
+        assert_eq!(
+            source.to_string(),
+            "invalid length: expected 32 bytes, got 4"
+        );
     }
 }

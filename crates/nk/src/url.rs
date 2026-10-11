@@ -1,7 +1,8 @@
-//! [`RelayUrl`]: a WHATWG-normalized relay URL, the typed counterpart of the
-//! TS `normalizeURL`/`normalizeRelayUrls` in `@qntx/nostr`'s `core/util.ts`.
-//! Normalization is byte-for-byte identical to the TS side.
+//! [`RelayUrl`]: a WHATWG-normalized relay URL
+//! ([NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md),
+//! [NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md)).
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
@@ -10,7 +11,40 @@ use core::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use url::Url;
 
-use crate::error::{Error, ErrorKind, Result};
+/// The result type for this module.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+/// Why relay URL normalization failed.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// The input is not a valid WHATWG URL.
+    #[error("invalid URL")]
+    InvalidUrl {
+        /// The parser failure.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
+    /// The scheme is not `http`, `https`, `ws`, or `wss`.
+    #[error("unsupported relay URL scheme: {scheme}:")]
+    UnsupportedScheme {
+        /// The offending scheme, without the colon.
+        scheme: String,
+    },
+}
+
+/// The [`Error::InvalidUrl`] source when rewriting `http:`/`https:` to
+/// `ws:`/`wss:` fails — `url::Url::set_scheme` reports no detail.
+#[derive(Debug)]
+struct SchemeRewrite;
+
+impl fmt::Display for SchemeRewrite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("could not rewrite the relay URL scheme")
+    }
+}
+
+impl core::error::Error for SchemeRewrite {}
 
 /// A normalized relay URL (`ws://` or `wss://`).
 ///
@@ -23,12 +57,13 @@ use crate::error::{Error, ErrorKind, Result};
 pub struct RelayUrl(String);
 
 impl RelayUrl {
-    /// Parses and normalizes `input` exactly like the TS `normalizeURL`.
+    /// Parses and normalizes `input`: a bare host is prefixed `wss://`.
     ///
     /// # Errors
     ///
-    /// `ErrorKind::Url` when `input` is not a valid WHATWG URL or its scheme
-    /// is not `http`/`https`/`ws`/`wss`.
+    /// [`Error::InvalidUrl`] when `input` is not a valid WHATWG URL;
+    /// [`Error::UnsupportedScheme`] when its scheme is not
+    /// `http`/`https`/`ws`/`wss`.
     pub fn parse(input: &str) -> Result<Self> {
         let prefixed;
         let input = if input.contains("://") {
@@ -37,22 +72,23 @@ impl RelayUrl {
             prefixed = alloc::format!("wss://{input}");
             prefixed.as_str()
         };
-        let mut url = Url::parse(input)
-            .map_err(|error| Error::with_source(ErrorKind::Url, "invalid URL", error))?;
+        let mut url = Url::parse(input).map_err(|e| Error::InvalidUrl {
+            source: Box::new(e),
+        })?;
         let rewrite = match url.scheme() {
             "http" => Some("ws"),
             "https" => Some("wss"),
             "ws" | "wss" => None,
             scheme => {
-                return Err(Error::new(
-                    ErrorKind::Url,
-                    alloc::format!("unsupported relay URL scheme: {scheme}:"),
-                ));
+                return Err(Error::UnsupportedScheme {
+                    scheme: String::from(scheme),
+                });
             }
         };
         if let Some(target) = rewrite {
-            url.set_scheme(target)
-                .map_err(|()| Error::new(ErrorKind::Url, "could not rewrite scheme"))?;
+            url.set_scheme(target).map_err(|()| Error::InvalidUrl {
+                source: Box::new(SchemeRewrite),
+            })?;
         }
         url.set_path(&collapse_path(url.path()));
         sort_query(&mut url);
@@ -66,9 +102,8 @@ impl RelayUrl {
         &self.0
     }
 
-    /// Like the TS `normalizeRelayUrls`: each entry is normalized, empty or
-    /// invalid entries are skipped, and results are deduplicated in
-    /// first-seen order.
+    /// Normalizes each entry; empty or invalid entries are skipped and
+    /// results are deduplicated in first-seen order.
     #[must_use]
     pub fn normalize_all<I, S>(inputs: I) -> Vec<Self>
     where
@@ -92,8 +127,7 @@ impl RelayUrl {
 }
 
 /// Collapses runs of `/` into one and strips a single trailing `/` unless the
-/// path is the bare root. Mirrors `p.pathname.replaceAll(/\/+/g, "/")` plus
-/// the one-slash trim in the TS implementation.
+/// path is the bare root.
 fn collapse_path(path: &str) -> String {
     let mut out = String::with_capacity(path.len());
     let mut at_slash = false;
@@ -114,9 +148,9 @@ fn collapse_path(path: &str) -> String {
     out
 }
 
-/// Stable-sorts decoded query pairs by name compared as UTF-16 code units
-/// (`URLSearchParams.sort()`), then re-serializes in
-/// `application/x-www-form-urlencoded` form; an empty result drops the `?`.
+/// Stable-sorts decoded query pairs by name compared as UTF-16 code units,
+/// then re-serializes in `application/x-www-form-urlencoded` form; an empty
+/// result drops the `?`.
 fn sort_query(url: &mut Url) {
     let mut pairs: Vec<(String, String)> = url
         .query_pairs()
@@ -214,7 +248,6 @@ mod tests {
 
     #[test]
     fn normalize_all_skips_dedupes_and_keeps_first_seen_order() {
-        // Mirrors the TS `normalizeRelayUrls` test in core.test.ts.
         let urls = RelayUrl::normalize_all([
             "",
             "wss://a.example",

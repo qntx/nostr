@@ -12,12 +12,12 @@
 //! - `i` + `u` case-insensitivity is Unicode simple case folding: ASCII case
 //!   plus U+212A (folds to `k`) and U+017F (folds to `s`) — the only two
 //!   non-ASCII chars that fold into the ASCII letters these patterns use
-//!   ([`fold`]).
+//!   (`fold`).
 //! - The invoice pattern backtracks like a JS regex: greedy `\d+` with
 //!   optional `[munp]` retries shorter amounts before the separator `1`
-//!   ([`invoice_at`]).
+//!   (`invoice_at`).
 //! - `\p{L}`/`\p{M}`/`\p{N}` come from `unicode-properties`; `\s` is the JS
-//!   whitespace class ([`is_js_whitespace`]); `\d` stays ASCII under `u`.
+//!   whitespace class (`is_js_whitespace`); `\d` stays ASCII under `u`.
 
 use alloc::collections::BTreeMap;
 use alloc::string::String;
