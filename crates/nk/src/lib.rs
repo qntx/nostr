@@ -14,7 +14,7 @@
 //! | `std`   | yes     | OS facilities; global secp256k1 context; base for `clock`/`os-rng` |
 //! | `clock` | yes     | `Timestamp::now` (wall clock; off on platforms without one) |
 //! | `os-rng` | yes    | `SecretKey::generate`, `Keys::generate`, `Keys::sign_event` (OS entropy) |
-//! | `nip04` | no      | legacy encrypted DMs (`nips::nip04::SharedSecret`, `encrypt`/`decrypt`) |
+//! | `nip04` | no      | legacy encrypted DMs (`nips::nip04::SharedSecret::encrypt`/`decrypt`) |
 //! | `nip10` | no      | thread references (`parse_thread_tags`, `reply_tags`/`reply_to`); needs `nip19` |
 //! | `nip13` | no      | proof of work (`pow`, `PowMiner`) |
 //! | `nip17` | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`); needs `nip59` |
@@ -22,7 +22,7 @@
 //! | `nip21` | no      | `nostr:` URI scheme (`NostrUri`); needs `nip19` |
 //! | `nip27` | no      | content tokenizer (`parse_content`, `ContentBlock`); needs `nip19` |
 //! | `nip42` | no      | relay auth (`auth_event`, `is_auth_required`) |
-//! | `nip44` | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
+//! | `nip44` | no      | v2 authenticated payload encryption (`ConversationKey::encrypt`/`decrypt`) |
 //! | `nip46` | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Request`/`Response`) |
 //! | `nip49` | no      | `ncryptsec` secret-key encryption (`EncryptedSecretKey`); needs `nip19` |
 //! | `nip51` | no      | lists (`parse_mute_list`, …, NIP-44 private tags); needs `nip44` |

@@ -20,8 +20,7 @@
 
 mod common;
 
-use nk::nips::ErrorKind;
-use nk::nips::nip04::{self, SharedSecret};
+use nk::nips::nip04::SharedSecret;
 use nk::{PublicKey, SecretKey};
 use serde::Deserialize;
 
@@ -83,12 +82,12 @@ fn nip04_vectors() {
         let iv = arr16(&case.iv);
         for (name, key) in [("derive", &derived), ("from_bytes", &from_bytes)] {
             assert_eq!(
-                nip04::encrypt_with_iv(key, &case.plaintext, &iv),
+                key.encrypt_with_iv(&case.plaintext, &iv),
                 case.payload,
                 "case {i}: encrypt_with_iv {name}"
             );
             assert_eq!(
-                nip04::decrypt(key, &case.payload).unwrap(),
+                key.decrypt(&case.payload).unwrap(),
                 case.plaintext,
                 "case {i}: decrypt {name}"
             );
@@ -96,18 +95,23 @@ fn nip04_vectors() {
     }
     for (i, case) in vector.invalid.iter().enumerate() {
         assert_eq!(case.error, "CryptoError", "invalid {i}: class");
-        let err = match case.op.as_str() {
+        match case.op.as_str() {
             "decrypt" => {
                 let key = SharedSecret::from_bytes(arr32(&case.shared_secret));
-                nip04::decrypt(&key, &case.payload).expect_err("case must fail")
+                assert!(
+                    key.decrypt(&case.payload).is_err(),
+                    "invalid {i}: decrypt must fail"
+                );
             }
             "derive" => {
                 let secret = SecretKey::from_hex(&case.sec1).expect("secret hex");
                 let peer = PublicKey::from_hex(&case.pub2).expect("pubkey hex");
-                SharedSecret::derive(&secret, &peer).expect_err("derive must fail")
+                assert!(
+                    SharedSecret::derive(&secret, &peer).is_err(),
+                    "invalid {i}: derive must fail"
+                );
             }
             op => panic!("invalid {i}: unknown op {op}"),
-        };
-        assert_eq!(err.kind(), ErrorKind::Crypto, "invalid {i}");
+        }
     }
 }

@@ -554,7 +554,8 @@ fn encrypt_layer(
         .map_err(|e| nip59_error_source("failed to encrypt", e))?;
     let mut nonce = [0u8; 32];
     rng.fill_bytes(&mut nonce);
-    nip44::encrypt_with_nonce(plaintext, &conversation, &nonce)
+    conversation
+        .encrypt_with_nonce(plaintext, &nonce)
         .map_err(|e| nip59_error_source("failed to encrypt", e))
 }
 
@@ -582,7 +583,8 @@ fn sign(
 fn decrypt_layer(ciphertext: &str, recipient: &Keys, peer: &PublicKey) -> Result<String> {
     let conversation = nip44::ConversationKey::derive(recipient.secret_key(), peer)
         .map_err(|e| nip59_error_source("failed to decrypt", e))?;
-    nip44::decrypt(ciphertext, &conversation)
+    conversation
+        .decrypt(ciphertext)
         .map_err(|e| nip59_error_source("failed to decrypt", e))
 }
 

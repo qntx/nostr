@@ -485,24 +485,19 @@ fn diff_nip44_v2() {
                     let nonce = unhexed(req.nonce.as_deref())?;
                     let key: [u8; 32] = key.try_into().map_err(|_| "CryptoError")?;
                     let nonce: [u8; 32] = nonce.try_into().map_err(|_| "CryptoError")?;
-                    nip44::encrypt_with_nonce(
-                        req.plaintext.as_deref().unwrap_or(""),
-                        &nip44::ConversationKey::from_bytes(key),
-                        &nonce,
-                    )
-                    .map(json_str)
-                    .map_err(crypto_err)
+                    nip44::ConversationKey::from_bytes(key)
+                        .encrypt_with_nonce(req.plaintext.as_deref().unwrap_or(""), &nonce)
+                        .map(json_str)
+                        .map_err(crypto_err)
                 }
                 "decrypt" => {
                     let key: [u8; 32] = unhexed(req.conversation_key.as_deref())?
                         .try_into()
                         .map_err(|_| "CryptoError")?;
-                    nip44::decrypt(
-                        req.payload.as_deref().unwrap_or(""),
-                        &nip44::ConversationKey::from_bytes(key),
-                    )
-                    .map(json_str)
-                    .map_err(crypto_err)
+                    nip44::ConversationKey::from_bytes(key)
+                        .decrypt(req.payload.as_deref().unwrap_or(""))
+                        .map(json_str)
+                        .map_err(crypto_err)
                 }
                 _ => Err("Error"),
             }

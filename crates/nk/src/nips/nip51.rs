@@ -22,7 +22,7 @@ use crate::{
 };
 
 use crate::nips::error::{Error, ErrorKind, Result};
-use crate::nips::nip44::{self, ConversationKey};
+use crate::nips::nip44::ConversationKey;
 
 /// A public mute-list item (`p`/`e`/`t`/`word` tags). `Word` values are
 /// lowercased like TS `toLowerCase()`.
@@ -435,8 +435,11 @@ where
     R: rand_core::CryptoRng + ?Sized,
 {
     let own = keys.public_key();
-    let conversation = ConversationKey::derive(keys.secret_key(), &own)?;
-    nip44::encrypt_with_rng(&private_tags_plaintext(tags), &conversation, rng)
+    let conversation = ConversationKey::derive(keys.secret_key(), &own)
+        .map_err(|e| Error::with_source(ErrorKind::Crypto, "invalid public key", e))?;
+    conversation
+        .encrypt_with_rng(&private_tags_plaintext(tags), rng)
+        .map_err(|e| Error::with_source(ErrorKind::Crypto, "NIP-44 encryption failed", e))
 }
 
 /// [`encrypt_private_tags_with_rng`] with an OS-entropy nonce.
@@ -475,8 +478,11 @@ pub fn decrypt_private_tags(keys: &Keys, event: &Event) -> Result<Tags> {
             "NIP-51 private content is only for the author",
         ));
     }
-    let conversation = ConversationKey::derive(keys.secret_key(), &own)?;
-    let plaintext = nip44::decrypt(event.content(), &conversation)?;
+    let conversation = ConversationKey::derive(keys.secret_key(), &own)
+        .map_err(|e| Error::with_source(ErrorKind::Crypto, "invalid public key", e))?;
+    let plaintext = conversation
+        .decrypt(event.content())
+        .map_err(|e| Error::with_source(ErrorKind::Crypto, "NIP-44 decryption failed", e))?;
     parse_private_tags(&plaintext)
 }
 

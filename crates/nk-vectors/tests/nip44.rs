@@ -25,7 +25,6 @@
 
 mod common;
 
-use nk::nips::ErrorKind;
 use nk::nips::nip44::{self, ConversationKey, MessageKeys};
 use nk::{PublicKey, SecretKey};
 use serde::Deserialize;
@@ -209,10 +208,12 @@ fn official_encrypt_decrypt() {
     for (i, case) in vector.v2.valid.encrypt_decrypt.iter().enumerate() {
         let key = conversation_key(&case.conversation_key);
         let nonce = bytes32(&case.nonce, "nonce");
-        let payload = nip44::encrypt_with_nonce(&case.plaintext, &key, &nonce)
+        let payload = key
+            .encrypt_with_nonce(&case.plaintext, &nonce)
             .unwrap_or_else(|e| panic!("case {i}: encrypt failed: {e}"));
         assert_eq!(payload, case.payload, "case {i}: payload");
-        let plaintext = nip44::decrypt(&payload, &key)
+        let plaintext = key
+            .decrypt(&payload)
             .unwrap_or_else(|e| panic!("case {i}: decrypt failed: {e}"));
         assert_eq!(plaintext, case.plaintext, "case {i}: plaintext");
     }
@@ -231,14 +232,16 @@ fn run_long_message(label: &str, cases: &[LongMessageCase]) {
         );
         let key = conversation_key(&case.conversation_key);
         let nonce = bytes32(&case.nonce, "nonce");
-        let payload = nip44::encrypt_with_nonce(&plaintext, &key, &nonce)
+        let payload = key
+            .encrypt_with_nonce(&plaintext, &nonce)
             .unwrap_or_else(|e| panic!("{label} case {i}: encrypt failed: {e}"));
         assert_eq!(
             sha256_hex(payload.as_bytes()),
             case.payload_sha256,
             "{label} case {i}: payload checksum"
         );
-        let decrypted = nip44::decrypt_with_max_len(&payload, &key, payload.len())
+        let decrypted = key
+            .decrypt_with_limit(&payload, payload.len())
             .unwrap_or_else(|e| panic!("{label} case {i}: decrypt failed: {e}"));
         assert_eq!(decrypted, plaintext, "{label} case {i}: plaintext");
     }
@@ -265,10 +268,7 @@ fn official_invalid_get_conversation_key() {
         // bytes without a curve check).
         let rejected = SecretKey::from_hex(&case.sec1).map_or(true, |secret| {
             PublicKey::from_hex(&case.pub2).map_or(true, |peer| {
-                matches!(
-                    ConversationKey::derive(&secret, &peer),
-                    Err(ref e) if e.kind() == ErrorKind::Crypto
-                )
+                ConversationKey::derive(&secret, &peer).is_err()
             })
         });
         assert!(rejected, "case {i}: expected rejection");
@@ -280,12 +280,10 @@ fn official_invalid_decrypt() {
     let vector: OfficialVectors = serde_json::from_str(OFFICIAL).expect("valid JSON");
     for (i, case) in vector.v2.invalid.decrypt.iter().enumerate() {
         let key = conversation_key(&case.conversation_key);
-        let err = nip44::decrypt(&case.payload, &key)
-            .expect_err(&format!("case {i}: decrypt must fail ({})", case.payload));
-        assert_eq!(
-            err.kind(),
-            ErrorKind::Crypto,
-            "case {i}: expected ErrorKind::Crypto"
+        assert!(
+            key.decrypt(&case.payload).is_err(),
+            "case {i}: decrypt must fail ({})",
+            case.payload
         );
     }
 }
@@ -299,13 +297,17 @@ fn official_invalid_encrypt_msg_lengths() {
     assert_eq!(lengths.first(), Some(&0), "first length is the sub-minimum");
     let key = conversation_key("c41c775356fd92eadc63ff5a0dc1da211b268cbea22316767095b2871ea1412d");
     let nonce = [0u8; 32];
-    let err = nip44::encrypt_with_nonce("", &key, &nonce).expect_err("empty plaintext must fail");
-    assert_eq!(err.kind(), ErrorKind::Crypto);
+    assert!(
+        key.encrypt_with_nonce("", &nonce).is_err(),
+        "empty plaintext must fail"
+    );
     for &len in lengths.iter().skip(1) {
         let plaintext = "a".repeat(usize::try_from(len).expect("fits usize"));
-        let payload = nip44::encrypt_with_nonce(&plaintext, &key, &nonce)
+        let payload = key
+            .encrypt_with_nonce(&plaintext, &nonce)
             .unwrap_or_else(|e| panic!("len {len}: encrypt failed: {e}"));
-        let decrypted = nip44::decrypt_with_max_len(&payload, &key, payload.len())
+        let decrypted = key
+            .decrypt_with_limit(&payload, payload.len())
             .unwrap_or_else(|e| panic!("len {len}: decrypt failed: {e}"));
         assert_eq!(decrypted, plaintext, "len {len}: round trip");
     }
