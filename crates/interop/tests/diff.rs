@@ -86,8 +86,8 @@ fn diff_dir() -> PathBuf {
     if path.is_absolute() {
         path
     } else {
-        // Relative paths are taken from the workspace root: `cargo test` runs
-        // integration tests with the package dir, not the workspace, as cwd.
+        // Relative paths are taken from the repository root: `cargo test` runs
+        // integration tests with the package dir as cwd.
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .join(path)

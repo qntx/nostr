@@ -43,16 +43,7 @@ jobs:
     permissions:
       contents: read
     with:
-      # rust-version omitted: rust-toolchain.toml pins the toolchain.
+      # rust-version omitted: crates/interop/rust-toolchain.toml pins it.
+      working-directory: crates/interop
       deny: true
-
-  rust-minimal:
-    uses: qntx/workflows/.github/workflows/ci-rust.yml@v2
-    permissions:
-      contents: read
-    with:
-      features: --no-default-features
       doc: true
-      # Per-package -p runs: Cargo feature unification across members must
-      # not mask the minimal configuration.
-      packages: qntx-nostr-interop

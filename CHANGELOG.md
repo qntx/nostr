@@ -21,6 +21,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 - **BREAKING:** the self-maintained Rust protocol crates are retired. `nk` (and the earlier `nk-core`/`nk-nips`) is removed and is no longer published; Rust consumers should use the [rust-nostr](https://crates.io/crates/nostr) crates from crates.io instead. `crates/nk-wasm` moved to `crates/wasm` (`qntx-nostr-wasm`, unpublished) and now depends only on `secp256k1` and `sha2`; `crates/nk-vectors` moved to `crates/interop` (`qntx-nostr-interop`, unpublished) and replays the shared vectors and differential streams against rust-nostr, with known divergences tracked in `crates/interop/divergences.json`. The wasm ABI exported symbols were renamed `nk_*` → `nostr_*` and the ABI version bumped to 2 — this is internal to `@qntx/nostr-wasm`; its JS API is unchanged.
 - `decryptPrivateTags` (NIP-51) now rejects decrypted private-tag plaintext containing lone UTF-16 surrogates (`\ud800`-style escapes `JSON.parse` accepts) with `EventValidationError("invalid NIP-51 private tags")` (N10).
 - `parseBolt11` (NIP-57) ignores the `x` expiry field when its value exceeds 2^53−1 (where a JS number loses precision) and keeps the 3600s default (N8).
+- Internal: `crates/interop` is now a standalone Cargo project — `Cargo.toml`/`Cargo.lock`/`rust-toolchain.toml`/`rustfmt.toml`/`clippy.toml`/`deny.toml` moved under it and the root workspace manifest and `.cargo/config.toml` are gone; the repository root has no Rust files. `bun run test:parity` runs cargo inside `crates/interop`.
 
 ### Fixed
 

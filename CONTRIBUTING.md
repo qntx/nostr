@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **Bun 1.4** — package scripts, tests, and tooling.
-- **Rust** — via `rust-toolchain.toml` (interop crate only).
+- **Rust** — via `crates/interop/rust-toolchain.toml` (interop crate only).
 - **LLVM clang** for `wasm32-unknown-unknown` — `@qntx/nostr-wasm` compiles the
   shared C core with a wasm-capable clang; Apple clang will not work.
 
@@ -41,10 +41,12 @@ Run before opening a pull request:
 bun run lint && bun run typecheck && bun run test   # lint includes taplo,
                                                     # version and
                                                     # parity checks
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
+cd crates/interop
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 cargo deny check
+cd ../..
 cd packages/nostr-wasm
 CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" bun run build:wasm
 bun run test:wasm

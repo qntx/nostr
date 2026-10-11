@@ -1,0 +1,25 @@
+# Thresholds for the pedantic/perf/complexity lints enabled in Cargo.toml.
+excessive-nesting-threshold  = 4
+too-many-lines-threshold     = 120
+too-many-arguments-threshold = 7
+type-complexity-threshold    = 250
+struct-field-name-threshold  = 8
+
+single-char-binding-names-threshold = 4
+min-ident-chars-threshold           = 2
+allowed-idents-below-min-chars      = ["i", "j", "k", "x", "y", "z", "w", "n", "e", "v", "f", "_"]
+
+# Clippy's own default. Builder/config structs may be `Copy` and passed by
+# value on cold paths. A stricter override produced false positives once
+# option structs grew large enough to exceed the default byte budget.
+pass-by-value-size-limit = 256
+trivial-copy-size-limit  = 8
+
+large-error-threshold = 128
+
+allow-dbg-in-tests    = true
+allow-print-in-tests  = true
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+
+literal-representation-threshold = 4
