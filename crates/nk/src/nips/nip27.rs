@@ -27,7 +27,7 @@ use crate::{Event, Tags};
 use unicode_properties::{GeneralCategoryGroup, UnicodeGeneralCategory};
 use url::Url;
 
-use crate::nips::nip19::{self, AddressPointer, Entity, EventPointer, ProfilePointer};
+use crate::nips::nip19::{AddressPointer, Entity, EventPointer, ProfilePointer};
 use crate::nips::util::is_js_whitespace;
 
 /// A decoded NIP-19 reference carried by [`ContentBlock::Reference`].
@@ -317,7 +317,7 @@ fn candidate_at(rest: &str, legacy: bool) -> Option<(Token, usize)> {
 /// `nostr:` or bare code → reference block; `nsec` and decode failures yield
 /// no block (the candidate becomes plain text).
 fn reference_block(code: &str, bare: bool) -> Option<ContentBlock<'_>> {
-    let reference = match nip19::decode(code).ok()? {
+    let reference = match Entity::from_bech32(code).ok()? {
         Entity::Profile(pointer) => Reference::Profile(pointer),
         Entity::Event(pointer) => Reference::Event(pointer),
         Entity::Address(pointer) => Reference::Address(pointer),

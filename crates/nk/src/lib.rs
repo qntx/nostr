@@ -19,12 +19,12 @@
 //! | `nip13` | no      | proof of work (`pow`, `PowMiner`) |
 //! | `nip17` | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`); needs `nip59` |
 //! | `nip19` | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) |
-//! | `nip21` | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`); needs `nip19` |
+//! | `nip21` | no      | `nostr:` URI scheme (`NostrUri`); needs `nip19` |
 //! | `nip27` | no      | content tokenizer (`parse_content`, `ContentBlock`); needs `nip19` |
 //! | `nip42` | no      | relay auth (`auth_event`, `is_auth_required`) |
 //! | `nip44` | no      | v2 authenticated payload encryption (`ConversationKey`, `encrypt`/`decrypt`) |
 //! | `nip46` | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Request`/`Response`) |
-//! | `nip49` | no      | `ncryptsec` secret-key encryption (`EncryptOptions`, `encrypt`/`decrypt`) |
+//! | `nip49` | no      | `ncryptsec` secret-key encryption (`EncryptedSecretKey`); needs `nip19` |
 //! | `nip51` | no      | lists (`parse_mute_list`, …, NIP-44 private tags); needs `nip44` |
 //! | `nip57` | no      | Lightning zaps (`zap_request`, `parse_bolt11`, `validate_zap_receipt`) |
 //! | `nip59` | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44` |

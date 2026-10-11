@@ -292,44 +292,53 @@ fn diff_nip46_uri() {
             }
             let input: UriInput = serde_json::from_str(input).ok()?;
             if let Some(client) = &input.client {
-                let uri = NostrConnectUri {
-                    client_pubkey: PublicKey::from_hex(client).ok()?,
-                    relays: input.relays.clone(),
-                    secret: input.secret.clone().unwrap_or_default(),
-                    perms: input.perms.clone().unwrap_or_default(),
-                    name: input.name.clone(),
-                    url: input.url.clone(),
-                    image: input.image.clone(),
-                }
-                .to_uri()
-                .ok()?;
+                let uri = NostrConnectUri::new(
+                    PublicKey::from_hex(client).ok()?,
+                    input.relays.clone(),
+                    input.secret.clone().unwrap_or_default(),
+                )
+                .ok()?
+                .with_perms(input.perms.clone().unwrap_or_default());
+                let uri = match &input.name {
+                    Some(name) => uri.with_name(name.clone()),
+                    None => uri,
+                };
+                let uri = match &input.url {
+                    Some(url) => uri.with_url(url.clone()),
+                    None => uri,
+                };
+                let uri = match &input.image {
+                    Some(image) => uri.with_image(image.clone()),
+                    None => uri,
+                };
+                let uri = uri.to_string();
                 // Re-parse the URI like the TS side does: a serialization bug
                 // must not hide behind a shared encoder.
-                let parsed = NostrConnectUri::parse(&uri).ok()?;
+                let parsed = uri.parse::<NostrConnectUri>().ok()?;
                 Some(serde_json::json!({
                     "uri": uri,
                     "parsed": {
-                        "clientPubkey": parsed.client_pubkey.to_hex(),
-                        "relays": parsed.relays,
-                        "secret": parsed.secret,
-                        "perms": parsed.perms,
-                        "name": parsed.name,
-                        "url": parsed.url,
-                        "image": parsed.image,
+                        "clientPubkey": parsed.client().to_hex(),
+                        "relays": parsed.relays(),
+                        "secret": parsed.secret(),
+                        "perms": parsed.perms(),
+                        "name": parsed.name(),
+                        "url": parsed.url(),
+                        "image": parsed.image(),
                     },
                 }))
             } else {
                 let uri = BunkerUri {
-                    pubkey: PublicKey::from_hex(input.pubkey.as_deref()?).ok()?,
+                    remote_signer: PublicKey::from_hex(input.pubkey.as_deref()?).ok()?,
                     relays: input.relays.clone(),
                     secret: input.secret.clone(),
                 }
                 .to_string();
-                let parsed = BunkerUri::parse(&uri)?;
+                let parsed = uri.parse::<BunkerUri>().ok()?;
                 Some(serde_json::json!({
                     "uri": uri,
                     "parsed": {
-                        "pubkey": parsed.pubkey.to_hex(),
+                        "pubkey": parsed.remote_signer.to_hex(),
                         "relays": parsed.relays,
                         "secret": parsed.secret,
                     },
@@ -356,7 +365,7 @@ fn diff_nip19_codec() {
             if req.op == "encode" {
                 return encode_entity(&req.entity?).ok().map(json_str);
             }
-            nip19::decode(&req.input?).ok().map(|entity| {
+            nip19::Entity::from_bech32(&req.input?).ok().map(|entity| {
                 serde_json::to_value(entity_json(&entity)).expect("entity serializes")
             })
         });

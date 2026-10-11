@@ -1,26 +1,29 @@
 //! NIP-19 bech32-encoded entities.
 //!
 //! `npub`, `nsec`, `note` carry a bare 32-byte payload; `nprofile`,
-//! `nevent`, `naddr` carry a TLV record. Byte rules are identical to
-//! `@qntx/nostr`'s `nips/nip19.ts` (and the `@scure/base` bech32 it wraps):
-//! TLVs are written in descending type order, duplicate TLV types keep the
-//! first value (relays keep all), identifier and relay bytes decode lossy
-//! as UTF-8, and the whole string is at most [`BECH32_MAX_LEN`] characters.
-//! All-lowercase and all-uppercase strings decode; mixed case is rejected.
+//! `nevent`, `naddr` carry a TLV record. TLVs are written in descending
+//! type order, duplicate TLV types keep the first value (relays keep all),
+//! identifier and relay bytes decode lossy as UTF-8, and the whole string
+//! is at most [`BECH32_MAX_LEN`] characters. All-lowercase and
+//! all-uppercase strings decode; mixed case is rejected.
+//!
+//! @see <https://github.com/nostr-protocol/nips/blob/master/19.md>
 
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
-use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use core::fmt;
+use core::str::FromStr;
+
 use crate::{EventId, Kind, PublicKey, SecretKey};
-use bech32::primitives::decode::CheckedHrpstring;
+use bech32::primitives::decode::{CheckedHrpstring, CheckedHrpstringError};
 use bech32::{ByteIterExt, Checksum, Fe32, Fe32IterExt, Fe1024, Hrp};
 use zeroize::Zeroizing;
 
-use crate::nips::error::{Error, ErrorKind, Result};
-
-/// Maximum bech32 string length accepted by [`decode`] (NIP-19).
+/// Maximum bech32 string length accepted by decoders (NIP-19).
 pub const BECH32_MAX_LEN: usize = 5000;
 
 /// `bech32::Bech32` with the NIP-19 length limit: the stock checksum type
@@ -57,9 +60,93 @@ const TLV_RELAY: u8 = 1;
 const TLV_AUTHOR: u8 = 2;
 const TLV_KIND: u8 = 3;
 
-fn nip19(message: impl Into<alloc::borrow::Cow<'static, str>>) -> Error {
-    Error::new(ErrorKind::Nip19, message)
+/// Errors produced by NIP-19 bech32 encoding and decoding.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// The string is not valid bech32 (bad charset, checksum, mixed case,
+    /// non-canonical padding, or over [`BECH32_MAX_LEN`] characters).
+    #[error("invalid bech32")]
+    Bech32 {
+        /// The decode failure.
+        #[source]
+        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+    },
+    /// The encoded string exceeds [`BECH32_MAX_LEN`] characters.
+    #[error("bech32 string exceeds 5000 characters: {len}")]
+    TooLong {
+        /// The encoded length in characters.
+        len: usize,
+    },
+    /// The human-readable prefix is not a NIP-19 prefix.
+    #[error("unknown bech32 prefix {prefix}")]
+    UnknownPrefix {
+        /// The unrecognized prefix.
+        prefix: String,
+    },
+    /// The string carries a different NIP-19 prefix than required.
+    #[error("expected a {expected} string, got {found}")]
+    UnexpectedPrefix {
+        /// The required prefix.
+        expected: &'static str,
+        /// The prefix that was found.
+        found: String,
+    },
+    /// A payload is not the required byte length.
+    #[error("invalid length: expected {expected} bytes, got {found}")]
+    InvalidLength {
+        /// The required byte count.
+        expected: usize,
+        /// The actual byte count.
+        found: usize,
+    },
+    /// The `nsec` payload is not a valid secp256k1 secret scalar.
+    #[error("invalid secret key")]
+    InvalidSecretKey,
+    /// A required TLV record is absent.
+    #[error("missing required {tlv}")]
+    MissingTlv {
+        /// The missing record, described by position.
+        tlv: &'static str,
+    },
+    /// A TLV record or the TLV stream itself is malformed.
+    #[error("invalid {tlv}")]
+    InvalidTlv {
+        /// The malformed record, described by position.
+        tlv: &'static str,
+    },
+    /// A TLV value exceeds the 255-byte single-byte length field.
+    #[error("TLV value exceeds 255 bytes: {len}")]
+    TlvTooLong {
+        /// The value length in bytes.
+        len: usize,
+    },
+    /// The kind TLV does not fit the NIP-01 range 0–65535.
+    #[error("kind {kind} is out of the 0-65535 range")]
+    KindOutOfRange {
+        /// The out-of-range wire value.
+        kind: u32,
+    },
 }
+
+/// The decode failure [`Error::Bech32`] boxes: a checksum/format error from
+/// the `bech32` crate or the non-canonical-padding check NIP-19 adds on top.
+#[derive(Debug)]
+pub(crate) enum DecodeError {
+    Bech32(CheckedHrpstringError),
+    Padding,
+}
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Bech32(error) => fmt::Display::fmt(error, f),
+            Self::Padding => f.write_str("non-zero padding in bech32 payload"),
+        }
+    }
+}
+
+impl core::error::Error for DecodeError {}
 
 /// Encodes `data` under `hrp` as a lowercase bech32 string.
 pub(crate) fn encode_bech32(hrp: Hrp, data: &[u8]) -> String {
@@ -73,32 +160,32 @@ pub(crate) fn encode_bech32(hrp: Hrp, data: &[u8]) -> String {
 
 /// [`encode_bech32`] plus the NIP-19 length limit: a 32-byte payload never
 /// reaches it, but TLV encoders can.
-fn encode_bech32_tlv(hrp: Hrp, data: &[u8]) -> Result<String> {
+fn encode_bech32_tlv(hrp: Hrp, data: &[u8]) -> Result<String, Error> {
     let code = encode_bech32(hrp, data);
     if code.len() > BECH32_MAX_LEN {
-        return Err(nip19("bech32 string exceeds 5000 characters"));
+        return Err(Error::TooLong { len: code.len() });
     }
     Ok(code)
 }
 
-/// Parses and checksum-verifies `code`, returning the hrp and payload bytes,
-/// or `None` on any format, checksum, or canonical-padding failure.
-pub(crate) fn decode_bech32(code: &str) -> Option<(Hrp, Vec<u8>)> {
-    let checked = CheckedHrpstring::new::<Nip19Bech32>(code).ok()?;
+/// Parses and checksum-verifies `code`, returning the hrp and payload bytes.
+/// Fails on any format, checksum, or canonical-padding violation.
+pub(crate) fn decode_bech32(code: &str) -> Result<(Hrp, Vec<u8>), DecodeError> {
+    let checked = CheckedHrpstring::new::<Nip19Bech32>(code).map_err(DecodeError::Bech32)?;
     let fes: Vec<Fe32> = checked.fe32_iter().collect();
-    // `@scure/base`'s canonical-padding rule: the trailing partial byte must
-    // be shorter than one field element and carry only zero bits.
+    // Canonical-padding rule: the trailing partial byte must be shorter
+    // than one field element and carry only zero bits.
     let leftover = (fes.len() * 5) % 8;
     let last = fes.last().map_or(0, |fe| fe.to_u8());
     if leftover >= 5 || (leftover > 0 && last & ((1u8 << leftover) - 1) != 0) {
-        return None;
+        return Err(DecodeError::Padding);
     }
-    Some((checked.hrp(), fes.iter().copied().fes_to_bytes().collect()))
+    Ok((checked.hrp(), fes.iter().copied().fes_to_bytes().collect()))
 }
 
-/// [`decode_bech32`] with NIP-19 error reporting.
-fn decode_nip19_bech32(code: &str) -> Result<(Hrp, Vec<u8>)> {
-    decode_bech32(code).ok_or_else(|| nip19("invalid bech32"))
+/// [`decode_bech32`] with the module error.
+fn decode_nip19_bech32(code: &str) -> Result<(Hrp, Vec<u8>), Error> {
+    decode_bech32(code).map_err(|e| Error::Bech32 { source: e.into() })
 }
 
 /// A profile pointer (`nprofile`): a pubkey plus relay hints.
@@ -162,10 +249,24 @@ pub enum Entity {
     Note(EventId),
 }
 
+impl Entity {
+    /// The bech32 prefix this entity encodes under.
+    const fn prefix(&self) -> &'static str {
+        match self {
+            Self::Profile(_) => "nprofile",
+            Self::Event(_) => "nevent",
+            Self::Address(_) => "naddr",
+            Self::Secret(_) => "nsec",
+            Self::Public(_) => "npub",
+            Self::Note(_) => "note",
+        }
+    }
+}
+
 /// TLV records in wire order, keyed by type byte.
 type Tlvs<'a> = BTreeMap<u8, Vec<&'a [u8]>>;
 
-fn parse_tlv(data: &[u8]) -> Result<Tlvs<'_>> {
+fn parse_tlv(data: &[u8]) -> Result<Tlvs<'_>, Error> {
     let mut tlvs: Tlvs<'_> = BTreeMap::new();
     let mut rest = data;
     while !rest.is_empty() {
@@ -173,13 +274,13 @@ fn parse_tlv(data: &[u8]) -> Result<Tlvs<'_>> {
             .get(..2)
             .and_then(|head| <&[u8; 2]>::try_from(head).ok())
         else {
-            return Err(nip19("not enough data to read TLV"));
+            return Err(Error::InvalidTlv { tlv: "TLV stream" });
         };
         let Some((value, tail)) = rest
             .get(2..)
             .and_then(|body| body.split_at_checked(usize::from(len)))
         else {
-            return Err(nip19(format!("not enough data to read on TLV {ty}")));
+            return Err(Error::InvalidTlv { tlv: "TLV stream" });
         };
         tlvs.entry(ty).or_default().push(value);
         rest = tail;
@@ -192,16 +293,14 @@ fn first_tlv<'a>(tlvs: &'a Tlvs<'_>, ty: u8) -> Option<&'a [u8]> {
     tlvs.get(&ty).and_then(|vs| vs.first()).copied()
 }
 
-fn required_tlv<'a>(tlvs: &'a Tlvs<'_>, ty: u8, prefix: &str) -> Result<&'a [u8]> {
-    first_tlv(tlvs, ty).ok_or_else(|| nip19(format!("missing TLV {ty} for {prefix}")))
+fn required_tlv<'a>(tlvs: &'a Tlvs<'_>, ty: u8, tlv: &'static str) -> Result<&'a [u8], Error> {
+    first_tlv(tlvs, ty).ok_or(Error::MissingTlv { tlv })
 }
 
 /// First value of TLV `ty`, checked to be exactly `N` bytes.
-fn tlv_bytes<const N: usize>(tlvs: &Tlvs<'_>, ty: u8, prefix: &str) -> Result<[u8; N]> {
-    let value = required_tlv(tlvs, ty, prefix)?;
-    value
-        .try_into()
-        .map_err(|_| nip19(format!("TLV {ty} should be {N} bytes")))
+fn tlv_bytes<const N: usize>(tlvs: &Tlvs<'_>, ty: u8, tlv: &'static str) -> Result<[u8; N], Error> {
+    let value = required_tlv(tlvs, ty, tlv)?;
+    value.try_into().map_err(|_| Error::InvalidTlv { tlv })
 }
 
 fn tlv_relays(tlvs: &Tlvs<'_>) -> Vec<String> {
@@ -214,16 +313,16 @@ fn tlv_relays(tlvs: &Tlvs<'_>) -> Vec<String> {
 }
 
 /// The kind TLV is a big-endian u32 on the wire but limited to the NIP-01
-/// range 0–65535 on both encode and decode (ruling N1).
-fn read_kind(tlvs: &Tlvs<'_>, ty: u8, prefix: &str) -> Result<Kind> {
-    let raw = u32::from_be_bytes(tlv_bytes::<4>(tlvs, ty, prefix)?);
+/// range 0–65535 on both encode and decode.
+fn read_kind(tlvs: &Tlvs<'_>, ty: u8, tlv: &'static str) -> Result<Kind, Error> {
+    let raw = u32::from_be_bytes(tlv_bytes::<4>(tlvs, ty, tlv)?);
     u16::try_from(raw)
         .map(Kind::new)
-        .map_err(|_| nip19(format!("invalid kind: {raw}")))
+        .map_err(|_| Error::KindOutOfRange { kind: raw })
 }
 
-fn push_tlv(out: &mut Vec<u8>, ty: u8, value: &[u8]) -> Result<()> {
-    let len = u8::try_from(value.len()).map_err(|_| nip19("TLV value exceeds 255 bytes"))?;
+fn push_tlv(out: &mut Vec<u8>, ty: u8, value: &[u8]) -> Result<(), Error> {
+    let len = u8::try_from(value.len()).map_err(|_| Error::TlvTooLong { len: value.len() })?;
     out.push(ty);
     out.push(len);
     out.extend_from_slice(value);
@@ -235,8 +334,10 @@ impl ProfilePointer {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Nip19`] when a relay hint exceeds 255 bytes.
-    pub fn to_bech32(&self) -> Result<String> {
+    /// [`Error::TlvTooLong`] when a relay hint exceeds 255 bytes;
+    /// [`Error::TooLong`] when the encoded string exceeds
+    /// [`BECH32_MAX_LEN`].
+    pub fn to_bech32(&self) -> Result<String, Error> {
         let mut data = Vec::new();
         // TLVs are written in descending type order (3, 2, 1, 0).
         for relay in &self.relays {
@@ -245,6 +346,22 @@ impl ProfilePointer {
         push_tlv(&mut data, TLV_SPECIAL, self.pubkey.as_bytes())?;
         encode_bech32_tlv(HRP_NPROFILE, &data)
     }
+
+    /// Decodes an `nprofile1…` string.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::UnexpectedPrefix`] for other prefixes; the [`Error`] decode
+    /// variants on malformed input.
+    pub fn from_bech32(code: &str) -> Result<Self, Error> {
+        match Entity::from_bech32(code)? {
+            Entity::Profile(pointer) => Ok(pointer),
+            other => Err(Error::UnexpectedPrefix {
+                expected: "nprofile",
+                found: other.prefix().to_owned(),
+            }),
+        }
+    }
 }
 
 impl EventPointer {
@@ -252,8 +369,10 @@ impl EventPointer {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Nip19`] when a relay hint exceeds 255 bytes.
-    pub fn to_bech32(&self) -> Result<String> {
+    /// [`Error::TlvTooLong`] when a relay hint exceeds 255 bytes;
+    /// [`Error::TooLong`] when the encoded string exceeds
+    /// [`BECH32_MAX_LEN`].
+    pub fn to_bech32(&self) -> Result<String, Error> {
         let mut data = Vec::new();
         if let Some(kind) = self.kind {
             push_tlv(&mut data, TLV_KIND, &u32::from(kind.as_u16()).to_be_bytes())?;
@@ -267,6 +386,22 @@ impl EventPointer {
         push_tlv(&mut data, TLV_SPECIAL, self.id.as_bytes())?;
         encode_bech32_tlv(HRP_NEVENT, &data)
     }
+
+    /// Decodes a `nevent1…` string.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::UnexpectedPrefix`] for other prefixes; the [`Error`] decode
+    /// variants on malformed input.
+    pub fn from_bech32(code: &str) -> Result<Self, Error> {
+        match Entity::from_bech32(code)? {
+            Entity::Event(pointer) => Ok(pointer),
+            other => Err(Error::UnexpectedPrefix {
+                expected: "nevent",
+                found: other.prefix().to_owned(),
+            }),
+        }
+    }
 }
 
 impl AddressPointer {
@@ -274,9 +409,10 @@ impl AddressPointer {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Nip19`] when the identifier or a relay hint exceeds 255
-    /// bytes.
-    pub fn to_bech32(&self) -> Result<String> {
+    /// [`Error::TlvTooLong`] when the identifier or a relay hint exceeds 255
+    /// bytes; [`Error::TooLong`] when the encoded string exceeds
+    /// [`BECH32_MAX_LEN`].
+    pub fn to_bech32(&self) -> Result<String, Error> {
         let mut data = Vec::new();
         push_tlv(
             &mut data,
@@ -290,6 +426,22 @@ impl AddressPointer {
         push_tlv(&mut data, TLV_SPECIAL, self.identifier.as_bytes())?;
         encode_bech32_tlv(HRP_NADDR, &data)
     }
+
+    /// Decodes an `naddr1…` string.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::UnexpectedPrefix`] for other prefixes; the [`Error`] decode
+    /// variants on malformed input.
+    pub fn from_bech32(code: &str) -> Result<Self, Error> {
+        match Entity::from_bech32(code)? {
+            Entity::Address(pointer) => Ok(pointer),
+            other => Err(Error::UnexpectedPrefix {
+                expected: "naddr",
+                found: other.prefix().to_owned(),
+            }),
+        }
+    }
 }
 
 impl Entity {
@@ -297,119 +449,197 @@ impl Entity {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Nip19`] when a pointer's relay hint or identifier
-    /// exceeds 255 bytes.
-    pub fn to_bech32(&self) -> Result<String> {
+    /// [`Error::TlvTooLong`] when a pointer's relay hint or identifier
+    /// exceeds 255 bytes; [`Error::TooLong`] when the encoded string
+    /// exceeds [`BECH32_MAX_LEN`].
+    pub fn to_bech32(&self) -> Result<String, Error> {
         match self {
             Self::Profile(pointer) => pointer.to_bech32(),
             Self::Event(pointer) => pointer.to_bech32(),
             Self::Address(pointer) => pointer.to_bech32(),
-            Self::Secret(secret) => Ok(encode_nsec(secret)),
-            Self::Public(pubkey) => Ok(encode_npub(pubkey)),
-            Self::Note(id) => Ok(encode_note(id)),
+            Self::Secret(secret) => Ok(secret.to_bech32()),
+            Self::Public(pubkey) => Ok(pubkey.to_bech32()),
+            Self::Note(id) => Ok(id.to_bech32()),
+        }
+    }
+
+    /// Decodes a NIP-19 bech32 entity.
+    ///
+    /// Accepts all-lowercase and all-uppercase strings; mixed case is
+    /// rejected. `nsec` payloads must be valid secp256k1 scalars.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Bech32`] on malformed bech32, [`Error::UnknownPrefix`] on
+    /// an unrecognized prefix, [`Error::InvalidLength`] on a wrong payload
+    /// length, [`Error::MissingTlv`]/[`Error::InvalidTlv`] on malformed
+    /// TLVs, [`Error::KindOutOfRange`] on an out-of-range kind, and
+    /// [`Error::InvalidSecretKey`] on an invalid secret scalar.
+    pub fn from_bech32(code: &str) -> Result<Self, Error> {
+        // The drop guard wipes the decoded buffer on every path — `nsec`
+        // payloads are secret key material.
+        let (hrp, data) = decode_nip19_bech32(code)?;
+        let data = Zeroizing::new(data);
+
+        if hrp == HRP_NPROFILE {
+            let tlvs = parse_tlv(&data)?;
+            let pubkey = tlv_bytes::<32>(&tlvs, TLV_SPECIAL, "nprofile pubkey TLV")?;
+            Ok(Self::Profile(ProfilePointer {
+                pubkey: PublicKey::from_bytes(pubkey),
+                relays: tlv_relays(&tlvs),
+            }))
+        } else if hrp == HRP_NEVENT {
+            let tlvs = parse_tlv(&data)?;
+            let id = tlv_bytes::<32>(&tlvs, TLV_SPECIAL, "nevent id TLV")?;
+            let author = match first_tlv(&tlvs, TLV_AUTHOR) {
+                Some(value) => Some(PublicKey::from_bytes(value.try_into().map_err(|_| {
+                    Error::InvalidTlv {
+                        tlv: "nevent author TLV",
+                    }
+                })?)),
+                None => None,
+            };
+            let kind = match first_tlv(&tlvs, TLV_KIND) {
+                Some(_) => Some(read_kind(&tlvs, TLV_KIND, "nevent kind TLV")?),
+                None => None,
+            };
+            Ok(Self::Event(EventPointer {
+                id: EventId::from_bytes(id),
+                relays: tlv_relays(&tlvs),
+                author,
+                kind,
+            }))
+        } else if hrp == HRP_NADDR {
+            let tlvs = parse_tlv(&data)?;
+            let identifier = required_tlv(&tlvs, TLV_SPECIAL, "naddr identifier TLV")?;
+            let pubkey = tlv_bytes::<32>(&tlvs, TLV_AUTHOR, "naddr pubkey TLV")?;
+            let kind = read_kind(&tlvs, TLV_KIND, "naddr kind TLV")?;
+            Ok(Self::Address(AddressPointer {
+                identifier: String::from_utf8_lossy(identifier).into_owned(),
+                pubkey: PublicKey::from_bytes(pubkey),
+                kind,
+                relays: tlv_relays(&tlvs),
+            }))
+        } else if hrp == HRP_NSEC {
+            // A bad scalar surfaces as [`Error::InvalidSecretKey`]; the
+            // `data` guard wipes the decoded bytes either way.
+            let secret = if data.len() == 32 {
+                SecretKey::from_slice(&data).map_err(|_| Error::InvalidSecretKey)
+            } else {
+                Err(Error::InvalidLength {
+                    expected: 32,
+                    found: data.len(),
+                })
+            };
+            Ok(Self::Secret(secret?))
+        } else if hrp == HRP_NPUB {
+            let bytes: [u8; 32] = data
+                .as_slice()
+                .try_into()
+                .map_err(|_| Error::InvalidLength {
+                    expected: 32,
+                    found: data.len(),
+                })?;
+            Ok(Self::Public(PublicKey::from_bytes(bytes)))
+        } else if hrp == HRP_NOTE {
+            let bytes: [u8; 32] = data
+                .as_slice()
+                .try_into()
+                .map_err(|_| Error::InvalidLength {
+                    expected: 32,
+                    found: data.len(),
+                })?;
+            Ok(Self::Note(EventId::from_bytes(bytes)))
+        } else {
+            Err(Error::UnknownPrefix {
+                prefix: hrp.as_str().to_owned(),
+            })
         }
     }
 }
 
-/// Encodes a public key as `npub1…`.
-#[must_use]
-pub fn encode_npub(pubkey: &PublicKey) -> String {
-    // 32-byte payloads produce ~70 characters, always under the limit.
-    encode_bech32(HRP_NPUB, pubkey.as_bytes())
+impl FromStr for Entity {
+    type Err = Error;
+
+    /// Parses a NIP-19 bech32 entity — identical to
+    /// [`Entity::from_bech32`].
+    fn from_str(s: &str) -> Result<Self, Error> {
+        Self::from_bech32(s)
+    }
 }
 
-/// Encodes a secret key as `nsec1…`; the raw bytes stay inside
-/// [`SecretKey::with_secret_bytes`].
-#[must_use]
-pub fn encode_nsec(secret: &SecretKey) -> String {
-    secret.with_secret_bytes(|bytes| encode_bech32(HRP_NSEC, bytes))
+impl PublicKey {
+    /// Encodes the public key as an `npub1…` string.
+    #[must_use]
+    pub fn to_bech32(self) -> String {
+        encode_bech32(HRP_NPUB, self.as_bytes())
+    }
+
+    /// Decodes an `npub1…` string.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::UnexpectedPrefix`] for other NIP-19 prefixes; the [`Error`]
+    /// decode variants on malformed input.
+    pub fn from_bech32(code: &str) -> Result<Self, Error> {
+        match Entity::from_bech32(code)? {
+            Entity::Public(pubkey) => Ok(pubkey),
+            other => Err(Error::UnexpectedPrefix {
+                expected: "npub",
+                found: other.prefix().to_owned(),
+            }),
+        }
+    }
 }
 
-/// Encodes an event id as `note1…`.
-#[must_use]
-pub fn encode_note(id: &EventId) -> String {
-    encode_bech32(HRP_NOTE, id.as_bytes())
+impl EventId {
+    /// Encodes the event id as a `note1…` string.
+    #[must_use]
+    pub fn to_bech32(self) -> String {
+        encode_bech32(HRP_NOTE, self.as_bytes())
+    }
+
+    /// Decodes a `note1…` string.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::UnexpectedPrefix`] for other NIP-19 prefixes; the [`Error`]
+    /// decode variants on malformed input.
+    pub fn from_bech32(code: &str) -> Result<Self, Error> {
+        match Entity::from_bech32(code)? {
+            Entity::Note(id) => Ok(id),
+            other => Err(Error::UnexpectedPrefix {
+                expected: "note",
+                found: other.prefix().to_owned(),
+            }),
+        }
+    }
 }
 
-/// Decodes a NIP-19 bech32 entity.
-///
-/// Accepts all-lowercase and all-uppercase strings; mixed case is
-/// rejected. `nsec` payloads must be valid secp256k1 scalars (ruling N2).
-///
-/// # Errors
-///
-/// [`ErrorKind::Nip19`] on malformed bech32, an unknown prefix, a wrong
-/// payload length, malformed TLVs, an out-of-range kind, or an invalid
-/// secret scalar (with the [`crate::key::Error`] error as `source`).
-pub fn decode(code: &str) -> Result<Entity> {
-    // The drop guard wipes the decoded buffer on every path — `nsec`
-    // payloads are secret key material (#210).
-    let (hrp, data) = decode_nip19_bech32(code)?;
-    let data = Zeroizing::new(data);
+impl SecretKey {
+    /// Encodes the secret key as an `nsec1…` string; the raw bytes stay
+    /// inside [`SecretKey::with_secret_bytes`].
+    #[must_use]
+    pub fn to_bech32(&self) -> String {
+        self.with_secret_bytes(|bytes| encode_bech32(HRP_NSEC, bytes))
+    }
 
-    if hrp == HRP_NPROFILE {
-        let tlvs = parse_tlv(&data)?;
-        let pubkey = tlv_bytes::<32>(&tlvs, TLV_SPECIAL, "nprofile")?;
-        Ok(Entity::Profile(ProfilePointer {
-            pubkey: PublicKey::from_bytes(pubkey),
-            relays: tlv_relays(&tlvs),
-        }))
-    } else if hrp == HRP_NEVENT {
-        let tlvs = parse_tlv(&data)?;
-        let id = tlv_bytes::<32>(&tlvs, TLV_SPECIAL, "nevent")?;
-        let author = match first_tlv(&tlvs, TLV_AUTHOR) {
-            Some(value) => Some(PublicKey::from_bytes(
-                value
-                    .try_into()
-                    .map_err(|_| nip19("TLV 2 should be 32 bytes"))?,
-            )),
-            None => None,
-        };
-        let kind = match first_tlv(&tlvs, TLV_KIND) {
-            Some(_) => Some(read_kind(&tlvs, TLV_KIND, "nevent")?),
-            None => None,
-        };
-        Ok(Entity::Event(EventPointer {
-            id: EventId::from_bytes(id),
-            relays: tlv_relays(&tlvs),
-            author,
-            kind,
-        }))
-    } else if hrp == HRP_NADDR {
-        let tlvs = parse_tlv(&data)?;
-        let identifier = required_tlv(&tlvs, TLV_SPECIAL, "naddr")?;
-        let pubkey = tlv_bytes::<32>(&tlvs, TLV_AUTHOR, "naddr")?;
-        let kind = read_kind(&tlvs, TLV_KIND, "naddr")?;
-        Ok(Entity::Address(AddressPointer {
-            identifier: String::from_utf8_lossy(identifier).into_owned(),
-            pubkey: PublicKey::from_bytes(pubkey),
-            kind,
-            relays: tlv_relays(&tlvs),
-        }))
-    } else if hrp == HRP_NSEC {
-        // A bad scalar wraps the nk error; the `data` guard wipes the
-        // decoded bytes whether or not the `SecretKey` was built.
-        let secret = if data.len() == 32 {
-            SecretKey::from_slice(&data)
-                .map_err(|e| Error::with_source(ErrorKind::Nip19, "invalid nsec scalar", e))
-        } else {
-            Err(nip19("nsec must be 32 bytes"))
-        };
-        Ok(Entity::Secret(secret?))
-    } else if hrp == HRP_NPUB {
-        let bytes: [u8; 32] = data
-            .as_slice()
-            .try_into()
-            .map_err(|_| nip19("npub must be 32 bytes"))?;
-        Ok(Entity::Public(PublicKey::from_bytes(bytes)))
-    } else if hrp == HRP_NOTE {
-        let bytes: [u8; 32] = data
-            .as_slice()
-            .try_into()
-            .map_err(|_| nip19("note must be 32 bytes"))?;
-        Ok(Entity::Note(EventId::from_bytes(bytes)))
-    } else {
-        Err(nip19(format!("unknown prefix {}", hrp.as_str())))
+    /// Decodes an `nsec1…` string. The payload must be a valid secp256k1
+    /// secret scalar.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::UnexpectedPrefix`] for other NIP-19 prefixes;
+    /// [`Error::InvalidLength`] when the payload is not 32 bytes;
+    /// [`Error::InvalidSecretKey`] when it is not a valid scalar.
+    pub fn from_bech32(code: &str) -> Result<Self, Error> {
+        match Entity::from_bech32(code)? {
+            Entity::Secret(secret) => Ok(secret),
+            other => Err(Error::UnexpectedPrefix {
+                expected: "nsec",
+                found: other.prefix().to_owned(),
+            }),
+        }
     }
 }
 
@@ -418,12 +648,10 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::panic, reason = "tests fail by panicking")]
 
     use alloc::borrow::ToOwned;
-    use alloc::string::ToString;
+    use alloc::format;
     use alloc::vec;
 
     use core::error::Error as _;
-
-    use crate::EventId;
 
     use super::*;
 
@@ -449,41 +677,45 @@ mod tests {
         // The Nip19Bech32 constants are the Bech32 ones with CODE_LENGTH
         // lifted to 5000: short payloads must encode identically.
         let stock = bech32::encode::<bech32::Bech32>(HRP_NPUB, &PK).unwrap();
-        assert_eq!(encode_npub(&pubkey()), stock);
+        assert_eq!(pubkey().to_bech32(), stock);
     }
 
     #[test]
     fn npub_round_trip() {
-        let code = encode_npub(&pubkey());
+        let code = pubkey().to_bech32();
         assert!(code.starts_with("npub1"));
-        let Entity::Public(decoded) = decode(&code).unwrap() else {
+        let Entity::Public(decoded) = Entity::from_bech32(&code).unwrap() else {
             panic!("expected npub entity");
         };
         assert_eq!(decoded, pubkey());
         assert_eq!(Entity::Public(pubkey()).to_bech32().unwrap(), code);
+        assert_eq!(PublicKey::from_bech32(&code).unwrap(), pubkey());
     }
 
     #[test]
     fn note_round_trip() {
-        let code = encode_note(&event_id());
+        let code = event_id().to_bech32();
         assert!(code.starts_with("note1"));
-        let Entity::Note(decoded) = decode(&code).unwrap() else {
+        let Entity::Note(decoded) = Entity::from_bech32(&code).unwrap() else {
             panic!("expected note entity");
         };
         assert_eq!(decoded, event_id());
         assert_eq!(Entity::Note(event_id()).to_bech32().unwrap(), code);
+        assert_eq!(EventId::from_bech32(&code).unwrap(), event_id());
     }
 
     #[test]
     fn nsec_round_trip() {
         let secret = SecretKey::from_bytes([3; 32]).unwrap();
-        let code = encode_nsec(&secret);
+        let code = secret.to_bech32();
         assert!(code.starts_with("nsec1"));
-        let Entity::Secret(decoded) = decode(&code).unwrap() else {
+        let Entity::Secret(decoded) = Entity::from_bech32(&code).unwrap() else {
             panic!("expected nsec entity");
         };
         assert_eq!(decoded.with_secret_bytes(|b| *b), [3; 32]);
         assert_eq!(Entity::Secret(decoded).to_bech32().unwrap(), code);
+        let key = SecretKey::from_bech32(&code).unwrap();
+        assert_eq!(key.with_secret_bytes(|b| *b), [3; 32]);
     }
 
     #[test]
@@ -494,10 +726,11 @@ mod tests {
         };
         let code = pointer.to_bech32().unwrap();
         assert!(code.starts_with("nprofile1"));
-        let Entity::Profile(decoded) = decode(&code).unwrap() else {
+        let Entity::Profile(decoded) = Entity::from_bech32(&code).unwrap() else {
             panic!("expected nprofile entity");
         };
         assert_eq!(decoded, pointer);
+        assert_eq!(ProfilePointer::from_bech32(&code).unwrap(), pointer);
     }
 
     #[test]
@@ -508,7 +741,8 @@ mod tests {
             author: None,
             kind: None,
         };
-        let Entity::Event(decoded) = decode(&bare.to_bech32().unwrap()).unwrap() else {
+        let Entity::Event(decoded) = Entity::from_bech32(&bare.to_bech32().unwrap()).unwrap()
+        else {
             panic!("expected nevent entity");
         };
         assert_eq!(decoded, bare);
@@ -520,10 +754,11 @@ mod tests {
             kind: Some(Kind::new(65535)),
         };
         let code = full.to_bech32().unwrap();
-        let Entity::Event(decoded_full) = decode(&code).unwrap() else {
+        let Entity::Event(decoded_full) = Entity::from_bech32(&code).unwrap() else {
             panic!("expected nevent entity");
         };
         assert_eq!(decoded_full, full);
+        assert_eq!(EventPointer::from_bech32(&code).unwrap(), full);
     }
 
     #[test]
@@ -534,7 +769,8 @@ mod tests {
             kind: Kind::new(30023),
             relays: vec!["wss://r.example".to_owned()],
         };
-        let Entity::Address(decoded) = decode(&pointer.to_bech32().unwrap()).unwrap() else {
+        let Entity::Address(decoded) = Entity::from_bech32(&pointer.to_bech32().unwrap()).unwrap()
+        else {
             panic!("expected naddr entity");
         };
         assert_eq!(decoded, pointer);
@@ -545,10 +781,59 @@ mod tests {
             kind: Kind::new(0),
             relays: Vec::new(),
         };
-        let Entity::Address(decoded_empty) = decode(&empty.to_bech32().unwrap()).unwrap() else {
+        let Entity::Address(decoded_empty) =
+            Entity::from_bech32(&empty.to_bech32().unwrap()).unwrap()
+        else {
             panic!("expected naddr entity");
         };
         assert_eq!(decoded_empty, empty);
+        assert_eq!(
+            AddressPointer::from_bech32(&pointer.to_bech32().unwrap()).unwrap(),
+            pointer
+        );
+    }
+
+    #[test]
+    fn entity_from_str_matches_from_bech32() {
+        let code = pubkey().to_bech32();
+        assert!(matches!(
+            code.parse::<Entity>(),
+            Ok(Entity::Public(pk)) if pk == pubkey()
+        ));
+    }
+
+    #[test]
+    fn typed_from_bech32_rejects_other_prefixes() {
+        let pubkey_code = pubkey().to_bech32();
+        assert!(matches!(
+            EventId::from_bech32(&pubkey_code),
+            Err(Error::UnexpectedPrefix {
+                expected: "note",
+                ..
+            })
+        ));
+        assert!(matches!(
+            SecretKey::from_bech32(&pubkey_code),
+            Err(Error::UnexpectedPrefix {
+                expected: "nsec",
+                ..
+            })
+        ));
+        assert!(matches!(
+            ProfilePointer::from_bech32(&pubkey_code),
+            Err(Error::UnexpectedPrefix {
+                expected: "nprofile",
+                ..
+            })
+        ));
+        let note_code = event_id().to_bech32();
+        assert!(matches!(
+            PublicKey::from_bech32(&note_code),
+            Err(Error::UnexpectedPrefix {
+                expected: "npub",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -576,7 +861,8 @@ mod tests {
         push_tlv(&mut data, TLV_SPECIAL, &other).unwrap();
         push_tlv(&mut data, TLV_RELAY, b"wss://a").unwrap();
         push_tlv(&mut data, TLV_RELAY, b"wss://b").unwrap();
-        let Entity::Profile(decoded) = decode(&craft("nprofile", &data)).unwrap() else {
+        let Entity::Profile(decoded) = Entity::from_bech32(&craft("nprofile", &data)).unwrap()
+        else {
             panic!("expected nprofile entity");
         };
         assert_eq!(decoded.pubkey.as_bytes(), &ID);
@@ -588,7 +874,8 @@ mod tests {
         let mut data = Vec::new();
         push_tlv(&mut data, 42, b"unknown").unwrap();
         push_tlv(&mut data, TLV_SPECIAL, &ID).unwrap();
-        let Entity::Profile(decoded) = decode(&craft("nprofile", &data)).unwrap() else {
+        let Entity::Profile(decoded) = Entity::from_bech32(&craft("nprofile", &data)).unwrap()
+        else {
             panic!("expected nprofile entity");
         };
         assert_eq!(decoded.pubkey.as_bytes(), &ID);
@@ -601,7 +888,7 @@ mod tests {
         push_tlv(&mut data, TLV_RELAY, &[0xff]).unwrap();
         push_tlv(&mut data, TLV_AUTHOR, &PK).unwrap();
         push_tlv(&mut data, TLV_KIND, &1u32.to_be_bytes()).unwrap();
-        let Entity::Address(decoded) = decode(&craft("naddr", &data)).unwrap() else {
+        let Entity::Address(decoded) = Entity::from_bech32(&craft("naddr", &data)).unwrap() else {
             panic!("expected naddr entity");
         };
         assert_eq!(decoded.identifier, "f\u{fffd}");
@@ -610,47 +897,66 @@ mod tests {
 
     #[test]
     fn uppercase_decodes_mixed_case_rejected() {
-        let lower = encode_npub(&pubkey());
+        let lower = pubkey().to_bech32();
         let upper = lower.to_uppercase();
-        let Entity::Public(decoded) = decode(&upper).unwrap() else {
+        let Entity::Public(decoded) = Entity::from_bech32(&upper).unwrap() else {
             panic!("expected npub entity");
         };
         assert_eq!(decoded, pubkey());
         let mut mixed = lower;
         mixed.replace_range(5..6, "P");
-        assert_eq!(decode(&mixed).unwrap_err().kind(), ErrorKind::Nip19);
+        assert!(matches!(
+            Entity::from_bech32(&mixed),
+            Err(Error::Bech32 { .. })
+        ));
     }
 
     #[test]
     fn wrong_checksum_rejected() {
-        let mut code = encode_npub(&pubkey());
+        let mut code = pubkey().to_bech32();
         let last = code.pop().unwrap();
         code.push(if last == 'q' { 'p' } else { 'q' });
-        assert_eq!(decode(&code).unwrap_err().kind(), ErrorKind::Nip19);
+        let err = Entity::from_bech32(&code).unwrap_err();
+        assert!(matches!(err, Error::Bech32 { .. }));
+        assert!(err.source().is_some());
     }
 
     #[test]
     fn unknown_prefix_rejected() {
         let code = craft("nzzz", &[1, 2, 3]);
-        let err = decode(&code).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Nip19);
-        assert!(err.to_string().contains("unknown prefix"));
+        assert!(matches!(
+            Entity::from_bech32(&code),
+            Err(Error::UnknownPrefix { .. })
+        ));
     }
 
     #[test]
     fn wrong_length_payloads_rejected() {
         for hrp in ["npub", "note", "nsec"] {
-            let err = decode(&craft(hrp, &[0u8; 16])).unwrap_err();
-            assert_eq!(err.kind(), ErrorKind::Nip19, "{hrp}");
+            assert!(
+                matches!(
+                    Entity::from_bech32(&craft(hrp, &[0u8; 16])),
+                    Err(Error::InvalidLength {
+                        expected: 32,
+                        found: 16
+                    })
+                ),
+                "{hrp}"
+            );
         }
     }
 
     #[test]
-    fn invalid_nsec_scalars_rejected_with_source() {
+    fn invalid_nsec_scalars_rejected() {
         for scalar in [[0u8; 32], [0xff; 32]] {
-            let err = decode(&craft("nsec", &scalar)).unwrap_err();
-            assert_eq!(err.kind(), ErrorKind::Nip19);
-            assert!(err.source().is_some());
+            assert!(matches!(
+                Entity::from_bech32(&craft("nsec", &scalar)),
+                Err(Error::InvalidSecretKey)
+            ));
+            assert!(matches!(
+                SecretKey::from_bech32(&craft("nsec", &scalar)),
+                Err(Error::InvalidSecretKey)
+            ));
         }
     }
 
@@ -662,62 +968,69 @@ mod tests {
             kind: Kind::new(65535),
             relays: Vec::new(),
         };
-        decode(&pointer.to_bech32().unwrap()).unwrap();
+        Entity::from_bech32(&pointer.to_bech32().unwrap()).unwrap();
 
-        // 65536 on the wire is out of range (ruling N1).
+        // 65536 on the wire is out of range.
         let mut data = Vec::new();
         push_tlv(&mut data, TLV_SPECIAL, b"").unwrap();
         push_tlv(&mut data, TLV_AUTHOR, &PK).unwrap();
         push_tlv(&mut data, TLV_KIND, &65536u32.to_be_bytes()).unwrap();
-        let err = decode(&craft("naddr", &data)).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Nip19);
-        assert!(err.to_string().contains("invalid kind"));
+        assert!(matches!(
+            Entity::from_bech32(&craft("naddr", &data)),
+            Err(Error::KindOutOfRange { kind: 65536 })
+        ));
 
         // Same rejection on the optional nevent kind.
         let mut event_data = Vec::new();
         push_tlv(&mut event_data, TLV_SPECIAL, &ID).unwrap();
         push_tlv(&mut event_data, TLV_KIND, &u32::MAX.to_be_bytes()).unwrap();
-        assert_eq!(
-            decode(&craft("nevent", &event_data)).unwrap_err().kind(),
-            ErrorKind::Nip19
-        );
+        assert!(matches!(
+            Entity::from_bech32(&craft("nevent", &event_data)),
+            Err(Error::KindOutOfRange { kind: u32::MAX })
+        ));
     }
 
     #[test]
     fn malformed_tlv_rejected() {
-        assert_eq!(
-            decode(&craft("nprofile", &[1])).unwrap_err().kind(),
-            ErrorKind::Nip19
-        );
+        assert!(matches!(
+            Entity::from_bech32(&craft("nprofile", &[1])),
+            Err(Error::InvalidTlv { .. })
+        ));
         // Declared length runs past the data.
-        let err = decode(&craft("nprofile", &[TLV_RELAY, 9, 1, 2])).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Nip19);
-        // Missing TLV 0.
-        let missing = decode(&craft("nprofile", &[])).unwrap_err();
-        assert!(missing.to_string().contains("missing TLV 0"));
-        let missing_two = decode(&craft("naddr", &[TLV_SPECIAL, 0])).unwrap_err();
-        assert!(missing_two.to_string().contains("missing TLV 2"));
+        assert!(matches!(
+            Entity::from_bech32(&craft("nprofile", &[TLV_RELAY, 9, 1, 2])),
+            Err(Error::InvalidTlv { .. })
+        ));
+        // Missing required TLVs.
+        assert!(matches!(
+            Entity::from_bech32(&craft("nprofile", &[])),
+            Err(Error::MissingTlv { .. })
+        ));
+        assert!(matches!(
+            Entity::from_bech32(&craft("naddr", &[TLV_SPECIAL, 0])),
+            Err(Error::MissingTlv { .. })
+        ));
         // Wrong-length single-valued TLVs.
         let mut short = Vec::new();
         push_tlv(&mut short, TLV_SPECIAL, &[0u8; 16]).unwrap();
-        assert_eq!(
-            decode(&craft("nprofile", &short)).unwrap_err().kind(),
-            ErrorKind::Nip19
-        );
+        assert!(matches!(
+            Entity::from_bech32(&craft("nprofile", &short)),
+            Err(Error::InvalidTlv { .. })
+        ));
         let mut bad_author = Vec::new();
         push_tlv(&mut bad_author, TLV_SPECIAL, &ID).unwrap();
         push_tlv(&mut bad_author, TLV_AUTHOR, &[0u8; 16]).unwrap();
-        assert_eq!(
-            decode(&craft("nevent", &bad_author)).unwrap_err().kind(),
-            ErrorKind::Nip19
-        );
+        assert!(matches!(
+            Entity::from_bech32(&craft("nevent", &bad_author)),
+            Err(Error::InvalidTlv { .. })
+        ));
         let mut bad_kind = Vec::new();
         push_tlv(&mut bad_kind, TLV_SPECIAL, &ID).unwrap();
         push_tlv(&mut bad_kind, TLV_KIND, &[0u8; 2]).unwrap();
-        assert_eq!(
-            decode(&craft("nevent", &bad_kind)).unwrap_err().kind(),
-            ErrorKind::Nip19
-        );
+        assert!(matches!(
+            Entity::from_bech32(&craft("nevent", &bad_kind)),
+            Err(Error::InvalidTlv { .. })
+        ));
     }
 
     #[test]
@@ -727,21 +1040,30 @@ mod tests {
             pubkey: pubkey(),
             relays: vec![relay.clone()],
         };
-        assert_eq!(pointer.to_bech32().unwrap_err().kind(), ErrorKind::Nip19);
+        assert!(matches!(
+            pointer.to_bech32(),
+            Err(Error::TlvTooLong { len: 306 })
+        ));
         let event = EventPointer {
             id: event_id(),
             relays: vec![relay],
             author: None,
             kind: None,
         };
-        assert_eq!(event.to_bech32().unwrap_err().kind(), ErrorKind::Nip19);
+        assert!(matches!(
+            event.to_bech32(),
+            Err(Error::TlvTooLong { len: 306 })
+        ));
         let address = AddressPointer {
             identifier: "x".repeat(300),
             pubkey: pubkey(),
             kind: Kind::new(1),
             relays: Vec::new(),
         };
-        assert_eq!(address.to_bech32().unwrap_err().kind(), ErrorKind::Nip19);
+        assert!(matches!(
+            address.to_bech32(),
+            Err(Error::TlvTooLong { len: 300 })
+        ));
     }
 
     #[test]
@@ -760,20 +1082,22 @@ mod tests {
         assert_eq!(data.len(), 3117);
         let code = craft("naddr", &data);
         assert_eq!(code.len(), BECH32_MAX_LEN);
-        assert!(decode(&code).is_ok());
+        assert!(Entity::from_bech32(&code).is_ok());
 
         data.push(0);
         let over = craft("naddr", &data);
         assert_eq!(over.len(), BECH32_MAX_LEN + 1);
-        assert_eq!(decode(&over).unwrap_err().kind(), ErrorKind::Nip19);
+        assert!(matches!(
+            Entity::from_bech32(&over),
+            Err(Error::Bech32 { .. })
+        ));
     }
 
     #[test]
     fn non_canonical_padding_rejected() {
         // A 32-byte payload encodes to 52 fes = 260 bits; the last fe holds
         // 1 data bit and 4 padding bits that must be zero. Setting a padding
-        // bit keeps the payload bytes identical but must still be rejected —
-        // `@scure/base` calls this "Non-zero padding".
+        // bit keeps the payload bytes identical but must still be rejected.
         let mut fes: Vec<Fe32> = PK.iter().copied().bytes_to_fes().collect();
         let last = fes.last_mut().unwrap();
         *last = Fe32::try_from(last.to_u8() | 0b0001).unwrap();
@@ -783,6 +1107,9 @@ mod tests {
             .with_checksum::<Nip19Bech32>(&HRP_NPUB)
             .chars()
             .collect();
-        assert_eq!(decode(&code).unwrap_err().kind(), ErrorKind::Nip19);
+        assert!(matches!(
+            Entity::from_bech32(&code),
+            Err(Error::Bech32 { .. })
+        ));
     }
 }

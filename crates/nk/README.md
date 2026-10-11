@@ -21,14 +21,14 @@ event.verify()?;
 
 ## NIPs
 
-`nk::nips` hosts the feature-gated NIP implementations, sharing the NIP-layer `Error`/`ErrorKind` — separate from the per-module core errors: `nip19` — the bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) byte-identical to the TS implementation; `nip21` — the `nostr:` URI scheme; `nip04` — the legacy AES-256-CBC encrypted-DM payload; `nip44` — NIP-44 v2 authenticated payload encryption with constant-time MAC verification; `nip49` — `ncryptsec` secret-key encryption; and the remaining NIPs listed in the feature table below.
+`nk::nips` hosts the feature-gated NIP implementations. Most share the NIP-layer `Error`/`ErrorKind` — separate from the per-module core errors — while the encoding NIPs carry their own `Error` enums (`nip19::Error`, `nip21::Error`, `nip46::Error`, `nip49::Error`): `nip19` — the bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) byte-identical to the TS implementation; `nip21` — the `nostr:` URI scheme; `nip04` — the legacy AES-256-CBC encrypted-DM payload; `nip44` — NIP-44 v2 authenticated payload encryption with constant-time MAC verification; `nip49` — `ncryptsec` secret-key encryption; and the remaining NIPs listed in the feature table below.
 
 ```rust,ignore
-use nk::nips::nip19;
+use nk::nips::nip19::Entity;
 use nk::SecretKey;
 
-let nsec = nip19::encode_nsec(&SecretKey::generate())?; // os-rng feature
-let entity = nip19::decode(&nsec)?;
+let nsec = SecretKey::generate().to_bech32(); // os-rng feature
+let entity = Entity::from_bech32(&nsec)?;
 ```
 
 ## Features
@@ -43,12 +43,12 @@ let entity = nip19::decode(&nsec)?;
 | `nip13`  | no      | proof of work (`pow`, `PowMiner`)                                                                       | —                                                     |
 | `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`, kind-10050 lists); needs `nip59`              | —                                                     |
 | `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`)                                  | `bech32`                                              |
-| `nip21`  | no      | `nostr:` URI scheme (`NostrUri`, `is_nostr_uri`); needs `nip19`                                         | —                                                     |
+| `nip21`  | no      | `nostr:` URI scheme (`NostrUri`); needs `nip19`                                                         | —                                                     |
 | `nip27`  | no      | content tokenizer (`parse_content`, `ContentBlock`); needs `nip19`                                      | `unicode-properties`                                  |
 | `nip42`  | no      | relay authentication (`auth_event`, `is_auth_required`)                                                 | —                                                     |
 | `nip44`  | no      | NIP-44 v2 payload encryption (`ConversationKey`, `encrypt`/`decrypt`)                                   | `base64ct`, `chacha20`, `hkdf`, `hmac`                |
-| `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Request`/`Response`)                   | —                                                     |
-| `nip49`  | no      | `ncryptsec` secret-key encryption (`encrypt_with`/`encrypt`/`decrypt`); needs `nip19`                   | `chacha20poly1305`, `scrypt`, `unicode-normalization` |
+| `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Method`, `Request`/`Response`)         | —                                                     |
+| `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptedSecretKey`); needs `nip19`                                 | `chacha20poly1305`, `scrypt`, `unicode-normalization` |
 | `nip51`  | no      | lists (`parse_mute_list`, `mute_list`, `pin_list`, `bookmark_list`, NIP-44 private tags); needs `nip44` | —                                                     |
 | `nip57`  | no      | Lightning zaps (`ZapTarget`, `zap_request`, `parse_bolt11`, `validate_zap_receipt`)                     | `bech32`                                              |
 | `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`                                 | —                                                     |

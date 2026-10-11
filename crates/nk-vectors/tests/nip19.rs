@@ -17,8 +17,7 @@
 
 mod common;
 
-use nk::nips::ErrorKind;
-use nk::nips::nip19;
+use nk::nips::nip19::Entity;
 use serde::Deserialize;
 
 use common::{EntityJson, encode_entity, entity_json};
@@ -49,7 +48,7 @@ struct Vector {
 }
 
 fn run_decode_case(label: &str, input: &str, case: &Case) {
-    match nip19::decode(input) {
+    match Entity::from_bech32(input) {
         Ok(entity) => {
             let expected = case
                 .decoded
@@ -69,7 +68,6 @@ fn run_decode_case(label: &str, input: &str, case: &Case) {
                 Some("Nip19Error"),
                 "{label}: unexpected decode error {error}"
             );
-            assert_eq!(error.kind(), ErrorKind::Nip19, "{label}");
         }
     }
 }
@@ -83,7 +81,7 @@ fn run_encode_case(label: &str, encode: &EntityJson, case: &Case) {
                 "{label}: encode mismatch"
             );
             if let Some(expected) = &case.decoded {
-                let entity = nip19::decode(&code)
+                let entity = Entity::from_bech32(&code)
                     .unwrap_or_else(|e| panic!("{label}: encoded string failed to decode: {e}"));
                 assert_eq!(&entity_json(&entity), expected, "{label}");
             }
