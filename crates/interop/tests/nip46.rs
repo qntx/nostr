@@ -311,7 +311,9 @@ fn request_cases(check: &mut DivergenceCheck) {
                 })
                 .expect("request serializes")
             });
-        let agrees = outcome.as_deref() == Some(case.json.as_str());
+        let agrees = outcome
+            .as_deref()
+            .is_some_and(|got| common::json_eq(got, &case.json));
         let got = outcome.unwrap_or_else(|| "rejected".to_owned());
         check.check(&case.name, agrees, &got);
     }
@@ -357,7 +359,7 @@ fn response_cases(check: &mut DivergenceCheck) {
             error: case.response.error.clone(),
         })
         .expect("response serializes");
-        check.check(&case.name, got == case.json, &got);
+        check.check(&case.name, common::json_eq(&got, &case.json), &got);
     }
 }
 

@@ -128,21 +128,25 @@ fn load(capability: &str) -> Fixture {
 
 /// Replays one capability: `run` returns `Some(output)` when rust-nostr
 /// accepts the input, `None` on rejection — mirroring the TS `out`/`err`
-/// split. Mismatches are counted and sampled, not asserted.
+/// split. `expected_of` projects `case.out` onto the shared output
+/// vocabulary before comparing (identity for most streams; re-encoded JSON
+/// strings parse to `Value`, and `nip27.tokenize` folds TS-only block kinds
+/// onto `text`/`url`). Mismatches are counted and sampled, not asserted.
 #[allow(
     clippy::print_stderr,
     reason = "the differential runner reports progress on stderr"
 )]
-fn replay<F>(capability: &str, run: F)
+fn replay<F, E>(capability: &str, run: F, expected_of: E)
 where
     F: Fn(&str) -> Option<serde_json::Value>,
+    E: Fn(&Case) -> Option<serde_json::Value>,
 {
     let fixture = load(capability);
     let mut diverged: u64 = 0;
     let mut samples: Vec<serde_json::Value> = Vec::new();
     for case in &fixture.cases {
-        let agrees = match (run(&case.input), &case.out) {
-            (Some(got), Some(expected)) => &got == expected,
+        let agrees = match (run(&case.input), expected_of(case)) {
+            (Some(got), Some(expected)) => got == expected,
             (None, None) => true,
             _ => false,
         };
@@ -185,6 +189,20 @@ const fn json_str(s: String) -> serde_json::Value {
     serde_json::Value::String(s)
 }
 
+/// `out` is already a `serde_json::Value` on most streams.
+fn expected_value(case: &Case) -> Option<serde_json::Value> {
+    case.out.clone()
+}
+
+/// Message streams record `out` as the re-encoded JSON document; compare
+/// the parse, not the bytes (key order is not semantic).
+fn expected_json(case: &Case) -> Option<serde_json::Value> {
+    case.out
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .and_then(|json| serde_json::from_str(json).ok())
+}
+
 // `core.event.serialize` is not replayed: the stream output is the NIP-01
 // id preimage `[0, pubkey, created_at, kind, tags, content]`, whose bytes
 // rust-nostr never exposes (`compute_id` builds and hashes it internally).
@@ -192,49 +210,65 @@ const fn json_str(s: String) -> serde_json::Value {
 #[test]
 #[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
 fn diff_event_id() {
-    replay("core.event.id", |input| {
-        serde_json::from_str::<UnsignedEvent>(input)
-            .ok()
-            .map(|unsigned| json_str(unsigned.compute_id().to_hex()))
-    });
+    replay(
+        "core.event.id",
+        |input| {
+            serde_json::from_str::<UnsignedEvent>(input)
+                .ok()
+                .map(|unsigned| json_str(unsigned.compute_id().to_hex()))
+        },
+        expected_value,
+    );
 }
 
 #[test]
 #[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
 fn diff_filter_match() {
-    replay("core.filter.match", |input| {
-        #[derive(Deserialize)]
-        struct MatchInput {
-            filter: Filter,
-            event: Event,
-        }
-        let parsed: MatchInput = serde_json::from_str(input).ok()?;
-        Some(serde_json::Value::Bool(
-            parsed
-                .filter
-                .match_event(&parsed.event, MatchEventOptions::new()),
-        ))
-    });
+    replay(
+        "core.filter.match",
+        |input| {
+            #[derive(Deserialize)]
+            struct MatchInput {
+                filter: Filter,
+                event: Event,
+            }
+            let parsed: MatchInput = serde_json::from_str(input).ok()?;
+            Some(serde_json::Value::Bool(
+                parsed
+                    .filter
+                    .match_event(&parsed.event, MatchEventOptions::new()),
+            ))
+        },
+        expected_value,
+    );
 }
 
 #[test]
 #[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
 fn diff_message_client() {
-    replay("core.message.client", |input| {
-        ClientMessage::from_json(input)
-            .ok()
-            .map(|message| json_str(message.as_json()))
-    });
+    replay(
+        "core.message.client",
+        |input| {
+            ClientMessage::from_json(input)
+                .ok()
+                .and_then(|message| common::json_value(&message.as_json()))
+        },
+        expected_json,
+    );
 }
 
 #[test]
 #[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
 fn diff_message_relay() {
-    replay("core.message.relay", |input| {
-        RelayMessage::from_json(input)
-            .ok()
-            .map(|message| json_str(message.as_json()))
-    });
+    replay(
+        "core.message.relay",
+        |input| {
+            RelayMessage::from_json(input)
+                .ok()
+                .and_then(|message| common::json_value(&message.as_json()))
+        },
+        expected_json,
+    );
 }
 
 /// `nip46.uri` inputs carry `{"client": …}` for the `nostrconnect://`
@@ -243,90 +277,95 @@ fn diff_message_relay() {
 #[test]
 #[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
 fn diff_nip46_uri() {
-    replay("nip46.uri", |input| {
-        #[derive(Deserialize)]
-        struct UriInput {
-            pubkey: Option<String>,
-            client: Option<String>,
-            relays: Vec<String>,
-            secret: Option<String>,
-            #[allow(dead_code, reason = "nostr's nostrconnect model has no perms param")]
-            perms: Option<Vec<String>>,
-            name: Option<String>,
-            url: Option<String>,
-            image: Option<String>,
-        }
-        let input: UriInput = serde_json::from_str(input).ok()?;
-        let relays: Vec<RelayUrl> = input
-            .relays
-            .iter()
-            .map(|r| RelayUrl::parse(r).ok())
-            .collect::<Option<_>>()?;
-        if let Some(client) = &input.client {
-            let mut metadata = NostrConnectMetadata::new(input.name.clone().unwrap_or_default());
-            if let Some(url) = &input.url {
-                metadata = metadata.url(Url::parse(url).ok()?);
+    replay(
+        "nip46.uri",
+        |input| {
+            #[derive(Deserialize)]
+            struct UriInput {
+                pubkey: Option<String>,
+                client: Option<String>,
+                relays: Vec<String>,
+                secret: Option<String>,
+                #[allow(dead_code, reason = "nostr's nostrconnect model has no perms param")]
+                perms: Option<Vec<String>>,
+                name: Option<String>,
+                url: Option<String>,
+                image: Option<String>,
             }
-            if let Some(image) = &input.image {
-                metadata = metadata.icons(vec![Url::parse(image).ok()?]);
+            let input: UriInput = serde_json::from_str(input).ok()?;
+            let relays: Vec<RelayUrl> = input
+                .relays
+                .iter()
+                .map(|r| RelayUrl::parse(r).ok())
+                .collect::<Option<_>>()?;
+            if let Some(client) = &input.client {
+                let mut metadata =
+                    NostrConnectMetadata::new(input.name.clone().unwrap_or_default());
+                if let Some(url) = &input.url {
+                    metadata = metadata.url(Url::parse(url).ok()?);
+                }
+                if let Some(image) = &input.image {
+                    metadata = metadata.icons(vec![Url::parse(image).ok()?]);
+                }
+                let uri = NostrConnectUri::Client {
+                    public_key: PublicKey::from_hex(client).ok()?,
+                    relays,
+                    metadata,
+                    secret: input.secret.clone().unwrap_or_default(),
+                }
+                .to_string();
+                // Re-parse like the TS side does: a serialization bug must not
+                // hide behind a shared encoder.
+                let parsed = NostrConnectUri::from_str(&uri).ok()?;
+                let NostrConnectUri::Client {
+                    public_key,
+                    relays: parsed_relays,
+                    metadata: parsed_metadata,
+                    secret: parsed_secret,
+                } = parsed
+                else {
+                    return None;
+                };
+                Some(serde_json::json!({
+                    "uri": uri,
+                    "parsed": {
+                        "clientPubkey": public_key.to_hex(),
+                        "relays": parsed_relays.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                        "secret": parsed_secret,
+                        "perms": Vec::<String>::new(),
+                        "name": parsed_metadata.name,
+                        "url": parsed_metadata.url.map(|u| u.to_string()),
+                        "image": parsed_metadata.icons.and_then(|i| i.first().map(ToString::to_string)),
+                    },
+                }))
+            } else {
+                let uri = NostrConnectUri::Bunker {
+                    remote_signer_public_key: PublicKey::from_hex(input.pubkey.as_deref()?).ok()?,
+                    relays,
+                    secret: input.secret.clone(),
+                }
+                .to_string();
+                let parsed = NostrConnectUri::from_str(&uri).ok()?;
+                let NostrConnectUri::Bunker {
+                    remote_signer_public_key,
+                    relays: parsed_relays,
+                    secret: parsed_secret,
+                } = parsed
+                else {
+                    return None;
+                };
+                Some(serde_json::json!({
+                    "uri": uri,
+                    "parsed": {
+                        "pubkey": remote_signer_public_key.to_hex(),
+                        "relays": parsed_relays.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                        "secret": parsed_secret,
+                    },
+                }))
             }
-            let uri = NostrConnectUri::Client {
-                public_key: PublicKey::from_hex(client).ok()?,
-                relays,
-                metadata,
-                secret: input.secret.clone().unwrap_or_default(),
-            }
-            .to_string();
-            // Re-parse like the TS side does: a serialization bug must not
-            // hide behind a shared encoder.
-            let parsed = NostrConnectUri::from_str(&uri).ok()?;
-            let NostrConnectUri::Client {
-                public_key,
-                relays: parsed_relays,
-                metadata: parsed_metadata,
-                secret: parsed_secret,
-            } = parsed
-            else {
-                return None;
-            };
-            Some(serde_json::json!({
-                "uri": uri,
-                "parsed": {
-                    "clientPubkey": public_key.to_hex(),
-                    "relays": parsed_relays.iter().map(ToString::to_string).collect::<Vec<_>>(),
-                    "secret": parsed_secret,
-                    "perms": Vec::<String>::new(),
-                    "name": parsed_metadata.name,
-                    "url": parsed_metadata.url.map(|u| u.to_string()),
-                    "image": parsed_metadata.icons.and_then(|i| i.first().map(ToString::to_string)),
-                },
-            }))
-        } else {
-            let uri = NostrConnectUri::Bunker {
-                remote_signer_public_key: PublicKey::from_hex(input.pubkey.as_deref()?).ok()?,
-                relays,
-                secret: input.secret.clone(),
-            }
-            .to_string();
-            let parsed = NostrConnectUri::from_str(&uri).ok()?;
-            let NostrConnectUri::Bunker {
-                remote_signer_public_key,
-                relays: parsed_relays,
-                secret: parsed_secret,
-            } = parsed
-            else {
-                return None;
-            };
-            Some(serde_json::json!({
-                "uri": uri,
-                "parsed": {
-                    "pubkey": remote_signer_public_key.to_hex(),
-                    "relays": parsed_relays.iter().map(ToString::to_string).collect::<Vec<_>>(),
-                    "secret": parsed_secret,
-                },
-            }))
-        }
-    });
+        },
+        expected_value,
+    );
 }
 
 /// One `nip19.codec` input: `{"op":"encode","entity":…}` or
@@ -341,18 +380,22 @@ struct Nip19Case {
 #[test]
 #[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
 fn diff_nip19_codec() {
-    replay("nip19.codec", |input| {
-        let req: Nip19Case = serde_json::from_str(input).ok()?;
-        if req.op == "encode" {
-            return entity_from_json(&req.entity?)
-                .ok()
-                .and_then(|entity| entity.to_bech32().ok())
-                .map(json_str);
-        }
-        Nip19::from_bech32(&req.input?)
-            .ok()
-            .map(|entity| serde_json::to_value(entity_json(&entity)).expect("entity serializes"))
-    });
+    replay(
+        "nip19.codec",
+        |input| {
+            let req: Nip19Case = serde_json::from_str(input).ok()?;
+            if req.op == "encode" {
+                return entity_from_json(&req.entity?)
+                    .ok()
+                    .and_then(|entity| entity.to_bech32().ok())
+                    .map(json_str);
+            }
+            Nip19::from_bech32(&req.input?).ok().map(|entity| {
+                serde_json::to_value(entity_json(&entity)).expect("entity serializes")
+            })
+        },
+        expected_value,
+    );
 }
 
 /// `nip27.tokenize` inputs are `{"content": …, "tags"?: …, "legacy"?: …,
@@ -361,14 +404,27 @@ fn diff_nip19_codec() {
 #[test]
 #[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
 fn diff_nip27_tokenize() {
-    replay("nip27.tokenize", |input| {
-        #[derive(Deserialize)]
-        struct TokenizeInput {
-            content: String,
-        }
-        let req: TokenizeInput = serde_json::from_str(input).ok()?;
-        Some(common::content_blocks(&req.content))
-    });
+    replay(
+        "nip27.tokenize",
+        |input| {
+            #[derive(Deserialize)]
+            struct TokenizeInput {
+                content: String,
+            }
+            let req: TokenizeInput = serde_json::from_str(input).ok()?;
+            Some(common::content_blocks(&req.content))
+        },
+        |case| {
+            #[derive(Deserialize)]
+            struct TokenizeInput {
+                content: String,
+            }
+            let req: TokenizeInput = serde_json::from_str(&case.input).ok()?;
+            case.out
+                .as_ref()
+                .map(|out| common::project_blocks(&req.content, out))
+        },
+    );
 }
 
 /// One `nip44.v2` input: `{"op":"encrypt","conversation_key","nonce",
@@ -386,35 +442,39 @@ struct Nip44Case {
 #[test]
 #[ignore = "requires INTEROP_DIFF_DIR: bun packages/nostr/scripts/parity/diff.ts"]
 fn diff_nip44_v2() {
-    replay("nip44.v2", |input| {
-        let req: Nip44Case = serde_json::from_str(input).ok()?;
-        match req.op.as_str() {
-            "encrypt" => {
-                let key = ConversationKey::from_slice(&unhex_arr::<32>(
-                    req.conversation_key.as_deref()?,
-                )?)
-                .ok()?;
-                let nonce = unhex_arr::<32>(req.nonce.as_deref()?)?;
-                let payload = v2::encrypt_to_bytes_with_nonce(
-                    &key,
-                    req.plaintext.as_deref().unwrap_or("").as_bytes(),
-                    nonce,
-                )
-                .ok()?;
-                Some(json_str(general_purpose::STANDARD.encode(&payload)))
-            }
-            "decrypt" => {
-                let key = ConversationKey::from_slice(&unhex_arr::<32>(
-                    req.conversation_key.as_deref()?,
-                )?)
-                .ok()?;
-                let payload = general_purpose::STANDARD
-                    .decode(req.payload.as_deref()?)
+    replay(
+        "nip44.v2",
+        |input| {
+            let req: Nip44Case = serde_json::from_str(input).ok()?;
+            match req.op.as_str() {
+                "encrypt" => {
+                    let key = ConversationKey::from_slice(&unhex_arr::<32>(
+                        req.conversation_key.as_deref()?,
+                    )?)
                     .ok()?;
-                let plaintext = v2::decrypt_to_bytes(&key, &payload).ok()?;
-                Some(json_str(String::from_utf8(plaintext).ok()?))
+                    let nonce = unhex_arr::<32>(req.nonce.as_deref()?)?;
+                    let payload = v2::encrypt_to_bytes_with_nonce(
+                        &key,
+                        req.plaintext.as_deref().unwrap_or("").as_bytes(),
+                        nonce,
+                    )
+                    .ok()?;
+                    Some(json_str(general_purpose::STANDARD.encode(&payload)))
+                }
+                "decrypt" => {
+                    let key = ConversationKey::from_slice(&unhex_arr::<32>(
+                        req.conversation_key.as_deref()?,
+                    )?)
+                    .ok()?;
+                    let payload = general_purpose::STANDARD
+                        .decode(req.payload.as_deref()?)
+                        .ok()?;
+                    let plaintext = v2::decrypt_to_bytes(&key, &payload).ok()?;
+                    Some(json_str(String::from_utf8(plaintext).ok()?))
+                }
+                _ => None,
             }
-            _ => None,
-        }
-    });
+        },
+        expected_value,
+    );
 }

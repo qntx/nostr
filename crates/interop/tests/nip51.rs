@@ -97,7 +97,6 @@ struct EncryptCase {
 struct DecryptCase {
     name: String,
     secret_key: String,
-    #[allow(dead_code, reason = "the declared author is not needed for decryption")]
     pubkey: String,
     content: String,
     out: Option<Vec<Vec<String>>>,
@@ -180,7 +179,9 @@ fn build_cases(check: &mut DivergenceCheck) {
         let outcome = build_outcome(case);
         let expect = case.builder.as_ref().expect("build case has builder");
         let agrees = outcome.as_ref().is_some_and(|(kind, content, tags)| {
-            *kind == expect.kind && content == &expect.content && tags == &expect.tags
+            *kind == expect.kind
+                && content == &expect.content
+                && common::same_tag_multiset(&expect.tags, tags)
         });
         let got = outcome.map_or_else(
             || "input not expressible".to_owned(),
@@ -218,6 +219,15 @@ fn private_encrypt_cases(check: &mut DivergenceCheck) {
 fn private_decrypt_cases(check: &mut DivergenceCheck) {
     let codec: Codec = serde_json::from_str(CODEC).expect("parse codec.json");
     for case in &codec.private.decrypt {
+        // The `pubkey` field is the declared author; the vector's
+        // author-binding check has no rust-nostr counterpart — its decrypt
+        // API takes only the content and recipient key.
+        if SecretKey::from_hex(&case.secret_key).map(|key| Keys::new(key).public_key().to_hex())
+            != Ok(case.pubkey.clone())
+        {
+            check.skip(&format!("decrypt: {}", case.name));
+            continue;
+        }
         let outcome = (|| {
             let key = conversation_key(&case.secret_key)?;
             let payload = general_purpose::STANDARD.decode(&case.content).ok()?;

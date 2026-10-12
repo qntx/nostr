@@ -64,19 +64,19 @@ fn wrap_cases(check: &mut DivergenceCheck) {
 fn unwrap_cases(check: &mut DivergenceCheck) {
     let vector: Vector = serde_json::from_str(CODEC).expect("parse codec.json");
     for case in &vector.unwrap {
-        let outcome: Option<(serde_json::Value, String)> = (|| {
+        let outcome: Option<(serde_json::Value, String, String)> = (|| {
             let gift_wrap: Event = serde_json::from_value(case.gift_wrap.clone()).ok()?;
             let keys = Keys::new(SecretKey::from_hex(&case.recipient_secret_key).ok()?);
             let gift = UnwrappedGift::from_gift_wrap(&keys, &gift_wrap).ok()?;
+            // A rumor may carry no `id`; `UnsignedEvent` computes it lazily,
+            // so compare the computed id.
+            let id = gift.rumor.compute_id().to_hex();
             let rumor = serde_json::to_value(&gift.rumor).ok()?;
-            Some((rumor, gift.sender.to_hex()))
+            Some((rumor, gift.sender.to_hex(), id))
         })();
         let agrees = match (&case.rumor, &outcome) {
-            (Some(expected), Some((rumor, _))) => {
-                // The vector records the unsigned rumor fields; serde_json's
-                // object comparison is order-insensitive but shape differs
-                // (nostr serializes tags the same wire way).
-                expected.get("id") == rumor.get("id")
+            (Some(expected), Some((rumor, _, id))) => {
+                expected.get("id").and_then(serde_json::Value::as_str) == Some(id.as_str())
                     && expected.get("pubkey") == rumor.get("pubkey")
                     && expected.get("created_at") == rumor.get("created_at")
                     && expected.get("kind") == rumor.get("kind")
@@ -88,7 +88,7 @@ fn unwrap_cases(check: &mut DivergenceCheck) {
         };
         let got = outcome.map_or_else(
             || "rejected".to_owned(),
-            |(rumor, _)| format!("rumor={rumor}"),
+            |(rumor, _, _)| format!("rumor={rumor}"),
         );
         check.check(&case.name, agrees, &got);
     }

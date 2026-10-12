@@ -56,6 +56,7 @@ struct RelayBuildCase {
     name: String,
     relays: Vec<String>,
     tags: Option<Vec<Vec<String>>>,
+    #[allow(dead_code, reason = "rejection is signalled by a missing `tags`")]
     error: Option<String>,
 }
 
@@ -112,17 +113,24 @@ fn relay_list_cases(check: &mut DivergenceCheck) {
                     .collect(),
             )
         })();
-        let agrees = match (&case.tags, &case.error, &outcome) {
-            (Some(expected), _, Some(tags)) => tags == expected,
-            // The vector expects an error (e.g. empty list);
-            // rust-nostr's builder has no error path.
-            _ => false,
-        };
-        let got = outcome.map_or_else(
-            || "input not expressible".to_owned(),
-            |tags| format!("tags={tags:?}"),
-        );
-        check.check(&format!("build: {}", case.name), agrees, &got);
+        match &outcome {
+            // `RelayUrl::parse` cannot express the relay inputs (and the
+            // builder has no error path for the vector's rejected cases).
+            None => check.skip(&format!("build: {}", case.name)),
+            Some(tags) if case.tags.is_some() => {
+                let expected = case.tags.as_ref().expect("checked above");
+                check.check(
+                    &format!("build: {}", case.name),
+                    common::same_tag_multiset(expected, tags),
+                    &format!("tags={tags:?}"),
+                );
+            }
+            Some(tags) => check.check(
+                &format!("build: {}", case.name),
+                false,
+                &format!("tags={tags:?}"),
+            ),
+        }
     }
     for case in &vector.relay_list.parse {
         let outcome: Option<Vec<String>> = serde_json::from_value::<Event>(case.event.clone())

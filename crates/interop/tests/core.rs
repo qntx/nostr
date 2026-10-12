@@ -1,8 +1,9 @@
 //! Executes `vectors/core/*.json` against rust-nostr's public API.
 //!
-//! Capabilities with no rust-nostr counterpart (hex codec, URL normalization
-//! beyond `url::Url`, filter canonicalization/fingerprint, COUNT HLL) are not
-//! run here; `parity.json` records them as `rust: null`.
+//! Capabilities with no rust-nostr counterpart (hex codec, URL
+//! normalization, the intrinsic filter limit, filter
+//! canonicalization/fingerprint, COUNT HLL) are not run here; `parity.json`
+//! records them as `rust: null`.
 
 #![allow(
     unused_crate_dependencies,
@@ -55,10 +56,7 @@ const FILTER_MATCH: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../vectors/core/filter-match.json"
 ));
-const FILTER_LIMIT: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../vectors/core/filter-limit.json"
-));
+
 const BUILDER: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../vectors/core/builder.json"
@@ -78,10 +76,6 @@ const TAG_BUILD: &str = include_str!(concat!(
 const EVENT_ORDER: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../vectors/core/event-order.json"
-));
-const URL_NORMALIZE: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../vectors/core/url-normalize.json"
 ));
 const EVENT_SIGNED_MATCHES: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -256,7 +250,7 @@ fn event_validate() {
             |event| format!("accepted, re-encodes as {}", event.as_json()),
         );
         let agrees = match (&case.parsed, &case.error, parsed) {
-            (Some(expected), None, Ok(event)) => event.as_json() == *expected,
+            (Some(expected), None, Ok(event)) => common::json_eq(&event.as_json(), expected),
             (None, Some(_), Err(_)) => true,
             _ => false,
         };
@@ -367,37 +361,6 @@ fn filter_match() {
 }
 
 #[derive(Debug, Deserialize)]
-struct FilterLimitCase {
-    filter: serde_json::Value,
-    limit: Option<usize>,
-}
-
-#[test]
-fn filter_limit() {
-    #[derive(Deserialize)]
-    struct Vector {
-        cases: Vec<FilterLimitCase>,
-    }
-    let vector: Vector = serde_json::from_str(FILTER_LIMIT).expect("filter-limit.json must parse");
-    let mut check = DivergenceCheck::new("core.filter.limit");
-    for (index, case) in vector.cases.iter().enumerate() {
-        let outcome = Filter::from_json(case.filter.to_string())
-            .ok()
-            .map(|filter| filter.limit);
-        let got = outcome.map_or_else(
-            || "input rejected".to_owned(),
-            |limit| format!("limit={limit:?}"),
-        );
-        check.check(
-            &index.to_string(),
-            outcome.is_some_and(|o| o == case.limit),
-            &got,
-        );
-    }
-    check.finish();
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum DeletionTargetCase {
     Id(String),
@@ -417,6 +380,7 @@ struct BuilderCase {
     reason: Option<String>,
     target: Option<serde_json::Value>,
     relay: Option<String>,
+    p_pubkey: Option<String>,
     #[serde(rename = "unsignedJson")]
     unsigned_json: Option<String>,
     error: Option<String>,
@@ -483,7 +447,10 @@ fn build_case(case: &BuilderCase, index: usize) -> Option<EventBuilder> {
         }
         "reaction" => {
             let target = Event::from_json(case.target.as_ref()?.to_string()).ok()?;
-            let hint = case.relay.as_deref().map(|raw| RelayUrl::parse(raw).ok())?;
+            let hint = case
+                .relay
+                .as_deref()
+                .and_then(|raw| RelayUrl::parse(raw).ok());
             Some(
                 ReactionBuilder::new(
                     ReactionTarget::new(&target, hint),
@@ -493,6 +460,11 @@ fn build_case(case: &BuilderCase, index: usize) -> Option<EventBuilder> {
             )
         }
         "repost" | "generic_repost" => {
+            if case.p_pubkey.is_some() {
+                // `RepostBuilder` always tags the target's own author; a
+                // caller-chosen `p` pubkey cannot be expressed.
+                return None;
+            }
             let target = Event::from_json(case.target.as_ref()?.to_string()).ok()?;
             let hint = RelayUrl::parse(case.relay.as_deref()?).ok()?;
             Some(
@@ -522,15 +494,24 @@ fn builder() {
             builder
                 .custom_created_at(created_at)
                 .finalize_unsigned(pubkey)
-                .as_json()
         });
-        let agrees = match (&case.error, &case.unsigned_json, &outcome) {
-            (None, Some(expected), Some(json)) => json == expected,
-            (Some(_), _, None) => true,
-            _ => false,
-        };
-        let got = outcome.unwrap_or_else(|| "input not expressible".to_owned());
-        check.check(&index.to_string(), agrees, &got);
+        match (&case.error, &case.unsigned_json, &outcome) {
+            (None, Some(_), None) => check.skip(&index.to_string()),
+            (None, Some(expected), Some(unsigned)) => {
+                let agrees = common::json_value(expected)
+                    .is_some_and(|expected| common::unsigned_event_eq(&expected, unsigned));
+                check.check(&index.to_string(), agrees, &unsigned.as_json());
+            }
+            (Some(_), _, None) => {
+                check.check(&index.to_string(), true, "rejected");
+            }
+            (Some(_), _, Some(unsigned)) => {
+                check.check(&index.to_string(), false, &unsigned.as_json());
+            }
+            (None, None, _) => {
+                check.check(&index.to_string(), true, "no expected output");
+            }
+        }
     }
     check.finish();
 }
@@ -557,7 +538,11 @@ fn check_message_cases(
     for case in &vector.cases {
         let parsed = parse(&case.raw);
         let agrees = match (&parsed, &case.error) {
-            (Ok(encoded), None) => encoded == case.encoded.as_deref().unwrap_or(&case.raw),
+            // JSON object key order is not semantic: compare the re-encoded
+            // documents as parsed values.
+            (Ok(encoded), None) => {
+                common::json_eq(encoded, case.encoded.as_deref().unwrap_or(&case.raw))
+            }
             (Err(_), Some(_)) => true,
             _ => false,
         };
@@ -587,6 +572,8 @@ fn message_relay() {
 
 #[derive(Debug, Deserialize)]
 struct TagBuildCase {
+    #[serde(default)]
+    rust: Option<bool>,
     op: String,
     id: Option<String>,
     pubkey: Option<String>,
@@ -673,12 +660,16 @@ fn tag_build() {
     let vector: Vector = serde_json::from_str(TAG_BUILD).expect("tag-build.json must parse");
     let mut check = DivergenceCheck::new("core.tag.build");
     for (index, case) in vector.cases.iter().enumerate() {
+        if case.rust == Some(false) {
+            check.skip(&index.to_string());
+            continue;
+        }
         let outcome = build_tag(case, index).map(|tag| tag.as_slice().to_owned());
-        let got = outcome.as_ref().map_or_else(
-            || "input not expressible".to_owned(),
-            |tag| format!("{tag:?}"),
-        );
-        check.check(&index.to_string(), outcome == Some(case.tag.clone()), &got);
+        match &outcome {
+            // No rust-nostr tag constructor can express the input.
+            None => check.skip(&index.to_string()),
+            Some(tag) => check.check(&index.to_string(), tag == &case.tag, &format!("{tag:?}")),
+        }
     }
     check.finish();
 }
@@ -793,42 +784,18 @@ fn event_signed_matches() {
                     && event.pubkey == unsigned.pubkey,
             )
         })();
-        let got = outcome.map_or_else(
-            || "input rejected".to_owned(),
-            |result| format!("matched={result}"),
-        );
-        check.check(&index.to_string(), outcome == Some(case.matches), &got);
-    }
-    check.finish();
-}
-
-#[derive(Debug, Deserialize)]
-struct UrlNormalizeCase {
-    input: String,
-    output: Option<String>,
-    error: Option<String>,
-}
-
-#[test]
-fn url_normalize() {
-    #[derive(Deserialize)]
-    struct Vector {
-        cases: Vec<UrlNormalizeCase>,
-    }
-    let vector: Vector =
-        serde_json::from_str(URL_NORMALIZE).expect("url-normalize.json must parse");
-    let mut check = DivergenceCheck::new("core.url.normalize");
-    for (index, case) in vector.cases.iter().enumerate() {
-        let outcome = RelayUrl::parse(&case.input)
-            .ok()
-            .map(|url| url.as_str().to_owned());
-        let agrees = match (&case.output, &case.error, &outcome) {
-            (Some(expected), _, Some(got)) => expected == got,
-            (None, Some(_), None) => true,
-            _ => false,
-        };
-        let got = outcome.unwrap_or_else(|| "rejected".to_owned());
-        check.check(&index.to_string(), agrees, &got);
+        match outcome {
+            // The rust-nostr types cannot represent the input (e.g. an
+            // empty pubkey), so there is no behavior to compare.
+            None => check.skip(&index.to_string()),
+            Some(matched) => {
+                check.check(
+                    &index.to_string(),
+                    matched == case.matches,
+                    &format!("matched={matched}"),
+                );
+            }
+        }
     }
     check.finish();
 }

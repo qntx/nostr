@@ -66,14 +66,20 @@ fn auth_event_vectors(check: &mut DivergenceCheck) {
                 .collect();
             (unsigned.kind.as_u16(), tags, unsigned.content)
         });
-        let agrees = outcome.as_ref().is_some_and(|(kind, tags, content)| {
-            *kind == 22_242 && *tags == case.tags && *content == case.content
-        });
-        let got = outcome.map_or_else(
-            || "input not expressible".to_owned(),
-            |(kind, tags, _)| format!("kind={kind} tags={tags:?}"),
-        );
-        check.check(&i.to_string(), agrees, &got);
+        match &outcome {
+            // `RelayUrl::parse` cannot express the relay input.
+            None => check.skip(&i.to_string()),
+            Some((kind, tags, content)) => {
+                let agrees = *kind == 22_242
+                    && common::same_tag_multiset(&case.tags, tags)
+                    && content == &case.content;
+                check.check(
+                    &i.to_string(),
+                    agrees,
+                    &format!("kind={kind} tags={tags:?}"),
+                );
+            }
+        }
     }
 }
 

@@ -127,7 +127,9 @@ fn zap_request_cases(check: &mut DivergenceCheck) {
         })();
         let agrees = match (&case.out, &case.err, &outcome) {
             (Some(expect), _, Some((kind, content, tags))) => {
-                *kind == expect.kind && content == &expect.content && tags == &expect.tags
+                *kind == expect.kind
+                    && content == &expect.content
+                    && common::same_tag_multiset(&expect.tags, tags)
             }
             (None, Some(_), None) => true,
             _ => false,

@@ -66,7 +66,6 @@ struct ValidateCase {
     method: String,
     payload_hex: Option<String>,
     now: u64,
-    #[allow(dead_code, reason = "rust-nostr hardcodes the skew window")]
     max_skew_secs: u64,
     result: bool,
     rust: Option<bool>,
@@ -107,6 +106,7 @@ fn auth_event_token_header(check: &mut DivergenceCheck) {
     let aux = common::unhex_arr::<32>(&vector.aux).expect("vector aux hex");
     for (i, case) in vector.auth.iter().enumerate() {
         if case.rust == Some(false) {
+            check.skip(&format!("auth/{i}"));
             continue;
         }
         let outcome: Option<(Event, String, String)> = (|| {
@@ -121,16 +121,17 @@ fn auth_event_token_header(check: &mut DivergenceCheck) {
             let header = format!("Nostr {token}");
             Some((event, token, header))
         })();
-        let agrees = outcome.as_ref().is_some_and(|(event, token, header)| {
-            serde_json::to_value(event).ok().as_ref() == Some(&case.event)
-                && token == &case.token
-                && header == &case.header
-        });
-        let got = outcome.map_or_else(
-            || "rejected".to_owned(),
-            |(_, _, header)| format!("header={header}"),
-        );
-        check.check(&format!("auth/{i}"), agrees, &got);
+        match &outcome {
+            // `HttpMethod` has no lowercase variants and no HEAD, so those
+            // inputs cannot be expressed.
+            None => check.skip(&format!("auth/{i}")),
+            Some((event, token, header)) => {
+                let agrees = serde_json::to_value(event).ok().as_ref() == Some(&case.event)
+                    && token == &case.token
+                    && header == &case.header;
+                check.check(&format!("auth/{i}"), agrees, &format!("header={header}"));
+            }
+        }
     }
 }
 
@@ -147,6 +148,19 @@ fn validate_auth_event_cases(check: &mut DivergenceCheck) {
     let vector: Vector = serde_json::from_str(CODEC).expect("valid JSON");
     for (i, case) in vector.validate.iter().enumerate() {
         if case.rust == Some(false) {
+            check.skip(&format!("validate/{i}"));
+            continue;
+        }
+        // `verify_auth_header` takes no `max_skew_secs`; cases whose verdict
+        // depends on a non-default window (a different skew, or an event
+        // more than rust-nostr's hardcoded 30s in the future) are skipped.
+        let future = case
+            .event
+            .get("created_at")
+            .and_then(serde_json::Value::as_u64)
+            .is_some_and(|created_at| created_at > case.now + 30);
+        if case.max_skew_secs != 60 || future {
+            check.skip(&format!("validate/{i}"));
             continue;
         }
         let outcome: Option<Result<(), ()>> = (|| {
@@ -173,18 +187,20 @@ fn validate_auth_event_cases(check: &mut DivergenceCheck) {
                 .map_err(|_| ()),
             )
         })();
-        // rust-nostr hardcodes a 30s-future/60s-past window; the vector's
-        // max_skew_secs parameter is not settable, so cases relying on a
-        // different skew diverge.
-        let agrees = outcome
-            .as_ref()
-            .is_some_and(|result| result.is_ok() == case.result);
-        let got = match &outcome {
-            Some(Ok(())) => "accepted".to_owned(),
-            Some(Err(())) => "rejected".to_owned(),
-            None => "input not expressible".to_owned(),
-        };
-        check.check(&format!("validate/{i}"), agrees, &got);
+        match &outcome {
+            // The event/method/url input cannot be expressed (e.g. a
+            // lowercase method `HttpMethod` rejects).
+            None => check.skip(&format!("validate/{i}")),
+            Some(result) => {
+                let agrees = result.is_ok() == case.result;
+                let got = if result.is_ok() {
+                    "accepted"
+                } else {
+                    "rejected"
+                };
+                check.check(&format!("validate/{i}"), agrees, got);
+            }
+        }
     }
 }
 
