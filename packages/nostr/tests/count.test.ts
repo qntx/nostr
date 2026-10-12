@@ -13,6 +13,7 @@ import {
   useWebSocketImplementation,
 } from "../src/index.ts";
 import type { CountResult, RelayMessage } from "../src/index.ts";
+import { CountTracker } from "../src/relay/count-tracker.ts";
 import { createFakeRelayNetwork } from "../src/testing/index.ts";
 import type { FakeRelayNetwork } from "../src/testing/index.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
@@ -497,6 +498,57 @@ describe("Relay.count", () => {
     MockWebSocket.last().receive(JSON.stringify(["COUNT", id, { count: 1 }]));
     await expect(countP).resolves.toStrictEqual({ count: 1 });
     relay.close();
+  });
+
+  test("rejects a duplicate in-flight COUNT id and sends no second COUNT", async () => {
+    const relay = await Relay.connect("wss://count-dup.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const first = relay.count([{ kinds: [1] }], { id: "dup", timeoutMs: 2000 });
+    await expect(relay.count([{ kinds: [0] }], { id: "dup" })).rejects.toThrow(
+      "duplicate subscription id: dup",
+    );
+    const counts = MockWebSocket.last()
+      .sent.map((s) => JSON.parse(s) as unknown[])
+      .filter((m) => m[0] === "COUNT");
+    expect(counts).toHaveLength(1);
+    MockWebSocket.last().receive(JSON.stringify(["COUNT", "dup", { count: 4 }]));
+    await expect(first).resolves.toStrictEqual({ count: 4 });
+    relay.close();
+  });
+
+  test("rejects a COUNT id already used by an active REQ", async () => {
+    const relay = await Relay.connect("wss://count-dup-sub.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const sub = relay.subscribe([{ kinds: [1] }], { id: "dup" });
+    await expect(relay.count([{ kinds: [1] }], { id: "dup" })).rejects.toThrow(MessageError);
+    sub.close();
+    relay.close();
+  });
+
+  test("a stale waiter settle does not evict a newer same-id entry", async () => {
+    const tracker = new CountTracker();
+    const send = (): void => undefined;
+    const base = {
+      timeoutMs: 60_000,
+      timeoutError: () => new Error("count timed out"),
+      sendError: () => new Error("count failed"),
+      filters: [],
+      send,
+    };
+    const first = tracker.track("dup", base);
+    const stale = tracker.get("dup");
+    stale?.reject(new Error("gone"));
+    await expect(first).rejects.toThrow("gone");
+
+    const second = tracker.track("dup", base);
+    const current = tracker.get("dup");
+    // A late settle by the superseded waiter must leave the newer entry alone.
+    stale?.reject(new Error("late"));
+    expect(tracker.get("dup")).toBe(current);
+    current?.resolve({ count: 9 });
+    await expect(second).resolves.toStrictEqual({ count: 9 });
   });
 });
 

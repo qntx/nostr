@@ -183,11 +183,13 @@ export class Client {
 
   async shutdown(): Promise<void> {
     this.#shutdown = true;
+    // Stop inbound events first: a live subscription would otherwise keep
+    // refilling the persistence queue and the drain below would never settle.
+    this.pool.close();
     while (this.#flushing !== undefined) {
-      // oxlint-disable-next-line no-await-in-loop -- waits for the current flush to settle before closing
+      // oxlint-disable-next-line no-await-in-loop -- waits for the current flush to settle
       await this.#flushing;
     }
-    this.pool.close();
   }
 
   /**
@@ -272,7 +274,7 @@ export class Client {
   }
 
   #queuePersist(event: Event): void {
-    if (!this.#persistEvents) {
+    if (!this.#persistEvents || this.#shutdown) {
       return;
     }
     this.#persistQueue.push(event);

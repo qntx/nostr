@@ -19,9 +19,10 @@ import {
 } from "../src/index.ts";
 import type { Event, EventTemplate } from "../src/index.ts";
 import { NegentropyStorageVector, Nip77Error } from "../src/nips/nip77.ts";
+import { fetchFilters } from "../src/relay/fetch.ts";
 import { subscriptionToAsyncIterable } from "../src/relay/index.ts";
 import type { SubscriptionHandlers } from "../src/relay/index.ts";
-import type { Subscription } from "../src/relay/subscription.ts";
+import type { Subscription, RelaySubscription } from "../src/relay/subscription.ts";
 import type { WebSocketConstructor } from "../src/relay/websocket.ts";
 import { createFakeRelayNetwork } from "../src/testing/index.ts";
 import type { FakeRelayNetwork } from "../src/testing/index.ts";
@@ -757,6 +758,68 @@ describe("Relay", () => {
     relay.close();
   });
 
+  test("fetch rejects an invalid custom id without leaking an armed timeout", async () => {
+    const relay = await Relay.connect("wss://fetch-bad-id.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const uncaught: unknown[] = [];
+    const onUncaught = (error: unknown): void => {
+      uncaught.push(error);
+    };
+    process.on("uncaughtException", onUncaught);
+    try {
+      await expect(
+        relay.fetch([{ kinds: [1] }], { id: "a".repeat(65), timeoutMs: 30 }),
+      ).rejects.toThrow(MessageError);
+      // Past the fetch deadline: a leaked timer would throw a TDZ error here.
+      await sleep(80);
+      expect(uncaught).toStrictEqual([]);
+      expect(sentMessages(MockWebSocket.last())).toStrictEqual([]);
+    } finally {
+      process.removeListener("uncaughtException", onUncaught);
+      relay.close();
+    }
+  });
+
+  test("fetch settles when subscribe fires oneose synchronously", async () => {
+    let closed = false;
+    let closeReason: string | undefined;
+    const fakeSub: RelaySubscription = {
+      id: "fake",
+      get closed() {
+        return closed;
+      },
+      close: (reason?: string) => {
+        closed = true;
+        closeReason = reason;
+      },
+    };
+    const timers: Array<() => void> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((handler: unknown, _delay?: number, ...args: unknown[]) => {
+      timers.push(() => {
+        (handler as (...a: unknown[]) => void)(...args);
+      });
+      return timers.length as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+    try {
+      const result = await fetchFilters(
+        (_filters, opts) => {
+          opts.oneose?.();
+          return fakeSub;
+        },
+        [{ kinds: [1] }],
+        { timeoutMs: 30 },
+      );
+      expect(result.end).toStrictEqual({ type: "eose" });
+      expect(closed).toBe(true);
+      expect(closeReason).toBe("fetch complete");
+      expect(timers).toHaveLength(0);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+  });
+
   test("WasmPoisonedError poisons verify and drops later EVENTs", async () => {
     let verifies = 0;
     const notices: string[] = [];
@@ -953,6 +1016,19 @@ describe("Relay", () => {
     relay.close();
   });
 
+  test("a pre-aborted closeOnEose subscribe sends neither REQ nor CLOSE", async () => {
+    const relay = await Relay.connect("wss://sub-aborted.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const ac = new AbortController();
+    ac.abort();
+    const sub = relay.subscribe([{ kinds: [1] }], { signal: ac.signal, closeOnEose: true });
+    expect(sub.closed).toBe(true);
+    expect(sentMessages(MockWebSocket.last())).toStrictEqual([]);
+    expect(relay.subscriptionCount).toBe(0);
+    relay.close();
+  });
+
   test("subscribe empty filters throws MessageError before any socket send", async () => {
     const relay = await Relay.connect("wss://empty-req.example", {
       websocketImplementation: MockWebSocketCtor,
@@ -1010,6 +1086,45 @@ describe("Relay", () => {
     expect(req[0]).toBe("REQ");
     expect(req[1]).toBe(id);
     sub.close();
+    relay.close();
+  });
+
+  test("subscribe throws on an explicit id already used by an active REQ", async () => {
+    const relay = await Relay.connect("wss://sub-dup-id.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const live = relay.subscribe([{ kinds: [1] }], { id: "dup" });
+    expect(() => relay.subscribe([{ kinds: [0] }], { id: "dup" })).toThrow(
+      "duplicate subscription id: dup",
+    );
+    expect(() => relay.subscribe([{ kinds: [0] }], { id: "dup", closeOnEose: true })).toThrow(
+      MessageError,
+    );
+    expect(sentMessages(MockWebSocket.last()).filter((m) => m[0] === "REQ")).toHaveLength(1);
+    live.close();
+    relay.close();
+  });
+
+  test("subscribe throws on an explicit id used by an in-flight COUNT", async () => {
+    const relay = await Relay.connect("wss://sub-dup-count.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const countP = relay.count([{ kinds: [1] }], { id: "dup", timeoutMs: 2000 });
+    expect(() => relay.subscribe([{ kinds: [1] }], { id: "dup" })).toThrow(MessageError);
+    MockWebSocket.last().receive(JSON.stringify(["COUNT", "dup", { count: 0 }]));
+    await expect(countP).resolves.toStrictEqual({ count: 0 });
+    relay.close();
+  });
+
+  test("a freed explicit id is reusable once the REQ is closed", async () => {
+    const relay = await Relay.connect("wss://sub-id-reuse.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const first = relay.subscribe([{ kinds: [1] }], { id: "dup" });
+    first.close();
+    const second = relay.subscribe([{ kinds: [0] }], { id: "dup" });
+    expect(second.closed).toBe(false);
+    second.close();
     relay.close();
   });
 
@@ -1780,6 +1895,62 @@ describe("Relay generation / close", () => {
     expect(relay.status).toBe(RelayStatus.Connected);
     expect(relay.generation).toBeGreaterThan(genAfterConnect);
     relay.close();
+  });
+
+  test("a subscribe() re-entered from onclose during close() stays registered", async () => {
+    const relay = new Relay("wss://reentrant-close.example", {
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: true,
+    });
+    await relay.connect();
+    let reentrant: { closed: boolean } | undefined;
+    relay.subscribe([{ kinds: [1] }], {
+      onclose: () => {
+        reentrant = relay.subscribe([{ kinds: [2] }]);
+      },
+    });
+    relay.close();
+    // closeAll ends the snapshot only: the re-entrant sub is a normal pending
+    // REQ for the next reconnect, not an orphan ended by the drain.
+    expect(reentrant?.closed).toBe(false);
+    expect(relay.subscriptionCount).toBe(1);
+  });
+
+  test("a same-id subscribe() re-entered from onclose during close() stays registered", async () => {
+    const relay = new Relay("wss://reentrant-same-id.example", {
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: true,
+    });
+    await relay.connect();
+    let reentrant: { closed: boolean } | undefined;
+    const first = relay.subscribe([{ kinds: [1] }], {
+      onclose: () => {
+        reentrant = relay.subscribe([{ kinds: [2] }], { id: first.id });
+      },
+    });
+    relay.close();
+    expect(reentrant?.closed).toBe(false);
+    expect(relay.subscriptionCount).toBe(1);
+  });
+
+  test("an onclose that always resubscribes does not spin closeAll forever", async () => {
+    const relay = new Relay("wss://resubscribe-storm.example", {
+      websocketImplementation: MockWebSocketCtor,
+      enableReconnect: true,
+    });
+    await relay.connect();
+    let resubscribed = 0;
+    let last: { closed: boolean } | undefined;
+    relay.subscribe([{ kinds: [1] }], {
+      onclose: () => {
+        resubscribed += 1;
+        last = relay.subscribe([{ kinds: [1] }]);
+      },
+    });
+    relay.close();
+    expect(resubscribed).toBe(1);
+    expect(last?.closed).toBe(false);
+    expect(relay.subscriptionCount).toBe(1);
   });
 
   test("stale connect timeout after close() does not kill the next socket", async () => {
@@ -2716,6 +2887,28 @@ describe("live REQ coalescing", () => {
     relay.close();
   });
 
+  test("an attachment closed during receivedEvent does not get notified for that event", async () => {
+    const relay = await Relay.connect("wss://coal-notify.example");
+    const keys = Keys.fromSecretKey(SK);
+    const note = EventBuilder.textNote("x").createdAt(1).signWithKeys(keys);
+    const received: string[] = [];
+    const events: string[] = [];
+    relay.subscribe([{ kinds: [1] }], {
+      receivedEvent: () => {
+        received.push("a");
+        b.close();
+      },
+    });
+    const b = relay.subscribe([{ kinds: [1] }], {
+      receivedEvent: () => received.push("b"),
+      onevent: (e) => events.push(e.id),
+    });
+    MockWebSocket.last().receive(JSON.stringify(["EVENT", b.id, note]));
+    expect(received).toStrictEqual(["a"]);
+    expect(events).toStrictEqual([]);
+    relay.close();
+  });
+
   test("CLOSED on the wire id closes every attachment", async () => {
     const relay = await Relay.connect("wss://coal-closed.example");
     const reasons: string[] = [];
@@ -3185,6 +3378,38 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
   const keys = Keys.fromSecretKey(SK);
   const note = (content: string, created_at: number) =>
     EventBuilder.textNote(content).createdAt(created_at).signWithKeys(keys);
+
+  test("two concurrent next() calls both settle, in order", async () => {
+    const { iterable, fire } = makeIterable();
+    const it = iterable[Symbol.asyncIterator]();
+    const first = it.next();
+    const second = it.next();
+    const na = note("a", 1);
+    const nb = note("b", 2);
+    fire().onevent?.(na);
+    fire().onevent?.(nb);
+    const outcome = await Promise.race([
+      Promise.all([first, second]),
+      sleep(200).then(() => "hung" as const),
+    ]);
+    expect(outcome).toStrictEqual([
+      { value: na, done: false },
+      { value: nb, done: false },
+    ]);
+  });
+
+  test("close resolves every pending next() with done", async () => {
+    const { iterable } = makeIterable();
+    const it = iterable[Symbol.asyncIterator]();
+    const first = it.next();
+    const second = it.next();
+    iterable.close();
+    const outcome = await Promise.race([
+      Promise.all([first, second]).then(([a, b]) => `${a.done},${b.done}`),
+      sleep(200).then(() => "hung"),
+    ]);
+    expect(outcome).toBe("true,true");
+  });
 
   test("drains a 10k-event backlog in order", async () => {
     const { iterable, fire } = makeIterable();

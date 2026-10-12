@@ -5,7 +5,7 @@ import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { filterFingerprint, matchFilters } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
-import { invokeSafely } from "../core/report.ts";
+import { invokeSafely, reportError } from "../core/report.ts";
 import { formatEventAddress, eventAddress, parseEventAddress } from "../core/tag.ts";
 import { normalizeURL } from "../core/util.ts";
 import { MemoryIndex } from "../storage/memory-index.ts";
@@ -36,6 +36,9 @@ export type ReactiveEventStoreEventMap = {
 };
 
 const SEEN_ON_PER_ID = 16;
+
+/** Notify passes per microtask; overflow reschedules so a writing subscriber cannot livelock. */
+const MAX_FLUSH_PASSES = 32;
 
 /** Category of a {@link Watch} subscription. */
 type WatchKind = "event" | "replaceable" | "query";
@@ -485,7 +488,14 @@ export class ReactiveEventStore {
   }
 
   #recordSeen(id: string, relayUrl: string): void {
-    const url = normalizeURL(relayUrl);
+    let url: string;
+    try {
+      url = normalizeURL(relayUrl);
+    } catch {
+      // A malformed relay label is metadata only: skip the seen-on record
+      // instead of throwing after the event was already indexed.
+      return;
+    }
     let urls = this.#seenOn.get(id);
     if (!urls) {
       urls = [];
@@ -605,13 +615,23 @@ export class ReactiveEventStore {
     }
     this.#flushScheduled = true;
     queueMicrotask(() => {
-      // Keep the flag set while flushing: writes re-entered from a
-      // subscriber land in #dirty and are notified in the same pass.
+      // Keep the flag set while flushing: writes re-entered from a subscriber
+      // land in #dirty and are notified in the same pass. Bound the passes so an
+      // always-writing subscriber cannot starve the microtask queue forever;
+      // overflow continues on the next turn after a loud report.
+      let passes = 0;
       while (this.#dirty.size > 0) {
         const batch = [...this.#dirty];
         this.#dirty.clear();
         for (const watch of batch) {
           watch.notify();
+        }
+        passes += 1;
+        if (passes >= MAX_FLUSH_PASSES && this.#dirty.size > 0) {
+          this.#flushScheduled = false;
+          reportError(new Error("ReactiveEventStore flush overflow: a subscriber keeps writing"));
+          this.#scheduleFlush();
+          return;
         }
       }
       this.#flushScheduled = false;

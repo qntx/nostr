@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
-import { giftWrapRelays } from "../src/client/dm.ts";
+import { giftWrapRelays, subscribePrivateMessages } from "../src/client/dm.ts";
+import type { DmDeps } from "../src/client/dm.ts";
 import { normalizeURL } from "../src/core/util.ts";
 import {
   Client,
@@ -17,6 +18,7 @@ import type { Event, EventStore, Filter, PutResult } from "../src/index.ts";
 import { Nip17Error, dmRelayListEventBuilder } from "../src/nips/nip17.ts";
 import { encryptToPubkey } from "../src/nips/nip44.ts";
 import { createGiftWrap, createRumor, createSeal, eventToJson, wrap } from "../src/nips/nip59.ts";
+import type { Pool } from "../src/relay/pool.ts";
 import { createFakeRelayNetwork } from "../src/testing/index.ts";
 import type { FakeRelayNetwork } from "../src/testing/index.ts";
 
@@ -780,6 +782,61 @@ describe("Client NIP-17", () => {
     await expect(store.get(junk.id)).resolves.toBeUndefined();
     sub.close();
     await bob.shutdown();
+  });
+
+  test("subscribePrivateMessages marks a failed-unwrap wrap processed so later receipts flush", async () => {
+    const bobKeys = Keys.fromSecretKey(BOB_SK);
+    const gossip = new Gossip();
+    gossip.ingest(dmRelayListEventBuilder([BOB_DM]).createdAt(1).signWithKeys(bobKeys));
+    let handlers: {
+      receivedEvent?: ((id: string, relayUrl: string) => void) | undefined;
+      onevent?: ((event: Event, relayUrl: string) => void) | undefined;
+    } = {};
+    const markSeenCalls: string[] = [];
+    const pool = {
+      subscribe: (
+        _relays: ReadonlyArray<string>,
+        _filters: ReadonlyArray<Filter>,
+        opts: typeof handlers,
+      ) => {
+        handlers = opts;
+        return { close: () => {} };
+      },
+    } as unknown as Pool;
+    const deps: DmDeps = {
+      pool,
+      gossip,
+      hydrateGossip: async () => Promise.resolve(),
+      ingest: () => {},
+      markSeen: (id, relayUrl) => {
+        markSeenCalls.push(`${id.slice(0, 8)}:${relayUrl}`);
+      },
+      assertAlive: () => {},
+      requireNip59Crypto: () => new KeysSigner(bobKeys),
+      publish: async () => Promise.resolve([]),
+    };
+    const closer = await subscribePrivateMessages(deps, {});
+    const junk = finalizeEvent(
+      {
+        kind: Kind.GiftWrap,
+        content: "not-valid-nip44",
+        created_at: 11,
+        tags: [["p", bobKeys.publicKey]],
+      },
+      ALICE_SK,
+    );
+    handlers.receivedEvent?.(junk.id, "wss://a.example");
+    handlers.onevent?.(junk, "wss://a.example");
+    // The failed unwrap must still flush the buffered receipt: pending urls
+    // for undecryptable wraps must not accumulate forever.
+    await waitFor(() => markSeenCalls.length > 0);
+    handlers.receivedEvent?.(junk.id, "wss://b.example");
+    await waitFor(() => markSeenCalls.length >= 2);
+    expect(markSeenCalls).toStrictEqual([
+      `${junk.id.slice(0, 8)}:wss://a.example`,
+      `${junk.id.slice(0, 8)}:wss://b.example`,
+    ]);
+    closer.close();
   });
 
   test("setDmRelays publishes kind 10050 to outbox, not to peer DM relays", async () => {

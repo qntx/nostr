@@ -43,6 +43,13 @@ export async function fetchFilters(
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;
+    // `subscribe` may fire oneose/onclose synchronously, before `sub`/`timer`
+    // are assigned: done() then only records the close reason for the sub
+    // subscribe is about to return.
+    // oxlint-disable-next-line prefer-const -- armed only after subscribe() returns
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let sub: ReturnType<typeof subscribe> | undefined;
+    let pendingCloseReason = "fetch complete";
     const done = (err?: unknown) => {
       if (settled) {
         return;
@@ -56,7 +63,8 @@ export async function fetchFilters(
       } else if (err === undefined) {
         reason = "fetch complete";
       }
-      sub.close(reason);
+      pendingCloseReason = reason;
+      sub?.close(reason);
       if (err === undefined) {
         resolve();
       } else {
@@ -71,41 +79,56 @@ export async function fetchFilters(
       }
     });
 
-    const timer = setTimeout(() => {
+    // Subscribe before arming the timeout: a synchronous throw (e.g. an invalid
+    // custom id) must reject without leaving an armed timer behind.
+    try {
+      sub = subscribe(filters, {
+        id: opts.id,
+        signal: opts.signal,
+        closeOnEose: true,
+        onevent(event) {
+          if (seen.has(event.id)) {
+            return;
+          }
+          seen.add(event.id);
+          events.push(event);
+        },
+        oneose() {
+          end = { type: "eose" };
+          done();
+        },
+        onclose(reason) {
+          // The Subscription's own abort listener may close it before ours runs;
+          // an aborted signal still rejects the fetch with the signal's reason.
+          if (settled) {
+            return;
+          }
+          if (opts.signal?.aborted === true) {
+            done(abortReason(opts.signal));
+            return;
+          }
+          // A remote CLOSED (or transport drop) still returns collected events.
+          end = { type: "closed", reason };
+          done();
+        },
+      });
+    } catch (error) {
+      disposeAbort();
+      // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- forwards the subscribe() throw verbatim
+      reject(error);
+      return;
+    }
+
+    // A synchronous oneose/onclose inside subscribe() already settled the
+    // fetch: close the returned sub with the recorded reason and arm nothing.
+    if (settled) {
+      sub.close(pendingCloseReason);
+      return;
+    }
+    timer = setTimeout(() => {
       end = { type: "timeout" };
       done();
     }, opts.timeoutMs);
-
-    const sub = subscribe(filters, {
-      id: opts.id,
-      signal: opts.signal,
-      closeOnEose: true,
-      onevent(event) {
-        if (seen.has(event.id)) {
-          return;
-        }
-        seen.add(event.id);
-        events.push(event);
-      },
-      oneose() {
-        end = { type: "eose" };
-        done();
-      },
-      onclose(reason) {
-        // The Subscription's own abort listener may close it before ours runs;
-        // an aborted signal still rejects the fetch with the signal's reason.
-        if (settled) {
-          return;
-        }
-        if (opts.signal?.aborted === true) {
-          done(abortReason(opts.signal));
-          return;
-        }
-        // A remote CLOSED (or transport drop) still returns collected events.
-        end = { type: "closed", reason };
-        done();
-      },
-    });
   });
 
   return { events, end };
