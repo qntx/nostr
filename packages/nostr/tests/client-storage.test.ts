@@ -260,7 +260,7 @@ describe("Client storage + observe", () => {
     await client.connect();
     const got: string[] = [];
     const sub = client.subscribe([{ kinds: [1] }], {
-      onevent: (e) => got.push(e.id),
+      onEvent: (e) => got.push(e.id),
     });
 
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -502,7 +502,7 @@ describe("Client storage + observe", () => {
     expect(seen[0]!.message).not.toContain(note.content);
   });
 
-  test("subscribe persist failure does not throw and still delivers onevent", async () => {
+  test("subscribe persist failure does not throw and still delivers onEvent", async () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("live").createdAt(1).signWithKeys(keys);
     const seen: StorageError[] = [];
@@ -526,7 +526,7 @@ describe("Client storage + observe", () => {
     await client.connect();
     const got: string[] = [];
     const sub = client.subscribe([{ kinds: [1] }], {
-      onevent: (e) => got.push(e.id),
+      onEvent: (e) => got.push(e.id),
     });
     await new Promise((resolve) => setTimeout(resolve, 10));
     const ws = MockWebSocket.last();

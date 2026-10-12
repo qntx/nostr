@@ -39,13 +39,13 @@ export async function fetchGossip(
   opts?: {
     timeoutMs?: number | undefined;
     signal?: AbortSignal | undefined;
-    onevent?: ((event: Event, relayUrl: string) => void) | undefined;
+    onEvent?: ((event: Event, relayUrl: string) => void) | undefined;
   },
 ): Promise<Event[]> {
   return fetchRouted(pool, jobsForFilters(gossip, filters, defaultRelays), {
     timeoutMs: opts?.timeoutMs,
     signal: opts?.signal,
-    onevent: opts?.onevent,
+    onEvent: opts?.onEvent,
   });
 }
 
@@ -58,7 +58,7 @@ export function subscribeGossip(
 ): Closer {
   const jobs = jobsForFilters(gossip, filters, defaultRelays);
   if (jobs.length === 0) {
-    queueMicrotask(() => opts.oneose?.());
+    queueMicrotask(() => opts.onEose?.());
     return {
       close: () => {
         /* empty */

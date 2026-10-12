@@ -73,7 +73,7 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
     if (pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must wait between iterations
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("timeout waiting for condition");
@@ -82,11 +82,11 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
 async function waitUntilAsync(pred: () => Promise<boolean>, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    // oxlint-disable-next-line no-await-in-loop -- polling must await each probe
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must await each probe
     if (await pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must wait between iterations
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("timeout waiting for condition");

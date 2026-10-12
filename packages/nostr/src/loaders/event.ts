@@ -124,7 +124,7 @@ export function createEventLoader(ctx: LoaderContext): EventLoader {
           }
           await ctx.pool.fetch(relays, [parsed.filter], {
             timeoutMs: ctx.fetchTimeoutMs,
-            onevent: (event, relayUrl) => ctx.ingest(event, relayUrl),
+            onEvent: (event, relayUrl) => ctx.ingest(event, relayUrl),
           });
           return parsed.lookup(ctx);
         } finally {

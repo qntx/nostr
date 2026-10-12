@@ -74,9 +74,9 @@ export type PoolPublishResult =
   | { readonly url: string; readonly status: "failed"; readonly error: Error };
 
 /** Multi-relay subscribe options: callbacks also receive the normalized relay URL. */
-export type PoolSubscribeOptions = Omit<SubscribeOptions, "onevent" | "receivedEvent"> & {
-  onevent?: ((event: Event, relayUrl: string) => void) | undefined;
-  receivedEvent?: ((id: string, relayUrl: string) => void) | undefined;
+export type PoolSubscribeOptions = Omit<SubscribeOptions, "onEvent" | "onEventSeen"> & {
+  onEvent?: ((event: Event, relayUrl: string) => void) | undefined;
+  onEventSeen?: ((id: string, relayUrl: string) => void) | undefined;
 };
 
 /** Per-relay one-shot fetch outcome: collected events plus how its REQ ended. */
@@ -421,13 +421,13 @@ export class Pool {
     }
     const canonical = canonicalizeFilters(filters);
     return fanIn(this, [{ urls: relays, filters: canonical, id: opts.id }], {
-      onevent: opts.onevent,
-      oneose: opts.oneose,
-      onclose: opts.onclose,
+      onEvent: opts.onEvent,
+      onEose: opts.onEose,
+      onClose: opts.onClose,
       signal: opts.signal,
       eoseTimeoutMs: opts.eoseTimeoutMs,
       alreadyHaveEvent: opts.alreadyHaveEvent,
-      receivedEvent: opts.receivedEvent,
+      onEventSeen: opts.onEventSeen,
       closeOnEose: opts.closeOnEose,
       connectTimeoutMs: this.#relayOptions.connectTimeoutMs,
     });
@@ -484,7 +484,7 @@ export class Pool {
       timeoutMs?: number | undefined;
       signal?: AbortSignal | undefined;
       /** Every event of every relay batch, including cross-relay duplicates. */
-      onevent?: ((event: Event, relayUrl: string) => void) | undefined;
+      onEvent?: ((event: Event, relayUrl: string) => void) | undefined;
     },
   ): Promise<Event[]> {
     if (filters.length === 0) {
@@ -494,7 +494,7 @@ export class Pool {
       timeoutMs: opts?.timeoutMs,
       signal: opts?.signal,
       connectTimeoutMs: this.#relayOptions.connectTimeoutMs,
-      onevent: opts?.onevent,
+      onEvent: opts?.onEvent,
     });
   }
 

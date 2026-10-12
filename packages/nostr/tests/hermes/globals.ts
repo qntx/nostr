@@ -52,7 +52,7 @@ if (
 if (!has("TextDecoder")) {
   class HermesTextDecoder {
     readonly encoding = "utf8";
-    // oxlint-disable-next-line no-restricted-types -- decode(null) is part of the WebIDL signature
+    // oxlint-disable-next-line typescript/no-restricted-types -- decode(null) is part of the WebIDL signature
     decode(input?: ArrayBuffer | ArrayBufferView | null): string {
       if (input === undefined || input === null) {
         return "";

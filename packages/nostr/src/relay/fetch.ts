@@ -43,10 +43,10 @@ export async function fetchFilters(
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;
-    // `subscribe` may fire oneose/onclose synchronously, before `sub`/`timer`
+    // `subscribe` may fire onEose/onClose synchronously, before `sub`/`timer`
     // are assigned: done() then only records the close reason for the sub
     // subscribe is about to return.
-    // oxlint-disable-next-line prefer-const -- armed only after subscribe() returns
+    // oxlint-disable-next-line eslint/prefer-const -- armed only after subscribe() returns
     let timer: ReturnType<typeof setTimeout> | undefined;
     let sub: ReturnType<typeof subscribe> | undefined;
     let pendingCloseReason = "fetch complete";
@@ -86,18 +86,18 @@ export async function fetchFilters(
         id: opts.id,
         signal: opts.signal,
         closeOnEose: true,
-        onevent(event) {
+        onEvent(event) {
           if (seen.has(event.id)) {
             return;
           }
           seen.add(event.id);
           events.push(event);
         },
-        oneose() {
+        onEose() {
           end = { type: "eose" };
           done();
         },
-        onclose(reason) {
+        onClose(reason) {
           // The Subscription's own abort listener may close it before ours runs;
           // an aborted signal still rejects the fetch with the signal's reason.
           if (settled) {
@@ -119,7 +119,7 @@ export async function fetchFilters(
       return;
     }
 
-    // A synchronous oneose/onclose inside subscribe() already settled the
+    // A synchronous onEose/onClose inside subscribe() already settled the
     // fetch: close the returned sub with the recorded reason and arm nothing.
     if (settled) {
       sub.close(pendingCloseReason);

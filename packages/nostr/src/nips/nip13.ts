@@ -127,7 +127,7 @@ export async function minePow(
     iterations++;
     if (iterations >= yieldEvery) {
       iterations = 0;
-      // oxlint-disable-next-line no-await-in-loop -- the yield is part of each mining round
+      // oxlint-disable-next-line eslint/no-await-in-loop -- the yield is part of each mining round
       await new Promise<void>((resolve) => {
         setTimeout(resolve);
       });

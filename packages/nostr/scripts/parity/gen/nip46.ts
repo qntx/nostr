@@ -40,7 +40,7 @@ const PK2 = "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23";
 type BunkerJson = {
   pubkey: string;
   relays: string[];
-  // oxlint-disable-next-line no-restricted-types -- the vector encodes "absent" as null
+  // oxlint-disable-next-line typescript/no-restricted-types -- the vector encodes "absent" as null
   secret: string | null;
 };
 
@@ -50,26 +50,26 @@ type ConnectJson = {
   relays: string[];
   secret: string;
   perms: string[];
-  // oxlint-disable no-restricted-types -- the vector encodes "absent" as null
+  // oxlint-disable typescript/no-restricted-types -- the vector encodes "absent" as null
   name: string | null;
   url: string | null;
   image: string | null;
-  // oxlint-enable no-restricted-types
+  // oxlint-enable typescript/no-restricted-types
 };
 
 type RequestJson = { id: string; method: string; params: string[] };
 type ResponseJson = {
   id: string;
-  // oxlint-disable no-restricted-types -- the vector encodes "absent" as null
+  // oxlint-disable typescript/no-restricted-types -- the vector encodes "absent" as null
   result: string | null;
   error: string | null;
-  // oxlint-enable no-restricted-types
+  // oxlint-enable typescript/no-restricted-types
 };
 
 type BunkerParseCase = {
   name: string;
   uri: string;
-  // oxlint-disable-next-line no-restricted-types -- `null` records the TS `undefined` return
+  // oxlint-disable-next-line typescript/no-restricted-types -- `null` records the TS `undefined` return
   out: BunkerJson | null;
 };
 type BunkerCase = {

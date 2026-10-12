@@ -7,23 +7,23 @@ import { nowSeconds } from "../core/util.ts";
 import { RelayClosedError } from "./error.ts";
 
 export type SubscriptionHandlers = {
-  onevent?: ((event: Event) => void) | undefined;
-  oneose?: (() => void) | undefined;
-  onclose?: ((reason: string) => void) | undefined;
-  /** Skip verify + onevent when true. Evaluated after parse, before verify. */
+  onEvent?: ((event: Event) => void) | undefined;
+  onEose?: (() => void) | undefined;
+  onClose?: ((reason: string) => void) | undefined;
+  /** Skip verify + onEvent when true. Evaluated after parse, before verify. */
   alreadyHaveEvent?: ((id: string) => boolean) | undefined;
   /**
    * Fired for every EVENT id this sub sees, including duplicates and alreadyHaveEvent hits, after
    * parse and before the verify skip.
    */
-  receivedEvent?: ((id: string) => void) | undefined;
+  onEventSeen?: ((id: string) => void) | undefined;
 };
 
 /** Options for {@link Relay.subscribe}: event handlers plus REQ behavior. */
 export type SubscribeOptions = SubscriptionHandlers & {
   id?: string | undefined;
   /**
-   * If set, fire `oneose` once after this many ms if EOSE has not arrived. The synthesized EOSE
+   * If set, fire `onEose` once after this many ms if EOSE has not arrived. The synthesized EOSE
    * also closes a `closeOnEose` subscription — without it a one-shot REQ would hang until a real
    * EOSE that is then ignored.
    */
@@ -78,11 +78,11 @@ export class Subscription {
     this.filters = filters;
     this.closeOnEose = opts.closeOnEose === true;
     this.#handlers = {
-      onevent: opts.onevent,
-      oneose: opts.oneose,
-      onclose: opts.onclose,
+      onEvent: opts.onEvent,
+      onEose: opts.onEose,
+      onClose: opts.onClose,
       alreadyHaveEvent: opts.alreadyHaveEvent,
-      receivedEvent: opts.receivedEvent,
+      onEventSeen: opts.onEventSeen,
     };
     if (opts.eoseTimeoutMs !== undefined) {
       this.#eoseTimer = setTimeout(() => {
@@ -117,7 +117,7 @@ export class Subscription {
 
   /**
    * Local close: idempotent; clears the EOSE timer and abort listener, detaches via `onLocalClose`
-   * (sends CLOSE / leaves the live group), then fires `onclose`.
+   * (sends CLOSE / leaves the live group), then fires `onClose`.
    */
   close(reason = "closed by client"): void {
     if (this.#closed) {
@@ -126,7 +126,7 @@ export class Subscription {
     this.#closed = true;
     this.#teardown();
     this.#onLocalClose(this);
-    invokeSafely(() => this.#handlers.onclose?.(reason));
+    invokeSafely(() => this.#handlers.onClose?.(reason));
   }
 
   /** Remote/transport termination: like {@link close} but `onLocalClose` is not called. */
@@ -136,7 +136,7 @@ export class Subscription {
     }
     this.#closed = true;
     this.#teardown();
-    invokeSafely(() => this.#handlers.onclose?.(reason));
+    invokeSafely(() => this.#handlers.onClose?.(reason));
   }
 
   #teardown(): void {
@@ -148,7 +148,7 @@ export class Subscription {
     this.#abortDispose = undefined;
   }
 
-  /** Mark EOSE: fires `oneose`, then closes when `closeOnEose`. No-op when closed or EOSE'd. */
+  /** Mark EOSE: fires `onEose`, then closes when `closeOnEose`. No-op when closed or EOSE'd. */
   markEose(): void {
     if (this.#closed || this.#eosed) {
       return;
@@ -158,7 +158,7 @@ export class Subscription {
       clearTimeout(this.#eoseTimer);
       this.#eoseTimer = undefined;
     }
-    invokeSafely(() => this.#handlers.oneose?.());
+    invokeSafely(() => this.#handlers.onEose?.());
     if (this.closeOnEose) {
       this.close("eose");
     }
@@ -182,9 +182,9 @@ export class Subscription {
     this.#authRetried = false;
   }
 
-  /** `receivedEvent` for every EVENT id, before watermark/alreadyHaveEvent/verify. */
+  /** `onEventSeen` for every EVENT id, before watermark/alreadyHaveEvent/verify. */
   notifyReceived(id: string): void {
-    invokeSafely(() => this.#handlers.receivedEvent?.(id));
+    invokeSafely(() => this.#handlers.onEventSeen?.(id));
   }
 
   alreadyHas(id: string): boolean {
@@ -199,10 +199,10 @@ export class Subscription {
     return this.#idsAtWatermark.has(id);
   }
 
-  /** Verified event: advance the watermark, then fire `onevent`. */
+  /** Verified event: advance the watermark, then fire `onEvent`. */
   deliver(event: Event): void {
     this.noteVerified(event);
-    invokeSafely(() => this.#handlers.onevent?.(event));
+    invokeSafely(() => this.#handlers.onEvent?.(event));
   }
 
   /**
@@ -252,10 +252,10 @@ export function subscriptionToAsyncIterable(
   // Pending next() resolvers resume in call order, so concurrent consumers hand
   // off queued events in the order they asked.
   let waiters: Array<() => void> = [];
-  // `let` is required: onclose can fire synchronously while start() is still assigning closer.
-  // oxlint-disable-next-line prefer-const
+  // `let` is required: onClose can fire synchronously while start() is still assigning closer.
+  // oxlint-disable-next-line eslint/prefer-const
   let closer: Closer | undefined;
-  // Set before every locally initiated close so onclose can distinguish it
+  // Set before every locally initiated close so onClose can distinguish it
   // from a remote/transport close without comparing reason strings.
   let localClose = false;
   let disposeAbort: (() => void) | undefined;
@@ -282,11 +282,11 @@ export function subscriptionToAsyncIterable(
   };
 
   closer = start({
-    onevent(event) {
+    onEvent(event) {
       queue.push(event);
       notify();
     },
-    onclose(reason) {
+    onClose(reason) {
       // The Subscription's own abort listener fires before this wrapper's,
       // so a signal-driven close can surface here while localClose is still
       // false — it is still a local close, not a remote one.
@@ -337,7 +337,7 @@ export function subscriptionToAsyncIterable(
             if (done) {
               return { value: undefined, done: true };
             }
-            // oxlint-disable-next-line no-await-in-loop -- the async iterator waits for each EVENT serially
+            // oxlint-disable-next-line eslint/no-await-in-loop -- the async iterator waits for each EVENT serially
             await waitForWake();
           }
         },

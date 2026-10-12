@@ -55,7 +55,7 @@ import type { EntityJson } from "./gen/entities.ts";
 import { encodeEntity, toJson } from "./gen/entities.ts";
 import { threadJson } from "./thread-json.ts";
 
-/* oxlint-disable no-bitwise -- a PRNG is bit arithmetic by design */
+/* oxlint-disable eslint/no-bitwise -- a PRNG is bit arithmetic by design */
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -66,7 +66,7 @@ function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-/* oxlint-enable no-bitwise */
+/* oxlint-enable eslint/no-bitwise */
 
 // `r` is rebound per capability so each file draws its own seeded stream.
 let r = mulberry32(0);
@@ -964,7 +964,7 @@ function nip46Pubkey(): string {
 }
 
 type Nip46UriInput = {
-  // oxlint-disable-next-line no-restricted-types -- null covers the JSON-null arm
+  // oxlint-disable-next-line typescript/no-restricted-types -- null covers the JSON-null arm
   pubkey?: string | null;
   client?: string;
   relays: string[];
@@ -1243,11 +1243,11 @@ function capture(run: () => unknown): { out?: unknown; err?: string } {
   }
 }
 
-// oxlint-disable-next-line no-unnecessary-type-parameters
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters
 function parseJson<T>(raw: string): T {
   // The input is generator-produced JSON text; the cast narrows `unknown` to
   // the shape the capability's public API expects.
-  // oxlint-disable-next-line no-unsafe-type-assertion
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return JSON.parse(raw) as T;
 }
 

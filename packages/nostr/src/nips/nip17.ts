@@ -165,7 +165,7 @@ export async function wrapDirectMessage(
       }
     : undefined;
   for (const target of targets) {
-    // oxlint-disable-next-line no-await-in-loop -- signer calls stay ordered, one recipient at a time
+    // oxlint-disable-next-line eslint/no-await-in-loop -- signer calls stay ordered, one recipient at a time
     const seal = await createSeal(crypto, target.pubkey, rumor, timeOpts);
     const wrap = createGiftWrap(seal, target.pubkey, {
       ...timeOpts,

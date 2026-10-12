@@ -6,7 +6,7 @@
 export type ManualFetchInit = {
   method?: string;
   headers?: Record<string, string>;
-  // oxlint-disable-next-line no-restricted-types -- mirrors RequestInit.body, which is nullable
+  // oxlint-disable-next-line typescript/no-restricted-types -- mirrors RequestInit.body, which is nullable
   body?: Blob | FormData | string | null;
   signal?: AbortSignal | undefined;
   /**
@@ -22,7 +22,7 @@ export type ManualFetch = (
 ) => Promise<{
   ok: boolean;
   status: number;
-  // oxlint-disable-next-line no-restricted-types -- mirrors Headers.get, which returns null
+  // oxlint-disable-next-line typescript/no-restricted-types -- mirrors Headers.get, which returns null
   headers: { get: (name: string) => string | null };
   json: () => Promise<unknown>;
   arrayBuffer: () => Promise<ArrayBuffer>;

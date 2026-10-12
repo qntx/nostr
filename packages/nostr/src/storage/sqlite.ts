@@ -1,4 +1,4 @@
-// oxlint-disable no-await-in-loop -- SqlDriver statements are issued sequentially; drivers are not required to support overlapping statements on one connection
+// oxlint-disable eslint/no-await-in-loop -- SqlDriver statements are issued sequentially; drivers are not required to support overlapping statements on one connection
 import { compareEventsDesc, itemCompare, sortEvents } from "../core/event.ts";
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";

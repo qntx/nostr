@@ -28,7 +28,7 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
     if (pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -64,7 +64,7 @@ describe("Client + ReactiveEventStore", () => {
     await client.shutdown();
   });
 
-  test("subscribe with observe:false delivers onevent but skips the index", async () => {
+  test("subscribe with observe:false delivers onEvent but skips the index", async () => {
     const client = makeClient();
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("skip me").createdAt(1).signWithKeys(keys);
@@ -73,7 +73,7 @@ describe("Client + ReactiveEventStore", () => {
     const delivered: string[] = [];
     const closer = client.subscribe(
       { kinds: [1] },
-      { observe: false, onevent: (e) => delivered.push(e.id) },
+      { observe: false, onEvent: (e) => delivered.push(e.id) },
     );
     await waitUntil(() => delivered.length === 1);
     expect(client.index.get(note.id)).toBeUndefined();
@@ -81,7 +81,7 @@ describe("Client + ReactiveEventStore", () => {
     await client.shutdown();
   });
 
-  test("two relays deliver the same note: index has it once, seenOn both, index precedes onevent", async () => {
+  test("two relays deliver the same note: index has it once, seenOn both, index precedes onEvent", async () => {
     const client = makeClient();
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("dup").createdAt(1).signWithKeys(keys);
@@ -93,11 +93,11 @@ describe("Client + ReactiveEventStore", () => {
     const closer = client.subscribe(
       { kinds: [1] },
       {
-        onevent: (event) => {
+        onEvent: (event) => {
           // index must already contain the event when the caller sees it
           order.push(indexOrderLabel(client.index.get(event.id)));
         },
-        receivedEvent: (id) => received.push(id),
+        onEventSeen: (id) => received.push(id),
       },
     );
 

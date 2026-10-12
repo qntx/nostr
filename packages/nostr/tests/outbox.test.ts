@@ -37,7 +37,7 @@ async function waitForReq(timeoutMs = 500): Promise<void> {
     if (collectReqFilters().length > 0) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for REQ");
@@ -50,7 +50,7 @@ async function waitForReqSockets(minCount: number, timeoutMs = 500): Promise<Moc
     if (sockets.length >= minCount) {
       return sockets;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for REQ sockets");
@@ -97,7 +97,7 @@ async function waitForSharedKind1Reqs(minCount = 1): Promise<unknown[][]> {
         return reqs;
       }
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for shared kind-1 REQ");

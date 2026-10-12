@@ -64,11 +64,11 @@ afterEach(() => {
 async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 2000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must check between sleeps
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must check between sleeps
     if (await check()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must check between sleeps
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must check between sleeps
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("timed out");
@@ -785,7 +785,7 @@ describe("Nip46Signer.fromNostrConnectURI hardening", () => {
         bunkerKeys.secretKey,
       );
       // RPCs are sent on the signer's own subscription — the newest one.
-      subs.at(-1)?.opts?.onevent?.(resp);
+      subs.at(-1)?.opts?.onEvent?.(resp);
     };
     const transport: Nip46Transport = {
       subscribe: (_relays, _filters, o) => {
@@ -862,8 +862,8 @@ describe("Nip46Signer.fromNostrConnectURI hardening", () => {
       timeoutMs: 3000,
     });
     const hs = subs.at(0)?.opts;
-    hs?.onevent?.(handshakeEvent("hs-secret", 0));
-    hs?.onevent?.(handshakeEvent("hs-secret", 1));
+    hs?.onEvent?.(handshakeEvent("hs-secret", 0));
+    hs?.onEvent?.(handshakeEvent("hs-secret", 1));
     const signer = await handshake;
     expect(signer.clientPublicKey).toBe(getPublicKey(CLIENT_SK));
     // handshake subscription + one signer RPC subscription — not two signers.
@@ -881,7 +881,7 @@ describe("Nip46Signer.fromNostrConnectURI hardening", () => {
       handshakeTimeoutMs: 3000,
       timeoutMs: 3000,
     });
-    subs.at(0)?.opts?.onevent?.(handshakeEvent("hs-secret", 0));
+    subs.at(0)?.opts?.onEvent?.(handshakeEvent("hs-secret", 0));
     await expect(handshake).rejects.toThrow(/boom/);
     expect(subs).toHaveLength(2);
     expect(subs.at(0)?.closes).toStrictEqual(["failed"]);

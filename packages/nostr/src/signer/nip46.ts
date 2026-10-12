@@ -26,8 +26,8 @@ import type { NostrSigner } from "./types.ts";
 /** Subscribe options used by NIP-46 transport (structural subset of Pool). */
 export type Nip46SubscribeOptions = {
   signal?: AbortSignal | undefined;
-  onevent?: ((event: Event) => void) | undefined;
-  onclose?: ((reason: string) => void) | undefined;
+  onEvent?: ((event: Event) => void) | undefined;
+  onClose?: ((reason: string) => void) | undefined;
 };
 
 /**
@@ -294,9 +294,9 @@ export class Nip46Signer implements NostrSigner {
     return new Promise((resolve, reject) => {
       let settled = false;
       let handshaking = false;
-      // `let` + later assignment: pool.subscribe may fire onclose synchronously (pre-aborted
+      // `let` + later assignment: pool.subscribe may fire onClose synchronously (pre-aborted
       // signal via fanIn) before a const initializer would complete.
-      // oxlint-disable-next-line prefer-const
+      // oxlint-disable-next-line eslint/prefer-const
       let sub: { close: (reason?: string) => void } | undefined;
       const finish = (err?: Error, signer?: Nip46Signer) => {
         if (settled) {
@@ -324,7 +324,7 @@ export class Nip46Signer implements NostrSigner {
         [{ kinds: [Kind.NostrConnect], "#p": [clientPubkey], limit: 0 }],
         {
           signal: opts.signal,
-          onevent: (event) => {
+          onEvent: (event) => {
             try {
               const convKey = getConversationKey(sk.bytes, event.pubkey);
               const payload = decrypt(event.content, convKey);
@@ -364,7 +364,7 @@ export class Nip46Signer implements NostrSigner {
               // ignore non-matching events
             }
           },
-          onclose: (reason) => {
+          onClose: (reason) => {
             if (reason !== "connected" && reason !== "failed") {
               finish(new Nip46Error(`nostrconnect subscription closed: ${reason}`));
             }
@@ -387,7 +387,7 @@ export class Nip46Signer implements NostrSigner {
         },
       ],
       {
-        onevent: (event) => {
+        onEvent: (event) => {
           try {
             const payload = decrypt(event.content, this.#conversationKey);
             const { id, result, error } = decodeNip46Response(payload);
@@ -420,7 +420,7 @@ export class Nip46Signer implements NostrSigner {
             // ignore decrypt failures from unrelated events
           }
         },
-        onclose: () => {
+        onClose: () => {
           this.#sub = undefined;
         },
       },

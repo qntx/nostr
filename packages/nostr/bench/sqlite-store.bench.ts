@@ -42,7 +42,7 @@ describe("sqlite store bench", () => {
     for (let i = 0; i < N; i++) {
       batch.push(event(i, author(i)));
       if (batch.length === 1000) {
-        // oxlint-disable-next-line no-await-in-loop -- batched fill must serialize writes
+        // oxlint-disable-next-line eslint/no-await-in-loop -- batched fill must serialize writes
         await store.putMany(batch.splice(0));
       }
     }
@@ -58,7 +58,7 @@ describe("sqlite store bench", () => {
     const RUNS = 20;
     const q0 = performance.now();
     for (let i = 0; i < RUNS; i++) {
-      // oxlint-disable-next-line no-await-in-loop -- timed runs must be sequential
+      // oxlint-disable-next-line eslint/no-await-in-loop -- timed runs must be sequential
       await store.query([filter]);
     }
     const queryMs = (performance.now() - q0) / RUNS;

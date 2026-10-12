@@ -20,7 +20,7 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
     if (pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must wait between iterations
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -29,11 +29,11 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
 async function waitUntilAsync(pred: () => Promise<boolean>, timeoutMs = 500): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    // oxlint-disable-next-line no-await-in-loop -- polling must await each probe
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must await each probe
     if (await pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must wait between iterations
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -61,7 +61,7 @@ describe("relay URL callbacks", () => {
     net.close();
   });
 
-  test("client subscribe: onevent once with first URL, receivedEvent per receipt", async () => {
+  test("client subscribe: onEvent once with first URL, onEventSeen per receipt", async () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("dup").createdAt(1).signWithKeys(keys);
     net.relay("wss://a.example").seed([note]);
@@ -78,8 +78,8 @@ describe("relay URL callbacks", () => {
     const closer = client.subscribe(
       { kinds: [1] },
       {
-        onevent: (event, relayUrl) => events.push([event, relayUrl]),
-        receivedEvent: (id, relayUrl) => received.push([id, relayUrl]),
+        onEvent: (event, relayUrl) => events.push([event, relayUrl]),
+        onEventSeen: (id, relayUrl) => received.push([id, relayUrl]),
       },
     );
 
@@ -94,7 +94,7 @@ describe("relay URL callbacks", () => {
     await client.shutdown();
   });
 
-  test("fetchRouted: onevent sees every relay batch, result deduped", async () => {
+  test("fetchRouted: onEvent sees every relay batch, result deduped", async () => {
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("routed").createdAt(1).signWithKeys(keys);
     net.relay("wss://a.example").seed([note]);
@@ -111,7 +111,7 @@ describe("relay URL callbacks", () => {
       [{ urls: ["wss://a.example", "wss://b.example"], filters: [{ kinds: [1] }] }],
       {
         timeoutMs: 2000,
-        onevent: (event, relayUrl) => seen.push([event.id, relayUrl]),
+        onEvent: (event, relayUrl) => seen.push([event.id, relayUrl]),
       },
     );
 
@@ -149,8 +149,8 @@ describe("relay URL callbacks", () => {
       { kinds: [1], authors: [a.publicKey] },
       {
         gossip: true,
-        onevent: (event, relayUrl) => events.push([event, relayUrl]),
-        receivedEvent: (_id, relayUrl) => received.push(relayUrl),
+        onEvent: (event, relayUrl) => events.push([event, relayUrl]),
+        onEventSeen: (_id, relayUrl) => received.push(relayUrl),
       },
     );
 
@@ -179,7 +179,7 @@ describe("issue #125", () => {
     net.close();
   });
 
-  test("#1 throwing onevent does not drop events from a fetch batch", async () => {
+  test("#1 throwing onEvent does not drop events from a fetch batch", async () => {
     const keys = Keys.fromSecretKey(SK);
     const older = EventBuilder.textNote("older").createdAt(1).signWithKeys(keys);
     const newer = EventBuilder.textNote("newer").createdAt(2).signWithKeys(keys);
@@ -195,12 +195,12 @@ describe("issue #125", () => {
       const routed = await fetchRouted(
         pool,
         [{ urls: ["wss://a.example"], filters: [{ kinds: [1] }] }],
-        { onevent: (event) => throwOnOlder(event) },
+        { onEvent: (event) => throwOnOlder(event) },
       );
       expect(routed.map((e) => e.id).toSorted()).toStrictEqual([older.id, newer.id].toSorted());
 
       const pooled = await pool.fetch(["wss://a.example"], [{ kinds: [1] }], {
-        onevent: (event) => throwOnOlder(event),
+        onEvent: (event) => throwOnOlder(event),
       });
       expect(pooled.map((e) => e.id).toSorted()).toStrictEqual([older.id, newer.id].toSorted());
       pool.close();
@@ -212,7 +212,7 @@ describe("issue #125", () => {
       });
       const fetched = await client.fetchEvents(
         { kinds: [1] },
-        { onevent: (event) => throwOnOlder(event), timeoutMs: 2000 },
+        { onEvent: (event) => throwOnOlder(event), timeoutMs: 2000 },
       );
       expect(fetched.map((e) => e.id).toSorted()).toStrictEqual([older.id, newer.id].toSorted());
       // persistence is a microtask-coalesced flush; poll until it lands
@@ -249,8 +249,8 @@ describe("issue #125", () => {
     const closer = client.subscribe(
       { kinds: [1] },
       {
-        onevent: (event) => events.push(event),
-        receivedEvent: (id) => received.push(id),
+        onEvent: (event) => events.push(event),
+        onEventSeen: (id) => received.push(id),
       },
     );
     await waitUntil(() => received.length > 0);

@@ -172,7 +172,7 @@ export class SubscriptionRegistry {
 
   closeAll(reason: string): void {
     // Snapshot semantics: end exactly the subscriptions registered at call
-    // time. An onclose handler may re-enter open() — with enableReconnect the
+    // time. An onClose handler may re-enter open() — with enableReconnect the
     // new sub stays registered as a normal sub (REQ'd on the next reconnect)
     // instead of spinning a drain loop or being orphaned by a blanket clear().
     const subs = [...this.#subs.values()];
@@ -189,7 +189,7 @@ export class SubscriptionRegistry {
       });
     }
     for (const sub of subs) {
-      // A same-id resubscribe from an earlier onclose may already own the slot.
+      // A same-id resubscribe from an earlier onClose may already own the slot.
       if (this.#subs.get(sub.id) === sub) {
         this.#subs.delete(sub.id);
       }
@@ -376,7 +376,7 @@ export class SubscriptionRegistry {
   }
 
   #deliverLiveEose(group: LiveGroup): void {
-    // snapshot: a oneose handler may close its handle and detach mid-pass
+    // snapshot: a onEose handler may close its handle and detach mid-pass
     const attachments = [...group.attachments];
     for (const att of attachments) {
       att.markEose();

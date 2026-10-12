@@ -31,11 +31,11 @@ async function sleep(ms: number): Promise<void> {
 async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 3000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    // oxlint-disable-next-line no-await-in-loop -- polling must await each probe
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must await each probe
     if (await check()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must wait between iterations
     await sleep(10);
   }
   throw new Error("timed out");
@@ -70,7 +70,7 @@ describe("FakeRelay NIP-01 + faults", () => {
     });
     const got: Event[] = [];
     const sub = relay.subscribe([{ kinds: [Kind.TextNote] }], {
-      onevent: (e) => got.push(e),
+      onEvent: (e) => got.push(e),
     });
 
     const live = note("live event", 5);
@@ -107,8 +107,8 @@ describe("FakeRelay NIP-01 + faults", () => {
     });
     const order: string[] = [];
     const sub = relay.subscribe([{ kinds: [Kind.TextNote] }], {
-      onevent: () => order.push("EVENT"),
-      oneose: () => order.push("EOSE"),
+      onEvent: () => order.push("EVENT"),
+      onEose: () => order.push("EOSE"),
     });
     await waitFor(() => containsAll(order, ["EOSE", "EVENT"]));
     expect(order).toStrictEqual(["EOSE", "EVENT"]);
@@ -121,8 +121,8 @@ describe("FakeRelay NIP-01 + faults", () => {
       websocketImplementation: net.websocketImplementation,
     });
     const reasons: string[] = [];
-    const a = relay.subscribe([{ kinds: [1] }], { onclose: (r) => reasons.push(`a:${r}`) });
-    const b = relay.subscribe([{ kinds: [2] }], { onclose: (r) => reasons.push(`b:${r}`) });
+    const a = relay.subscribe([{ kinds: [1] }], { onClose: (r) => reasons.push(`a:${r}`) });
+    const b = relay.subscribe([{ kinds: [2] }], { onClose: (r) => reasons.push(`b:${r}`) });
     await sleep(10);
     net.relay("wss://closed.example").closeSubscriptions("lab: maintenance");
     await waitFor(() => reasons.length === 2);
@@ -205,7 +205,7 @@ describe("FakeRelay NIP-01 + faults", () => {
       reconnects += 1;
     });
     const got: Event[] = [];
-    relay.subscribe([{ kinds: [1] }], { onevent: (e) => got.push(e) });
+    relay.subscribe([{ kinds: [1] }], { onEvent: (e) => got.push(e) });
 
     net.relay("wss://bounce.example").disconnect();
     await waitFor(() => reconnects === 1);
@@ -363,7 +363,7 @@ describe("FakeRelay NIP-42 auth", () => {
     });
     const got: Event[] = [];
     const sub = relay.subscribe([{ kinds: [Kind.TextNote] }], {
-      onevent: (e) => got.push(e),
+      onEvent: (e) => got.push(e),
     });
     await waitFor(() => got.length === 1);
     expect(got[0]!.id).toBe(stored.id);
@@ -382,7 +382,7 @@ describe("FakeRelay NIP-42 auth", () => {
     });
     const reasons: string[] = [];
     const sub = relay.subscribe([{ kinds: [Kind.TextNote] }], {
-      onclose: (r) => reasons.push(r),
+      onClose: (r) => reasons.push(r),
     });
     await waitFor(() => reasons.length === 1);
     expect(reasons[0]).toMatch(/^auth-required:/);
@@ -579,7 +579,7 @@ describe("issue #125", () => {
     const metaNew = EventBuilder.metadata({ name: "new" }).createdAt(20).signWithKeys(keys);
     core.seed([metaNew]);
     const gotMeta: Event[] = [];
-    const subMeta = subRelay.subscribe([{ kinds: [0] }], { onevent: (e) => gotMeta.push(e) });
+    const subMeta = subRelay.subscribe([{ kinds: [0] }], { onEvent: (e) => gotMeta.push(e) });
     await waitFor(() => gotMeta.length === 1);
     const metaOld = EventBuilder.metadata({ name: "old" }).createdAt(10).signWithKeys(keys);
     core.inject(metaOld);
@@ -588,7 +588,7 @@ describe("issue #125", () => {
 
     // (b) re-publishing the same event ACKs `duplicate:` and is not re-delivered
     const gotNotes: Event[] = [];
-    const subNotes = subRelay.subscribe([{ kinds: [1] }], { onevent: (e) => gotNotes.push(e) });
+    const subNotes = subRelay.subscribe([{ kinds: [1] }], { onEvent: (e) => gotNotes.push(e) });
     const dup = EventBuilder.textNote("dup").createdAt(30).signWithKeys(keys);
     const firstDup = await pub.publish(dup);
     expect(firstDup.ok).toBe(true);
@@ -615,7 +615,7 @@ describe("issue #125", () => {
 
     // (d) ephemeral events are delivered live, ACKed, and never stored
     const gotEph: Event[] = [];
-    const subEph = subRelay.subscribe([{ kinds: [20001] }], { onevent: (e) => gotEph.push(e) });
+    const subEph = subRelay.subscribe([{ kinds: [20001] }], { onEvent: (e) => gotEph.push(e) });
     const eph = EventBuilder.textNote("ephemeral").kind(20001).createdAt(33).signWithKeys(keys);
     const okEph = await pub.publish(eph);
     expect(okEph.ok).toBe(true);

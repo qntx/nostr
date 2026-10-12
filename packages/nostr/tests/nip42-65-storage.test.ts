@@ -94,7 +94,7 @@ describe("nip42", () => {
 
     const got: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => {
+      onEvent: (e) => {
         got.push(e.id);
       },
     });

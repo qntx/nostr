@@ -15,7 +15,7 @@ export class MemoryEventStore implements EventStore {
   async putMany(events: ReadonlyArray<Event>): Promise<PutResult[]> {
     const results: PutResult[] = [];
     for (const event of events) {
-      // oxlint-disable-next-line no-await-in-loop -- putMany applies puts sequentially in input order
+      // oxlint-disable-next-line eslint/no-await-in-loop -- putMany applies puts sequentially in input order
       results.push(await this.put(event));
     }
     return results;

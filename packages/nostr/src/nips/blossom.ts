@@ -349,7 +349,7 @@ export async function healBlobUrl(
       continue;
     }
     const candidate = `${base}/${hash}${ext}`;
-    // oxlint-disable-next-line no-await-in-loop -- probes servers in order, returning on the first hit
+    // oxlint-disable-next-line eslint/no-await-in-loop -- probes servers in order, returning on the first hit
     const status = await headStatus(fetchImpl, candidate, opts?.signal);
     if (status !== undefined && status >= 200 && status < 300) {
       return candidate;
@@ -371,7 +371,7 @@ export async function uploadToServers(
   let last: BlossomError | undefined;
   for (const server of servers) {
     try {
-      // oxlint-disable-next-line no-await-in-loop -- tries servers sequentially until one succeeds
+      // oxlint-disable-next-line eslint/no-await-in-loop -- tries servers sequentially until one succeeds
       return await upload(server, file, auth, opts);
     } catch (error) {
       if (isAbortError(error)) {

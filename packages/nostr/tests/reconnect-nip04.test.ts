@@ -45,7 +45,7 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
     if (pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -106,7 +106,7 @@ describe("Relay reconnect", () => {
     });
 
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e),
+      onEvent: (e) => events.push(e),
     });
 
     const first = MockWebSocket.instances[0]!;
@@ -155,11 +155,11 @@ describe("Relay reconnect", () => {
     let closed: string | undefined;
     const connecting = relay.connect();
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e.id),
-      oneose: () => {
+      onEvent: (e) => events.push(e.id),
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -206,7 +206,7 @@ describe("Relay reconnect", () => {
     let eose = 0;
     const connecting = relay.connect();
     const sub = relay.subscribe([{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
     });
@@ -296,7 +296,7 @@ describe("Relay reconnect", () => {
     const later = EventBuilder.textNote("same-second unseen").createdAt(50).signWithKeys(keys);
     const events: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e.id),
+      onEvent: (e) => events.push(e.id),
     }) as Subscription;
 
     const first = MockWebSocket.last();
@@ -338,8 +338,8 @@ describe("Relay reconnect", () => {
     const events: string[] = [];
     const received: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e.id),
-      receivedEvent: (id) => received.push(id),
+      onEvent: (e) => events.push(e.id),
+      onEventSeen: (id) => received.push(id),
     }) as Subscription;
 
     const first = MockWebSocket.last();

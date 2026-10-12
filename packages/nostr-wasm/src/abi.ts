@@ -40,7 +40,7 @@ function requireMemory(value: WebAssembly.ExportValue | undefined): WebAssembly.
   return value;
 }
 
-// oxlint-disable-next-line no-unnecessary-type-parameters -- T binds the declared ABI signature at each call site
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- T binds the declared ABI signature at each call site
 function requireFn<T extends (...args: number[]) => unknown>(
   value: WebAssembly.ExportValue | undefined,
   name: string,
@@ -48,7 +48,7 @@ function requireFn<T extends (...args: number[]) => unknown>(
   if (typeof value !== "function") {
     throw new TypeError(`wasm missing ${name} export`);
   }
-  // oxlint-disable-next-line no-unsafe-type-assertion -- wasm exports are opaque; each name is bound to the signature the ABI contract requires
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- wasm exports are opaque; each name is bound to the signature the ABI contract requires
   return value as T;
 }
 

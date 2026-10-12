@@ -589,7 +589,7 @@ export async function runNegSession(opts: {
   const need = new Set<string>();
   opts.openingSend(neg.initiate());
   for (let round = 0; round < MAX_NEG_ROUNDS; round++) {
-    // oxlint-disable-next-line no-await-in-loop -- protocol rounds are sequential by definition
+    // oxlint-disable-next-line eslint/no-await-in-loop -- protocol rounds are sequential by definition
     const out = neg.reconcile(await opts.next());
     for (const id of out.have) {
       have.add(id);

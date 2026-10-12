@@ -32,7 +32,7 @@ type FetchedAt = Map<string, { at: number; hit: boolean }>;
 
 /**
  * Batch-fetch replaceable events (kind + authors) via the pool. Fetched events are written into the
- * reactive index (`onevent` records `seenOn`) and the winner is read back from it; the index — not
+ * reactive index (`onEvent` records `seenOn`) and the winner is read back from it; the index — not
  * the loader — owns the stored value and winner selection. The loader only tracks per-address
  * `fetchedAt` timestamps so a recent fetch (including a miss) is not repeated within
  * `staleAfterSec`.
@@ -54,7 +54,7 @@ export function createReplaceableLoader(ctx: LoaderContext, kind: number): Repla
         const filter: Filter = { kinds: [kind], authors };
         await ctx.pool.fetch(relays, [filter], {
           timeoutMs: ctx.fetchTimeoutMs,
-          onevent: (event, relayUrl) => ctx.ingest(event, relayUrl),
+          onEvent: (event, relayUrl) => ctx.ingest(event, relayUrl),
         });
       }
       const now = nowSeconds();

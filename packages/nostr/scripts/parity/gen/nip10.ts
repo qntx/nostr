@@ -55,7 +55,7 @@ function signed(tags: Tag[], kind = 1, secretKey = ALICE): Event {
 
 // The vector inputs deliberately include malformed elements; the cast narrows
 // `unknown` to the API's input shape.
-// oxlint-disable-next-line no-unsafe-type-assertion
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
 const asTags = (tags: unknown): Tag[] => tags as Tag[];
 
 type ParseCase = {
@@ -164,7 +164,7 @@ parseCase("numeric e value throws", [["e", 42]], false);
 type ReplyCase = {
   name: string;
   parent: unknown;
-  // oxlint-disable-next-line no-restricted-types -- the vector encodes "no hint" as null
+  // oxlint-disable-next-line typescript/no-restricted-types -- the vector encodes "no hint" as null
   relay_hint: string | null;
   quotes: ReplyTagsOptions["quotes"];
   // Present only for reply_to cases: the wrapped EventBuilder's kind/content.
@@ -189,7 +189,7 @@ function isNormalized(hint: string): boolean {
 function replyCase(
   name: string,
   parent: Event,
-  // oxlint-disable-next-line no-restricted-types -- the vector encodes "no hint" as null
+  // oxlint-disable-next-line typescript/no-restricted-types -- the vector encodes "no hint" as null
   relayHint: string | null,
   quotes: ReplyTagsOptions["quotes"],
   rust?: boolean,

@@ -6,7 +6,7 @@ import { installIdbMock } from "./helpers/idb-mock.ts";
 import type { IdbMock } from "./helpers/idb-mock.ts";
 
 describe("MemoryEventStore conformance", () => {
-  // oxlint-disable-next-line expect-expect -- assertions live inside each case's run()
+  // oxlint-disable-next-line jest/expect-expect -- assertions live inside each case's run()
   test.each(eventStoreConformanceCases)("$name", async (c) => {
     await c.run(new MemoryEventStore());
   });
@@ -24,7 +24,7 @@ describe("IndexedDbEventStore conformance", () => {
     mock.uninstall();
   });
 
-  // oxlint-disable-next-line expect-expect -- assertions live inside each case's run()
+  // oxlint-disable-next-line jest/expect-expect -- assertions live inside each case's run()
   test.each(eventStoreConformanceCases)("$name", async (c) => {
     const store = new IndexedDbEventStore({ dbName: `conformance-${dbSeq++}` });
     await store.open();

@@ -61,7 +61,7 @@ describe("nip13 minePow", () => {
 
   test("mined id equals serializeEvent hashing at several difficulties", async () => {
     for (const difficulty of [4, 8, 12]) {
-      // oxlint-disable-next-line no-await-in-loop -- difficulties are mined one at a time
+      // oxlint-disable-next-line eslint/no-await-in-loop -- difficulties are mined one at a time
       const mined = await minePow({ ...UNSIGNED, tags: [...UNSIGNED.tags] }, difficulty);
       expect(getPow(mined.id)).toBeGreaterThanOrEqual(difficulty);
       expect(mined.id).toBe(getEventHash(mined));

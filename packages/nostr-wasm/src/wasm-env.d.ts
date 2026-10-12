@@ -14,7 +14,7 @@ declare namespace WebAssembly {
     readonly buffer: ArrayBuffer;
   }
 
-  // oxlint-disable-next-line no-extraneous-class, no-static-only-class -- ambient declaration of the WebAssembly.Module constructor value
+  // oxlint-disable-next-line typescript/no-extraneous-class, unicorn/no-static-only-class -- ambient declaration of the WebAssembly.Module constructor value
   class Module {
     static imports(module: Module): ModuleImportDescriptor[];
   }
@@ -24,7 +24,7 @@ declare namespace WebAssembly {
   }
 
   class RuntimeError extends Error {
-    // oxlint-disable-next-line custom-error-definition -- ambient declaration; a literal type is the only way to pin the name in a .d.ts
+    // oxlint-disable-next-line oxc/custom-error-definition -- ambient declaration; a literal type is the only way to pin the name in a .d.ts
     override name: "RuntimeError";
   }
 
@@ -38,7 +38,7 @@ declare namespace WebAssembly {
   function compile(bytes: ArrayBufferLike | ArrayBufferView): Promise<Module>;
 }
 
-// oxlint-disable-next-line no-implicit-globals -- declares fetch for runtimes typed without the DOM lib
+// oxlint-disable-next-line eslint/no-implicit-globals -- declares fetch for runtimes typed without the DOM lib
 declare function fetch(input: URL | string): Promise<{
   ok: boolean;
   status: number;
