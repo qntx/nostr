@@ -1220,6 +1220,82 @@ describe("IndexedDbEventStore", () => {
     await expect(store.get(note.id)).resolves.toBeUndefined();
     store.close();
   });
+
+  test("an aborted remove rejects and leaves data and tombstone mirrors intact", async () => {
+    const keys = Keys.fromSecretKey(SK);
+    const store = new IndexedDbEventStore({ dbName: "remove-abort" });
+    await store.open();
+    const note = EventBuilder.textNote("keep").createdAt(1).signWithKeys(keys);
+    const meta = EventBuilder.metadata({ name: "m" }).createdAt(2).signWithKeys(keys);
+    await store.put(note);
+    await store.put(meta);
+    // A tombstone must also survive the abort rollback.
+    await store.put(EventBuilder.deletion([meta.id]).createdAt(3).signWithKeys(keys));
+    await expect(store.get(meta.id)).resolves.toBeUndefined();
+
+    mock.failNextTxComplete("abort", null);
+    const outcome = await Promise.race([
+      store.remove([note.id]).then(
+        () => "resolved" as const,
+        (error: unknown) => error,
+      ),
+      new Promise<"hung">((resolve) => {
+        setTimeout(() => resolve("hung"), 500);
+      }),
+    ]);
+    expect(outcome).toBeInstanceOf(StorageError);
+    // The rolled-back cache mirror must not phantom-delete the event or the tombstone.
+    await expect(store.get(note.id)).resolves.toBeDefined();
+    await expect(store.query([{ kinds: [1] }])).resolves.toHaveLength(1);
+    await expect(store.get(meta.id)).resolves.toBeUndefined();
+    store.close();
+  });
+
+  test("concurrent open() calls share one in-flight open", async () => {
+    const g = globalThis as unknown as {
+      indexedDB: { open: (name: string, version?: number) => unknown };
+    };
+    let opens = 0;
+    const realOpen = g.indexedDB.open;
+    g.indexedDB.open = (name: string, version?: number): unknown => {
+      opens += 1;
+      return realOpen(name, version);
+    };
+    try {
+      const store = new IndexedDbEventStore({ dbName: "open-share" });
+      await Promise.all([store.open(), store.open(), store.open()]);
+      expect(opens).toBe(1);
+      store.close();
+    } finally {
+      g.indexedDB.open = realOpen;
+    }
+  });
+
+  test("an aborted clear rejects and leaves data and tombstone mirrors intact", async () => {
+    const keys = Keys.fromSecretKey(SK);
+    const store = new IndexedDbEventStore({ dbName: "clear-abort" });
+    await store.open();
+    const note = EventBuilder.textNote("keep").createdAt(1).signWithKeys(keys);
+    const meta = EventBuilder.metadata({ name: "m" }).createdAt(2).signWithKeys(keys);
+    await store.put(note);
+    await store.put(meta);
+    await store.put(EventBuilder.deletion([meta.id]).createdAt(3).signWithKeys(keys));
+
+    mock.failNextTxComplete("abort", null);
+    const outcome = await Promise.race([
+      store.clear().then(
+        () => "resolved" as const,
+        (error: unknown) => error,
+      ),
+      new Promise<"hung">((resolve) => {
+        setTimeout(() => resolve("hung"), 500);
+      }),
+    ]);
+    expect(outcome).toBeInstanceOf(StorageError);
+    await expect(store.get(note.id)).resolves.toBeDefined();
+    await expect(store.get(meta.id)).resolves.toBeUndefined();
+    store.close();
+  });
 });
 
 describe("IndexedDbEventStore version contention", () => {

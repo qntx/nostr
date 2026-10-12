@@ -171,22 +171,39 @@ export class SubscriptionRegistry {
   }
 
   closeAll(reason: string): void {
-    const groups = [...this.#liveBySubId.values()];
+    // Snapshot semantics: end exactly the subscriptions registered at call
+    // time. An onclose handler may re-enter open() — with enableReconnect the
+    // new sub stays registered as a normal sub (REQ'd on the next reconnect)
+    // instead of spinning a drain loop or being orphaned by a blanket clear().
+    const subs = [...this.#subs.values()];
+    const groups = new Set<LiveGroup>();
+    for (const sub of subs) {
+      const group = this.#liveBySubId.get(sub.id);
+      if (group !== undefined) {
+        groups.add(group);
+      }
+    }
     for (const group of groups) {
       invokeSafely(() => {
         this.#endLiveGroup(group, { sendClose: false, reason });
       });
     }
-    for (const sub of this.#subs.values()) {
+    for (const sub of subs) {
+      // A same-id resubscribe from an earlier onclose may already own the slot.
+      if (this.#subs.get(sub.id) === sub) {
+        this.#subs.delete(sub.id);
+      }
       sub.end(reason);
     }
-    this.#subs.clear();
-    this.#liveByFp.clear();
-    this.#liveBySubId.clear();
   }
 
   #openExclusive(filters: ReadonlyArray<Filter>, opts: SubscribeOptions): Subscription {
     const sub = new Subscription(filters, opts, (closed) => {
+      // Ownership check: a constructor-time close (pre-aborted signal) runs this
+      // before registration, and a late close must not evict a newer same-id entry.
+      if (this.#subs.get(closed.id) !== closed) {
+        return;
+      }
       this.#subs.delete(closed.id);
       try {
         if (this.#isOpen()) {
@@ -197,6 +214,11 @@ export class SubscriptionRegistry {
       }
     });
 
+    // A subscription closed in its constructor (already-aborted signal) is never
+    // registered: no REQ goes out and no CLOSE is owed for it.
+    if (sub.closed) {
+      return sub;
+    }
     this.#subs.set(sub.id, sub);
     if (this.#isOpen()) {
       this.#send(["REQ", sub.id, ...filters]);
@@ -267,12 +289,17 @@ export class SubscriptionRegistry {
   }
 
   #forgetLiveGroup(group: LiveGroup, reason: string): void {
-    // A newer wire may already own the fingerprint slot; only unlink this group.
+    // A newer wire may already own the fingerprint/subscription slots; only
+    // unlink this group.
     if (this.#liveByFp.get(group.fp) === group) {
       this.#liveByFp.delete(group.fp);
     }
-    this.#liveBySubId.delete(group.sub.id);
-    this.#subs.delete(group.sub.id);
+    if (this.#liveBySubId.get(group.sub.id) === group) {
+      this.#liveBySubId.delete(group.sub.id);
+    }
+    if (this.#subs.get(group.sub.id) === group.sub) {
+      this.#subs.delete(group.sub.id);
+    }
     // The wire has no handlers, so `end` fires nothing.
     group.sub.end(reason);
   }
@@ -312,6 +339,9 @@ export class SubscriptionRegistry {
     const { sub } = group;
     const attachments = [...group.attachments];
     for (const att of attachments) {
+      if (att.closed) {
+        continue;
+      }
       att.notifyReceived(event.id);
     }
     if (sub.isAtWatermark(event.id)) {

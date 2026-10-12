@@ -31,6 +31,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 - `validateAuthEvent` (NIP-98) now rejects auth events carrying more than one `u` or more than one `method` tag instead of matching the first.
 - `@qntx/nostr-wasm` throws `CryptoError("wasm scratch allocation failed")` when `nostr_buffer` returns NULL after a failed `memory.grow`, instead of writing at address 0 and corrupting linear memory.
 - Internal: the nostr-tools `scripts/parity/cross-check.ts` script is removed; vector parity is covered by `crates/interop`.
+- `Relay.subscribe` and `Relay.count` now throw `MessageError("duplicate subscription id: …")` synchronously when a caller-chosen `id` shadows an in-flight REQ or COUNT on the same relay; previously the second request silently replaced the first on the wire and starved the first waiter.
 - `decryptPrivateTags` (NIP-51) now rejects decrypted private-tag plaintext containing lone UTF-16 surrogates (`\ud800`-style escapes `JSON.parse` accepts) with `EventValidationError("invalid NIP-51 private tags")` (N10).
 - `parseBolt11` (NIP-57) ignores the `x` expiry field when its value exceeds 2^53−1 (where a JS number loses precision) and keeps the 3600s default (N8).
 - Internal: `crates/interop` is now a standalone Cargo project — `Cargo.toml`/`Cargo.lock`/`rust-toolchain.toml`/`rustfmt.toml`/`clippy.toml`/`deny.toml` moved under it and the root workspace manifest and `.cargo/config.toml` are gone; the repository root has no Rust files. `bun run test:parity` runs cargo inside `crates/interop`.
@@ -40,6 +41,15 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 - `nip46.decodeNip46Request`/`decodeNip46Response` reject JSON payloads containing lone surrogates (`\ud800`-style escapes `JSON.parse` accepts but serde_json rejects), reporting `invalid NIP-46 request/response JSON` (N10).
 - `nip46.parseNostrConnectURI` no longer echoes the input URI in the `invalid nostrconnect URI` error — the URI may carry the handshake `secret` (N11).
+- `Relay.fetch` no longer leaves an armed timeout behind when `subscribe` throws synchronously (e.g. an invalid caller-chosen `id`): the rejection now propagates without a stray timer that would later touch a dead binding.
+- `Relay.subscribe` with an already-aborted `AbortSignal` no longer registers the subscription or emits a `REQ`/`CLOSE` on the wire; `closeAll` drains subscriptions re-registered from inside `onclose` callbacks instead of leaving them as invisible zombies, and an attachment closed by a sibling's `receivedEvent` callback is no longer notified for that same event.
+- `Client.shutdown()` closes the relay pool before draining the persistence queue, so live subscriptions can no longer refill the queue and keep `shutdown()` waiting forever; events ingested after shutdown are not queued for persistence.
+- `subscriptionToAsyncIterable` resolves concurrent `next()` calls in call order via a waiter queue — a second pending `next()` no longer starves the first — and close/error now settle every pending `next()`.
+- `IndexedDbEventStore.remove`/`clear`/`setOutboxBound` run through the same snapshot/restore write-transaction path as `putMany`: an aborted or failed transaction restores the in-memory deletion/replaceable mirrors so RAM can no longer diverge from the database (phantom deletions or resurrections), and `onabort` settles the write instead of hanging. Concurrent `open()` calls now share a single in-flight connection open.
+- `ReactiveEventStore`: a subscriber that writes on every notification can no longer starve the microtask queue — the flush loop is bounded per turn and reschedules with a loud `reportError`; a malformed relay URL passed to `add`/`markSeen` is skipped for `seenOn` bookkeeping instead of throwing mid-ingest.
+- `DataLoader` no longer evicts a newer in-flight entry when an older request for the same key settles after `clear()`.
+- `subscribePrivateMessages` (NIP-17) releases the abort listener if `pool.subscribe` throws, and a wrap whose unwrap fails is now marked processed so its buffered relay receipts flush instead of pinning `pendingUrls` forever.
+- Testing: `FakeSocket.send` throws `InvalidStateError` while `CONNECTING` like a browser WebSocket, and `FakeRelayCore` latency-delayed sends are cancelled when the socket detaches so they no longer reach a closed transport.
 
 ## [0.12.1] - 2026-10-10
 

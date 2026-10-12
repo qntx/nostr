@@ -249,7 +249,9 @@ export function subscriptionToAsyncIterable(
   let head = 0;
   let done = false;
   let error: Error | undefined;
-  let wake: (() => void) | undefined;
+  // Pending next() resolvers resume in call order, so concurrent consumers hand
+  // off queued events in the order they asked.
+  let waiters: Array<() => void> = [];
   // `let` is required: onclose can fire synchronously while start() is still assigning closer.
   // oxlint-disable-next-line prefer-const
   let closer: Closer | undefined;
@@ -259,13 +261,16 @@ export function subscriptionToAsyncIterable(
   let disposeAbort: (() => void) | undefined;
 
   const notify = () => {
-    wake?.();
-    wake = undefined;
+    const pending = waiters;
+    waiters = [];
+    for (const wake of pending) {
+      wake();
+    }
   };
 
   const waitForWake = async (): Promise<void> =>
     new Promise<void>((resolve) => {
-      wake = resolve;
+      waiters.push(resolve);
     });
 
   const closeLocal = (reason: string): void => {

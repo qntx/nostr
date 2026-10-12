@@ -713,8 +713,18 @@ export class Relay {
     if (!this.#isOpen() && !this.#enableReconnect) {
       throw new RelayClosedError("not connected", this.url);
     }
+    if (opts.id !== undefined) {
+      this.#assertWireIdFree(assertSubscriptionId(opts.id));
+    }
     const canonical = canonicalizeFilters(filters);
     return this.#subscriptions.open(canonical, opts);
+  }
+
+  /** Caller-chosen ids must not shadow an in-flight REQ or COUNT on this relay. */
+  #assertWireIdFree(id: string): void {
+    if (this.#subscriptions.get(id) !== undefined || this.#countRequests.get(id) !== undefined) {
+      throw new MessageError(`duplicate subscription id: ${id}`);
+    }
   }
 
   #acceptEvent(event: Event): boolean {
@@ -813,6 +823,9 @@ export class Relay {
     const canonical = canonicalizeFilters(filters);
 
     const id = opts?.id === undefined ? this.nextSubId("count") : createSubscriptionId(opts.id);
+    if (opts?.id !== undefined) {
+      this.#assertWireIdFree(id);
+    }
     const timeoutMs = opts?.timeoutMs ?? this.#publishTimeoutMs;
 
     return this.#countRequests.track(id, {

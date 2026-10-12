@@ -75,6 +75,11 @@ export function createFakeRelayNetwork(defaults: FakeRelayOptions = {}): FakeRel
     }
 
     send(data: string): void {
+      // Browser semantics: CONNECTING throws InvalidStateError; CLOSING/CLOSED
+      // silently discard.
+      if (this.readyState === FakeSocket.CONNECTING) {
+        throw new Error("InvalidStateError: WebSocket is not open: readyState 0 (CONNECTING)");
+      }
       if (this.readyState !== FakeSocket.OPEN) {
         return;
       }

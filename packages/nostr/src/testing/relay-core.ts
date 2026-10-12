@@ -71,6 +71,8 @@ export type FakeRelaySession = {
   negs: Map<string, Negentropy>;
   authed: boolean;
   queue: Promise<void>;
+  /** Armed latency-delayed sends; cleared on detach so nothing fires post-close. */
+  timers: Set<ReturnType<typeof setTimeout>>;
 };
 
 /** Wire filters are trusted as NIP-01 filters once they are records. */
@@ -204,6 +206,7 @@ export class FakeRelayCore implements FakeRelay {
       negs: new Map(),
       authed: false,
       queue: Promise.resolve(),
+      timers: new Set(),
     };
     this.#sessions.add(session);
     if (this.#opts.auth) {
@@ -214,6 +217,10 @@ export class FakeRelayCore implements FakeRelay {
 
   detach(session: FakeRelaySession): void {
     this.#sessions.delete(session);
+    for (const timer of session.timers) {
+      clearTimeout(timer);
+    }
+    session.timers.clear();
   }
 
   /** Feed a raw client→relay frame. Messages of one session are handled in order. */
@@ -243,7 +250,16 @@ export class FakeRelayCore implements FakeRelay {
     const payload = JSON.stringify(message);
     const { latencyMs } = this.#opts;
     if (latencyMs !== undefined && latencyMs > 0) {
-      setTimeout(() => session.transport.send(payload), latencyMs);
+      const timer = setTimeout(() => {
+        session.timers.delete(timer);
+        // A session detached during the latency window must not emit on a dead
+        // transport.
+        if (!this.#sessions.has(session)) {
+          return;
+        }
+        session.transport.send(payload);
+      }, latencyMs);
+      session.timers.add(timer);
       return;
     }
     session.transport.send(payload);
