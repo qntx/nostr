@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-12
+
 ### Added
 
 - `@qntx/nostr-native`: the React Native crypto backend — a Nitro C++ HybridObject over vendored libsecp256k1 v0.8.0 (MIT) exposing `verifySerialized` (`SerializedEventVerifier` for `createEventVerifier`) and `signing` (`SigningBackend` for `Keys.fromSecretKey`/`Keys.generate`), iOS and Android. The package may only import `@qntx/nostr/core`. Moved from Meowl's `@meowl-social/nostr-crypto` and relicensed MIT OR Apache-2.0; the host C suite compiles the core with ASan+UBSan and runs the shared `vectors/bip340/official.csv` cases. The C API is `nostr_native_*` and every vendored libsecp256k1 symbol is prefixed `nostr_native_secp256k1_`, so the module links cleanly next to other copies of the library in the same app binary.
@@ -408,16 +410,22 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr.js/compare/v0.9.0...HEAD
-[0.9.0]: https://github.com/qntx/nostr.js/compare/v0.8.0...v0.9.0
-[0.8.0]: https://github.com/qntx/nostr.js/compare/v0.7.0...v0.8.0
-[0.7.0]: https://github.com/qntx/nostr.js/compare/v0.6.0...v0.7.0
-[0.6.0]: https://github.com/qntx/nostr.js/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/qntx/nostr.js/compare/v0.4.1...v0.5.0
-[0.4.1]: https://github.com/qntx/nostr.js/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/qntx/nostr.js/compare/v0.3.1...v0.4.0
-[0.3.1]: https://github.com/qntx/nostr.js/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/qntx/nostr.js/compare/v0.2.2...v0.3.0
-[0.2.2]: https://github.com/qntx/nostr.js/compare/v0.2.1...v0.2.2
-[0.2.1]: https://github.com/qntx/nostr.js/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/qntx/nostr.js/compare/v0.1.0...v0.2.0
+[Unreleased]: https://github.com/qntx/nostr/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/qntx/nostr/compare/v0.12.1...v0.13.0
+[0.12.1]: https://github.com/qntx/nostr/compare/v0.12.0...v0.12.1
+[0.12.0]: https://github.com/qntx/nostr/compare/v0.11.0...v0.12.0
+[0.11.0]: https://github.com/qntx/nostr/compare/v0.10.1...v0.11.0
+[0.10.1]: https://github.com/qntx/nostr/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/qntx/nostr/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/qntx/nostr/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/qntx/nostr/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/qntx/nostr/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/qntx/nostr/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/qntx/nostr/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/qntx/nostr/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/qntx/nostr/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/qntx/nostr/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/qntx/nostr/compare/v0.2.2...v0.3.0
+[0.2.2]: https://github.com/qntx/nostr/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/qntx/nostr/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/qntx/nostr/compare/v0.1.0...v0.2.0
