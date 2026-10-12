@@ -6,7 +6,8 @@
 // (tests/vectors/nip98.test.ts) and crates/interop.
 //
 // Events are signed deterministically: a fixed secret key plus a fixed BIP-340
-// auxiliary rand passed to `signEvent`, so Rust's `Keys::sign_event_with_aux`
+// auxiliary rand passed to `signEvent`, so rust-nostr's
+// `Keys::sign_schnorr_with_aux_rand` (crates/interop/tests/nip98.rs)
 // reproduces `id`/`sig` byte-for-byte. `getToken` serializes in the canonical
 // wire order (id, pubkey, created_at, kind, tags, content, sig), so its output
 // is the token both languages produce.
