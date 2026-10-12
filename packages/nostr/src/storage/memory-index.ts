@@ -1,13 +1,21 @@
-import { addToSetMap, removeFromSetMap, trimOldest } from "../core/collections.ts";
+import { trimOldest } from "../core/collections.ts";
 import type { Event } from "../core/event.ts";
 import { compareEventsDesc, itemCompare, sortEvents } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
-import { matchFilter } from "../core/filter.ts";
+import { filterTagConditions, matchFilter } from "../core/filter.ts";
 import { eventAddress, formatEventAddress, parseEventAddress } from "../core/tag.ts";
 import { DeletionState } from "./deletion.ts";
 import { applyPutMemory, decidePut, outboxBoundKey } from "./put.ts";
 import type { PutLookup } from "./put.ts";
+import { SortedEvents } from "./sorted-events.ts";
+import type { EventCursor } from "./sorted-events.ts";
 import type { NegentropyItem, OutboxBound, PutResult } from "./types.ts";
+
+/**
+ * NIP-01 only defines single-letter tag conditions; `#e`/`#p` hold hex ids (filter side
+ * lowercased).
+ */
+const SINGLE_ASCII_LETTER = /^[a-zA-Z]$/;
 
 export type MemoryIndexOptions = {
   /**
@@ -37,10 +45,11 @@ export type MemoryIndexOptions = {
  */
 export class MemoryIndex {
   readonly #byId = new Map<string, Event>();
-  readonly #byPubkey = new Map<string, Set<string>>();
-  readonly #byKind = new Map<number, Set<string>>();
-  readonly #byKindPubkey = new Map<string, Set<string>>(); // `${kind}:${pubkey}` → ids
-  readonly #byEpTag = new Map<string, Set<string>>(); // `${"e"|"p"}:${value}` → ids (event-side verbatim)
+  readonly #all = new SortedEvents();
+  readonly #byPubkey = new Map<string, SortedEvents>();
+  readonly #byKind = new Map<number, SortedEvents>();
+  readonly #byKindPubkey = new Map<string, SortedEvents>(); // `${kind}:${pubkey}` bucket
+  readonly #byTag = new Map<string, SortedEvents>(); // `${name}:${value}` for single-letter tag names (event-side verbatim)
   readonly #replaceable = new Map<string, string>(); // address -> event id
   // address -> last evicted winner; insertion order is the FIFO trim order
   readonly #watermarks = new Map<string, { id: string; created_at: number }>();
@@ -163,17 +172,39 @@ export class MemoryIndex {
       return [];
     }
     const items: NegentropyItem[] = [];
-    this.#eachCandidate(filter, (event) => {
-      if (this.#deletion.covers(event)) {
-        return;
+    const { limit } = filter;
+    if (filter.ids) {
+      const seen = new Set<string>();
+      for (const raw of filter.ids) {
+        const event = this.#byId.get(raw.toLowerCase());
+        if (!event || seen.has(event.id)) {
+          continue;
+        }
+        seen.add(event.id);
+        if (this.#deletion.covers(event) || !matchFilter(filter, event)) {
+          continue;
+        }
+        items.push({ id: event.id, created_at: event.created_at });
       }
-      if (!matchFilter(filter, event)) {
-        return;
+    } else {
+      const cursor = this.#candidates(filter);
+      while (cursor.value !== undefined) {
+        const event = cursor.value;
+        cursor.next();
+        if (this.#deletion.covers(event) || !matchFilter(filter, event)) {
+          continue;
+        }
+        items.push({ id: event.id, created_at: event.created_at });
+        if (limit !== undefined && items.length >= limit) {
+          break;
+        }
       }
-      items.push({ id: event.id, created_at: event.created_at });
-    });
+    }
     if (filter.limit !== undefined) {
-      items.sort(compareEventsDesc);
+      // The ids path collected matches in filter order; cursor results are already canonical.
+      if (filter.ids) {
+        items.sort(compareEventsDesc);
+      }
       if (items.length > filter.limit) {
         items.length = filter.limit;
       }
@@ -271,10 +302,11 @@ export class MemoryIndex {
       }
     }
     this.#byId.clear();
+    this.#all.clear();
     this.#byPubkey.clear();
     this.#byKind.clear();
     this.#byKindPubkey.clear();
-    this.#byEpTag.clear();
+    this.#byTag.clear();
     this.#replaceable.clear();
     this.#watermarks.clear();
     this.#watermarkIds.clear();
@@ -289,14 +321,12 @@ export class MemoryIndex {
   #indexInsert(event: Event): void {
     this.#byId.set(event.id, event);
     const { pubkey } = event;
-    addToSetMap(this.#byPubkey, pubkey, event.id);
-    addToSetMap(this.#byKind, event.kind, event.id);
-    addToSetMap(this.#byKindPubkey, `${event.kind}:${pubkey}`, event.id);
-    for (const tag of event.tags) {
-      if ((tag[0] !== "e" && tag[0] !== "p") || tag[1] === undefined) {
-        continue;
-      }
-      addToSetMap(this.#byEpTag, `${tag[0]}:${tag[1]}`, event.id);
+    this.#all.insert(event);
+    insertBucket(this.#byPubkey, pubkey, event);
+    insertBucket(this.#byKind, event.kind, event);
+    insertBucket(this.#byKindPubkey, `${event.kind}:${pubkey}`, event);
+    for (const key of tagKeys(event)) {
+      insertBucket(this.#byTag, key, event);
     }
     const addr = eventAddress(event);
     if (addr !== undefined) {
@@ -316,14 +346,12 @@ export class MemoryIndex {
     }
     this.#byId.delete(id);
     const { pubkey } = event;
-    removeFromSetMap(this.#byPubkey, pubkey, id);
-    removeFromSetMap(this.#byKind, event.kind, id);
-    removeFromSetMap(this.#byKindPubkey, `${event.kind}:${pubkey}`, id);
-    for (const tag of event.tags) {
-      if ((tag[0] !== "e" && tag[0] !== "p") || tag[1] === undefined) {
-        continue;
-      }
-      removeFromSetMap(this.#byEpTag, `${tag[0]}:${tag[1]}`, id);
+    this.#all.remove(event);
+    removeBucket(this.#byPubkey, pubkey, event);
+    removeBucket(this.#byKind, event.kind, event);
+    removeBucket(this.#byKindPubkey, `${event.kind}:${pubkey}`, event);
+    for (const key of tagKeys(event)) {
+      removeBucket(this.#byTag, key, event);
     }
     const addr = eventAddress(event);
     if (addr !== undefined && this.#replaceable.get(addr) === id) {
@@ -337,50 +365,8 @@ export class MemoryIndex {
     if (filter.limit === 0) {
       return [];
     }
+    const { limit } = filter;
     const matched: Event[] = [];
-    this.#eachCandidate(filter, (event) => {
-      if (this.#deletion.covers(event)) {
-        return;
-      }
-      if (!matchFilter(filter, event)) {
-        return;
-      }
-      matched.push(event);
-    });
-    sortEvents(matched);
-    return filter.limit === undefined ? matched : matched.slice(0, filter.limit);
-  }
-
-  #deriveOutboxBound(pubkey: string, kind: number): OutboxBound | undefined {
-    const byPk = this.#byPubkey.get(pubkey.toLowerCase());
-    const byKind = this.#byKind.get(kind);
-    if (!byPk || !byKind) {
-      return undefined;
-    }
-    let oldest: number | undefined;
-    let newest: number | undefined;
-    for (const id of byPk) {
-      if (!byKind.has(id) || this.#deletion.ids.has(id)) {
-        continue;
-      }
-      const event = this.#byId.get(id);
-      if (!event || this.#deletion.covers(event)) {
-        continue;
-      }
-      if (oldest === undefined || event.created_at < oldest) {
-        oldest = event.created_at;
-      }
-      if (newest === undefined || event.created_at > newest) {
-        newest = event.created_at;
-      }
-    }
-    if (oldest === undefined || newest === undefined) {
-      return undefined;
-    }
-    return { oldest, newest };
-  }
-
-  #eachCandidate(filter: Filter, visit: (event: Event) => void): void {
     if (filter.ids) {
       const seen = new Set<string>();
       for (const raw of filter.ids) {
@@ -389,91 +375,121 @@ export class MemoryIndex {
           continue;
         }
         seen.add(event.id);
-        visit(event);
+        if (this.#deletion.covers(event) || !matchFilter(filter, event)) {
+          continue;
+        }
+        matched.push(event);
       }
-      return;
+      sortEvents(matched);
+      return limit === undefined ? matched : matched.slice(0, limit);
     }
+    const cursor = this.#candidates(filter);
+    while (cursor.value !== undefined) {
+      const event = cursor.value;
+      cursor.next();
+      if (this.#deletion.covers(event) || !matchFilter(filter, event)) {
+        continue;
+      }
+      matched.push(event);
+      if (limit !== undefined && matched.length >= limit) {
+        break;
+      }
+    }
+    return matched;
+  }
 
-    if (filter.authors && filter.kinds) {
-      const seen = new Set<string>();
-      for (const pk of filter.authors) {
+  /**
+   * Smallest-total bucket set for the filter's usable indexes: `authors`×`kinds` (both present),
+   * `authors`, `kinds`, each single-letter `#x` condition (a bucket per value; `#e`/`#p` filter
+   * values lowercased like `matchFilter`, others verbatim), or `all` as the fallback.
+   */
+  #plan(filter: Filter): SortedEvents[] {
+    const { authors, kinds } = filter;
+    const tagConds = filterTagConditions(filter);
+
+    let best: SortedEvents[] | undefined;
+    let bestTotal = Number.POSITIVE_INFINITY;
+    const consider = (buckets: Array<SortedEvents | undefined>): void => {
+      let total = 0;
+      const present: SortedEvents[] = [];
+      for (const bucket of buckets) {
+        if (bucket !== undefined) {
+          present.push(bucket);
+          total += bucket.size;
+        }
+      }
+      if (total < bestTotal) {
+        bestTotal = total;
+        best = present;
+      }
+    };
+
+    if (authors !== undefined && kinds !== undefined) {
+      const buckets: Array<SortedEvents | undefined> = [];
+      for (const pk of authors) {
         const pubkey = pk.toLowerCase();
-        for (const kind of filter.kinds) {
-          const ids = this.#byKindPubkey.get(`${kind}:${pubkey}`);
-          if (!ids) {
-            continue;
-          }
-          for (const id of ids) {
-            if (seen.has(id)) {
-              continue;
-            }
-            seen.add(id);
-            const event = this.#byId.get(id);
-            if (event) {
-              visit(event);
-            }
-          }
+        for (const kind of kinds) {
+          buckets.push(this.#byKindPubkey.get(`${kind}:${pubkey}`));
         }
       }
-      return;
+      consider(buckets);
     }
+    if (authors !== undefined) {
+      consider(authors.map((pk) => this.#byPubkey.get(pk.toLowerCase())));
+    }
+    if (kinds !== undefined) {
+      consider(kinds.map((kind) => this.#byKind.get(kind)));
+    }
+    for (const { name, values } of tagConds) {
+      consider(values.map((v) => this.#byTag.get(`${name}:${v}`)));
+    }
+    if (best === undefined || bestTotal > this.#all.size) {
+      return [this.#all];
+    }
+    return best;
+  }
 
-    if (filter.authors) {
-      const seen = new Set<string>();
-      for (const pk of filter.authors) {
-        const byPk = this.#byPubkey.get(pk.toLowerCase());
-        if (!byPk) {
-          continue;
-        }
-        for (const id of byPk) {
-          if (seen.has(id)) {
-            continue;
-          }
-          seen.add(id);
-          const event = this.#byId.get(id);
-          if (event) {
-            visit(event);
-          }
-        }
+  /** Canonical-order candidates from the planned buckets, each clipped to `since`/`until`. */
+  #candidates(filter: Filter): CandidateCursor {
+    const buckets = this.#plan(filter);
+    const cursors: EventCursor[] = [];
+    for (const bucket of buckets) {
+      const cursor = bucket.cursor(filter.since, filter.until);
+      if (cursor.value !== undefined) {
+        cursors.push(cursor);
       }
-      return;
     }
+    if (cursors.length === 0) {
+      return EMPTY_CURSOR;
+    }
+    if (cursors.length === 1) {
+      return cursors[0] ?? EMPTY_CURSOR;
+    }
+    return new CursorHeap(cursors);
+  }
 
-    if (filter.kinds) {
-      const seen = new Set<string>();
-      for (const kind of filter.kinds) {
-        const byKind = this.#byKind.get(kind);
-        if (!byKind) {
-          continue;
-        }
-        for (const id of byKind) {
-          if (seen.has(id)) {
-            continue;
-          }
-          seen.add(id);
-          const event = this.#byId.get(id);
-          if (event) {
-            visit(event);
-          }
-        }
+  #deriveOutboxBound(pubkey: string, kind: number): OutboxBound | undefined {
+    const bucket = this.#byKindPubkey.get(`${kind}:${pubkey.toLowerCase()}`);
+    if (bucket === undefined) {
+      return undefined;
+    }
+    // Canonical order: first non-deleted event is the newest, last the oldest.
+    let oldest: number | undefined;
+    let newest: number | undefined;
+    const cursor = bucket.cursor();
+    while (cursor.value !== undefined) {
+      const event = cursor.value;
+      cursor.next();
+      if (this.#deletion.covers(event)) {
+        continue;
       }
-      return;
+      newest ??= event.created_at;
+      oldest = event.created_at;
     }
-
-    const eTags = filter["#e"];
-    const pTags = filter["#p"];
-    if (eTags !== undefined || pTags !== undefined) {
-      const seen = new Set<string>();
-      visitEpTagIds(this.#byEpTag, this.#byId, "e", eTags, seen, visit);
-      visitEpTagIds(this.#byEpTag, this.#byId, "p", pTags, seen, visit);
-      return;
+    if (oldest === undefined || newest === undefined) {
+      return undefined;
     }
-
-    // #t/#d and other non-e/p tags are not indexed (e/p only). A generic tag
-    // store is extra put/remove amp; hashtag-only queries scan #byId.
-    for (const event of this.#byId.values()) {
-      visit(event);
-    }
+    return { oldest, newest };
   }
 
   #setWatermark(addr: string, watermark: { id: string; created_at: number }): void {
@@ -517,31 +533,128 @@ export class MemoryIndex {
   }
 }
 
-function visitEpTagIds(
-  byEpTag: Map<string, Set<string>>,
-  byId: Map<string, Event>,
-  name: "e" | "p",
-  values: ReadonlyArray<string> | undefined,
-  seen: Set<string>,
-  visit: (event: Event) => void,
-): void {
-  if (values === undefined) {
-    return;
+type CandidateCursor = {
+  readonly value: Event | undefined;
+  next: () => void;
+};
+
+const EMPTY_CURSOR: CandidateCursor = {
+  value: undefined,
+  next: () => undefined,
+};
+
+/**
+ * Binary-heap k-way merge of sorted cursors. `next()` advances every cursor sitting on the emitted
+ * event, which dedupes an event present in several buckets (multi-value `#x` filters); copies
+ * compare equal so they always surface adjacent. Entries pair each cursor with its head event so
+ * heap comparisons never read `undefined`.
+ */
+class CursorHeap implements CandidateCursor {
+  #heap: Array<{ cursor: EventCursor; event: Event }>;
+
+  constructor(cursors: EventCursor[]) {
+    const heap: Array<{ cursor: EventCursor; event: Event }> = [];
+    for (const cursor of cursors) {
+      const event = cursor.value;
+      if (event !== undefined) {
+        heap.push({ cursor, event });
+      }
+    }
+    this.#heap = heap;
+    for (let i = Math.floor(heap.length / 2) - 1; i >= 0; i--) {
+      this.#siftDown(i);
+    }
   }
-  for (const value of values) {
-    const ids = byEpTag.get(`${name}:${value.toLowerCase()}`);
-    if (!ids) {
+
+  get value(): Event | undefined {
+    return this.#heap[0]?.event;
+  }
+
+  next(): void {
+    const emitted = this.#heap[0]?.event;
+    if (emitted === undefined) {
+      return;
+    }
+    while (this.#heap[0]?.event === emitted) {
+      const [root] = this.#heap;
+      if (root === undefined) {
+        return;
+      }
+      root.cursor.next();
+      const nextEvent = root.cursor.value;
+      if (nextEvent === undefined) {
+        const last = this.#heap.pop();
+        if (this.#heap.length > 0 && last !== undefined) {
+          this.#heap[0] = last;
+          this.#siftDown(0);
+        }
+      } else {
+        root.event = nextEvent;
+        this.#siftDown(0);
+      }
+    }
+  }
+
+  #less(a: number, b: number): boolean {
+    const x = this.#heap[a];
+    const y = this.#heap[b];
+    return x !== undefined && y !== undefined && compareEventsDesc(x.event, y.event) < 0;
+  }
+
+  #siftDown(start: number): void {
+    const heap = this.#heap;
+    let i = start;
+    for (;;) {
+      let min = i;
+      if (this.#less(2 * i + 1, min)) {
+        min = 2 * i + 1;
+      }
+      if (this.#less(2 * i + 2, min)) {
+        min = 2 * i + 2;
+      }
+      if (min === i) {
+        return;
+      }
+      const tmp = heap[i];
+      const swap = heap[min];
+      if (tmp === undefined || swap === undefined) {
+        return;
+      }
+      heap[i] = swap;
+      heap[min] = tmp;
+      i = min;
+    }
+  }
+}
+
+/** Distinct `${name}:${value}` bucket keys for every ASCII single-letter tag name on the event. */
+function tagKeys(event: Event): string[] {
+  const keys = new Set<string>();
+  for (const tag of event.tags) {
+    const [name, value] = tag;
+    if (name === undefined || value === undefined || !SINGLE_ASCII_LETTER.test(name)) {
       continue;
     }
-    for (const id of ids) {
-      if (seen.has(id)) {
-        continue;
-      }
-      seen.add(id);
-      const event = byId.get(id);
-      if (event) {
-        visit(event);
-      }
-    }
+    keys.add(`${name}:${value}`);
+  }
+  return [...keys];
+}
+
+function insertBucket<K>(map: Map<K, SortedEvents>, key: K, event: Event): void {
+  let bucket = map.get(key);
+  if (bucket === undefined) {
+    bucket = new SortedEvents();
+    map.set(key, bucket);
+  }
+  bucket.insert(event);
+}
+
+function removeBucket<K>(map: Map<K, SortedEvents>, key: K, event: Event): void {
+  const bucket = map.get(key);
+  if (bucket === undefined || !bucket.remove(event)) {
+    return;
+  }
+  if (bucket.size === 0) {
+    map.delete(key);
   }
 }

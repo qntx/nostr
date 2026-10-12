@@ -1,7 +1,11 @@
 import type { Event } from "./event.ts";
 import { isAddressableKind, isReplaceableKind } from "./kind.ts";
 
-/** NIP-01 filter object (immutable-friendly; callers may still pass plain objects). */
+/**
+ * NIP-01 filter object (immutable-friendly; callers may still pass plain objects). Filters are
+ * treated as immutable once used: `matchFilter` and the event stores cache a compiled form keyed on
+ * the object, so mutating a filter after it has been matched yields stale results.
+ */
 export type Filter = {
   readonly ids?: ReadonlyArray<string> | undefined;
   readonly kinds?: ReadonlyArray<number> | undefined;
@@ -17,48 +21,95 @@ export type Filter = {
 /** NIP-01 only defines single-letter tag conditions. */
 const SINGLE_LETTER_TAG = /^#[a-zA-Z]$/;
 
-/** Local NIP-01 match. `search` is ignored; relays interpret NIP-50. */
-export function matchFilter(filter: Filter, event: Event): boolean {
-  if (filter.ids && !filter.ids.some((id) => id.toLowerCase() === event.id)) {
-    return false;
-  }
-  if (filter.kinds && !filter.kinds.includes(event.kind)) {
-    return false;
-  }
-  if (filter.authors && !filter.authors.some((pk) => pk.toLowerCase() === event.pubkey)) {
-    return false;
-  }
+type CompiledTagCondition = {
+  readonly name: string;
+  readonly values: ReadonlySet<string>;
+};
 
+/** `matchFilter` condition form: `Set` lookups instead of per-element scans and `toLowerCase`. */
+type CompiledFilter = {
+  readonly ids: ReadonlySet<string> | undefined;
+  readonly kinds: ReadonlySet<number> | undefined;
+  readonly authors: ReadonlySet<string> | undefined;
+  readonly tags: ReadonlyArray<CompiledTagCondition>;
+  readonly since: number | undefined;
+  readonly until: number | undefined;
+};
+
+const compiledFilters = new WeakMap<Filter, CompiledFilter>();
+
+/**
+ * Single-letter `#x` conditions shared by `matchFilter` and the event stores: `#e`/`#p` values are
+ * lowercased (they hold hex ids, same as `encodeClientMessage`), other tag values stay verbatim —
+ * relays match tag values literally. Multi-letter `#` keys are outside NIP-01. Internal to the
+ * package; not exported from the index.
+ */
+export function filterTagConditions(
+  filter: Filter,
+): Array<{ name: string; values: ReadonlyArray<string> }> {
+  const conditions: Array<{ name: string; values: ReadonlyArray<string> }> = [];
   for (const key of Object.keys(filter)) {
-    // Multi-letter # keys are outside NIP-01 and ignored.
     if (!SINGLE_LETTER_TAG.test(key)) {
       continue;
     }
-    const tagName = key.slice(1);
-    const values = filter[`#${tagName}`];
-    if (!values) {
+    const name = key.slice(1);
+    const values = filter[`#${name}`];
+    if (values === undefined) {
       continue;
     }
-    const hexTag = tagName === "e" || tagName === "p";
+    conditions.push({
+      name,
+      values: name === "e" || name === "p" ? values.map((v) => v.toLowerCase()) : values,
+    });
+  }
+  return conditions;
+}
+
+function compileFilter(filter: Filter): CompiledFilter {
+  return {
+    ids: filter.ids ? new Set(filter.ids.map((id) => id.toLowerCase())) : undefined,
+    kinds: filter.kinds ? new Set(filter.kinds) : undefined,
+    authors: filter.authors ? new Set(filter.authors.map((pk) => pk.toLowerCase())) : undefined,
+    tags: filterTagConditions(filter).map(({ name, values }) => ({
+      name,
+      values: new Set(values),
+    })),
+    since: filter.since,
+    until: filter.until,
+  };
+}
+
+/** Local NIP-01 match. `search` is ignored; relays interpret NIP-50. */
+export function matchFilter(filter: Filter, event: Event): boolean {
+  let compiled = compiledFilters.get(filter);
+  if (compiled === undefined) {
+    compiled = compileFilter(filter);
+    compiledFilters.set(filter, compiled);
+  }
+  if (compiled.ids !== undefined && !compiled.ids.has(event.id)) {
+    return false;
+  }
+  if (compiled.kinds !== undefined && !compiled.kinds.has(event.kind)) {
+    return false;
+  }
+  if (compiled.authors !== undefined && !compiled.authors.has(event.pubkey)) {
+    return false;
+  }
+
+  for (const { name, values } of compiled.tags) {
     const hit = event.tags.some((tag) => {
       const [tagKey, tagValue] = tag;
-      if (tagKey !== tagName || tagValue === undefined) {
-        return false;
-      }
-      // #e/#p hold hex ids: filter values are canonicalized to lowercase (same as
-      // encodeClientMessage), but the event's tag value is compared verbatim — relays
-      // match tag values literally.
-      return values.some((v) => (hexTag ? v.toLowerCase() : v) === tagValue);
+      return tagKey === name && tagValue !== undefined && values.has(tagValue);
     });
     if (!hit) {
       return false;
     }
   }
 
-  if (filter.since !== undefined && event.created_at < filter.since) {
+  if (compiled.since !== undefined && event.created_at < compiled.since) {
     return false;
   }
-  if (filter.until !== undefined && event.created_at > filter.until) {
+  if (compiled.until !== undefined && event.created_at > compiled.until) {
     return false;
   }
 

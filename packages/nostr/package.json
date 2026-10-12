@@ -192,6 +192,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.src.json",
     "bench:store": "BENCH=1 vp test bench/reactive-store.bench.ts",
     "bench:store:sqlite": "BENCH=1 vp test bench/sqlite-store.bench.ts",
+    "bench:index": "BENCH=1 vp test bench/memory-index.bench.ts",
     "bench:nip27": "BENCH=1 vp test bench/nip27.bench.ts",
     "smoke:hermes": "bun scripts/hermes-smoke.ts",
     "check:pkg": "vp pack && publint && attw --pack . --profile esm-only",
