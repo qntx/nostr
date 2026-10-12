@@ -40,7 +40,7 @@ export class MemoryIndex {
   readonly #byPubkey = new Map<string, Set<string>>();
   readonly #byKind = new Map<number, Set<string>>();
   readonly #byKindPubkey = new Map<string, Set<string>>(); // `${kind}:${pubkey}` → ids
-  readonly #byEpTag = new Map<string, Set<string>>(); // `${"e"|"p"}:${value.toLowerCase()}` → ids
+  readonly #byEpTag = new Map<string, Set<string>>(); // `${"e"|"p"}:${value}` → ids (event-side verbatim)
   readonly #replaceable = new Map<string, string>(); // address -> event id
   // address -> last evicted winner; insertion order is the FIFO trim order
   readonly #watermarks = new Map<string, { id: string; created_at: number }>();
@@ -296,7 +296,7 @@ export class MemoryIndex {
       if ((tag[0] !== "e" && tag[0] !== "p") || tag[1] === undefined) {
         continue;
       }
-      addToSetMap(this.#byEpTag, `${tag[0]}:${tag[1].toLowerCase()}`, event.id);
+      addToSetMap(this.#byEpTag, `${tag[0]}:${tag[1]}`, event.id);
     }
     const addr = eventAddress(event);
     if (addr !== undefined) {
@@ -323,7 +323,7 @@ export class MemoryIndex {
       if ((tag[0] !== "e" && tag[0] !== "p") || tag[1] === undefined) {
         continue;
       }
-      removeFromSetMap(this.#byEpTag, `${tag[0]}:${tag[1].toLowerCase()}`, id);
+      removeFromSetMap(this.#byEpTag, `${tag[0]}:${tag[1]}`, id);
     }
     const addr = eventAddress(event);
     if (addr !== undefined && this.#replaceable.get(addr) === id) {

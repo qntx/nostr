@@ -45,10 +45,10 @@ export function matchFilter(filter: Filter, event: Event): boolean {
       if (tagKey !== tagName || tagValue === undefined) {
         return false;
       }
-      if (hexTag) {
-        return values.some((v) => v.toLowerCase() === tagValue.toLowerCase());
-      }
-      return values.includes(tagValue);
+      // #e/#p hold hex ids: filter values are canonicalized to lowercase (same as
+      // encodeClientMessage), but the event's tag value is compared verbatim — relays
+      // match tag values literally.
+      return values.some((v) => (hexTag ? v.toLowerCase() : v) === tagValue);
     });
     if (!hit) {
       return false;

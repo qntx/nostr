@@ -435,23 +435,31 @@ describe("IndexedDbEventStore", () => {
     const keys = Keys.fromSecretKey(SK);
     const store = new IndexedDbEventStore({ dbName: "case-hex" });
     await store.open();
-    // Tag values are arbitrary content: uppercase e/p values are indexed
-    // case-insensitively while the event itself stays canonical.
-    const note = EventBuilder.textNote("n")
+    // Event-side tag values are verbatim like matchFilter: uppercase e/p tag
+    // values never match, while filter values canonicalize to lowercase.
+    const upper = EventBuilder.textNote("upper")
       .tag(["e", EID.toUpperCase()])
       .tag(["p", keys.publicKey.toUpperCase()])
       .createdAt(1)
       .signWithKeys(keys);
-    const mixed = { ...note, id: note.id.toUpperCase(), pubkey: note.pubkey.toUpperCase() };
+    const lower = EventBuilder.textNote("lower")
+      .tag(["e", EID])
+      .tag(["p", keys.publicKey])
+      .createdAt(2)
+      .signWithKeys(keys);
+    const mixed = { ...upper, id: upper.id.toUpperCase(), pubkey: upper.pubkey.toUpperCase() };
     await expect(store.put(mixed)).resolves.toBe("invalid");
-    await expect(store.put(note)).resolves.toBe("accepted");
-    const got3 = await store.get(note.id.toUpperCase());
-    expect(got3?.id).toBe(note.id);
+    await expect(store.put(upper)).resolves.toBe("accepted");
+    await expect(store.put(lower)).resolves.toBe("accepted");
+    const got3 = await store.get(upper.id.toUpperCase());
+    expect(got3?.id).toBe(upper.id);
     await expect(
       store.query([{ authors: [keys.publicKey.toUpperCase()], kinds: [1] }]),
-    ).resolves.toHaveLength(1);
-    await expect(store.query([{ "#e": [EID.toUpperCase()] }])).resolves.toHaveLength(1);
-    await expect(store.query([{ "#p": [keys.publicKey.toUpperCase()] }])).resolves.toHaveLength(1);
+    ).resolves.toHaveLength(2);
+    await expect(store.query([{ "#e": [EID.toUpperCase()] }])).resolves.toStrictEqual([lower]);
+    await expect(store.query([{ "#p": [keys.publicKey.toUpperCase()] }])).resolves.toStrictEqual([
+      lower,
+    ]);
     store.close();
   });
 

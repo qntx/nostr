@@ -1,9 +1,10 @@
 /**
- * NIP-01 regular ranges verbatim; kinds outside every defined range are still stored like regular
- * events (see {@link classifyKind}).
+ * Regular means relays store the event: every kind below 10000 except the replaceable kinds 0 and 3.
+ * The NIP-01 enumerated regular ranges are a subset; kinds 45–999 are stored like regular events in
+ * practice (nostr-tools and rust-nostr agree).
  */
 export function isRegularKind(kind: number): boolean {
-  return kind === 1 || kind === 2 || (kind >= 4 && kind < 45) || (kind >= 1000 && kind < 10000);
+  return kind < 10000 && kind !== 0 && kind !== 3;
 }
 
 /** Replaceable: latest per (pubkey, kind) wins. */
@@ -27,7 +28,7 @@ export type KindClassification = "regular" | "replaceable" | "ephemeral" | "addr
 /**
  * Classify a kind number into its NIP-01 storage class. NIP-01 leaves kinds 45–999 and 40000+
  * undefined (rather than forbidden); relays store them like regular events, so they classify
- * `"regular"` here even though {@link isRegularKind} returns false for them.
+ * `"regular"` here even though {@link isRegularKind} returns false for kinds 40000+.
  */
 export function classifyKind(kind: number): KindClassification {
   if (isReplaceableKind(kind)) {

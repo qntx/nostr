@@ -88,9 +88,8 @@ function emit(capability: string, file: string, cases: unknown, crossCheck?: str
 const CROSS_CHECK_IDS = "nostr-tools 2.24.1 @7fa1ef4: getEventHash/serializeEvent ids match (5/5)";
 const CROSS_CHECK_SIGS = "nostr-tools 2.24.1 @7fa1ef4: verifyEvent signatures match (3/3)";
 const CROSS_CHECK_KINDS =
-  "nostr-tools 2.24.1 @7fa1ef4: is*Kind booleans agree inside the NIP-01 ranges; kind 45/999 " +
-  "isRegularKind and 40000+ classifyKind differ by definition (nostr-tools uses `<10000 except " +
-  "0/3` and reports `unknown`/`parameterized`)";
+  "nostr-tools 2.24.1 @7fa1ef4: is*Kind booleans agree (both use `<10000 except 0/3`); 40000+ " +
+  "classifyKind still differ by definition (nostr-tools reports `unknown`/`parameterized`)";
 const CROSS_CHECK_URLS =
   "nostr-tools 2.24.1 @7fa1ef4: 38/40 agree; ftp://* differs — nostr-tools keeps non-ws schemes, " +
   "normalizeURL here rejects them with UrlError";

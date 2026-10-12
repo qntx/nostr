@@ -510,7 +510,7 @@ export class SqliteEventStore implements EventStore {
       await tx.run(`INSERT INTO tags (event_id, name, value, created_at) VALUES (?, ?, ?, ?)`, [
         event.id,
         tag[0],
-        tag[0] === "e" || tag[0] === "p" ? tag[1].toLowerCase() : tag[1],
+        tag[1],
         event.created_at,
       ]);
     }

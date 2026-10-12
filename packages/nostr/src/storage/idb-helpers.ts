@@ -61,7 +61,7 @@ export async function walkCursor(
 }
 
 export function tagRefKey(name: string, value: string, id: string): string {
-  return `${name}:${value.toLowerCase()}:${id}`;
+  return `${name}:${value}:${id}`;
 }
 
 export function writeTagRefs(store: IDBObjectStoreLike, event: Event): void {
@@ -69,7 +69,7 @@ export function writeTagRefs(store: IDBObjectStoreLike, event: Event): void {
     if ((tag[0] !== "e" && tag[0] !== "p") || tag[1] === undefined) {
       continue;
     }
-    const value = tag[1].toLowerCase();
+    const { 1: value } = tag;
     const { id } = event;
     store.put({
       key: tagRefKey(tag[0], value, id),

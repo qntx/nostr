@@ -197,6 +197,34 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
     },
   },
   {
+    name: "#e/#p tag values compare verbatim, lowercasing only the filter side",
+    async run(store) {
+      const target = note(bob(), "target", 1);
+      const upper = note(alice(), "upper", 2, [
+        ["e", target.id.toUpperCase()],
+        ["p", bob().publicKey.toUpperCase()],
+      ]);
+      const lower = note(alice(), "lower", 3, [
+        ["e", target.id],
+        ["p", bob().publicKey],
+      ]);
+      await store.putMany([target, upper, lower]);
+      // Filter values are caller input and canonicalize to lowercase; the event's tag value is
+      // compared literally, so the uppercase-tagged event never matches.
+      eq(ids(await store.query([{ "#e": [target.id] }])), [lower.id], "#e lowercase filter");
+      eq(
+        ids(await store.query([{ "#e": [target.id.toUpperCase()] }])),
+        [lower.id],
+        "#e uppercase filter",
+      );
+      eq(
+        ids(await store.query([{ "#p": [bob().publicKey.toUpperCase()] }])),
+        [lower.id],
+        "#p uppercase filter",
+      );
+    },
+  },
+  {
     name: "multi-letter # keys are ignored (NIP-01 single-letter tag conditions only)",
     async run(store) {
       const tagged = note(alice(), "tagged", 1, [["client", "test-app"]]);
