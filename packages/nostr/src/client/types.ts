@@ -100,7 +100,7 @@ export type FetchEventsOptions = {
    * Every event of every relay batch, including duplicates across relays. `relayUrl` is the
    * normalized URL of the relay that delivered it.
    */
-  onevent?: ((event: Event, relayUrl: string) => void) | undefined;
+  onEvent?: ((event: Event, relayUrl: string) => void) | undefined;
 };
 
 /** Options for {@link Client.fetchEach}: one-shot per-relay fetch, no gossip routing. */
@@ -118,15 +118,15 @@ export type SubscribeOptions = {
    * First receipt of each event only (deduped across relays). `relayUrl` is the normalized URL of
    * the relay that delivered it first.
    */
-  onevent?: ((event: Event, relayUrl: string) => void) | undefined;
+  onEvent?: ((event: Event, relayUrl: string) => void) | undefined;
   /** Every receipt from every relay, including duplicates skipped by dedupe. */
-  receivedEvent?: ((id: string, relayUrl: string) => void) | undefined;
-  oneose?: (() => void) | undefined;
-  onclose?: ((reason: string) => void) | undefined;
+  onEventSeen?: ((id: string, relayUrl: string) => void) | undefined;
+  onEose?: (() => void) | undefined;
+  onClose?: ((reason: string) => void) | undefined;
   signal?: AbortSignal | undefined;
   id?: string | undefined;
   /**
-   * If set, fire `oneose` once after this many ms if not all relays have EOSEd. Does not close the
+   * If set, fire `onEose` once after this many ms if not all relays have EOSEd. Does not close the
    * subscription.
    */
   eoseTimeoutMs?: number | undefined;
@@ -187,9 +187,9 @@ export type FetchPrivateMessagesOptions = {
 /** Options for a live NIP-17 private-message subscription. */
 export type SubscribePrivateMessagesOptions = {
   readonly since?: number | undefined;
-  readonly onevent?: ((msg: ReceivedPrivateMessage) => void) | undefined;
-  readonly oneose?: (() => void) | undefined;
-  readonly onclose?: ((reason: string) => void) | undefined;
+  readonly onEvent?: ((msg: ReceivedPrivateMessage) => void) | undefined;
+  readonly onEose?: (() => void) | undefined;
+  readonly onClose?: ((reason: string) => void) | undefined;
   readonly signal?: AbortSignal | undefined;
   readonly eoseTimeoutMs?: number | undefined;
   readonly observe?: boolean | undefined;

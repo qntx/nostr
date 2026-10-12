@@ -107,7 +107,7 @@ export async function syncToRelay(
     for (let i = 0; i < found.length; i += SYNC_UPLOAD_CONCURRENCY) {
       const chunk = found.slice(i, i + SYNC_UPLOAD_CONCURRENCY);
       // Upload chunks are rate-limited serially.
-      // oxlint-disable-next-line no-await-in-loop
+      // oxlint-disable-next-line eslint/no-await-in-loop
       await Promise.all(
         chunk.map(async (event) => {
           try {
@@ -142,11 +142,11 @@ export async function syncToRelay(
       // Every relay that delivered an event is recorded once it is ingested.
       const urlsById = new Map<string, string[]>();
       // Id batches are fetched serially so backpressure stays bounded.
-      // oxlint-disable-next-line no-await-in-loop
+      // oxlint-disable-next-line eslint/no-await-in-loop
       const events = await deps.pool.fetch([url], [{ ids: batch }], {
         timeoutMs: opts?.timeoutMs,
         signal: opts?.signal,
-        onevent: shouldObserve
+        onEvent: shouldObserve
           ? (event, relayUrl) => {
               const urls = urlsById.get(event.id);
               if (urls === undefined) {
@@ -182,7 +182,7 @@ export async function syncToRelay(
       let results: PutResult[];
       try {
         // Persisted serially per batch so failures land on the right ids.
-        // oxlint-disable-next-line no-await-in-loop
+        // oxlint-disable-next-line eslint/no-await-in-loop
         results = await deps.storage.putMany(events);
       } catch (error) {
         const thrown = toError(error);

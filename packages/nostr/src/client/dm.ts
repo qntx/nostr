@@ -137,7 +137,7 @@ export async function fetchPrivateMessages(
     {
       timeoutMs: opts?.timeoutMs,
       signal: opts?.signal,
-      onevent: (event, relayUrl) => {
+      onEvent: (event, relayUrl) => {
         let set = urls.get(event.id);
         if (!set) {
           urls.set(event.id, (set = new Set()));
@@ -150,7 +150,7 @@ export async function fetchPrivateMessages(
   const byRumor = new Map<string, ReceivedPrivateMessage>();
   for (const wrap of events) {
     try {
-      // oxlint-disable-next-line no-await-in-loop -- unwraps run serially so ingest/seenOn keep relay order
+      // oxlint-disable-next-line eslint/no-await-in-loop -- unwraps run serially so ingest/seenOn keep relay order
       const rumor = await unwrap(crypto, wrap);
       const wrapUrls = urls.get(wrap.id);
       const firstUrl = wrapUrls?.values().next().value;
@@ -227,13 +227,13 @@ export async function subscribePrivateMessages(
       [{ kinds: [Kind.GiftWrap, Kind.GiftWrapEphemeral], "#p": [self], since: opts?.since }],
       {
         signal: opts?.signal,
-        oneose: opts?.oneose,
-        onclose: (reason) => {
+        onEose: opts?.onEose,
+        onClose: (reason) => {
           markClosed();
-          opts?.onclose?.(reason);
+          opts?.onClose?.(reason);
         },
         eoseTimeoutMs: opts?.eoseTimeoutMs,
-        receivedEvent: (id, relayUrl) => {
+        onEventSeen: (id, relayUrl) => {
           if (closed) {
             return;
           }
@@ -248,7 +248,7 @@ export async function subscribePrivateMessages(
             list.push(relayUrl);
           }
         },
-        onevent: (wrap, relayUrl) => {
+        onEvent: (wrap, relayUrl) => {
           if (closed) {
             return;
           }
@@ -270,7 +270,7 @@ export async function subscribePrivateMessages(
                 deps.ingest(wrap, relayUrl);
               }
               flushSeen(wrap.id);
-              opts?.onevent?.({ wrap, rumor, relayUrl });
+              opts?.onEvent?.({ wrap, rumor, relayUrl });
             } catch {
               // junk / forgery — not stored; keep the queue alive if a handler
               // throws, and still mark the wrap processed so its buffered relay

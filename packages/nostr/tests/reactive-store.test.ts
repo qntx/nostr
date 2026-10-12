@@ -177,7 +177,7 @@ describe("ReactiveEventStore watches", () => {
       });
       store.add(stubEvent(0));
       for (let i = 0; i < 64; i++) {
-        // oxlint-disable-next-line no-await-in-loop -- microtask yields pace the flush passes
+        // oxlint-disable-next-line eslint/no-await-in-loop -- microtask yields pace the flush passes
         await Promise.resolve();
       }
       stop();

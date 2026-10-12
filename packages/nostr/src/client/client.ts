@@ -187,7 +187,7 @@ export class Client {
     // refilling the persistence queue and the drain below would never settle.
     this.pool.close();
     while (this.#flushing !== undefined) {
-      // oxlint-disable-next-line no-await-in-loop -- waits for the current flush to settle
+      // oxlint-disable-next-line eslint/no-await-in-loop -- waits for the current flush to settle
       await this.#flushing;
     }
   }
@@ -296,7 +296,7 @@ export class Client {
       while (this.#persistQueue.length > 0) {
         const batch = this.#persistQueue.splice(0);
         try {
-          // oxlint-disable-next-line no-await-in-loop -- queued batches are persisted in order
+          // oxlint-disable-next-line eslint/no-await-in-loop -- queued batches are persisted in order
           await this.storage.putMany(batch);
         } catch (error) {
           this.#events.emit("storageerror", toStorageError(error));
@@ -503,11 +503,11 @@ export class Client {
     }
 
     // Every inbound event lands in the index (with its relay URL) before the caller's
-    // onevent runs. `onevent` fires once per relay delivery, so only the first sighting of
+    // onEvent runs. `onEvent` fires once per relay delivery, so only the first sighting of
     // an id does a full index put — later relays are recorded via markSeen. The batch loop
     // below adds gossip meta and persistence without re-putting.
     const seenIds = new Set<string>();
-    const onevent = (event: Event, relayUrl: string) => {
+    const onEvent = (event: Event, relayUrl: string) => {
       if (shouldObserve) {
         if (seenIds.has(event.id)) {
           this.index.markSeen(event.id, relayUrl);
@@ -516,7 +516,7 @@ export class Client {
           this.index.add(event, relayUrl);
         }
       }
-      opts?.onevent?.(event, relayUrl);
+      opts?.onEvent?.(event, relayUrl);
     };
 
     const batch =
@@ -524,12 +524,12 @@ export class Client {
         ? await this.pool.fetch(this.#defaultRelays(opts?.relays), filters, {
             timeoutMs: opts?.timeoutMs,
             signal: opts?.signal,
-            onevent,
+            onEvent,
           })
         : await fetchGossip(this.pool, this.gossip, filters, () => this.#defaultRelays(), {
             timeoutMs: opts?.timeoutMs,
             signal: opts?.signal,
-            onevent,
+            onEvent,
           });
     for (const e of batch) {
       candidates.push(e);
@@ -606,22 +606,22 @@ export class Client {
       if (shouldObserve) {
         this.observe(event, relayUrl);
       }
-      opts?.onevent?.(event, relayUrl);
+      opts?.onEvent?.(event, relayUrl);
     };
 
     const wrapReceived = (id: string, relayUrl: string) => {
       if (shouldObserve) {
         this.index.markSeen(id, relayUrl);
       }
-      opts?.receivedEvent?.(id, relayUrl);
+      opts?.onEventSeen?.(id, relayUrl);
     };
 
     if (opts?.gossip !== true || opts.relays !== undefined) {
       return this.pool.subscribe(this.#defaultRelays(opts?.relays), filters, {
-        onevent: wrapEvent,
-        receivedEvent: wrapReceived,
-        oneose: opts?.oneose,
-        onclose: opts?.onclose,
+        onEvent: wrapEvent,
+        onEventSeen: wrapReceived,
+        onEose: opts?.onEose,
+        onClose: opts?.onClose,
         signal: opts?.signal,
         id: opts?.id,
         eoseTimeoutMs: opts?.eoseTimeoutMs,
@@ -629,10 +629,10 @@ export class Client {
     }
 
     return subscribeGossip(this.pool, this.gossip, filters, () => this.#defaultRelays(), {
-      onevent: wrapEvent,
-      receivedEvent: wrapReceived,
-      oneose: opts?.oneose,
-      onclose: opts?.onclose,
+      onEvent: wrapEvent,
+      onEventSeen: wrapReceived,
+      onEose: opts?.onEose,
+      onClose: opts?.onClose,
       signal: opts?.signal,
       eoseTimeoutMs: opts?.eoseTimeoutMs,
     });

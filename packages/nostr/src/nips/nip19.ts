@@ -137,7 +137,7 @@ function encodeBech32<Prefix extends string>(
   data: Uint8Array,
 ): `${Prefix}1${string}` {
   const words = bech32.toWords(data);
-  // oxlint-disable-next-line no-unsafe-type-assertion -- bech32 output is `${prefix}1…` by construction
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- bech32 output is `${prefix}1…` by construction
   return bech32.encode(prefix, words, Bech32MaxSize) as `${Prefix}1${string}`;
 }
 

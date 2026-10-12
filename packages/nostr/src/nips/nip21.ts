@@ -16,7 +16,7 @@ export class Nip21Error extends NostrError {
  * Matches `nostr:<bech32>` (not anchored). Case classes are written out so matching is
  * case-insensitive for ASCII only: the `i` flag would also fold U+212A (K) into `k`.
  */
-// oxlint-disable-next-line no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
+// oxlint-disable-next-line typescript/no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
 export const NOSTR_URI_REGEX: RegExp =
   /[Nn][Oo][Ss][Tt][Rr]:([A-Za-z0-9]+1[02-9AC-HJ-NP-Zac-hj-np-z]+)/;
 

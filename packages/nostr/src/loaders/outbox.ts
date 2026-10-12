@@ -210,7 +210,7 @@ export class OutboxFeed {
           const batch = await this.#pool.fetch([url], filters, {
             timeoutMs: this.#timeoutMs,
             signal: opts?.signal,
-            onevent: (event, relayUrl) => invokeSafely(() => this.#seen?.(event, relayUrl)),
+            onEvent: (event, relayUrl) => invokeSafely(() => this.#seen?.(event, relayUrl)),
           });
           for (const event of batch) {
             byId.set(event.id, event);
@@ -276,7 +276,7 @@ export class OutboxFeed {
       closers.push(
         this.#pool.subscribe([url], [filter], {
           signal: opts?.signal,
-          onevent: (event, relayUrl) => {
+          onEvent: (event, relayUrl) => {
             invokeSafely(() => this.#seen?.(event, relayUrl));
             if (seen.has(event.id)) {
               return;

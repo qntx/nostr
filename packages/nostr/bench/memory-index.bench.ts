@@ -7,7 +7,7 @@ const N = 100_000;
 const RUNS = 20;
 
 // Deterministic PRNG for fabricated data (same shape as the ad-hoc bench).
-/* oxlint-disable no-bitwise -- a PRNG is bit arithmetic by design */
+/* oxlint-disable eslint/no-bitwise -- a PRNG is bit arithmetic by design */
 let seed = 0x9e3779b9;
 function rnd(): number {
   seed ^= seed << 13;
@@ -15,7 +15,7 @@ function rnd(): number {
   seed ^= seed << 5;
   return (seed >>> 0) / 0x1_00_00_00_00;
 }
-/* oxlint-enable no-bitwise */
+/* oxlint-enable eslint/no-bitwise */
 
 function at<T>(items: ReadonlyArray<T>, i: number): T {
   const item = items[i];

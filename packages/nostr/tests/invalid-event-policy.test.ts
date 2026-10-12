@@ -23,7 +23,7 @@ const advance = async (ms: number): Promise<void> => {
   vi.advanceTimersByTime(ms);
   // Settle the fake network's queueMicrotask handlers and promise chains.
   for (let i = 0; i < 50; i += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- sequential ticks are the flush
+    // oxlint-disable-next-line eslint/no-await-in-loop -- sequential ticks are the flush
     await Promise.resolve();
   }
 };
@@ -104,7 +104,7 @@ describe("invalid-event policy", () => {
 
     for (let i = 0; i < 5; i += 1) {
       net.relay(A).deliver(forged(i));
-      // oxlint-disable-next-line no-await-in-loop -- spacing failures beyond the window is the test
+      // oxlint-disable-next-line eslint/no-await-in-loop -- spacing failures beyond the window is the test
       await advance(120);
     }
 
@@ -151,7 +151,7 @@ describe("invalid-event policy", () => {
     const { pool, onSuspend } = makePool();
     const seen: string[] = [];
     pool.subscribe([A], [{}], {
-      onevent: (event) => {
+      onEvent: (event) => {
         seen.push(event.id);
       },
     });
@@ -201,7 +201,7 @@ describe("invalid-event policy", () => {
     });
     const seen: string[] = [];
     pool.subscribe([A], [{}], {
-      onevent: (event) => {
+      onEvent: (event) => {
         seen.push(event.id);
       },
     });

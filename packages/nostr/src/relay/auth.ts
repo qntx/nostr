@@ -135,7 +135,7 @@ export class RelayAuth {
         return true;
       }
       const signed = this.#challenge;
-      // oxlint-disable-next-line no-await-in-loop -- auth retries are sequential: each round waits for the new AUTH challenge
+      // oxlint-disable-next-line eslint/no-await-in-loop -- auth retries are sequential: each round waits for the new AUTH challenge
       const result = await this.auth(signer);
       if (this.#authedChallenge === this.#challenge) {
         return true;

@@ -55,7 +55,7 @@ function serializedDriver(inner: SqlDriver): SqlDriver & { overlapped: () => boo
 }
 
 describe("SqliteEventStore conformance", () => {
-  // oxlint-disable-next-line expect-expect -- assertions live inside each case's run()
+  // oxlint-disable-next-line jest/expect-expect -- assertions live inside each case's run()
   test.each(eventStoreConformanceCases)("$name", async (c) => {
     const { driver, store } = await openStore();
     try {

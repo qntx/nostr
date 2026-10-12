@@ -36,10 +36,10 @@ const deliverOnCall = (
   call: number,
   n: number,
   event: Event,
-  opts: { onevent?: ((event: Event, relayUrl: string) => void) | undefined } | undefined,
+  opts: { onEvent?: ((event: Event, relayUrl: string) => void) | undefined } | undefined,
 ): void => {
   if (call === n) {
-    opts?.onevent?.(event, RELAY);
+    opts?.onEvent?.(event, RELAY);
   }
 };
 
@@ -52,7 +52,7 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
     if (pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -252,8 +252,8 @@ describe("createEventLoader overlapping fetches", () => {
     pool.fetch = async (_relays, _filters, opts) => {
       await Promise.resolve();
       fetchCalls += 1;
-      opts?.onevent?.(older, RELAY);
-      opts?.onevent?.(newer, RELAY);
+      opts?.onEvent?.(older, RELAY);
+      opts?.onEvent?.(newer, RELAY);
       return [older, newer];
     };
     const loader = createEventLoader(makeCtx(pool));
@@ -366,8 +366,8 @@ describe("createEventLoader overlapping fetches", () => {
     pool.fetch = async (_relays, _filters, opts) => {
       await Promise.resolve();
       fetchCalls += 1;
-      opts?.onevent?.(loser, RELAY);
-      opts?.onevent?.(winner, RELAY);
+      opts?.onEvent?.(loser, RELAY);
+      opts?.onEvent?.(winner, RELAY);
       return [loser, winner];
     };
     const loader = createEventLoader(makeCtx(pool));

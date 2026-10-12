@@ -15,15 +15,15 @@ export type RoutedJob = {
 
 export type FanInOptions = {
   /** First receipt only (deduped across jobs). `relayUrl` is the normalized relay URL. */
-  onevent?: ((event: Event, relayUrl: string) => void) | undefined;
-  oneose?: (() => void) | undefined;
-  onclose?: ((reason: string) => void) | undefined;
+  onEvent?: ((event: Event, relayUrl: string) => void) | undefined;
+  onEose?: (() => void) | undefined;
+  onClose?: ((reason: string) => void) | undefined;
   signal?: AbortSignal | undefined;
   /** Armed at fan-in only. Never forwarded to relay.subscribe. */
   eoseTimeoutMs?: number | undefined;
   alreadyHaveEvent?: ((id: string) => boolean) | undefined;
   /** Every receipt from every relay, including skipped duplicates. */
-  receivedEvent?: ((id: string, relayUrl: string) => void) | undefined;
+  onEventSeen?: ((id: string, relayUrl: string) => void) | undefined;
   closeOnEose?: boolean | undefined;
   /** Optional. ensureRelay uses Pool.#opts.connectTimeoutMs when omitted. */
   connectTimeoutMs?: number | undefined;
@@ -56,12 +56,12 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
       clearTimeout(eoseTimer);
       eoseTimer = undefined;
     }
-    invokeSafely(() => opts.oneose?.());
+    invokeSafely(() => opts.onEose?.());
   };
 
   /**
    * Remove one relay from the pending-EOSE set. `eosed` credits a real EOSE; a CLOSED or a connect
-   * failure only drops the wait — the aggregate `oneose` fires once every remaining relay ended AND
+   * failure only drops the wait — the aggregate `onEose` fires once every remaining relay ended AND
    * at least one actually EOSE'd.
    */
   const settleEose = (jobIndex: number, url: string, eosed: boolean) => {
@@ -96,12 +96,12 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
     for (const c of closers) {
       c.close(reason);
     }
-    invokeSafely(() => opts.onclose?.(reason ?? "closed by client"));
+    invokeSafely(() => opts.onClose?.(reason ?? "closed by client"));
   };
 
   if (opts.signal?.aborted === true) {
     closed = true;
-    invokeSafely(() => opts.onclose?.("aborted"));
+    invokeSafely(() => opts.onClose?.("aborted"));
     return { close: closeAll };
   }
 
@@ -116,7 +116,7 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
   const finish = (): void => {
     if (pending <= 0 && !closed) {
       settleClose();
-      invokeSafely(() => opts.onclose?.(lastReason ?? "all relays failed"));
+      invokeSafely(() => opts.onClose?.(lastReason ?? "all relays failed"));
     }
   };
 
@@ -130,7 +130,7 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
     if (closed) {
       return;
     }
-    const received = opts.receivedEvent;
+    const received = opts.onEventSeen;
     const sub = relay.subscribe([...job.filters], {
       id: jobs.length === 1 ? job.id : undefined,
       closeOnEose: opts.closeOnEose,
@@ -141,14 +141,14 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
         });
         return have;
       },
-      receivedEvent:
+      onEventSeen:
         received === undefined ? undefined : (id) => invokeSafely(() => received(id, relay.url)),
-      onevent: (event) => {
+      onEvent: (event) => {
         seen.add(event.id);
-        invokeSafely(() => opts.onevent?.(event, relay.url));
+        invokeSafely(() => opts.onEvent?.(event, relay.url));
       },
-      oneose: () => settleEose(jobIndex, relay.url, true),
-      onclose: (reason) => {
+      onEose: () => settleEose(jobIndex, relay.url, true),
+      onClose: (reason) => {
         settleEose(jobIndex, relay.url, false);
         lastReason = reason;
         pending -= 1;
@@ -214,7 +214,7 @@ export function fanIn(pool: Pool, jobs: ReadonlyArray<RoutedJob>, opts: FanInOpt
         return;
       }
       settleClose();
-      invokeSafely(() => opts.onclose?.("no relays"));
+      invokeSafely(() => opts.onClose?.("no relays"));
     });
   }
 
@@ -229,7 +229,7 @@ export async function fetchRouted(
     signal?: AbortSignal | undefined;
     connectTimeoutMs?: number | undefined;
     /** Every event of every relay batch, including cross-relay duplicates. */
-    onevent?: ((event: Event, relayUrl: string) => void) | undefined;
+    onEvent?: ((event: Event, relayUrl: string) => void) | undefined;
   } = {},
 ): Promise<Event[]> {
   throwIfAborted(opts.signal);
@@ -257,7 +257,7 @@ export async function fetchRouted(
           }
           return;
         }
-        // The whole batch lands before callbacks so a throwing onevent cannot
+        // The whole batch lands before callbacks so a throwing onEvent cannot
         // drop events; listener errors are reported, never propagated.
         for (const event of batch) {
           if (!byId.has(event.id)) {
@@ -265,7 +265,7 @@ export async function fetchRouted(
           }
         }
         for (const event of batch) {
-          invokeSafely(() => opts.onevent?.(event, relayUrl));
+          invokeSafely(() => opts.onEvent?.(event, relayUrl));
         }
       });
     }),

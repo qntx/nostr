@@ -25,7 +25,7 @@ async function tickUntil(pred: () => boolean): Promise<void> {
     if (pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must yield between checks
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must yield between checks
     await Promise.resolve();
   }
   throw new Error("timed out waiting for IndexedDB mock");
@@ -55,12 +55,12 @@ async function idbGet(dbName: string, storeName: string, key: string): Promise<u
   ).indexedDB;
   return new Promise((resolve, reject) => {
     const open = factory.open(dbName);
-    // oxlint-disable-next-line prefer-add-event-listener -- fake IDBOpenDBRequest mirrors the on* handler API
+    // oxlint-disable-next-line unicorn/prefer-add-event-listener -- fake IDBOpenDBRequest mirrors the on* handler API
     open.onerror = () => reject(open.error ?? new Error("idbGet open failed"));
     open.onsuccess = () => {
       const db = open.result;
       const get = db.transaction(storeName, "readonly").objectStore(storeName).get(key);
-      // oxlint-disable-next-line prefer-add-event-listener -- fake IDBRequest mirrors the on* handler API
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- fake IDBRequest mirrors the on* handler API
       get.onerror = () => {
         db.close();
         reject(get.error ?? new Error("idbGet failed"));

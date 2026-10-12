@@ -1,5 +1,5 @@
 // oxlint-disable unicorn/prefer-add-event-listener -- the *Like driver interfaces model only the `on*` handler surface
-// oxlint-disable no-await-in-loop -- requests inside one IndexedDB transaction are issued sequentially; awaiting a no-request promise auto-commits the tx
+// oxlint-disable eslint/no-await-in-loop -- requests inside one IndexedDB transaction are issued sequentially; awaiting a no-request promise auto-commits the tx
 import type { Event } from "../core/event.ts";
 import { itemCompare, sortEvents, validateSignedEvent } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";

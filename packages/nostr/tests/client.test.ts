@@ -106,7 +106,7 @@ const assertNoReqOnFor = async (urlPart: string, ms: number): Promise<void> => {
     if (hit) {
       throw new Error(`unexpected REQ on ${urlPart}`);
     }
-    // oxlint-disable-next-line no-await-in-loop -- negative assertion must poll continuously
+    // oxlint-disable-next-line eslint/no-await-in-loop -- negative assertion must poll continuously
     await sleep(5);
   }
 };
@@ -117,7 +117,7 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
     if (pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling helper must sleep between checks
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling helper must sleep between checks
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -377,7 +377,7 @@ describe("Client", () => {
     await client.shutdown();
   });
 
-  test("subscribe two relays with eoseTimeoutMs fires oneose once", async () => {
+  test("subscribe two relays with eoseTimeoutMs fires onEose once", async () => {
     const client = new Client({
       relays: ["wss://a.example", "wss://b.example"],
       websocketImplementation: MockWebSocketCtor,
@@ -387,7 +387,7 @@ describe("Client", () => {
       { kinds: [1] },
       {
         eoseTimeoutMs: 50,
-        oneose: () => {
+        onEose: () => {
           eose += 1;
         },
       },
@@ -452,7 +452,7 @@ describe("Client", () => {
     expect(stored.map((e) => e.id)).toContain(early.id);
   });
 
-  test("gossip subscribe with eoseTimeoutMs fires oneose once", async () => {
+  test("gossip subscribe with eoseTimeoutMs fires onEose once", async () => {
     const author = Keys.fromSecretKey(SK);
     const tagged = Keys.fromSecretKey(SK2);
     const client = new Client({
@@ -476,7 +476,7 @@ describe("Client", () => {
       {
         gossip: true,
         eoseTimeoutMs: 50,
-        oneose: () => {
+        onEose: () => {
           eose += 1;
         },
       },
@@ -729,7 +729,7 @@ describe("Client", () => {
     await client.shutdown();
   });
 
-  test("gossip subscribe close fires onclose once across two outboxes", async () => {
+  test("gossip subscribe close fires onClose once across two outboxes", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
     const client = new Client({
@@ -753,7 +753,7 @@ describe("Client", () => {
       { kinds: [1], authors: [a.publicKey, b.publicKey] },
       {
         gossip: true,
-        onclose: () => {
+        onClose: () => {
           closes += 1;
         },
       },
@@ -768,7 +768,7 @@ describe("Client", () => {
     await client.shutdown();
   });
 
-  test("gossip subscribe CLOSED waits for every outbox before onclose", async () => {
+  test("gossip subscribe CLOSED waits for every outbox before onClose", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
     const client = new Client({
@@ -792,7 +792,7 @@ describe("Client", () => {
       { kinds: [1], authors: [a.publicKey, b.publicKey] },
       {
         gossip: true,
-        onclose: () => {
+        onClose: () => {
           closes += 1;
         },
       },
@@ -807,7 +807,7 @@ describe("Client", () => {
     await client.shutdown();
   });
 
-  test("gossip leftover plus two outboxes close fires onclose once", async () => {
+  test("gossip leftover plus two outboxes close fires onClose once", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
     const c = Keys.fromSecretKey(
@@ -834,7 +834,7 @@ describe("Client", () => {
       { kinds: [1], authors: [a.publicKey, b.publicKey, c.publicKey] },
       {
         gossip: true,
-        onclose: () => {
+        onClose: () => {
           closes += 1;
         },
       },
@@ -851,7 +851,7 @@ describe("Client", () => {
     await client.shutdown();
   });
 
-  test("gossip leftover CLOSED waits for fallback pool before onclose", async () => {
+  test("gossip leftover CLOSED waits for fallback pool before onClose", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
     const client = new Client({
@@ -870,7 +870,7 @@ describe("Client", () => {
       { kinds: [1], authors: [a.publicKey, b.publicKey] },
       {
         gossip: true,
-        onclose: () => {
+        onClose: () => {
           closes += 1;
         },
       },
@@ -904,7 +904,7 @@ describe("Client", () => {
       { kinds: [1], authors: [a.publicKey, b.publicKey] },
       {
         gossip: true,
-        onclose: () => {
+        onClose: () => {
           closes += 1;
         },
       },
@@ -926,7 +926,7 @@ describe("Client", () => {
     await client.shutdown();
   });
 
-  test("gossip empty filters fire oneose without opening sockets", async () => {
+  test("gossip empty filters fire onEose without opening sockets", async () => {
     const client = new Client({
       relays: ["wss://default.example"],
       websocketImplementation: MockWebSocketCtor,
@@ -936,10 +936,10 @@ describe("Client", () => {
     let closed: string | undefined;
     client.subscribe([], {
       gossip: true,
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -1037,7 +1037,7 @@ describe("Client", () => {
     await genericClient.shutdown();
   });
 
-  test("gossip close still CLOSEs inners when onclose throws", async () => {
+  test("gossip close still CLOSEs inners when onClose throws", async () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
     const c = Keys.fromSecretKey(
@@ -1063,7 +1063,7 @@ describe("Client", () => {
       { kinds: [1], authors: [a.publicKey, b.publicKey, c.publicKey] },
       {
         gossip: true,
-        onclose: () => {
+        onClose: () => {
           throw new Error("boom");
         },
       },
@@ -1104,7 +1104,7 @@ describe("Client", () => {
     const received: string[] = [];
 
     await client.connect();
-    const sub = client.subscribe({ kinds: [1] }, { onevent: (e) => received.push(e.id) });
+    const sub = client.subscribe({ kinds: [1] }, { onEvent: (e) => received.push(e.id) });
     await sleep(10);
 
     const ws = MockWebSocket.last();
@@ -1136,7 +1136,7 @@ describe("Client", () => {
     const received: string[] = [];
 
     await client.connect();
-    const sub = client.subscribe({ kinds: [1] }, { onevent: (e) => received.push(e.id) });
+    const sub = client.subscribe({ kinds: [1] }, { onEvent: (e) => received.push(e.id) });
     await sleep(10);
 
     const ws = MockWebSocket.last();
@@ -1161,7 +1161,7 @@ describe("Client", () => {
     const received: string[] = [];
 
     await client.connect();
-    const sub = client.subscribe({ kinds: [1] }, { onevent: (e) => received.push(e.id) });
+    const sub = client.subscribe({ kinds: [1] }, { onEvent: (e) => received.push(e.id) });
     await sleep(10);
 
     const ws = MockWebSocket.last();

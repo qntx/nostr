@@ -107,11 +107,11 @@ function requireWrapFor(
 async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 2000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    // oxlint-disable-next-line no-await-in-loop -- polling must await each probe
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must await each probe
     if (await check()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must wait between iterations
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("timed out");
@@ -142,7 +142,7 @@ function trackingStore(inner = new MemoryEventStore()): {
       }
       const out: PutResult[] = [];
       for (const event of events) {
-        // oxlint-disable-next-line no-await-in-loop -- forwarding must preserve call order
+        // oxlint-disable-next-line eslint/no-await-in-loop -- forwarding must preserve call order
         out.push(await inner.put(event));
       }
       return out;
@@ -446,7 +446,7 @@ describe("Client NIP-17", () => {
 
     const got: string[] = [];
     const sub = await bob.subscribePrivateMessages({
-      onevent: (msg) => {
+      onEvent: (msg) => {
         got.push(msg.rumor.content);
       },
     });
@@ -519,10 +519,10 @@ describe("Client NIP-17", () => {
     const got: Array<{ content: string; kind: number; id: string }> = [];
     let eosed = false;
     const sub = await bob.subscribePrivateMessages({
-      onevent: (msg) => {
+      onEvent: (msg) => {
         got.push({ content: msg.rumor.content, kind: msg.wrap.kind, id: msg.wrap.id });
       },
-      oneose: () => {
+      onEose: () => {
         eosed = true;
       },
     });
@@ -570,7 +570,7 @@ describe("Client NIP-17", () => {
     await bob.shutdown();
   });
 
-  test("subscribePrivateMessages close same turn as deliver skips persist and onevent", async () => {
+  test("subscribePrivateMessages close same turn as deliver skips persist and onEvent", async () => {
     const aliceKeys = Keys.fromSecretKey(ALICE_SK);
     const bobKeys = Keys.fromSecretKey(BOB_SK);
     seedLists(net, aliceKeys, bobKeys);
@@ -602,7 +602,7 @@ describe("Client NIP-17", () => {
     await bob.connect();
     const got: string[] = [];
     const sub = await bob.subscribePrivateMessages({
-      onevent: (msg) => {
+      onEvent: (msg) => {
         got.push(msg.rumor.content);
       },
     });
@@ -617,7 +617,7 @@ describe("Client NIP-17", () => {
     await bob.shutdown();
   });
 
-  test("subscribePrivateMessages close during decrypt skips persist and onevent", async () => {
+  test("subscribePrivateMessages close during decrypt skips persist and onEvent", async () => {
     const aliceKeys = Keys.fromSecretKey(ALICE_SK);
     const bobKeys = Keys.fromSecretKey(BOB_SK);
     seedLists(net, aliceKeys, bobKeys);
@@ -663,7 +663,7 @@ describe("Client NIP-17", () => {
     await bob.connect();
     const got: string[] = [];
     const sub = await bob.subscribePrivateMessages({
-      onevent: (msg) => {
+      onEvent: (msg) => {
         got.push(msg.rumor.content);
       },
     });
@@ -680,7 +680,7 @@ describe("Client NIP-17", () => {
     await bob.shutdown();
   });
 
-  test("subscribePrivateMessages abort during decrypt skips persist and onevent", async () => {
+  test("subscribePrivateMessages abort during decrypt skips persist and onEvent", async () => {
     const aliceKeys = Keys.fromSecretKey(ALICE_SK);
     const bobKeys = Keys.fromSecretKey(BOB_SK);
     seedLists(net, aliceKeys, bobKeys);
@@ -728,7 +728,7 @@ describe("Client NIP-17", () => {
     const ac = new AbortController();
     const sub = await bob.subscribePrivateMessages({
       signal: ac.signal,
-      onevent: (msg) => {
+      onEvent: (msg) => {
         got.push(msg.rumor.content);
       },
     });
@@ -770,7 +770,7 @@ describe("Client NIP-17", () => {
     await bob.connect();
     const got: string[] = [];
     const sub = await bob.subscribePrivateMessages({
-      onevent: (msg) => {
+      onEvent: (msg) => {
         got.push(msg.rumor.content);
       },
     });
@@ -789,8 +789,8 @@ describe("Client NIP-17", () => {
     const gossip = new Gossip();
     gossip.ingest(dmRelayListEventBuilder([BOB_DM]).createdAt(1).signWithKeys(bobKeys));
     let handlers: {
-      receivedEvent?: ((id: string, relayUrl: string) => void) | undefined;
-      onevent?: ((event: Event, relayUrl: string) => void) | undefined;
+      onEventSeen?: ((id: string, relayUrl: string) => void) | undefined;
+      onEvent?: ((event: Event, relayUrl: string) => void) | undefined;
     } = {};
     const markSeenCalls: string[] = [];
     const pool = {
@@ -825,12 +825,12 @@ describe("Client NIP-17", () => {
       },
       ALICE_SK,
     );
-    handlers.receivedEvent?.(junk.id, "wss://a.example");
-    handlers.onevent?.(junk, "wss://a.example");
+    handlers.onEventSeen?.(junk.id, "wss://a.example");
+    handlers.onEvent?.(junk, "wss://a.example");
     // The failed unwrap must still flush the buffered receipt: pending urls
     // for undecryptable wraps must not accumulate forever.
     await waitFor(() => markSeenCalls.length > 0);
-    handlers.receivedEvent?.(junk.id, "wss://b.example");
+    handlers.onEventSeen?.(junk.id, "wss://b.example");
     await waitFor(() => markSeenCalls.length >= 2);
     expect(markSeenCalls).toStrictEqual([
       `${junk.id.slice(0, 8)}:wss://a.example`,
@@ -1054,7 +1054,7 @@ describe("issue #125", () => {
     net.relay(BOB_DM2).seed([wrap2]);
     const got: string[] = [];
     const sub = await bob.subscribePrivateMessages({
-      onevent: (msg) => got.push(msg.rumor.content),
+      onEvent: (msg) => got.push(msg.rumor.content),
     });
     await waitFor(() => bob.index.get(wrap2.id) !== undefined);
     await waitQuiet(() => bob.index.seenOn(wrap2.id).length === 2, 100);

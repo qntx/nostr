@@ -53,7 +53,7 @@ export class Nip05Error extends NostrError {
  * Matches optional local@domain. Groups: 1=local (optional), 2=domain. Case classes are written out
  * so matching is ASCII-only: the `i` flag would also fold U+212A (K) into `k`.
  */
-// oxlint-disable-next-line no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
+// oxlint-disable-next-line typescript/no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
 export const NIP05_REGEX: RegExp = /^(?:([A-Za-z0-9._-]+)@)?([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)$/;
 
 export function isNip05(value: unknown): value is string {

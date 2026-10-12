@@ -60,7 +60,7 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
     if (pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling must alternate check and sleep sequentially
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must alternate check and sleep sequentially
     await sleep(5);
   }
   throw new Error("timeout waiting for condition");
@@ -310,8 +310,8 @@ describe("Relay", () => {
     let eosed = false;
 
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e),
-      oneose: () => {
+      onEvent: (e) => events.push(e),
+      onEose: () => {
         eosed = true;
       },
     });
@@ -518,7 +518,7 @@ describe("Relay", () => {
     });
     const reasons: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onclose: (reason) => {
+      onClose: (reason) => {
         reasons.push(reason);
       },
     });
@@ -539,7 +539,7 @@ describe("Relay", () => {
     });
     const events: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => {
+      onEvent: (e) => {
         events.push(e.id);
       },
     });
@@ -606,7 +606,7 @@ describe("Relay", () => {
     });
     const reasons: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onclose: (reason) => {
+      onClose: (reason) => {
         reasons.push(reason);
       },
     });
@@ -615,7 +615,7 @@ describe("Relay", () => {
     ws.receive(JSON.stringify(["CLOSED", sub.id, "auth-required: login"]));
 
     for (let i = 0; i < 3; i++) {
-      // oxlint-disable-next-line no-await-in-loop -- challenge rounds must be answered in order
+      // oxlint-disable-next-line eslint/no-await-in-loop -- challenge rounds must be answered in order
       await waitUntil(() => sentAuthEvents(ws).length >= i + 1);
       const event = sentAuthEvents(ws)[i]!;
       expect(challengeTag(event)).toBe(`ch${i + 1}`);
@@ -799,7 +799,7 @@ describe("Relay", () => {
     }
   });
 
-  test("fetch settles when subscribe fires oneose synchronously", async () => {
+  test("fetch settles when subscribe fires onEose synchronously", async () => {
     let closed = false;
     let closeReason: string | undefined;
     const fakeSub: RelaySubscription = {
@@ -823,7 +823,7 @@ describe("Relay", () => {
     try {
       const result = await fetchFilters(
         (_filters, opts) => {
-          opts.oneose?.();
+          opts.onEose?.();
           return fakeSub;
         },
         [{ kinds: [1] }],
@@ -856,7 +856,7 @@ describe("Relay", () => {
     const second = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
     const events: string[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e.id),
+      onEvent: (e) => events.push(e.id),
     }) as Subscription;
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["EVENT", sub.id, first]));
@@ -891,7 +891,7 @@ describe("Relay", () => {
     relay.on("verifiererror", (e) => errors.push(e));
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
-    const sub = relay.subscribe([{ kinds: [1] }], { onevent: () => {} });
+    const sub = relay.subscribe([{ kinds: [1] }], { onEvent: () => {} });
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["EVENT", sub.id, note]));
     expect(verifies).toBe(1);
@@ -909,7 +909,7 @@ describe("Relay", () => {
     });
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
-    const sub = relay.subscribe([{ kinds: [1] }], { onevent: () => {} });
+    const sub = relay.subscribe([{ kinds: [1] }], { onEvent: () => {} });
     const ws = MockWebSocket.last();
     // Before the dead-verifier change a non-poison exception escaped ws.receive
     // as an uncaught error.
@@ -925,7 +925,7 @@ describe("Relay", () => {
 
     const events: unknown[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e),
+      onEvent: (e) => events.push(e),
     });
     MockWebSocket.last().receive(JSON.stringify(["EVENT", sub.id, bad]));
     expect(events).toHaveLength(0);
@@ -946,7 +946,7 @@ describe("Relay", () => {
     const forged = { ...good, id: forgedId, created_at: 999_999 };
     const events: string[] = [];
     const sub = relay.subscribe([{ kinds: [1], since: 5 }], {
-      onevent: (e) => events.push(e.id),
+      onEvent: (e) => events.push(e.id),
     }) as Subscription;
 
     const ws = MockWebSocket.last();
@@ -1453,8 +1453,8 @@ describe("isInsecureRelayUrl", () => {
   });
 });
 
-describe("alreadyHaveEvent / receivedEvent", () => {
-  test("alreadyHaveEvent true skips verify and onevent; receivedEvent still fires", async () => {
+describe("alreadyHaveEvent / onEventSeen", () => {
+  test("alreadyHaveEvent true skips verify and onEvent; onEventSeen still fires", async () => {
     let verifies = 0;
     const relay = await Relay.connect("wss://have.example", {
       websocketImplementation: MockWebSocketCtor,
@@ -1470,8 +1470,8 @@ describe("alreadyHaveEvent / receivedEvent", () => {
 
     const sub = relay.subscribe([{ kinds: [1] }], {
       alreadyHaveEvent: () => true,
-      receivedEvent: (id) => received.push(id),
-      onevent: (e) => events.push(e),
+      onEventSeen: (id) => received.push(id),
+      onEvent: (e) => events.push(e),
     }) as Subscription;
 
     MockWebSocket.last().receive(JSON.stringify(["EVENT", sub.id, note]));
@@ -1483,7 +1483,7 @@ describe("alreadyHaveEvent / receivedEvent", () => {
     relay.close();
   });
 
-  test("Pool.subscribe two relays verifies once and records receivedEvent", async () => {
+  test("Pool.subscribe two relays verifies once and records onEventSeen", async () => {
     let verifies = 0;
     const pool = new Pool({
       websocketImplementation: MockWebSocketCtor,
@@ -1498,8 +1498,8 @@ describe("alreadyHaveEvent / receivedEvent", () => {
     const received: string[] = [];
 
     const closer = pool.subscribe(["wss://a.example", "wss://b.example"], [{ kinds: [1] }], {
-      receivedEvent: (id) => received.push(id),
-      onevent: (e) => events.push(e.id),
+      onEventSeen: (id) => received.push(id),
+      onEvent: (e) => events.push(e.id),
     });
 
     await waitUntil(all(instanceCountIs(2), everyInstanceSent("REQ")));
@@ -1530,7 +1530,7 @@ describe("alreadyHaveEvent / receivedEvent", () => {
     const events: string[] = [];
 
     const closer = pool.subscribe(["wss://seen.example"], [{ kinds: [1] }], {
-      onevent: (e) => events.push(e.id),
+      onEvent: (e) => events.push(e.id),
     });
     await waitUntil(
       all(
@@ -1887,7 +1887,7 @@ describe("Relay generation / close", () => {
     relay.close();
   });
 
-  test("a subscribe() re-entered from onclose during close() stays registered", async () => {
+  test("a subscribe() re-entered from onClose during close() stays registered", async () => {
     const relay = new Relay("wss://reentrant-close.example", {
       websocketImplementation: MockWebSocketCtor,
       enableReconnect: true,
@@ -1895,7 +1895,7 @@ describe("Relay generation / close", () => {
     await relay.connect();
     let reentrant: { closed: boolean } | undefined;
     relay.subscribe([{ kinds: [1] }], {
-      onclose: () => {
+      onClose: () => {
         reentrant = relay.subscribe([{ kinds: [2] }]);
       },
     });
@@ -1906,7 +1906,7 @@ describe("Relay generation / close", () => {
     expect(relay.subscriptionCount).toBe(1);
   });
 
-  test("a same-id subscribe() re-entered from onclose during close() stays registered", async () => {
+  test("a same-id subscribe() re-entered from onClose during close() stays registered", async () => {
     const relay = new Relay("wss://reentrant-same-id.example", {
       websocketImplementation: MockWebSocketCtor,
       enableReconnect: true,
@@ -1914,7 +1914,7 @@ describe("Relay generation / close", () => {
     await relay.connect();
     let reentrant: { closed: boolean } | undefined;
     const first = relay.subscribe([{ kinds: [1] }], {
-      onclose: () => {
+      onClose: () => {
         reentrant = relay.subscribe([{ kinds: [2] }], { id: first.id });
       },
     });
@@ -1923,7 +1923,7 @@ describe("Relay generation / close", () => {
     expect(relay.subscriptionCount).toBe(1);
   });
 
-  test("an onclose that always resubscribes does not spin closeAll forever", async () => {
+  test("an onClose that always resubscribes does not spin closeAll forever", async () => {
     const relay = new Relay("wss://resubscribe-storm.example", {
       websocketImplementation: MockWebSocketCtor,
       enableReconnect: true,
@@ -1932,7 +1932,7 @@ describe("Relay generation / close", () => {
     let resubscribed = 0;
     let last: { closed: boolean } | undefined;
     relay.subscribe([{ kinds: [1] }], {
-      onclose: () => {
+      onClose: () => {
         resubscribed += 1;
         last = relay.subscribe([{ kinds: [1] }]);
       },
@@ -2046,7 +2046,7 @@ function reqId(ws: MockWebSocket): string {
 }
 
 describe("Relay synthetic EOSE", () => {
-  test("eoseTimeoutMs fires oneose without CLOSE; later EOSE is ignored; EVENT still delivered; reconnect allows a new oneose", async () => {
+  test("eoseTimeoutMs fires onEose without CLOSE; later EOSE is ignored; EVENT still delivered; reconnect allows a new onEose", async () => {
     const relay = await Relay.connect("wss://synth-eose.example", {
       websocketImplementation: MockWebSocketCtor,
       enableReconnect: true,
@@ -2058,8 +2058,8 @@ describe("Relay synthetic EOSE", () => {
     let eose = 0;
     const sub = relay.subscribe([{ kinds: [1] }], {
       eoseTimeoutMs: 40,
-      onevent: (e) => events.push(e.id),
-      oneose: () => {
+      onEvent: (e) => events.push(e.id),
+      onEose: () => {
         eose += 1;
       },
     });
@@ -2090,10 +2090,10 @@ describe("Relay synthetic EOSE", () => {
     const sub = relay.subscribe([{ kinds: [1] }], {
       closeOnEose: true,
       eoseTimeoutMs: 30,
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closeReason = reason;
       },
     });
@@ -2102,13 +2102,13 @@ describe("Relay synthetic EOSE", () => {
     expect(sub.closed).toBe(true);
     expect(closeReason).toBe("eose");
     expect(framesOf(ws, "CLOSE").some((m) => m[1] === sub.id)).toBe(true);
-    // A late real EOSE does not refire oneose.
+    // A late real EOSE does not refire onEose.
     ws.receive(JSON.stringify(["EOSE", sub.id]));
     expect(eose).toBe(1);
     relay.close();
   });
 
-  test("AUTH retry after synthetic EOSE allows a new oneose", async () => {
+  test("AUTH retry after synthetic EOSE allows a new onEose", async () => {
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://auth-synth-eose.example", {
       websocketImplementation: MockWebSocketCtor,
@@ -2118,8 +2118,8 @@ describe("Relay synthetic EOSE", () => {
     let eose = 0;
     const sub = relay.subscribe([{ kinds: [1] }], {
       eoseTimeoutMs: 30,
-      onevent: (e) => events.push(e.id),
-      oneose: () => {
+      onEvent: (e) => events.push(e.id),
+      onEose: () => {
         eose += 1;
       },
     });
@@ -2143,11 +2143,11 @@ describe("Relay synthetic EOSE", () => {
 });
 
 describe("Pool aggregated EOSE", () => {
-  test("two relays both EOSE fire oneose once", async () => {
+  test("two relays both EOSE fire onEose once", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     let eose = 0;
     const closer = pool.subscribe(["wss://a.example", "wss://b.example"], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
     });
@@ -2160,7 +2160,7 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("one silent relay plus eoseTimeoutMs fires oneose once and does not CLOSE the silent REQ", async () => {
+  test("one silent relay plus eoseTimeoutMs fires onEose once and does not CLOSE the silent REQ", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     let eose = 0;
     const closer = pool.subscribe(
@@ -2168,7 +2168,7 @@ describe("Pool aggregated EOSE", () => {
       [{ kinds: [1] }],
       {
         eoseTimeoutMs: 50,
-        oneose: () => {
+        onEose: () => {
           eose += 1;
         },
       },
@@ -2185,7 +2185,7 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("enableReconnect first socket error does not fire oneose; REQ is on socket 2", async () => {
+  test("enableReconnect first socket error does not fire onEose; REQ is on socket 2", async () => {
     MockWebSocket.failConnect = true;
     const pool = new Pool({
       websocketImplementation: MockWebSocketCtor,
@@ -2198,11 +2198,11 @@ describe("Pool aggregated EOSE", () => {
     let closed: string | undefined;
     const events: string[] = [];
     const closer = pool.subscribe(["wss://first-socket-fail.example"], [{ kinds: [1] }], {
-      onevent: (e) => events.push(e.id),
-      oneose: () => {
+      onEvent: (e) => events.push(e.id),
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -2246,7 +2246,7 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("connect failure plus EOSE fires oneose once", async () => {
+  test("connect failure plus EOSE fires onEose once", async () => {
     MockWebSocket.autoConnect = false;
     const pool = new Pool({
       websocketImplementation: MockWebSocketCtor,
@@ -2254,7 +2254,7 @@ describe("Pool aggregated EOSE", () => {
     });
     let eose = 0;
     const closer = pool.subscribe(["wss://ok.example", "wss://fail.example"], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
     });
@@ -2269,15 +2269,15 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("caller close before EOSE fires onclose and not oneose", async () => {
+  test("caller close before EOSE fires onClose and not onEose", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     let eose = 0;
     let closed: string | undefined;
     const closer = pool.subscribe(["wss://a.example", "wss://b.example"], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -2288,17 +2288,17 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("abort before EOSE fires onclose and not oneose", async () => {
+  test("abort before EOSE fires onClose and not onEose", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     const ac = new AbortController();
     let eose = 0;
     let closed: string | undefined;
     pool.subscribe(["wss://a.example", "wss://b.example"], [{ kinds: [1] }], {
       signal: ac.signal,
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -2309,15 +2309,15 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("empty relay list fires onclose(no relays) and not oneose", async () => {
+  test("empty relay list fires onClose(no relays) and not onEose", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     let eose = 0;
     let closed: string | undefined;
     pool.subscribe([], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -2327,7 +2327,7 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("all connect failures fire onclose(all relays failed)", async () => {
+  test("all connect failures fire onClose(all relays failed)", async () => {
     MockWebSocket.failConnect = true;
     const pool = new Pool({
       websocketImplementation: MockWebSocketCtor,
@@ -2336,10 +2336,10 @@ describe("Pool aggregated EOSE", () => {
     let eose = 0;
     let closed: string | undefined;
     pool.subscribe(["wss://fail-a.example", "wss://fail-b.example"], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -2350,15 +2350,15 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("a single refused relay fires only onclose, never oneose", async () => {
+  test("a single refused relay fires only onClose, never onEose", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     let eose = 0;
     let closed: string | undefined;
     pool.subscribe(["wss://refused.example"], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -2371,7 +2371,7 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("one refused relay does not block the others' aggregate oneose", async () => {
+  test("one refused relay does not block the others' aggregate onEose", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     let eose = 0;
     let closed: string | undefined;
@@ -2379,10 +2379,10 @@ describe("Pool aggregated EOSE", () => {
       ["wss://ok-mixed.example", "wss://refused-mixed.example"],
       [{ kinds: [1] }],
       {
-        oneose: () => {
+        onEose: () => {
           eose += 1;
         },
-        onclose: (reason) => {
+        onClose: (reason) => {
           closed = reason;
         },
       },
@@ -2400,15 +2400,15 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("all refused relays fire only onclose with the last reason", async () => {
+  test("all refused relays fire only onClose with the last reason", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     let eose = 0;
     let closed: string | undefined;
     pool.subscribe(["wss://refused-a.example", "wss://refused-b.example"], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -2422,7 +2422,7 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("attach RelayClosedError after ensureRelay fires onclose(all relays failed)", async () => {
+  test("attach RelayClosedError after ensureRelay fires onClose(all relays failed)", async () => {
     const pool = new Pool({
       websocketImplementation: MockWebSocketCtor,
       enableReconnect: false,
@@ -2444,7 +2444,7 @@ describe("Pool aggregated EOSE", () => {
     let closed: string | undefined;
     try {
       pool.subscribe(["wss://attach-closed.example"], [{ kinds: [1] }], {
-        onclose: (reason) => {
+        onClose: (reason) => {
           closed = reason;
         },
       });
@@ -2469,7 +2469,7 @@ describe("Pool aggregated EOSE", () => {
     });
     let eose = 0;
     const closer = pool.subscribe(["wss://a.example", "wss://b.example"], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
     });
@@ -2529,12 +2529,12 @@ describe("Pool aggregated EOSE", () => {
     pool.close();
   });
 
-  test("all connect failures fire onclose once even if the handler calls close", async () => {
+  test("all connect failures fire onClose once even if the handler calls close", async () => {
     MockWebSocket.failConnect = true;
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     let n = 0;
     const closer = pool.subscribe(["wss://a.example", "wss://b.example"], [{ kinds: [1] }], {
-      onclose: () => {
+      onClose: () => {
         n += 1;
         closer.close();
       },
@@ -2606,8 +2606,8 @@ describe("live REQ coalescing", () => {
     const note = EventBuilder.textNote("hi").createdAt(1).signWithKeys(keys);
     const aEvents: string[] = [];
     const bEvents: string[] = [];
-    const a = relay.subscribe([{ kinds: [1] }], { onevent: (e) => aEvents.push(e.id) });
-    const b = relay.subscribe([{ kinds: [1] }], { onevent: (e) => bEvents.push(e.id) });
+    const a = relay.subscribe([{ kinds: [1] }], { onEvent: (e) => aEvents.push(e.id) });
+    const b = relay.subscribe([{ kinds: [1] }], { onEvent: (e) => bEvents.push(e.id) });
     expect(b.id).toBe(a.id);
     const ws = MockWebSocket.last();
     expect(framesOf(ws, "REQ")).toHaveLength(1);
@@ -2625,8 +2625,8 @@ describe("live REQ coalescing", () => {
     const second = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
     const aEvents: string[] = [];
     const bEvents: string[] = [];
-    const a = relay.subscribe([{ kinds: [1] }], { onevent: (e) => aEvents.push(e.id) });
-    const b = relay.subscribe([{ kinds: [1] }], { onevent: (e) => bEvents.push(e.id) });
+    const a = relay.subscribe([{ kinds: [1] }], { onEvent: (e) => aEvents.push(e.id) });
+    const b = relay.subscribe([{ kinds: [1] }], { onEvent: (e) => bEvents.push(e.id) });
     const ws = MockWebSocket.last();
     a.close();
     expect(framesOf(ws, "CLOSE")).toHaveLength(0);
@@ -2674,7 +2674,7 @@ describe("live REQ coalescing", () => {
     const liveNote = EventBuilder.textNote("live").createdAt(2).signWithKeys(keys);
     const fetchNote = EventBuilder.textNote("fetch").createdAt(1).signWithKeys(keys);
     const liveEvents: string[] = [];
-    const live = relay.subscribe([{ kinds: [1] }], { onevent: (e) => liveEvents.push(e.id) });
+    const live = relay.subscribe([{ kinds: [1] }], { onEvent: (e) => liveEvents.push(e.id) });
     const fetchP = relay.fetch([{ kinds: [1] }], { timeoutMs: 2000 });
     await Promise.resolve();
     const ws = MockWebSocket.last();
@@ -2707,8 +2707,8 @@ describe("live REQ coalescing", () => {
     const aEvents: string[] = [];
     const bEvents: string[] = [];
     const a = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => aEvents.push(e.id),
-      oneose: () => {
+      onEvent: (e) => aEvents.push(e.id),
+      onEose: () => {
         eoseA += 1;
       },
     });
@@ -2718,8 +2718,8 @@ describe("live REQ coalescing", () => {
     expect(eoseA).toBe(1);
 
     const b = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => bEvents.push(e.id),
-      oneose: () => {
+      onEvent: (e) => bEvents.push(e.id),
+      onEose: () => {
         eoseB += 1;
       },
     });
@@ -2858,13 +2858,13 @@ describe("live REQ coalescing", () => {
     const received: string[] = [];
     const a = relay.subscribe([{ kinds: [1] }], {
       alreadyHaveEvent: () => true,
-      receivedEvent: (id) => received.push(`a:${id}`),
-      onevent: (e) => aEvents.push(e.id),
+      onEventSeen: (id) => received.push(`a:${id}`),
+      onEvent: (e) => aEvents.push(e.id),
     }) as Subscription;
     const b = relay.subscribe([{ kinds: [1] }], {
       alreadyHaveEvent: () => false,
-      receivedEvent: (id) => received.push(`b:${id}`),
-      onevent: (e) => bEvents.push(e.id),
+      onEventSeen: (id) => received.push(`b:${id}`),
+      onEvent: (e) => bEvents.push(e.id),
     }) as Subscription;
     expect(b.id).toBe(a.id);
     MockWebSocket.last().receive(JSON.stringify(["EVENT", a.id, note]));
@@ -2877,21 +2877,21 @@ describe("live REQ coalescing", () => {
     relay.close();
   });
 
-  test("an attachment closed during receivedEvent does not get notified for that event", async () => {
+  test("an attachment closed during onEventSeen does not get notified for that event", async () => {
     const relay = await Relay.connect("wss://coal-notify.example");
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("x").createdAt(1).signWithKeys(keys);
     const received: string[] = [];
     const events: string[] = [];
     relay.subscribe([{ kinds: [1] }], {
-      receivedEvent: () => {
+      onEventSeen: () => {
         received.push("a");
         b.close();
       },
     });
     const b = relay.subscribe([{ kinds: [1] }], {
-      receivedEvent: () => received.push("b"),
-      onevent: (e) => events.push(e.id),
+      onEventSeen: () => received.push("b"),
+      onEvent: (e) => events.push(e.id),
     });
     MockWebSocket.last().receive(JSON.stringify(["EVENT", b.id, note]));
     expect(received).toStrictEqual(["a"]);
@@ -2903,10 +2903,10 @@ describe("live REQ coalescing", () => {
     const relay = await Relay.connect("wss://coal-closed.example");
     const reasons: string[] = [];
     const a = relay.subscribe([{ kinds: [1] }], {
-      onclose: (r) => reasons.push(`a:${r}`),
+      onClose: (r) => reasons.push(`a:${r}`),
     });
     const b = relay.subscribe([{ kinds: [1] }], {
-      onclose: (r) => reasons.push(`b:${r}`),
+      onClose: (r) => reasons.push(`b:${r}`),
     });
     MockWebSocket.last().receive(JSON.stringify(["CLOSED", a.id, "bye"]));
     expect(a.closed).toBe(true);
@@ -2940,8 +2940,8 @@ describe("live REQ coalescing", () => {
     const note = EventBuilder.textNote("after").createdAt(1).signWithKeys(keys);
     const aEvents: string[] = [];
     const bEvents: string[] = [];
-    const a = relay.subscribe([{ kinds: [1] }], { onevent: (e) => aEvents.push(e.id) });
-    const b = relay.subscribe([{ kinds: [1] }], { onevent: (e) => bEvents.push(e.id) });
+    const a = relay.subscribe([{ kinds: [1] }], { onEvent: (e) => aEvents.push(e.id) });
+    const b = relay.subscribe([{ kinds: [1] }], { onEvent: (e) => bEvents.push(e.id) });
     const first = MockWebSocket.last();
     expect(framesOf(first, "REQ")).toHaveLength(1);
     first.close();
@@ -2988,9 +2988,9 @@ describe("live REQ coalescing", () => {
     const bEvents: string[] = [];
     const a = relay.subscribe([{ kinds: [1] }], {
       signal: ac.signal,
-      onevent: (e) => aEvents.push(e.id),
+      onEvent: (e) => aEvents.push(e.id),
     });
-    const b = relay.subscribe([{ kinds: [1] }], { onevent: (e) => bEvents.push(e.id) });
+    const b = relay.subscribe([{ kinds: [1] }], { onEvent: (e) => bEvents.push(e.id) });
     const ws = MockWebSocket.last();
     expect(framesOf(ws, "REQ")).toHaveLength(1);
     ac.abort();
@@ -3003,26 +3003,26 @@ describe("live REQ coalescing", () => {
     relay.close();
   });
 
-  test("onevent/oneose/onclose throw on A still delivers to B", async () => {
+  test("onEvent/onEose/onClose throw on A still delivers to B", async () => {
     const relay = await Relay.connect("wss://coal-isolate.example");
     const keys = Keys.fromSecretKey(SK);
     const note = EventBuilder.textNote("iso").createdAt(1).signWithKeys(keys);
     const bEvents: string[] = [];
     let eoseB = 0;
     const a = relay.subscribe([{ kinds: [1] }], {
-      onevent: () => {
-        throw new Error("a-onevent");
+      onEvent: () => {
+        throw new Error("a-onEvent");
       },
-      oneose: () => {
-        throw new Error("a-oneose");
+      onEose: () => {
+        throw new Error("a-onEose");
       },
-      onclose: () => {
-        throw new Error("a-onclose");
+      onClose: () => {
+        throw new Error("a-onClose");
       },
     });
     const b = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => bEvents.push(e.id),
-      oneose: () => {
+      onEvent: (e) => bEvents.push(e.id),
+      onEose: () => {
         eoseB += 1;
       },
     });
@@ -3040,7 +3040,7 @@ describe("live REQ coalescing", () => {
     } finally {
       restore();
     }
-    expect(reported.map(errText)).toStrictEqual(["a-onevent", "a-oneose", "a-onclose"]);
+    expect(reported.map(errText)).toStrictEqual(["a-onEvent", "a-onEose", "a-onClose"]);
   });
 
   test("Pool.subscribe twice same URL+filters sends one REQ", async () => {
@@ -3052,10 +3052,10 @@ describe("live REQ coalescing", () => {
     const aEvents: string[] = [];
     const bEvents: string[] = [];
     const a = pool.subscribe([url], [{ kinds: [1] }], {
-      onevent: (e) => aEvents.push(e.id),
+      onEvent: (e) => aEvents.push(e.id),
     });
     const b = pool.subscribe([url], [{ kinds: [1] }], {
-      onevent: (e) => bEvents.push(e.id),
+      onEvent: (e) => bEvents.push(e.id),
     });
     const ws = socketFor("coal-pool.example");
     await waitUntil(
@@ -3085,7 +3085,7 @@ describe("live REQ coalescing", () => {
     let eoseA = 0;
     let eoseB = 0;
     const a = pool.subscribe([url], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eoseA += 1;
       },
     });
@@ -3100,7 +3100,7 @@ describe("live REQ coalescing", () => {
     ws.receive(JSON.stringify(["EOSE", id]));
     expect(eoseA).toBe(1);
     const b = pool.subscribe([url], [{ kinds: [1] }], {
-      oneose: () => {
+      onEose: () => {
         eoseB += 1;
       },
     });
@@ -3313,7 +3313,7 @@ describe("connect ownership (issue #134)", () => {
     const note = EventBuilder.textNote("hi").createdAt(1).signWithKeys(keys);
     const events: Event[] = [];
     const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e),
+      onEvent: (e) => events.push(e),
     });
     MockWebSocket.last().receive(JSON.stringify(["EVENT", sub.id, note]));
     expect(events).toHaveLength(1);
@@ -3358,7 +3358,7 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
       return {
         close: (reason = "closed by client") => {
           closeReasons.push(reason);
-          handlers?.onclose?.(reason);
+          handlers?.onClose?.(reason);
         },
       };
     }, opts);
@@ -3376,8 +3376,8 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
     const second = it.next();
     const na = note("a", 1);
     const nb = note("b", 2);
-    fire().onevent?.(na);
-    fire().onevent?.(nb);
+    fire().onEvent?.(na);
+    fire().onEvent?.(nb);
     const outcome = await Promise.race([
       Promise.all([first, second]),
       sleep(200).then(() => "hung" as const),
@@ -3415,7 +3415,7 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
       tags: [],
     });
     for (let i = 0; i < total; i += 1) {
-      fire().onevent?.(stub(i));
+      fire().onEvent?.(stub(i));
     }
     iterable.close();
     const seen: number[] = [];
@@ -3429,9 +3429,9 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
     const { iterable, fire } = makeIterable();
     const a = note("a", 1);
     const b = note("b", 2);
-    fire().onevent?.(a);
-    fire().onevent?.(b);
-    fire().onclose?.("relay went away");
+    fire().onEvent?.(a);
+    fire().onEvent?.(b);
+    fire().onClose?.("relay went away");
 
     const it = iterable[Symbol.asyncIterator]();
     const nextA = await it.next();
@@ -3450,7 +3450,7 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
 
   test("iterator return() is a local close and completes normally", async () => {
     const { iterable, fire, closeReasons } = makeIterable();
-    fire().onevent?.(note("a", 1));
+    fire().onEvent?.(note("a", 1));
     const got: string[] = [];
     for await (const e of iterable) {
       got.push(e.id);
@@ -3464,7 +3464,7 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
     const ctrl = new AbortController();
     const { iterable, fire, closeReasons } = makeIterable({ signal: ctrl.signal });
     const a = note("a", 1);
-    fire().onevent?.(a);
+    fire().onEvent?.(a);
     ctrl.abort(new Error("stop"));
     const it = iterable[Symbol.asyncIterator]();
     const abortedNext = await it.next();
@@ -3476,7 +3476,7 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
 
   test("iterable.close() is a local close and completes normally", async () => {
     const { iterable, fire, closeReasons } = makeIterable();
-    fire().onevent?.(note("a", 1));
+    fire().onEvent?.(note("a", 1));
     iterable.close();
     const it = iterable[Symbol.asyncIterator]();
     await it.next();
@@ -3595,7 +3595,7 @@ describe("duplicate publish and abort-listener cleanup", () => {
       const controller = new AbortController();
       const tracked = trackAbortListeners(controller.signal);
       for (let i = 0; i < 5; i++) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential fetches must finish before the listener count is read
+        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential fetches must finish before the listener count is read
         const result = await relay.fetch([{ kinds: [1] }], {
           signal: controller.signal,
           timeoutMs: 300,
@@ -3618,7 +3618,7 @@ describe("duplicate publish and abort-listener cleanup", () => {
       const controller = new AbortController();
       const tracked = trackAbortListeners(controller.signal);
       for (let i = 0; i < 5; i++) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential fetches must finish before the listener count is read
+        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential fetches must finish before the listener count is read
         const events = await pool.fetch(["wss://fetch.example"], [{ kinds: [1] }], {
           signal: controller.signal,
           timeoutMs: 300,
@@ -3641,7 +3641,7 @@ describe("duplicate publish and abort-listener cleanup", () => {
       const controller = new AbortController();
       const tracked = trackAbortListeners(controller.signal);
       for (let i = 0; i < 5; i++) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential fetches must finish before the listener count is read
+        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential fetches must finish before the listener count is read
         const results = await pool.fetchEach(["wss://fetch.example"], [{ kinds: [1] }], {
           signal: controller.signal,
           timeoutMs: 300,
@@ -3690,7 +3690,7 @@ describe("duplicate publish and abort-listener cleanup", () => {
       const tracked = trackAbortListeners(controller.signal);
       for (let i = 0; i < 5; i++) {
         const seen: string[] = [];
-        // oxlint-disable-next-line no-await-in-loop -- sequential streams must finish before the listener count is read
+        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential streams must finish before the listener count is read
         for await (const e of relay.stream([{ kinds: [1] }], { signal: controller.signal })) {
           seen.push(e.id);
           break;
@@ -3714,7 +3714,7 @@ describe("duplicate publish and abort-listener cleanup", () => {
       const controller = new AbortController();
       const tracked = trackAbortListeners(controller.signal);
       for (let i = 0; i < 5; i++) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential counts must finish before the listener count is read
+        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential counts must finish before the listener count is read
         const result = await relay.count([{ kinds: [1] }], {
           signal: controller.signal,
           timeoutMs: 300,
@@ -3750,7 +3750,7 @@ describe("filter-mismatched EVENTs", () => {
     const events: string[] = [];
     const sub = relay.subscribe([{ authors: [a.publicKey] }], {
       closeOnEose: true,
-      onevent: (e) => events.push(e.id),
+      onEvent: (e) => events.push(e.id),
     });
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["EVENT", sub.id, byB]));
@@ -3782,7 +3782,7 @@ describe("filter-mismatched EVENTs", () => {
     const byA = EventBuilder.textNote("mine").createdAt(2).signWithKeys(a);
     const events: string[] = [];
     const sub = relay.subscribe([{ authors: [a.publicKey] }], {
-      onevent: (e) => events.push(e.id),
+      onEvent: (e) => events.push(e.id),
     });
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["EVENT", sub.id, byB]));

@@ -53,16 +53,16 @@ class StubSub implements Closer {
 
   /** Deliver an event through the same gate order the wire runtime uses. */
   event(event: Event): void {
-    this.#handlers.receivedEvent?.(event.id);
+    this.#handlers.onEventSeen?.(event.id);
     if (this.#handlers.alreadyHaveEvent?.(event.id) === true) {
       return;
     }
-    this.#handlers.onevent?.(event);
+    this.#handlers.onEvent?.(event);
   }
 
   /** Remote EOSE; closes the sub when the REQ was closeOnEose. */
   eose(): void {
-    this.#handlers.oneose?.();
+    this.#handlers.onEose?.();
     if (this.#handlers.closeOnEose === true) {
       this.close("eose");
     }
@@ -78,7 +78,7 @@ class StubSub implements Closer {
       return;
     }
     this.closed = true;
-    this.#handlers.onclose?.(reason ?? "closed by client");
+    this.#handlers.onClose?.(reason ?? "closed by client");
   }
 }
 
@@ -134,7 +134,7 @@ function makeEvent(content = "x", createdAt = 1): Event {
 }
 
 describe("fanIn", () => {
-  test("attach + EOSE-close, then connect failure: onclose fires once with the sub's reason", async () => {
+  test("attach + EOSE-close, then connect failure: onClose fires once with the sub's reason", async () => {
     const a = new StubRelay(A);
     const dA = deferred<StubRelay>();
     const dB = deferred<StubRelay>();
@@ -150,10 +150,10 @@ describe("fanIn", () => {
     let eose = 0;
     fanIn(pool, [job(["wss://a", "wss://b"])], {
       closeOnEose: true,
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: (reason) => {
+      onClose: (reason) => {
         closes += 1;
         closed = reason;
       },
@@ -170,7 +170,7 @@ describe("fanIn", () => {
     expect(closed).toBe("eose");
   });
 
-  test("attach + remote CLOSED, then connect failure: onclose fires once with A's reason", async () => {
+  test("attach + remote CLOSED, then connect failure: onClose fires once with A's reason", async () => {
     const a = new StubRelay(A);
     const dA = deferred<StubRelay>();
     const dB = deferred<StubRelay>();
@@ -184,7 +184,7 @@ describe("fanIn", () => {
     let closes = 0;
     let closed: string | undefined;
     fanIn(pool, [job(["wss://a", "wss://b"])], {
-      onclose: (reason) => {
+      onClose: (reason) => {
         closes += 1;
         closed = reason;
       },
@@ -200,7 +200,7 @@ describe("fanIn", () => {
     expect(closed).toBe("closed: duplicate");
   });
 
-  test("connect failure first, then attach + close: onclose fires once", async () => {
+  test("connect failure first, then attach + close: onClose fires once", async () => {
     const a = new StubRelay(A);
     const dA = deferred<StubRelay>();
     const dB = deferred<StubRelay>();
@@ -214,7 +214,7 @@ describe("fanIn", () => {
     let closes = 0;
     let closed: string | undefined;
     fanIn(pool, [job(["wss://a", "wss://b"])], {
-      onclose: (reason) => {
+      onClose: (reason) => {
         closes += 1;
         closed = reason;
       },
@@ -231,13 +231,13 @@ describe("fanIn", () => {
     expect(closed).toBe("shutdown");
   });
 
-  test("all connect failures: onclose fires once with 'all relays failed'", async () => {
+  test("all connect failures: onClose fires once with 'all relays failed'", async () => {
     const pool = makePool(new Map<string, EnsureResult>());
 
     let closes = 0;
     let closed: string | undefined;
     fanIn(pool, [job(["wss://a", "wss://b"])], {
-      onclose: (reason) => {
+      onClose: (reason) => {
         closes += 1;
         closed = reason;
       },
@@ -262,7 +262,7 @@ describe("fanIn", () => {
     let closes = 0;
     let closed: string | undefined;
     fanIn(pool, [job(["wss://a", "wss://b"])], {
-      onclose: (reason) => {
+      onClose: (reason) => {
         closes += 1;
         closed = reason;
       },
@@ -291,7 +291,7 @@ describe("fanIn", () => {
     let closes = 0;
     let closed: string | undefined;
     fanIn(pool, [job(["wss://a", "wss://b"])], {
-      onclose: (reason) => {
+      onClose: (reason) => {
         closes += 1;
         closed = reason;
       },
@@ -306,14 +306,14 @@ describe("fanIn", () => {
     expect(closed).toBe("gone");
   });
 
-  test("eoseTimeoutMs fires oneose once; a later real EOSE does not refire it", async () => {
+  test("eoseTimeoutMs fires onEose once; a later real EOSE does not refire it", async () => {
     const a = new StubRelay(A);
     const pool = makePool(new Map<string, EnsureResult>([[A, a]]));
 
     let eose = 0;
     fanIn(pool, [job(["wss://a"])], {
       eoseTimeoutMs: 20,
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
     });
@@ -332,10 +332,10 @@ describe("fanIn", () => {
     let eose = 0;
     let closes = 0;
     const closer = fanIn(pool, [job(["wss://a", "wss://a/"]), job(["wss://a"])], {
-      oneose: () => {
+      onEose: () => {
         eose += 1;
       },
-      onclose: () => {
+      onClose: () => {
         closes += 1;
       },
     });
@@ -352,7 +352,7 @@ describe("fanIn", () => {
     expect(closes).toBe(1);
   });
 
-  test("events dedupe across relays while receivedEvent counts every delivery", async () => {
+  test("events dedupe across relays while onEventSeen counts every delivery", async () => {
     const a = new StubRelay(A);
     const b = new StubRelay(B);
     const pool = makePool(
@@ -365,10 +365,10 @@ describe("fanIn", () => {
     let events = 0;
     let received = 0;
     fanIn(pool, [job(["wss://a", "wss://b"])], {
-      onevent: () => {
+      onEvent: () => {
         events += 1;
       },
-      receivedEvent: () => {
+      onEventSeen: () => {
         received += 1;
       },
     });
@@ -381,7 +381,7 @@ describe("fanIn", () => {
     expect(received).toBe(2);
   });
 
-  test("signal aborted after attach closes every sub and fires onclose once", async () => {
+  test("signal aborted after attach closes every sub and fires onClose once", async () => {
     const a = new StubRelay(A);
     const b = new StubRelay(B);
     const pool = makePool(
@@ -396,7 +396,7 @@ describe("fanIn", () => {
     let closed: string | undefined;
     fanIn(pool, [job(["wss://a", "wss://b"])], {
       signal: controller.signal,
-      onclose: (reason) => {
+      onClose: (reason) => {
         closes += 1;
         closed = reason;
       },
@@ -412,7 +412,7 @@ describe("fanIn", () => {
     expect(closed).toBe("aborted");
   });
 
-  test("signal aborted up front fires onclose('aborted') and attaches nothing", async () => {
+  test("signal aborted up front fires onClose('aborted') and attaches nothing", async () => {
     const a = new StubRelay(A);
     const pool = makePool(new Map<string, EnsureResult>([[A, a]]));
     const controller = new AbortController();
@@ -421,7 +421,7 @@ describe("fanIn", () => {
     let closed: string | undefined;
     fanIn(pool, [job(["wss://a"])], {
       signal: controller.signal,
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -436,7 +436,7 @@ describe("fanIn", () => {
 
     let closed: string | undefined;
     fanIn(pool, [job([])], {
-      onclose: (reason) => {
+      onClose: (reason) => {
         closed = reason;
       },
     });
@@ -474,7 +474,7 @@ describe("fetchRouted", () => {
     expect(events).toHaveLength(1);
   });
 
-  test("a throwing onevent does not drop events from the result", async () => {
+  test("a throwing onEvent does not drop events from the result", async () => {
     const { reported, restore } = stubReportError();
     try {
       const a = new StubRelay(A);
@@ -483,7 +483,7 @@ describe("fetchRouted", () => {
       const pool = makePool(new Map<string, EnsureResult>([[A, a]]));
 
       const events = await fetchRouted(pool, [job(["wss://a"])], {
-        onevent: () => {
+        onEvent: () => {
           throw new Error("listener boom");
         },
       });

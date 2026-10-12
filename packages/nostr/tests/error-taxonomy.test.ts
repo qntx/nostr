@@ -60,7 +60,7 @@ async function waitUntil(pred: () => boolean, timeoutMs = 500): Promise<void> {
     if (pred()) {
       return;
     }
-    // oxlint-disable-next-line no-await-in-loop -- polling must wait between iterations
+    // oxlint-disable-next-line eslint/no-await-in-loop -- polling must wait between iterations
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("timeout waiting for condition");
@@ -179,44 +179,44 @@ function restoreGlobal(name: string, value: unknown): void {
 describe("subscriptionToAsyncIterable close reasons", () => {
   function started(opts?: { signal?: AbortSignal }): {
     stream: AsyncIterable<unknown> & { close: (reason?: string) => void };
-    onclose: (reason: string) => void;
+    onClose: (reason: string) => void;
     next: () => Promise<IteratorResult<unknown>>;
   } {
     let handlersRef: {
-      onclose?: ((reason: string) => void) | undefined;
+      onClose?: ((reason: string) => void) | undefined;
     } = {};
     const stream = subscriptionToAsyncIterable((handlers) => {
       handlersRef = handlers;
       return {
         close: (reason) => {
-          handlers.onclose?.(reason ?? "closed by client");
+          handlers.onClose?.(reason ?? "closed by client");
         },
       };
     }, opts);
-    if (!handlersRef.onclose) {
-      throw new Error("start omitted onclose");
+    if (!handlersRef.onClose) {
+      throw new Error("start omitted onClose");
     }
     const iterator = stream[Symbol.asyncIterator]();
     return {
       stream,
-      onclose: (reason: string) => handlersRef.onclose?.(reason),
+      onClose: (reason: string) => handlersRef.onClose?.(reason),
       next: async () => iterator.next(),
     };
   }
 
-  test("onclose relay gone throws RelayClosedError from next", async () => {
-    const { onclose, next } = started();
+  test("onClose relay gone throws RelayClosedError from next", async () => {
+    const { onClose, next } = started();
     const pending = next();
-    onclose("relay gone");
+    onClose("relay gone");
     const err = await captureError(pending);
     expect(err).toBeInstanceOf(RelayClosedError);
     expect((err as RelayClosedError).message).toBe("relay gone");
   });
 
   test("any remote close reason throws, even one that looks local", async () => {
-    const { onclose, next } = started();
+    const { onClose, next } = started();
     const pending = next();
-    onclose("closed by client");
+    onClose("closed by client");
     const err = await captureError(pending);
     expect(err).toBeInstanceOf(RelayClosedError);
   });
@@ -307,7 +307,7 @@ describe("ClientError", () => {
     expect((err as ClientError).message).toBe(message);
   }
 
-  // oxlint-disable-next-line expect-expect -- assertions live in the pinClientError helper
+  // oxlint-disable-next-line jest/expect-expect -- assertions live in the pinClientError helper
   test("getPublicKey/signEvent/signEventBuilder/signTemplate without signer", async () => {
     const client = new Client();
     pinClientError(await captureError(client.getPublicKey()), "no signer configured");
@@ -322,7 +322,7 @@ describe("ClientError", () => {
     );
   });
 
-  // oxlint-disable-next-line expect-expect -- assertions live in the pinClientError helper
+  // oxlint-disable-next-line jest/expect-expect -- assertions live in the pinClientError helper
   test("requireNip59Crypto methods without signer", async () => {
     const client = new Client({ relays: ["wss://a.example"] });
     pinClientError(
@@ -333,7 +333,7 @@ describe("ClientError", () => {
     pinClientError(await captureError(client.subscribePrivateMessages()), "no signer configured");
   });
 
-  // oxlint-disable-next-line expect-expect -- assertions live in the pinClientError helper
+  // oxlint-disable-next-line jest/expect-expect -- assertions live in the pinClientError helper
   test("assertAlive after shutdown", async () => {
     const client = new Client({ relays: ["wss://a.example"] });
     await client.shutdown();
@@ -344,7 +344,7 @@ describe("ClientError", () => {
     );
   });
 
-  // oxlint-disable-next-line expect-expect -- assertions live in the pinClientError helper
+  // oxlint-disable-next-line jest/expect-expect -- assertions live in the pinClientError helper
   test("defaultRelays with no relays configured", () => {
     const client = new Client();
     pinClientError(
