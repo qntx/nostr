@@ -60,6 +60,34 @@ describe("nip98", () => {
     expect(validateAuthEvent(event, URL, "GET")).toBe(false);
   });
 
+  test("rejects events with several u or method tags", () => {
+    const template = {
+      kind: Kind.HttpAuth,
+      created_at: Math.floor(Date.now() / 1000),
+      content: "",
+    };
+    const dupeU = sign({
+      ...template,
+      tags: [
+        ["u", URL],
+        ["u", "https://other.example/"],
+        ["method", METHOD],
+      ],
+    });
+    expect(validateAuthEvent(dupeU, URL, METHOD)).toBe(false);
+    const dupeMethod = sign({
+      ...template,
+      tags: [
+        ["u", URL],
+        ["method", METHOD],
+        ["method", "GET"],
+      ],
+    });
+    expect(validateAuthEvent(dupeMethod, URL, METHOD)).toBe(false);
+    const noMethod = sign({ ...template, tags: [["u", URL]] });
+    expect(validateAuthEvent(noMethod, URL, METHOD)).toBe(false);
+  });
+
   test("timestamp skew fails unless maxSkewSec covers it", async () => {
     const now = Math.floor(Date.now() / 1000);
     const stale = unpackEventFromToken(await getToken(URL, METHOD, sign, { now: now - 120 }));

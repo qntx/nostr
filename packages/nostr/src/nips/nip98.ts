@@ -148,12 +148,19 @@ export function validateAuthEvent(
     return false;
   }
 
-  const u = firstTagValue(event.tags, "u");
-  if (u !== url) {
+  // The `u` tag MUST be exactly the request URL, so a token carrying several `u` (or `method`)
+  // tags would be valid for more than one request — reject rather than first-wins.
+  const us = event.tags.filter((tag) => tag[0] === "u");
+  const methods = event.tags.filter((tag) => tag[0] === "method");
+  if (us.length !== 1 || methods.length !== 1) {
     return false;
   }
 
-  const m = firstTagValue(event.tags, "method");
+  if (us[0]?.[1] !== url) {
+    return false;
+  }
+
+  const m = methods[0]?.[1];
   if (m === undefined || m.toLowerCase() !== method.toLowerCase()) {
     return false;
   }

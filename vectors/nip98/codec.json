@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.11.0",
+    "version": "0.12.1",
     "note": "signed with a fixed key and fixed BIP-340 aux (SigningBackend injection); tokens are base64 of the wire-order event JSON"
   },
   "secret_key": "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf",
@@ -816,7 +816,7 @@
       "method": "POST",
       "now": 1700000000,
       "max_skew_secs": 60,
-      "result": true
+      "result": false
     },
     {
       "event": {
