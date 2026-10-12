@@ -103,9 +103,11 @@ function assertNip19Kind(kind: number): void {
   }
 }
 
+// TLV entries are emitted in ascending type order (0 special, 1 relays, 2 author, 3 kind),
+// matching the NIP-19 example; values within one type keep their input order.
 function encodeTLV(tlv: TLV): Uint8Array {
   const entries: Uint8Array[] = [];
-  for (const [t, vs] of Object.entries(tlv).reverse()) {
+  for (const [t, vs] of Object.entries(tlv)) {
     for (const v of vs) {
       if (v.length > 255) {
         throw new Nip19Error("TLV value exceeds 255 bytes");

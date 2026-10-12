@@ -12,9 +12,13 @@ export class Nip21Error extends NostrError {
   override name = "Nip21Error";
 }
 
-/** Matches `nostr:<bech32>` (not anchored). */
+/**
+ * Matches `nostr:<bech32>` (not anchored). Case classes are written out so matching is
+ * case-insensitive for ASCII only: the `i` flag would also fold U+212A (K) into `k`.
+ */
 // oxlint-disable-next-line no-inferrable-types -- isolatedDeclarations requires the annotation for dts emit
-export const NOSTR_URI_REGEX: RegExp = /nostr:([a-z0-9]+1[02-9ac-hj-np-z]+)/i;
+export const NOSTR_URI_REGEX: RegExp =
+  /[Nn][Oo][Ss][Tt][Rr]:([A-Za-z0-9]+1[02-9AC-HJ-NP-Zac-hj-np-z]+)/;
 
 export type NostrURI = {
   /** Full URI including `nostr:` */
@@ -28,7 +32,7 @@ export function isNostrURI(value: unknown): value is `nostr:${string}` {
   if (typeof value !== "string") {
     return false;
   }
-  if (!/^nostr:[a-z0-9]+1[02-9ac-hj-np-z]+$/i.test(value)) {
+  if (!/^[Nn][Oo][Ss][Tt][Rr]:[A-Za-z0-9]+1[02-9AC-HJ-NP-Zac-hj-np-z]+$/.test(value)) {
     return false;
   }
   return !value.toLowerCase().startsWith("nostr:nsec1");
@@ -36,7 +40,7 @@ export function isNostrURI(value: unknown): value is `nostr:${string}` {
 
 /** Parse and decode a full `nostr:…` URI. NIP-21 excludes `nsec`. */
 export function parseNostrURI(uri: string): NostrURI {
-  const match = /^nostr:([a-z0-9]+1[02-9ac-hj-np-z]+)$/i.exec(uri);
+  const match = /^[Nn][Oo][Ss][Tt][Rr]:([A-Za-z0-9]+1[02-9AC-HJ-NP-Zac-hj-np-z]+)$/.exec(uri);
   const entity = match?.at(1);
   if (entity === undefined) {
     throw new Nip21Error(`invalid Nostr URI: ${uri}`);
