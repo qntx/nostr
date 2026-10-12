@@ -16,10 +16,8 @@
       "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
     },
     "vectors": ["vectors/core/url-normalize.json"],
-    "rust": {
-      "api": "nostr::RelayUrl::parse",
-      "tests": ["crates/interop/tests/core.rs"]
-    }
+    "rust": null,
+    "rustNote": "rust-nostr RelayUrl::parse only parses ws/wss URLs and preserves the input path; it is not a normalizer"
   },
   {
     "id": "core.kind.classify",
@@ -178,10 +176,8 @@
       "tests": ["packages/nostr/tests/vectors/core.test.ts"]
     },
     "vectors": ["vectors/core/filter-limit.json"],
-    "rust": {
-      "api": "nostr::Filter (deserialization)",
-      "tests": ["crates/interop/tests/core.rs"]
-    }
+    "rust": null,
+    "rustNote": "rust-nostr has no intrinsic-limit API; Filter.limit is only the requested limit"
   },
   {
     "id": "core.filter.canonicalize",

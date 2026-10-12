@@ -1,11 +1,12 @@
 //! Executes `vectors/nip27/codec.json` against rust-nostr's public
 //! `nostr::parser::NostrParser`.
 //!
-//! Glue is limited to token→block conversion: consecutive
-//! `Text`/`Whitespace`/`LineBreak` tokens merge into one `text` block and
-//! `Nostr`/`Url`/`Hashtag` tokens map to `reference`/`url`/`hashtag`. Block
-//! kinds rust-nostr cannot produce (emoji, invoice, relay, media
-//! classification, bare-bech32 references) diverge and are registered.
+//! `NostrParser` is not a rendering tokenizer, so both sides are projected
+//! onto the shared vocabulary `text`/`reference`/`url`/`hashtag` before
+//! comparing: rust tokens merge into text/url/hashtag/`nostr:`-references
+//! via [`content_blocks`], and the vector's block list is folded the same
+//! way by [`project_blocks`] (media and `nrelay:` become `url`; invoice,
+//! emoji and bare references become `text`; adjacent text merges).
 
 #![allow(
     unused_crate_dependencies,
@@ -23,7 +24,7 @@
 
 mod common;
 
-use common::{DivergenceCheck, content_blocks};
+use common::{DivergenceCheck, content_blocks, project_blocks};
 use serde::Deserialize;
 
 const CODEC: &str = include_str!(concat!(
@@ -40,8 +41,8 @@ struct Codec {
 struct Case {
     name: String,
     content: String,
-    // `tags`/`legacy`/`imeta` have no `NostrParserOptions` counterpart and are
-    // ignored; whatever rust-nostr produces for them diverges on its own.
+    // `tags`/`legacy`/`imeta` are folded away by the projection before
+    // comparing.
     out: serde_json::Value,
 }
 
@@ -52,7 +53,11 @@ fn tokenize_cases() {
     let mut check = DivergenceCheck::new("nip27.tokenize");
     for case in &codec.cases {
         let got = content_blocks(&case.content);
-        check.check(&case.name, got == case.out, &got.to_string());
+        check.check(
+            &case.name,
+            got == project_blocks(&case.content, &case.out),
+            &got.to_string(),
+        );
     }
     check.finish();
 }

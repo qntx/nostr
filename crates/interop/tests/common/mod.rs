@@ -16,16 +16,23 @@ use nostr::parser::{NostrParser, Token};
 use serde::Deserialize;
 
 /// A registered divergence between the vector expectation and rust-nostr's
-/// behavior. `side` is `"pending"` until V2 adjudicates it.
+/// behavior. `side` records which implementation diverges from spec text or
+/// where the difference is inherent:
+/// - `rust-nostr`: rust-nostr deviates from the NIP or a referenced RFC; the
+///   vector is correct.
+/// - `platform`: inherent JSON/number-model difference (`JSON.parse` vs
+///   `serde_json`); both are acceptable.
+/// - `unspecified`: the NIP does not define the behavior; both are
+///   acceptable choices.
 #[derive(Debug, Deserialize)]
 pub(crate) struct Divergence {
     /// The `parity.json` capability id (e.g. `nip19.codec`).
     pub capability: String,
     /// The case name/index within the vector file.
     pub case: String,
-    /// `"pending"` until adjudicated.
+    /// One of `rust-nostr`, `platform`, `unspecified`.
     pub side: String,
-    /// One-line factual description of the difference.
+    /// One-line rationale naming the relevant spec clause.
     pub reason: String,
 }
 
@@ -38,10 +45,14 @@ static DIVERGENCES: LazyLock<BTreeMap<String, BTreeMap<String, String>>> = LazyL
     let mut map: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for entry in entries {
         assert!(
-            entry.side == "pending",
-            "divergences.json {}/{}: side must be \"pending\" in V1",
+            matches!(
+                entry.side.as_str(),
+                "rust-nostr" | "platform" | "unspecified"
+            ),
+            "divergences.json {}/{}: side {:?} must be rust-nostr, platform or unspecified",
             entry.capability,
-            entry.case
+            entry.case,
+            entry.side
         );
         let cases = map.entry(entry.capability.clone()).or_default();
         assert!(
@@ -172,7 +183,7 @@ pub(crate) fn unhex_arr<const N: usize>(s: &str) -> Option<[u8; N]> {
 }
 
 use nostr::nips::nip19::{Nip19, Nip19Coordinate, Nip19Event, Nip19Profile};
-use nostr::prelude::{Coordinate, EventId, Kind, PublicKey, RelayUrl, SecretKey};
+use nostr::prelude::{Coordinate, EventId, Kind, PublicKey, RelayUrl, SecretKey, UnsignedEvent};
 use serde::Serialize;
 
 /// The vector's normalized NIP-19 entity shape (TS `DecodedResult` / pointer
@@ -336,11 +347,70 @@ fn nip21_pointer(entity: &Nip21) -> serde_json::Value {
     }
 }
 
+/// Parses a JSON document; `None` when the input is not JSON.
+pub(crate) fn json_value(raw: &str) -> Option<serde_json::Value> {
+    serde_json::from_str(raw).ok()
+}
+
+/// JSON object key order is not semantic: two encoded documents are equal
+/// when they parse to the same `serde_json::Value`.
+pub(crate) fn json_eq(a: &str, b: &str) -> bool {
+    json_value(a) == json_value(b)
+}
+
+/// Order-insensitive tag comparison for builder outputs where tag order
+/// carries no meaning: the multisets of tag arrays must be identical.
+pub(crate) fn same_tag_multiset(expected: &[Vec<String>], got: &[Vec<String>]) -> bool {
+    fn count<'a>(
+        tags: impl IntoIterator<Item = &'a Vec<String>>,
+    ) -> BTreeMap<&'a Vec<String>, usize> {
+        tags.into_iter().fold(BTreeMap::new(), |mut acc, tag| {
+            *acc.entry(tag).or_default() += 1;
+            acc
+        })
+    }
+    count(expected) == count(got)
+}
+
+/// Compares an unsigned-event JSON document against a built
+/// `nostr::UnsignedEvent`: `pubkey`/`created_at`/`kind`/`content` must match
+/// exactly and `tags` must match as an order-insensitive multiset (builder
+/// tag order carries no meaning).
+pub(crate) fn unsigned_event_eq(expected: &serde_json::Value, got: &UnsignedEvent) -> bool {
+    let tags: Vec<Vec<String>> = got.tags.iter().map(|tag| tag.as_slice().to_vec()).collect();
+    let expected_tags: Vec<Vec<String>> = expected
+        .get("tags")
+        .and_then(serde_json::Value::as_array)
+        .map(|tags| {
+            tags.iter()
+                .filter_map(|tag| {
+                    tag.as_array().map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|item| item.as_str().map(str::to_owned))
+                            .collect()
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    expected.get("pubkey").and_then(serde_json::Value::as_str) == Some(got.pubkey.to_hex().as_str())
+        && expected
+            .get("created_at")
+            .and_then(serde_json::Value::as_u64)
+            == Some(got.created_at.as_secs())
+        && expected.get("kind").and_then(serde_json::Value::as_u64)
+            == Some(u64::from(got.kind.as_u16()))
+        && expected.get("content").and_then(serde_json::Value::as_str) == Some(got.content.as_str())
+        && same_tag_multiset(&expected_tags, &tags)
+}
+
 /// Runs `nostr::parser::NostrParser` over `text` and renders the token stream
-/// as vector blocks: consecutive `Text`/`Whitespace`/`LineBreak` tokens merge
-/// into one `text` block; `Nostr`/`Url`/`Hashtag` map to `reference`/`url`/
-/// `hashtag`. Block kinds rust-nostr cannot produce (emoji, invoice, relay,
-/// media classification, bare-bech32 references) simply diverge.
+/// in the shared block vocabulary `text`/`reference`/`url`/`hashtag`:
+/// consecutive `Text`/`Whitespace`/`LineBreak` tokens merge into one `text`
+/// block; `Nostr`/`Url`/`Hashtag` map to `reference`/`url`/`hashtag`.
+/// `NostrParser` only produces references for `nostr:`-prefixed entities, so
+/// its `reference` blocks always carry `bare: false`.
 fn flush_text(acc: &mut String, out: &mut Vec<serde_json::Value>) {
     if !acc.is_empty() {
         out.push(serde_json::json!({"type": "text", "text": acc.as_str()}));
@@ -377,4 +447,162 @@ pub(crate) fn content_blocks(text: &str) -> serde_json::Value {
     }
     flush(&mut text_acc, &mut blocks);
     serde_json::Value::Array(blocks)
+}
+
+/// Projects a TS token list onto the shared vocabulary that rust-nostr's
+/// `NostrParser` can express, so `content_blocks` output is comparable.
+/// Blocks tile `content` contiguously, so each block's source text is the
+/// next `block`-sized slice of the input:
+/// - `text`/`url`/`hashtag` keep their payload;
+/// - `image`/`video`/`audio`/`relay` become `url` blocks on the same source;
+/// - `reference` stays a reference only for `nostr:`-prefixed entities
+///   (`bare: false`); bare bech32 references become `text` carrying the raw
+///   source span;
+/// - `invoice`/`emoji` become `text` carrying the raw source span;
+/// - adjacent `text` blocks merge.
+///
+/// A block whose source span cannot be derived is left untouched, which
+/// surfaces as a normal divergence rather than a panic.
+/// Splits off the next `len` bytes of `rest` (clamped to the next char
+/// boundary so a mismeasured span degrades to a divergence, not a panic)
+/// and returns them.
+fn take<'a>(rest: &mut &'a str, len: usize) -> &'a str {
+    let mut n = len.min(rest.len());
+    while n < rest.len() && !rest.is_char_boundary(n) {
+        n += 1;
+    }
+    let (head, tail) = rest.split_at(n);
+    *rest = tail;
+    head
+}
+
+/// `true` for the NIP-19 data characters the scanner accepts after the HRP:
+/// `[02-9ac-hj-np-z]` in either ASCII case (the bech32 charset minus
+/// `1`, `b`, `i`, `o`).
+fn is_nip19_data(c: char) -> bool {
+    let c = c.to_ascii_lowercase();
+    c.is_ascii_digit() && c != '1'
+        || c == 'a'
+        || ('c'..='h').contains(&c)
+        || ('j'..='n').contains(&c)
+        || ('p'..='z').contains(&c)
+}
+
+/// Byte length of the `nostr:`-prefixed or bare bech32 token at the head of
+/// `rest` — the reference block's true source span, which can differ from
+/// the re-encoded entity's length when the source carried non-canonical TLVs.
+/// The token shape is `<hrp>1<data>` with the same HRP set and data charset
+/// the TS scanner accepts; a non-matching head yields 0.
+fn bech32_span(rest: &str, bare: bool) -> usize {
+    let prefix_len = if bare {
+        0
+    } else {
+        rest.get(.."nostr:".len())
+            .filter(|head| head.eq_ignore_ascii_case("nostr:"))
+            .map_or(0, str::len)
+    };
+    let after = rest.get(prefix_len..).unwrap_or_default();
+    // `nsec` is only reachable behind a `nostr:` prefix; bare scanning
+    // accepts the public entity HRPs only.
+    let hrps: &[&str] = if bare {
+        &["nprofile", "nevent", "naddr", "npub", "note"]
+    } else {
+        &["nprofile", "nevent", "naddr", "npub", "note", "nsec"]
+    };
+    let Some(body) = hrps.iter().find_map(|hrp| {
+        after
+            .get(..hrp.len())
+            .filter(|head| head.eq_ignore_ascii_case(hrp))
+            .and_then(|_| after.get(hrp.len()..))
+            .filter(|tail| tail.starts_with('1'))
+    }) else {
+        return 0;
+    };
+    let run_len = body
+        .get(1..)
+        .unwrap_or_default()
+        .chars()
+        .take_while(|c| is_nip19_data(*c))
+        .map(char::len_utf8)
+        .sum::<usize>();
+    prefix_len + after.len() - body.len() + 1 + run_len
+}
+
+pub(crate) fn project_blocks(content: &str, out: &serde_json::Value) -> serde_json::Value {
+    let Some(blocks) = out.as_array() else {
+        return out.clone();
+    };
+    let mut projected: Vec<serde_json::Value> = Vec::new();
+    let mut text_acc = String::new();
+    let mut rest = content;
+    for block in blocks {
+        let Some(kind) = block.get("type").and_then(serde_json::Value::as_str) else {
+            projected.push(block.clone());
+            continue;
+        };
+        match kind {
+            "text" => {
+                let text = block
+                    .get("text")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                text_acc.push_str(take(&mut rest, text.len()));
+            }
+            "url" | "image" | "video" | "audio" | "relay" => {
+                flush_text(&mut text_acc, &mut projected);
+                let url = block
+                    .get("url")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                let _ = take(&mut rest, url.len());
+                projected.push(serde_json::json!({"type": "url", "url": url}));
+            }
+            "hashtag" => {
+                flush_text(&mut text_acc, &mut projected);
+                if let Some(value) = block.get("value").and_then(serde_json::Value::as_str) {
+                    let _ = take(&mut rest, value.len() + 1);
+                }
+                projected.push(block.clone());
+            }
+            "reference" => {
+                let bare = block
+                    .get("bare")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                let span = bech32_span(rest, bare);
+                if span == 0 {
+                    projected.push(block.clone());
+                    continue;
+                }
+                if bare {
+                    text_acc.push_str(take(&mut rest, span));
+                } else {
+                    flush_text(&mut text_acc, &mut projected);
+                    let _ = take(&mut rest, span);
+                    projected.push(block.clone());
+                }
+            }
+            "invoice" => {
+                let bolt11 = block
+                    .get("bolt11")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                let prefix_len = rest
+                    .get(.."lightning:".len())
+                    .filter(|head| head.eq_ignore_ascii_case("lightning:"))
+                    .map_or(0, str::len);
+                text_acc.push_str(take(&mut rest, prefix_len + bolt11.len()));
+            }
+            "emoji" => {
+                let shortcode = block
+                    .get("shortcode")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                text_acc.push_str(take(&mut rest, shortcode.len() + 2));
+            }
+            _ => projected.push(block.clone()),
+        }
+    }
+    flush_text(&mut text_acc, &mut projected);
+    serde_json::Value::Array(projected)
 }

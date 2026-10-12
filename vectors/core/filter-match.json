@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.11.0",
+    "version": "0.12.1",
     "cross_check": null
   },
   "cases": [
@@ -805,7 +805,7 @@
         "content": "c",
         "sig": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       },
-      "matches": true
+      "matches": false
     },
     {
       "filter": {
@@ -831,7 +831,7 @@
         "content": "c",
         "sig": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       },
-      "matches": true
+      "matches": false
     },
     {
       "filter": {

@@ -154,6 +154,12 @@ describe("SqliteEventStore", () => {
       await expect(store.query([{ "#p": [refPk] }])).resolves.toHaveLength(1);
       await expect(store.query([{ "#e": [refId.toLowerCase()] }])).resolves.toHaveLength(1);
       await expect(store.query([{ "#e": ["00".repeat(32)] }])).resolves.toHaveLength(0);
+      // The event side is literal like matchFilter: an uppercase tag value never matches a
+      // (lowercased) filter value.
+      const upper = note(bob(), "upper", 2, [["e", refId]]);
+      await store.put(upper);
+      await expect(store.query([{ "#e": [refId.toLowerCase()] }])).resolves.toHaveLength(1);
+      await expect(store.query([{ "#e": [refId] }])).resolves.toHaveLength(1);
     } finally {
       driver.close();
     }

@@ -341,11 +341,7 @@ fn shared_secret(check: &mut DivergenceCheck) {
         // The vector also asserts `from_shared_secret(shared_secret)` yields
         // the same conversation key; rust-nostr has no such derivation entry
         // point — `ConversationKey::from_slice` takes the key verbatim.
-        check.check(
-            &format!("shared_secret/{i}/from_shared_secret"),
-            false,
-            "rust-nostr has no shared-secret->conversation-key import; derive() is the only path",
-        );
+        check.skip(&format!("shared_secret/{i}/from_shared_secret"));
     }
 }
 

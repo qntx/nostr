@@ -39,10 +39,19 @@ export type ParseContentOptions = {
   imeta?: ReadonlyMap<string, string> | undefined;
 };
 
-// Bech32 data charset ([02-9ac-hj-np-z], case-insensitive) and the NIP-19 entity prefixes.
-const BECH32_CHARS = "02-9ac-hj-np-z";
-const NIP19_PREFIX = "(?:npub|nprofile|note|nevent|naddr|nsec)1";
-const NIP19_BARE_PREFIX = "(?:npub|nprofile|note|nevent|naddr)1";
+// Bech32 data charset ([02-9ac-hj-np-z], both ASCII cases) and the NIP-19 entity prefixes.
+const BECH32_CHARS = "02-9AC-HJ-NP-Zac-hj-np-z";
+
+/**
+ * Pair every letter of an ASCII literal into a case class (`[Nn]…`) so keywords match
+ * case-insensitively for ASCII only. The regex `i` flag cannot be used here: under `u` it also
+ * folds U+017F (ſ)→s and U+212A (K)→k, which would let `noſtr:` or `lnbc1K…` slip through.
+ */
+const asciiCi = (word: string): string =>
+  word.replaceAll(/[a-zA-Z]/g, (c) => `[${c.toLowerCase()}${c.toUpperCase()}]`);
+
+const NIP19_PREFIX = asciiCi("(?:npub|nprofile|note|nevent|naddr|nsec)1");
+const NIP19_BARE_PREFIX = asciiCi("(?:npub|nprofile|note|nevent|naddr)1");
 
 // A URL run ends at whitespace, angle brackets, double quotes, CJK punctuation
 // (U+3000–U+303F), or full-width forms (U+FF00–U+FFEF).
@@ -51,13 +60,13 @@ const URL_RUN = `[^\\s<>"\\u3000-\\u303f\\uff00-\\uffef]+`;
 // Rule order matters: at every position the first matching alternative wins.
 const SCAN_BODY = [
   // 1. nostr: URIs carry a NIP-19 entity.
-  `(?<nostr>nostr:${NIP19_PREFIX}[${BECH32_CHARS}]+)`,
+  `(?<nostr>${asciiCi("nostr:")}${NIP19_PREFIX}[${BECH32_CHARS}]+)`,
   // 2./3. http(s) and ws(s) URLs share the same boundary rules.
-  `(?<url>https?://${URL_RUN})`,
-  `(?<relay>wss?://${URL_RUN})`,
+  `(?<url>${asciiCi("https")}?://${URL_RUN})`,
+  `(?<relay>${asciiCi("wss")}?://${URL_RUN})`,
   // 4. BOLT11 invoices, with an optional lightning: URI prefix. The HRP may carry an amount
   // (`lnbc10u1…` = ln + currency + amount + multiplier + the `1` separator).
-  `(?<invoice>(?:lightning:)?ln(?:bcrt|tbs|bc|tb)(?:\\d+[munp]?)?1[${BECH32_CHARS}]+)`,
+  `(?<invoice>(?:${asciiCi("lightning:")})?${asciiCi("ln")}(?:${asciiCi("bcrt")}|${asciiCi("tbs")}|${asciiCi("bc")}|${asciiCi("tb")})(?:\\d+[munpMUNP]?)?1[${BECH32_CHARS}]+)`,
   // 5. Hashtags: Unicode letters/marks/numbers and underscore, at most 42 code points.
   `(?<hashtag>#[\\p{L}\\p{M}\\p{N}_]{1,42})`,
   // 6. Custom emoji shortcodes (validated against the event's emoji tags). NIP-30 allows
@@ -65,11 +74,11 @@ const SCAN_BODY = [
   `(?<emoji>:[A-Za-z0-9_-]+:)`,
 ].join("|");
 
-const SCAN = new RegExp(SCAN_BODY, "giu");
+const SCAN = new RegExp(SCAN_BODY, "gu");
 // 7. Bare NIP-19 entities — legacy rendering support, opt-in only.
 const SCAN_LEGACY = new RegExp(
   `${SCAN_BODY}|(?<bare>${NIP19_BARE_PREFIX}[${BECH32_CHARS}]+)`,
-  "giu",
+  "gu",
 );
 
 // The character before `#` must be absent or a non-tag character.

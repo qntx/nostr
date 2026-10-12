@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.11.0",
+    "version": "0.12.1",
     "note": "real `wrap`/`createSeal`/`createGiftWrap` under an injected `randomBytes` entropy stream; `entropy` records the consumed bytes in draw order (seal: [offset u32] → nonce → aux; wrap: ephemeral key → [offset u32] → nonce → aux)"
   },
   "wrap": [

@@ -238,9 +238,11 @@ describe("kinds", () => {
     expect(isRegularKind(1)).toBe(true);
     expect(isRegularKind(7)).toBe(true);
     expect(isRegularKind(1111)).toBe(true);
-    expect(isRegularKind(45)).toBe(false);
-    expect(isRegularKind(999)).toBe(false);
     expect(isRegularKind(44)).toBe(true);
+    // Kinds 45–999 are not replaceable/ephemeral/addressable, so relays store them like regular
+    // events — nostr-tools and rust-nostr classify them the same way.
+    expect(isRegularKind(45)).toBe(true);
+    expect(isRegularKind(999)).toBe(true);
     expect(isReplaceableKind(0)).toBe(true);
     expect(isReplaceableKind(10002)).toBe(true);
     expect(isEphemeralKind(22242)).toBe(true);
@@ -391,6 +393,27 @@ describe("filter", () => {
     expect(matchFilter({ search: "nope" }, base)).toBe(true);
     expect(matchFilter({ kinds: [1], search: "nope" }, base)).toBe(true);
     expect(matchFilter({ kinds: [2], search: "nope" }, base)).toBe(false);
+  });
+
+  test("matchFilter compares #e/#p tag values verbatim, lowercasing only the filter side", () => {
+    const tagged = {
+      ...base,
+      tags: [
+        ["e", "ABCD1234"],
+        ["p", "90ABCDEF"],
+        ["t", "MixedCaseTag"],
+      ],
+    };
+    // Filter values are caller input and canonicalize to lowercase; the event's tag value is
+    // compared literally like a relay would — an uppercase tag value never matches.
+    expect(matchFilter({ "#e": ["abcd1234"] }, tagged)).toBe(false);
+    expect(matchFilter({ "#p": ["90abcdef"] }, tagged)).toBe(false);
+    expect(matchFilter({ "#p": ["90ABCDEF"] }, tagged)).toBe(false);
+    // Non-hex tag names stay verbatim on both sides.
+    expect(matchFilter({ "#t": ["mixedcasetag"] }, tagged)).toBe(false);
+    expect(matchFilter({ "#t": ["MixedCaseTag"] }, tagged)).toBe(true);
+    const lower = { ...base, tags: [["e", "abcd1234"]] };
+    expect(matchFilter({ "#e": ["ABCD1234"] }, lower)).toBe(true);
   });
 
   test("matchFilters is OR across filters", () => {

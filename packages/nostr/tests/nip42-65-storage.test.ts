@@ -591,18 +591,24 @@ describe("MemoryEventStore", () => {
     const eid = "aa".repeat(32);
     const root = "11".repeat(32);
     const parent = "22".repeat(32);
-    // Tag values are arbitrary content: uppercase e/p values stay canonical-indexed.
+    // Tag values are arbitrary content: event-side e/p values compare verbatim, so uppercase
+    // tag values never match while filter values still canonicalize to lowercase.
     const stored = EventBuilder.textNote("mixed")
       .tag(["e", eid.toUpperCase()])
       .tag(["p", keys.publicKey.toUpperCase()])
       .createdAt(1)
       .signWithKeys(keys);
-    const mixed = stored;
+    const lower = EventBuilder.textNote("lower")
+      .tag(["e", eid])
+      .tag(["p", keys.publicKey])
+      .createdAt(2)
+      .signWithKeys(keys);
     await expect(store.put(stored)).resolves.toBe("accepted");
+    await expect(store.put(lower)).resolves.toBe("accepted");
     const v22 = await store.query([{ "#e": [eid.toUpperCase()] }]);
-    expect(v22.map((e) => e.id)).toStrictEqual([mixed.id]);
+    expect(v22.map((e) => e.id)).toStrictEqual([lower.id]);
     const v23 = await store.query([{ "#p": [keys.publicKey.toUpperCase()] }]);
-    expect(v23.map((e) => e.id)).toStrictEqual([mixed.id]);
+    expect(v23.map((e) => e.id)).toStrictEqual([lower.id]);
 
     const reply = EventBuilder.textNote("reply")
       .tag(["e", root])

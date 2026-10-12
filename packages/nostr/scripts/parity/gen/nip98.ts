@@ -281,7 +281,8 @@ validateCase(primary.event, URL, "POST", new Uint8Array([1]), NOW, 60, false);
 // The object-payload path is TS-only.
 validateCase(payloadSigned.event, URL, "POST", { whatever: true }, NOW, 60, false, false);
 
-// The first `u`/`method` tag wins: hand-built tag orderings.
+// NIP-98's `u` tag is the request URL verbatim, so an event carrying more than one `u` (or
+// `method`) tag is rejected outright rather than matching first-wins.
 {
   const dupFirst = sign({
     kind: 27235,
@@ -293,7 +294,7 @@ validateCase(payloadSigned.event, URL, "POST", { whatever: true }, NOW, 60, fals
     ],
     content: "",
   });
-  validateCase(dupFirst, URL, "POST", undefined, NOW, 60, true);
+  validateCase(dupFirst, URL, "POST", undefined, NOW, 60, false);
   validateCase(dupFirst, "https://wrong.example/", "POST", undefined, NOW, 60, false);
 
   const dupLast = sign({
