@@ -57,6 +57,7 @@ export type IDBTransactionLike = {
 export type IDBDatabaseLike = {
   objectStoreNames: { contains: (name: string) => boolean };
   createObjectStore: (name: string, options?: { keyPath?: string }) => IDBObjectStoreLike;
+  deleteObjectStore: (name: string) => void;
   transaction: (
     storeNames: string | string[],
     mode?: "readonly" | "readwrite",

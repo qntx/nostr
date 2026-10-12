@@ -394,6 +394,10 @@ export function installIdbMock(): IdbMock {
       return new MockStore(data, new MockTx(this, "all"), name);
     }
 
+    deleteObjectStore(name: string) {
+      this.rec.stores.delete(name);
+    }
+
     transaction(storeNames: string | string[], mode: "readonly" | "readwrite" = "readonly") {
       if (this.#closed) {
         throw new Error("InvalidStateError: connection is closed");
@@ -675,39 +679,6 @@ export async function seedIdbV2(
       };
       // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the mock request mirrors IDB on* handlers
       tx.onerror = () => reject(tx.error ?? new Error("seed v2 put failed"));
-    };
-  });
-}
-
-export async function seedIdbV3(dbName: string): Promise<void> {
-  const host =
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the installed mock IS this shape
-    globalThis as unknown as {
-      indexedDB: { open: (name: string, version?: number) => MockOpenReq };
-    };
-  const factory = host.indexedDB;
-  return new Promise((resolve, reject) => {
-    const req = factory.open(dbName, 3);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      const events = db.createObjectStore("events", { keyPath: "id" });
-      events.createIndex("created_at", "created_at");
-      events.createIndex("kind_created_at", ["kind", "created_at"]);
-      events.createIndex("pubkey_created_at", ["pubkey", "created_at"]);
-      events.createIndex("kind_pubkey_created_at", ["kind", "pubkey", "created_at"]);
-      db.createObjectStore("tag_refs", { keyPath: "key" }).createIndex("name_value_created", [
-        "name",
-        "value",
-        "created_at",
-      ]);
-      db.createObjectStore("addresses", { keyPath: "address" });
-      db.createObjectStore("tombstones", { keyPath: "key" });
-    };
-    // oxlint-disable-next-line unicorn/prefer-add-event-listener -- the mock request mirrors IDB on* handlers
-    req.onerror = () => reject(req.error ?? new Error("seed v3 open failed"));
-    req.onsuccess = () => {
-      req.result.close();
-      resolve();
     };
   });
 }
