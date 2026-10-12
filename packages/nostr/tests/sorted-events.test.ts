@@ -4,7 +4,7 @@ import type { Event } from "../src/core/event.ts";
 import { compareEventsDesc } from "../src/core/event.ts";
 import { SortedEvents } from "../src/storage/sorted-events.ts";
 
-/* oxlint-disable no-bitwise -- a PRNG is bit arithmetic by design */
+/* oxlint-disable eslint/no-bitwise -- a PRNG is bit arithmetic by design */
 let seed = 0x9e3779b9;
 function rnd(): number {
   seed ^= seed << 13;
@@ -12,7 +12,7 @@ function rnd(): number {
   seed ^= seed << 5;
   return (seed >>> 0) / 0x1_00_00_00_00;
 }
-/* oxlint-enable no-bitwise */
+/* oxlint-enable eslint/no-bitwise */
 
 let nextId = 0;
 function fabricate(createdAt: number): Event {

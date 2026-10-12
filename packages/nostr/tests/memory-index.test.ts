@@ -6,7 +6,7 @@ import type { Filter } from "../src/core/filter.ts";
 import { matchFilter } from "../src/core/filter.ts";
 import { MemoryIndex } from "../src/storage/memory-index.ts";
 
-/* oxlint-disable no-bitwise -- a PRNG is bit arithmetic by design */
+/* oxlint-disable eslint/no-bitwise -- a PRNG is bit arithmetic by design */
 let seed = 0x6d2b79f5;
 function rnd(): number {
   seed ^= seed << 13;
@@ -14,7 +14,7 @@ function rnd(): number {
   seed ^= seed << 5;
   return (seed >>> 0) / 0x1_00_00_00_00;
 }
-/* oxlint-enable no-bitwise */
+/* oxlint-enable eslint/no-bitwise */
 
 function hex32(n: number): string {
   return n.toString(16).padStart(64, "0");
