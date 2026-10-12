@@ -79,12 +79,23 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  * Char-by-char because Hermes may lack `String.prototype.isWellFormed`.
  */
 export function hasLoneSurrogate(value: string): boolean {
-  // Iterating by code point skips proper pairs; only unpaired surrogates match.
-  for (const ch of value) {
-    const code = ch.codePointAt(0);
-    if (code !== undefined && code >= 0xd800 && code <= 0xdfff) {
-      return true;
+  // Code-unit scan: a high surrogate must be followed by a low surrogate; a
+  // lone low surrogate fails on its own.
+  for (let i = 0; i < value.length; i++) {
+    // oxlint-disable-next-line unicorn/prefer-code-point -- surrogate halves need code units, not code points
+    const code = value.charCodeAt(i);
+    if (code < 0xd800 || code > 0xdfff) {
+      continue;
     }
+    if (code <= 0xdbff) {
+      // oxlint-disable-next-line unicorn/prefer-code-point -- surrogate halves need code units, not code points
+      const next = value.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        i += 1;
+        continue;
+      }
+    }
+    return true;
   }
   return false;
 }

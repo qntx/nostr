@@ -2,7 +2,7 @@ import { schnorr } from "@noble/curves/secp256k1.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { expect, test, describe } from "vite-plus/test";
 
-import { containsLoneSurrogate, normalizeRelayUrls } from "../src/core/util.ts";
+import { containsLoneSurrogate, hasLoneSurrogate, normalizeRelayUrls } from "../src/core/util.ts";
 import {
   Kind,
   Keys,
@@ -723,5 +723,20 @@ describe("containsLoneSurrogate", () => {
     expect(containsLoneSurrogate({})).toBe(false);
     expect(containsLoneSurrogate(null)).toBe(false);
     expect(containsLoneSurrogate(42)).toBe(false);
+  });
+});
+
+describe("hasLoneSurrogate", () => {
+  test("detects a trailing high surrogate", () => {
+    expect(hasLoneSurrogate("ok\uD800")).toBe(true);
+  });
+
+  test("detects a leading low surrogate", () => {
+    expect(hasLoneSurrogate("\uDFFFok")).toBe(true);
+  });
+
+  test("accepts a valid surrogate pair", () => {
+    expect(hasLoneSurrogate("a 🚀 b")).toBe(false);
+    expect(hasLoneSurrogate("🚀")).toBe(false);
   });
 });

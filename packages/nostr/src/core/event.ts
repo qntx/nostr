@@ -33,6 +33,9 @@ const verifiedEvents = new WeakSet<Event>();
 /** Cache of events known to fail verification. */
 const failedEvents = new WeakSet<Event>();
 
+/** Cache of object identities that already passed {@link validateSignedEvent}. */
+const validatedEvents = new WeakSet<Record<string, unknown>>();
+
 export function markVerified(event: Event): void {
   verifiedEvents.add(event);
   failedEvents.delete(event);
@@ -97,6 +100,9 @@ export function validateEvent(event: unknown): event is UnsignedEvent {
 
 /** Structural validation of a full event including id and sig hex shape. */
 export function validateSignedEvent(event: unknown): event is Event {
+  if (isRecord(event) && validatedEvents.has(event)) {
+    return true;
+  }
   if (!validateEvent(event)) {
     return false;
   }
@@ -107,6 +113,7 @@ export function validateSignedEvent(event: unknown): event is Event {
   if (typeof e["sig"] !== "string" || !isHex64(e["sig"])) {
     return false;
   }
+  validatedEvents.add(e);
   return true;
 }
 
