@@ -4,8 +4,7 @@
 // Captures the TS NIP-46 URI codecs (`parseBunkerURL`/`toBunkerURL`,
 // `createNostrConnectURI`/`parseNostrConnectURI`) and RPC JSON codecs
 // (`encode`/`decode` `Nip46Request`/`Nip46Response`) as frozen vectors shared
-// by the TS test suite (tests/vectors/nip46.test.ts) and the nk-* Rust
-// crates. All cases go through the real exported functions — nothing is
+// by the TS test suite (tests/vectors/nip46.test.ts) and crates/interop. All cases go through the real exported functions — nothing is
 // hand-computed.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";

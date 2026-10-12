@@ -4,6 +4,7 @@ import { checkParity } from "./check.ts";
 
 const TRUE = (): boolean => true;
 const EMPTY = (): string => "";
+const CITES = (): string => "vectors/x.json";
 const mapReader =
   (files: Map<string, string>) =>
   (p: string): string =>
@@ -12,13 +13,10 @@ const mapReader =
 function cap(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const c: Record<string, unknown> = {
     id: "core.example",
-    tier: "B",
-    status: "ts-only",
-    milestone: "NK1",
     ts: { module: "src/x.ts", tests: ["tests/x.test.ts"] },
+    vectors: ["vectors/x.json"],
     rust: null,
     rustNote: "no rust-nostr counterpart",
-    vectors: [],
     ...overrides,
   };
   // rustNote is only valid with rust: null; an explicit rust object drops
@@ -29,75 +27,88 @@ function cap(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return c;
 }
 
-function parity(caps: Array<Record<string, unknown>>): unknown {
-  return { schema: 1, capabilities: caps };
-}
-
 describe("parity check", () => {
   test("accepts a minimal valid document", () => {
-    expect(checkParity(parity([cap()]), [], TRUE, EMPTY)).toStrictEqual([]);
+    expect(checkParity([cap()], ["vectors/x.json"], TRUE, CITES)).toStrictEqual([]);
+  });
+
+  test("rejects a non-array top level", () => {
+    const errors = checkParity({ schema: 1, capabilities: [cap()] }, [], TRUE, CITES);
+    expect(errors).toStrictEqual(["parity.json: top level must be an array"]);
+  });
+
+  test("rejects unknown entry keys", () => {
+    const errors = checkParity([cap({ tier: "A", status: "stable" })], [], TRUE, CITES);
+    expect(errors).toStrictEqual([
+      'capability "core.example": unknown key "tier"',
+      'capability "core.example": unknown key "status"',
+    ]);
   });
 
   test("rejects duplicate ids", () => {
-    const errors = checkParity(parity([cap(), cap()]), [], TRUE, EMPTY);
+    const errors = checkParity([cap(), cap()], ["vectors/x.json"], TRUE, CITES);
     expect(errors).toStrictEqual(['capability "core.example": duplicate id']);
   });
 
-  test("rejects an invalid tier", () => {
-    const errors = checkParity(parity([cap({ tier: "D" })]), [], TRUE, EMPTY);
-    expect(errors).toStrictEqual(['capability "core.example": tier must be one of A|B|C']);
-  });
-
-  test("rejects n/a outside tier C", () => {
-    const errors = checkParity(parity([cap({ status: "n/a" })]), [], TRUE, EMPTY);
+  test("rejects an empty vectors list", () => {
+    const errors = checkParity([cap({ vectors: [] })], [], TRUE, CITES);
     expect(errors).toStrictEqual([
-      'capability "core.example": status "n/a" is only allowed for tier C',
+      'capability "core.example": vectors must list at least one vector file',
     ]);
   });
 
-  test("requires tier C to be n/a", () => {
-    const errors = checkParity(parity([cap({ tier: "C" })]), [], TRUE, EMPTY);
-    expect(errors).toStrictEqual(['capability "core.example": tier C must have status "n/a"']);
+  test("rejects an empty ts.tests list", () => {
+    const errors = checkParity(
+      [cap({ ts: { module: "src/x.ts", tests: [] } })],
+      ["vectors/x.json"],
+      TRUE,
+      CITES,
+    );
+    expect(errors).toStrictEqual([
+      'capability "core.example": ts.tests must list at least one test file',
+      'capability "core.example": vector vectors/x.json is not referenced by any of its test files',
+    ]);
+  });
+
+  test("rejects a missing ts.module", () => {
+    const errors = checkParity(
+      [cap({ ts: { tests: ["tests/x.test.ts"] } })],
+      ["vectors/x.json"],
+      TRUE,
+      CITES,
+    );
+    expect(errors).toStrictEqual([
+      'capability "core.example": ts.module must be a non-empty string',
+    ]);
   });
 
   test("rejects missing referenced paths", () => {
-    const errors = checkParity(parity([cap()]), [], () => false, EMPTY);
+    const errors = checkParity([cap()], ["vectors/x.json"], () => false, EMPTY);
     expect(errors).toStrictEqual([
       'capability "core.example": referenced path does not exist: src/x.ts',
       'capability "core.example": referenced path does not exist: tests/x.test.ts',
-    ]);
-  });
-
-  test("rejects stable without ts tests", () => {
-    const errors = checkParity(
-      parity([cap({ status: "stable", ts: { module: "src/x.ts", tests: [] } })]),
-      [],
-      TRUE,
-      EMPTY,
-    );
-    expect(errors).toStrictEqual([
-      'capability "core.example": "stable" requires non-empty ts.tests',
+      'capability "core.example": vector file does not exist: vectors/x.json',
     ]);
   });
 
   test("rejects rust null without rustNote", () => {
     const c = cap();
     delete c["rustNote"];
-    const errors = checkParity(parity([c]), [], TRUE, EMPTY);
+    const errors = checkParity([c], ["vectors/x.json"], TRUE, CITES);
     expect(errors).toStrictEqual([
       'capability "core.example": rust is null but rustNote is missing or empty',
     ]);
   });
 
   test("rejects a rust object without an api", () => {
-    const errors = checkParity(parity([cap({ rust: { tests: ["tests/x.rs"] } })]), [], TRUE, EMPTY);
+    const errors = checkParity([cap({ rust: { tests: ["tests/x.rs"] } })], [], TRUE, CITES);
     expect(errors).toStrictEqual([
       'capability "core.example": rust.api must be a non-empty string naming the rust-nostr path',
     ]);
   });
 
   test("rejects a rust object without tests", () => {
-    const errors = checkParity(parity([cap({ rust: { api: "nostr::Event" } })]), [], TRUE, EMPTY);
+    const errors = checkParity([cap({ rust: { api: "nostr::Event" } })], [], TRUE, CITES);
     expect(errors).toStrictEqual([
       'capability "core.example": rust.tests must list at least one runner file',
     ]);
@@ -105,89 +116,56 @@ describe("parity check", () => {
 
   test("rejects rustNote alongside a rust object", () => {
     const errors = checkParity(
-      parity([cap({ rust: { api: "nostr::Event", tests: ["tests/x.rs"] }, rustNote: "kept" })]),
-      [],
+      [cap({ rust: { api: "nostr::Event", tests: ["tests/x.rs"] }, rustNote: "kept" })],
+      ["vectors/x.json"],
       TRUE,
-      EMPTY,
+      CITES,
     );
     expect(errors).toStrictEqual([
       'capability "core.example": rustNote is only allowed when rust is null',
     ]);
   });
 
-  test("requires a vector for stable tier A", () => {
-    const errors = checkParity(
-      parity([
-        cap({ tier: "A", status: "stable", rust: { api: "nostr::x", tests: ["rust/x.rs"] } }),
-      ]),
-      [],
-      TRUE,
-      EMPTY,
-    );
-    expect(errors).toStrictEqual([
-      'capability "core.example": tier A "stable" requires at least one vector file',
-    ]);
-  });
-
   test("rejects unreferenced vector files", () => {
-    const errors = checkParity(parity([cap()]), ["vectors/core/orphan.json"], TRUE, EMPTY);
+    const errors = checkParity([cap()], ["vectors/x.json", "vectors/orphan.json"], TRUE, CITES);
     expect(errors).toStrictEqual([
-      "vector file is not referenced by any capability: vectors/core/orphan.json",
+      "vector file is not referenced by any capability: vectors/orphan.json",
     ]);
   });
 
   test("requires each vector to be cited in a test file", () => {
-    const c = cap({ vectors: ["vectors/core/x.json"] });
     const files = new Map([
       ["src/x.ts", ""],
       ["tests/x.test.ts", "reads nothing relevant"],
-      ["vectors/core/x.json", "{}"],
+      ["vectors/x.json", "{}"],
     ]);
-    const errors = checkParity(
-      parity([c]),
-      ["vectors/core/x.json"],
-      (p) => files.has(p),
-      mapReader(files),
-    );
+    const errors = checkParity([cap()], ["vectors/x.json"], (p) => files.has(p), mapReader(files));
     expect(errors).toStrictEqual([
-      'capability "core.example": vector vectors/core/x.json is not referenced by any of its test files',
+      'capability "core.example": vector vectors/x.json is not referenced by any of its test files',
     ]);
   });
 
   test("accepts a vector cited by test file contents", () => {
-    const c = cap({ vectors: ["vectors/core/x.json"] });
     const files = new Map([
       ["src/x.ts", ""],
-      ["tests/x.test.ts", 'readFileSync("vectors/core/x.json")'],
-      ["vectors/core/x.json", "{}"],
+      ["tests/x.test.ts", 'readFileSync("vectors/x.json")'],
+      ["vectors/x.json", "{}"],
     ]);
-    const errors = checkParity(
-      parity([c]),
-      ["vectors/core/x.json"],
-      (p) => files.has(p),
-      mapReader(files),
-    );
+    const errors = checkParity([cap()], ["vectors/x.json"], (p) => files.has(p), mapReader(files));
     expect(errors).toStrictEqual([]);
   });
 
-  test("accepts a vector cited only by rust tests (rust: null capability keeps ts vectors)", () => {
+  test("accepts a vector cited only by rust tests (rust object keeps ts vectors)", () => {
     const c = cap({
-      status: "stable",
       rust: { api: "nostr::x", tests: ["tests/x.rs"] },
-      vectors: ["vectors/core/x.json"],
     });
     const files = new Map([
       ["src/x.ts", ""],
       ["tests/x.test.ts", "no citation"],
       ["tests/x.rs", "x.json"],
-      ["vectors/core/x.json", "{}"],
+      ["vectors/x.json", "{}"],
     ]);
-    const errors = checkParity(
-      parity([c]),
-      ["vectors/core/x.json"],
-      (p) => files.has(p),
-      mapReader(files),
-    );
+    const errors = checkParity([c], ["vectors/x.json"], (p) => files.has(p), mapReader(files));
     expect(errors).toStrictEqual([]);
   });
 });

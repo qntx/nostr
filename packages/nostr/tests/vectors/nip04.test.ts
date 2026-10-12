@@ -7,7 +7,7 @@ import { hexToBytes } from "../../src/core/util.ts";
 import { CryptoError } from "../../src/index.ts";
 import { decrypt, decryptWithSharedSecret } from "../../src/nips/nip04.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`.
 type Case = {
   sec1: string;

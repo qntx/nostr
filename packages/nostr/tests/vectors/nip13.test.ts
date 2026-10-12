@@ -8,7 +8,7 @@ import type { UnsignedEvent } from "../../src/core/event.ts";
 import { hexToBytes } from "../../src/core/util.ts";
 import { getPow, Nip13Error } from "../../src/nips/nip13.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`.
 type SharedPowCase = { id: string; bits: number };
 type TsOnlyPowCase = { input: string; bits?: number; error?: string; rust: false };

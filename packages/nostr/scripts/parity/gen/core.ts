@@ -2,7 +2,8 @@
 // Generates vectors/core/*.json — run with
 // `bun packages/nostr/scripts/parity/gen/core.ts`.
 // Captures the TS core's wire output as frozen vectors shared by the TS test
-// suite (tests/vectors/core.test.ts) and the nk-* Rust crates.
+// suite (tests/vectors/core.test.ts) and replayed against rust-nostr by
+// crates/interop.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -302,9 +303,9 @@ const validWireEvents: Array<[string, string]> = [
   ["kind 1e3", evPatched("kind", "1e3")],
   ["kind -0", evPatched("kind", "-0")],
   ["created_at max safe", evPatched("created_at", "9007199254740991")],
-  // Large integral spellings pin correctly-rounded f64 parsing (NK-ADR-012
-  // ruling 8: serde_json float_roundtrip): above 2^52 a sloppy parse loses
-  // one ulp and emits an integer one below the written value.
+  // Large integral spellings pin correctly-rounded f64 parsing (serde_json's
+  // float_roundtrip semantics): above 2^52 a sloppy parse loses one ulp and
+  // emits an integer one below the written value.
   ["created_at max safe .0", evPatched("created_at", "9007199254740991.0")],
   ["created_at 2^53-2 .0", evPatched("created_at", "9007199254740990.0")],
   ["created_at 2^52+1 .0", evPatched("created_at", "4503599627370497.0")],

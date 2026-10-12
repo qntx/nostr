@@ -135,8 +135,7 @@ function resolveKeys(secretKey: SecretKeyInput | Keys): Keys {
  *
  * `auxRand` is the 32-byte BIP-340 auxiliary randomness. It defaults to a fresh `randomBytes(32)`
  * draw; an explicit value makes the signature reproducible, which is required for vectors and
- * tests. This is the counterpart of `nk`'s `Keys::sign_event_with_aux`. Never reuse aux randomness
- * in production.
+ * tests. Never reuse aux randomness in production.
  */
 export function finalizeEvent(
   template: EventTemplate,
@@ -160,8 +159,7 @@ export function finalizeEvent(
  *
  * `auxRand` is the 32-byte BIP-340 auxiliary randomness. It defaults to a fresh `randomBytes(32)`
  * draw; an explicit value makes the signature reproducible, which is required for vectors and
- * tests. This is the counterpart of `nk`'s `Keys::sign_event_with_aux`. Never reuse aux randomness
- * in production.
+ * tests. Never reuse aux randomness in production.
  */
 export function signEvent(
   unsigned: UnsignedEvent,

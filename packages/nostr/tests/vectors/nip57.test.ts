@@ -10,7 +10,7 @@ import { bytesToHex } from "../../src/core/util.ts";
 import type { Bolt11Fields, ZapReceiptValidation } from "../../src/nips/nip57.ts";
 import { makeZapRequest, parseBolt11, validateZapReceipt } from "../../src/nips/nip57.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`.
 type ZapOut = { kind: number; created_at: number; content: string; tags: Tag[] };
 

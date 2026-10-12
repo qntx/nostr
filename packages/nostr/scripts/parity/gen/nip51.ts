@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-51 list parsers/builders plus the private-tag
 // encrypt/decrypt flow as frozen vectors shared by the TS test suite
-// (tests/vectors/nip51.test.ts) and the nk-* Rust crates.
+// (tests/vectors/nip51.test.ts) and crates/interop.
 //
 // Private-tag ciphertexts are deterministic: the `Nip51Crypto` wrapper calls
 // the real `nip44.encrypt`/`decrypt` with a recorded fixed nonce.

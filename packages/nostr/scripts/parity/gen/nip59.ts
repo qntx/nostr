@@ -3,16 +3,16 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-59 `createSeal`/`createGiftWrap`/`wrap`/`unwrap`
 // semantics as frozen vectors shared by the TS test suite
-// (tests/vectors/nip59.test.ts) and the nk-* Rust crates.
+// (tests/vectors/nip59.test.ts) and crates/interop.
 //
 // Every event is produced by the real TS API under a deterministic entropy
 // stream: `WrapOptions.randomBytes` feeds the gift wrap's ephemeral key,
 // timestamp offset, NIP-44 nonce and BIP-340 aux, and the injected
 // `Nip59Crypto` wrapper draws its seal nonce/aux from the same stream — the
-// byte order matches `nk`'s `*_with_rng` (seal: [offset] → nonce → aux;
-// gift wrap: key → [offset] → nonce → aux). The consumed prefix is recorded
-// per case as `entropy`, which the Rust runner replays through a scripted
-// `CryptoRng`.
+// draw order is fixed per copy (seal: [offset] → nonce → aux; gift wrap:
+// key → [offset] → nonce → aux). The consumed prefix is recorded per case
+// as `entropy`, which the TS test suite replays through a sequential
+// reader.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

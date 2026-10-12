@@ -8,7 +8,7 @@ import type { BlockJson } from "../../scripts/parity/content-json.ts";
 import { parseContent } from "../../src/nips/nip27.ts";
 import type { ParseContentOptions } from "../../src/nips/nip27.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`.
 type TokenizeCase = {
   name: string;

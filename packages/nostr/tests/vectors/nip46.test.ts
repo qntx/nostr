@@ -21,7 +21,7 @@ import {
   toBunkerURL,
 } from "../../src/nips/nip46.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`.
 type BunkerJson = { pubkey: string; relays: string[]; secret: string | null };
 type ConnectJson = {

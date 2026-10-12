@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-10 `parseThreadTags`/`buildReplyTags`/`replyTo`
 // semantics as frozen vectors shared by the TS test suite
-// (tests/vectors/nip10.test.ts) and the nk-* Rust crates. The canonical
+// (tests/vectors/nip10.test.ts) and replayed by crates/interop. The canonical
 // `ThreadReferences` JSON encoding lives in ../thread-json.ts and is shared
 // with the seeded `nip10.thread` differential stream (diff.ts).
 

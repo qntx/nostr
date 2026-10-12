@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-98 `getToken`/`unpackEventFromToken`/`validateAuthEvent`
 // semantics as frozen vectors shared by the TS test suite
-// (tests/vectors/nip98.test.ts) and the nk-* Rust crates.
+// (tests/vectors/nip98.test.ts) and crates/interop.
 //
 // Events are signed deterministically: a fixed secret key plus a fixed BIP-340
 // auxiliary rand passed to `signEvent`, so Rust's `Keys::sign_event_with_aux`

@@ -7,7 +7,7 @@ import { bytesToHex } from "../../src/core/util.ts";
 import { Nip21Error, isNostrURI, parseNostrURI } from "../../src/index.ts";
 import type { DecodedResult } from "../../src/nips/nip19.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`.
 type EntityJson =
   | { type: "nprofile"; pubkey: string; relays: string[] }

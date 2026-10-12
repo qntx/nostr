@@ -1,8 +1,7 @@
 // Canonical JSON encoding of NIP-10 `ThreadReferences` — shared by
 // `gen/nip10.ts` (codec vectors) and `diff.ts` (the seeded `nip10.thread`
-// differential stream), and mirrored by the Rust replay in
-// crates/nk-vectors/tests/diff.rs + common/. Key order is identical on both
-// sides; missing `author`/`kind` hints encode as null.
+// differential stream). Key order is fixed; missing `author`/`kind` hints
+// encode as null.
 // oxlint-disable typescript/no-restricted-types -- the canonical vector JSON encodes absent hints as null
 
 import type { ThreadReferences } from "../../src/nips/nip10.ts";

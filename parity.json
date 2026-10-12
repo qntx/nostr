@@ -1,1066 +1,501 @@
-{
-  "schema": 1,
-  "capabilities": [
-    {
-      "id": "core.hex",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/util.ts",
-        "tests": ["packages/nostr/tests/core.test.ts", "packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": null,
-      "vectors": ["vectors/core/hex.json"],
-      "rustNote": "rust-nostr has no standalone hex codec surface; nothing to compare the TS codec against"
-    },
-    {
-      "id": "core.url.normalize",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/util.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::RelayUrl::parse",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/url-normalize.json"]
-    },
-    {
-      "id": "core.kind.classify",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/kind.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::Kind",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/kind-classify.json"]
-    },
-    {
-      "id": "core.tag.build",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/tag.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::Tag / nostr::event::builder::EventBuilder",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/tag-build.json"]
-    },
-    {
-      "id": "core.tag.address",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/tag.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::nips::nip19::Coordinate",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/tag-address.json"]
-    },
-    {
-      "id": "core.event.validate",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/event.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::Event::{from_json, verify}",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/event-validate.json"]
-    },
-    {
-      "id": "core.event.serialize",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/event.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::Event::{as_json, from_json}",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/event-serialize.json"]
-    },
-    {
-      "id": "core.event.id",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/event.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::UnsignedEvent::compute_id",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/event-serialize.json"]
-    },
-    {
-      "id": "core.event.order",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/event.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::Event (Ord)",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/event-order.json"]
-    },
-    {
-      "id": "core.event.signed-matches",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/event.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::Event::verify",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/event-signed-matches.json"]
-    },
-    {
-      "id": "core.key.public",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/key.ts",
-        "tests": [
-          "packages/nostr/tests/core.test.ts",
-          "packages/nostr/tests/vectors/bip340.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "secp256k1::XOnlyPublicKey / nostr::Keys",
-        "tests": ["crates/interop/tests/bip340.rs"]
-      },
-      "vectors": ["vectors/bip340/official.csv"]
-    },
-    {
-      "id": "core.event.sign",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/key.ts",
-        "tests": [
-          "packages/nostr/tests/vectors/core.test.ts",
-          "packages/nostr/tests/vectors/bip340.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::Keys / nostr::signer::SignEvent",
-        "tests": ["crates/interop/tests/core.rs", "crates/interop/tests/bip340.rs"]
-      },
-      "vectors": ["vectors/core/event-sign.json", "vectors/bip340/official.csv"]
-    },
-    {
-      "id": "core.event.verify",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/verifier.ts",
-        "tests": [
-          "packages/nostr/tests/verifier.test.ts",
-          "packages/nostr/tests/vectors/bip340.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::Event::verify",
-        "tests": ["crates/interop/tests/core.rs", "crates/interop/tests/bip340.rs"]
-      },
-      "vectors": ["vectors/bip340/official.csv"]
-    },
-    {
-      "id": "core.filter.match",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/filter.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::Filter::match_event",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/filter-match.json"]
-    },
-    {
-      "id": "core.filter.limit",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/filter.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::Filter (deserialization)",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/filter-limit.json"]
-    },
-    {
-      "id": "core.filter.canonicalize",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/filter.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": null,
-      "vectors": ["vectors/core/filter-canonicalize.json"],
-      "rustNote": "nostr::Filter exposes no canonicalization API"
-    },
-    {
-      "id": "core.filter.fingerprint",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/filter.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": null,
-      "vectors": ["vectors/core/filter-fingerprint.json"],
-      "rustNote": "nostr::Filter exposes no fingerprinting API"
-    },
-    {
-      "id": "core.message.client",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/message.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::ClientMessage",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/message-client.json"]
-    },
-    {
-      "id": "core.message.relay",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/message.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::RelayMessage",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/message-relay.json"]
-    },
-    {
-      "id": "core.message.subscription-id",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/message.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::SubscriptionId",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/message-client.json", "vectors/core/message-relay.json"]
-    },
-    {
-      "id": "core.count.hll",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/message.ts",
-        "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/count.test.ts"]
-      },
-      "rust": null,
-      "vectors": ["vectors/core/count-hll.json"],
-      "rustNote": "rust-nostr has no COUNT / HyperLogLog implementation to compare"
-    },
-    {
-      "id": "core.builder",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr/src/core/builder.ts",
-        "tests": [
-          "packages/nostr/tests/builder-signer.test.ts",
-          "packages/nostr/tests/vectors/core.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::EventBuilder",
-        "tests": ["crates/interop/tests/core.rs"]
-      },
-      "vectors": ["vectors/core/builder.json"]
-    },
-    {
-      "id": "nip19.codec",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip19.ts",
-        "tests": [
-          "packages/nostr/tests/nip19.test.ts",
-          "packages/nostr/tests/vectors/nip19.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip19::{Nip19, FromBech32, ToBech32}",
-        "tests": ["crates/interop/tests/nip19.rs"]
-      },
-      "vectors": ["vectors/nip19/codec.json", "vectors/nip19/official.json"]
-    },
-    {
-      "id": "nip21.uri",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip21.ts",
-        "tests": [
-          "packages/nostr/tests/nip10-21-27.test.ts",
-          "packages/nostr/tests/vectors/nip21.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip21::Nip21",
-        "tests": ["crates/interop/tests/nip21.rs"]
-      },
-      "vectors": ["vectors/nip21/uri.json"]
-    },
-    {
-      "id": "nip44.v2",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip44.ts",
-        "tests": ["packages/nostr/tests/nip44.test.ts"]
-      },
-      "rust": {
-        "api": "nostr::nips::nip44::{ConversationKey, encrypt_to_bytes, decrypt_to_bytes}",
-        "tests": ["crates/interop/tests/nip44.rs"]
-      },
-      "vectors": [
-        "vectors/nip44/official.json",
-        "vectors/nip44/extended.json",
-        "vectors/nip44/shared-secret.json"
-      ]
-    },
-    {
-      "id": "nip04.codec",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip04.ts",
-        "tests": [
-          "packages/nostr/tests/reconnect-nip04.test.ts",
-          "packages/nostr/tests/vectors/nip04.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip04::{encrypt_with_iv, decrypt}",
-        "tests": ["crates/interop/tests/nip04.rs"]
-      },
-      "vectors": ["vectors/nip04/codec.json"]
-    },
-    {
-      "id": "nip49.ncryptsec",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip49.ts",
-        "tests": [
-          "packages/nostr/tests/nip49.test.ts",
-          "packages/nostr/tests/vectors/nip49.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip49::EncryptedSecretKey",
-        "tests": ["crates/interop/tests/nip49.rs"]
-      },
-      "vectors": [
-        "vectors/nip49/official.json",
-        "vectors/nip49/codec.json",
-        "vectors/nip49/max-logn.json"
-      ]
-    },
-    {
-      "id": "nip13.pow",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip13.ts",
-        "tests": [
-          "packages/nostr/tests/nip13.test.ts",
-          "packages/nostr/tests/vectors/nip13.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip13::{get_leading_zero_bits, SingleThreadPow}",
-        "tests": ["crates/interop/tests/nip13.rs"]
-      },
-      "vectors": ["vectors/nip13/codec.json"]
-    },
-    {
-      "id": "nip42.auth-event",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip42.ts",
-        "tests": [
-          "packages/nostr/tests/nip42-65-storage.test.ts",
-          "packages/nostr/tests/vectors/nip42.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip42::{ClientAuthentication, MachineReadablePrefix}",
-        "tests": ["crates/interop/tests/nip42.rs"]
-      },
-      "vectors": ["vectors/nip42/codec.json"]
-    },
-    {
-      "id": "nip98.http-auth",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip98.ts",
-        "tests": [
-          "packages/nostr/tests/nip98.test.ts",
-          "packages/nostr/tests/vectors/nip98.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip98::{HttpData, verify_auth_header}",
-        "tests": ["crates/interop/tests/nip98.rs"]
-      },
-      "vectors": ["vectors/nip98/codec.json"]
-    },
-    {
-      "id": "nip59.wrap",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip59.ts",
-        "tests": [
-          "packages/nostr/tests/nip59.test.ts",
-          "packages/nostr/tests/vectors/nip59.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip59::UnwrappedGift",
-        "tests": ["crates/interop/tests/nip59.rs"]
-      },
-      "vectors": ["vectors/nip59/codec.json"]
-    },
-    {
-      "id": "nip17.dm",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK2",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip17.ts",
-        "tests": [
-          "packages/nostr/tests/nip17.test.ts",
-          "packages/nostr/tests/vectors/nip17.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip17::{InboxRelayList, extract_relay_list}",
-        "tests": ["crates/interop/tests/nip17.rs"]
-      },
-      "vectors": ["vectors/nip17/codec.json"]
-    },
-    {
-      "id": "nip10.thread",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip10.ts",
-        "tests": [
-          "packages/nostr/tests/nip10-21-27.test.ts",
-          "packages/nostr/tests/vectors/nip10.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip10::TextNoteReplyBuilder",
-        "tests": ["crates/interop/tests/nip10.rs"]
-      },
-      "vectors": ["vectors/nip10/codec.json"]
-    },
-    {
-      "id": "nip27.tokenize",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip27.ts",
-        "tests": [
-          "packages/nostr/tests/nip27.test.ts",
-          "packages/nostr/tests/vectors/nip27.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::parser::NostrParser",
-        "tests": ["crates/interop/tests/nip27.rs", "crates/interop/tests/diff.rs"]
-      },
-      "vectors": ["vectors/nip27/codec.json"]
-    },
-    {
-      "id": "nip51.lists",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip51.ts",
-        "tests": [
-          "packages/nostr/tests/nip51.test.ts",
-          "packages/nostr/tests/vectors/nip51.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip51::{MuteList, PinnedNotes, Bookmarks}",
-        "tests": ["crates/interop/tests/nip51.rs"]
-      },
-      "vectors": ["vectors/nip51/codec.json"]
-    },
-    {
-      "id": "nip57.zap",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip57.ts",
-        "tests": [
-          "packages/nostr/tests/nip57.test.ts",
-          "packages/nostr/tests/vectors/nip57.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip57::ZapRequestData",
-        "tests": ["crates/interop/tests/nip57.rs"]
-      },
-      "vectors": ["vectors/nip57/codec.json"]
-    },
-    {
-      "id": "nip65.relay-list",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip65.ts",
-        "tests": [
-          "packages/nostr/tests/nip42-65-storage.test.ts",
-          "packages/nostr/tests/vectors/nip65.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip65::{extract_relay_list, RelayList}",
-        "tests": ["crates/interop/tests/nip65.rs"]
-      },
-      "vectors": ["vectors/nip65/codec.json"]
-    },
-    {
-      "id": "nip77.negentropy",
-      "tier": "A",
-      "status": "ts-only",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip77.ts",
-        "tests": ["packages/nostr/tests/nip77.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "negentropy lives in the nostr-relay-* crates, outside the protocol vector comparison in V1"
-    },
-    {
-      "id": "nip46.codec",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip46.ts",
-        "tests": [
-          "packages/nostr/tests/nip46.test.ts",
-          "packages/nostr/tests/vectors/nip46.test.ts"
-        ]
-      },
-      "rust": {
-        "api": "nostr::nips::nip46::{NostrConnectUri, NostrConnectMetadata, NostrConnectMessage}",
-        "tests": ["crates/interop/tests/nip46.rs"]
-      },
-      "vectors": ["vectors/nip46/codec.json"]
-    },
-    {
-      "id": "nip05.identifier",
-      "tier": "A",
-      "status": "ts-only",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip05.ts",
-        "tests": ["packages/nostr/tests/nip05.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "nip11.info",
-      "tier": "A",
-      "status": "ts-only",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/nip11.ts",
-        "tests": ["packages/nostr/tests/nip11.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "blossom.client",
-      "tier": "A",
-      "status": "ts-only",
-      "milestone": "NK3",
-      "ts": {
-        "module": "packages/nostr/src/nips/blossom.ts",
-        "tests": ["packages/nostr/tests/blossom.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "signer.keys",
-      "tier": "A",
-      "status": "ts-only",
-      "milestone": "NK4",
-      "ts": {
-        "module": "packages/nostr/src/signer/keys.ts",
-        "tests": ["packages/nostr/tests/signing-backend.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "signer.delegated",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK4",
-      "ts": {
-        "module": "packages/nostr/src/signer/delegated.ts",
-        "tests": ["packages/nostr/tests/delegated-signer.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "signer.nip46",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK4",
-      "ts": {
-        "module": "packages/nostr/src/signer/nip46.ts",
-        "tests": ["packages/nostr/tests/nip46.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "signer.nip07",
-      "tier": "C",
-      "status": "n/a",
-      "milestone": "NK4",
-      "ts": {
-        "module": "packages/nostr/src/signer/nip07.ts",
-        "tests": ["packages/nostr/tests/nip07.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "gossip.route",
-      "tier": "A",
-      "status": "ts-only",
-      "milestone": "NK4",
-      "ts": {
-        "module": "packages/nostr/src/gossip/gossip.ts",
-        "tests": ["packages/nostr/tests/loaders-gossip.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "relay.url.insecure",
-      "tier": "A",
-      "status": "ts-only",
-      "milestone": "NK5",
-      "ts": {
-        "module": "packages/nostr/src/relay/url.ts",
-        "tests": ["packages/nostr/tests/relay.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "relay.connection",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK5",
-      "ts": {
-        "module": "packages/nostr/src/relay/relay.ts",
-        "tests": ["packages/nostr/tests/relay.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "relay.subscription",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK5",
-      "ts": {
-        "module": "packages/nostr/src/relay/subscription.ts",
-        "tests": ["packages/nostr/tests/relay.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "relay.publish",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK5",
-      "ts": {
-        "module": "packages/nostr/src/relay/relay.ts",
-        "tests": [
-          "packages/nostr/tests/integration-fake-relay.test.ts",
-          "packages/nostr/tests/relay.test.ts"
-        ]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "relay.auth",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK5",
-      "ts": {
-        "module": "packages/nostr/src/relay/auth.ts",
-        "tests": ["packages/nostr/tests/lazy-auth.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "relay.count",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK5",
-      "ts": {
-        "module": "packages/nostr/src/relay/count-tracker.ts",
-        "tests": ["packages/nostr/tests/count.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "relay.negentropy",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK5",
-      "ts": {
-        "module": "packages/nostr/src/relay/neg-session.ts",
-        "tests": ["packages/nostr/tests/relay.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "relay.pool",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK5",
-      "ts": {
-        "module": "packages/nostr/src/relay/pool.ts",
-        "tests": [
-          "packages/nostr/tests/fan-in.test.ts",
-          "packages/nostr/tests/invalid-event-policy.test.ts"
-        ]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "testing.fake-relay",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK5",
-      "ts": {
-        "module": "packages/nostr/src/testing/relay-core.ts",
-        "tests": [
-          "packages/nostr/tests/testing.test.ts",
-          "packages/nostr/tests/integration-fake-relay.test.ts"
-        ]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "storage.memory",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK6",
-      "ts": {
-        "module": "packages/nostr/src/storage/memory.ts",
-        "tests": ["packages/nostr/tests/event-store-conformance.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "storage.sqlite",
-      "tier": "A",
-      "status": "ts-only",
-      "milestone": "NK6",
-      "ts": {
-        "module": "packages/nostr/src/storage/sqlite.ts",
-        "tests": ["packages/nostr/tests/sqlite-store.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "storage.indexeddb",
-      "tier": "C",
-      "status": "n/a",
-      "milestone": "NK6",
-      "ts": {
-        "module": "packages/nostr/src/storage/indexeddb.ts",
-        "tests": ["packages/nostr/tests/indexeddb-store.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "store.reactive",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK6",
-      "ts": {
-        "module": "packages/nostr/src/store/reactive.ts",
-        "tests": ["packages/nostr/tests/reactive-store.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "loaders.replaceable",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK7",
-      "ts": {
-        "module": "packages/nostr/src/loaders/replaceable.ts",
-        "tests": ["packages/nostr/tests/event-loader.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "loaders.event",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK7",
-      "ts": {
-        "module": "packages/nostr/src/loaders/event.ts",
-        "tests": ["packages/nostr/tests/event-loader.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "loaders.profile",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK7",
-      "ts": {
-        "module": "packages/nostr/src/loaders/profile.ts",
-        "tests": ["packages/nostr/tests/loaders-gossip.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "loaders.lists",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK7",
-      "ts": {
-        "module": "packages/nostr/src/loaders/lists.ts",
-        "tests": ["packages/nostr/tests/loaders-gossip.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "loaders.outbox",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK7",
-      "ts": {
-        "module": "packages/nostr/src/loaders/outbox.ts",
-        "tests": ["packages/nostr/tests/outbox.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "client.core",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK8",
-      "ts": {
-        "module": "packages/nostr/src/client/client.ts",
-        "tests": ["packages/nostr/tests/client.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "client.dm",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK8",
-      "ts": {
-        "module": "packages/nostr/src/client/dm.ts",
-        "tests": ["packages/nostr/tests/client-nip17.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "client.sync",
-      "tier": "B",
-      "status": "ts-only",
-      "milestone": "NK8",
-      "ts": {
-        "module": "packages/nostr/src/client/sync.ts",
-        "tests": ["packages/nostr/tests/client.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "client-layer capability; no protocol vectors are run against rust-nostr"
-    },
-    {
-      "id": "wasm.backend",
-      "tier": "A",
-      "status": "stable",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr-wasm/src/load.ts",
-        "tests": [
-          "packages/nostr-wasm/tests/abi.test.ts",
-          "packages/nostr-wasm/tests/verify.test.ts",
-          "packages/nostr-wasm/tests/sign.test.ts",
-          "packages/nostr-wasm/tests/node-load.test.ts"
-        ]
-      },
-      "vectors": [
-        "vectors/bip340/official.csv",
-        "vectors/core/event-sign.json",
-        "vectors/core/event-serialize.json"
-      ],
-      "rust": null,
-      "rustNote": "the wasm ABI is C now: packages/nostr-wasm/c/nostr_wasm.c over the shared nostr_core.c in packages/nostr-native/cpp; no rust-nostr counterpart to compare"
-    },
-    {
-      "id": "wasm.loader",
-      "tier": "C",
-      "status": "n/a",
-      "milestone": "NK1",
-      "ts": {
-        "module": "packages/nostr-wasm/src/load.ts",
-        "tests": ["packages/nostr-wasm/tests/node-load.test.ts"]
-      },
-      "rust": null,
-      "vectors": [],
-      "rustNote": "wasm module loading is TS-side; no Rust counterpart to compare"
+[
+  {
+    "id": "core.hex",
+    "ts": {
+      "module": "packages/nostr/src/core/util.ts",
+      "tests": ["packages/nostr/tests/core.test.ts", "packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/hex.json"],
+    "rust": null,
+    "rustNote": "rust-nostr has no standalone hex codec surface; nothing to compare the TS codec against"
+  },
+  {
+    "id": "core.url.normalize",
+    "ts": {
+      "module": "packages/nostr/src/core/util.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
+    },
+    "vectors": ["vectors/core/url-normalize.json"],
+    "rust": {
+      "api": "nostr::RelayUrl::parse",
+      "tests": ["crates/interop/tests/core.rs"]
     }
-  ]
-}
+  },
+  {
+    "id": "core.kind.classify",
+    "ts": {
+      "module": "packages/nostr/src/core/kind.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/kind-classify.json"],
+    "rust": {
+      "api": "nostr::Kind",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.tag.build",
+    "ts": {
+      "module": "packages/nostr/src/core/tag.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/tag-build.json"],
+    "rust": {
+      "api": "nostr::Tag / nostr::event::builder::EventBuilder",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.tag.address",
+    "ts": {
+      "module": "packages/nostr/src/core/tag.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/tag-address.json"],
+    "rust": {
+      "api": "nostr::nips::nip19::Coordinate",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.event.validate",
+    "ts": {
+      "module": "packages/nostr/src/core/event.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/event-validate.json"],
+    "rust": {
+      "api": "nostr::Event::{from_json, verify}",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.event.serialize",
+    "ts": {
+      "module": "packages/nostr/src/core/event.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/event-serialize.json"],
+    "rust": {
+      "api": "nostr::Event::{as_json, from_json}",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.event.id",
+    "ts": {
+      "module": "packages/nostr/src/core/event.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/event-serialize.json"],
+    "rust": {
+      "api": "nostr::UnsignedEvent::compute_id",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.event.order",
+    "ts": {
+      "module": "packages/nostr/src/core/event.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/event-order.json"],
+    "rust": {
+      "api": "nostr::Event (Ord)",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.event.signed-matches",
+    "ts": {
+      "module": "packages/nostr/src/core/event.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/event-signed-matches.json"],
+    "rust": {
+      "api": "nostr::Event::verify",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.key.public",
+    "ts": {
+      "module": "packages/nostr/src/core/key.ts",
+      "tests": ["packages/nostr/tests/core.test.ts", "packages/nostr/tests/vectors/bip340.test.ts"]
+    },
+    "vectors": ["vectors/bip340/official.csv"],
+    "rust": {
+      "api": "secp256k1::XOnlyPublicKey / nostr::Keys",
+      "tests": ["crates/interop/tests/bip340.rs"]
+    }
+  },
+  {
+    "id": "core.event.sign",
+    "ts": {
+      "module": "packages/nostr/src/core/key.ts",
+      "tests": [
+        "packages/nostr/tests/vectors/core.test.ts",
+        "packages/nostr/tests/vectors/bip340.test.ts"
+      ]
+    },
+    "vectors": ["vectors/core/event-sign.json", "vectors/bip340/official.csv"],
+    "rust": {
+      "api": "nostr::Keys / nostr::signer::SignEvent",
+      "tests": ["crates/interop/tests/core.rs", "crates/interop/tests/bip340.rs"]
+    }
+  },
+  {
+    "id": "core.event.verify",
+    "ts": {
+      "module": "packages/nostr/src/core/verifier.ts",
+      "tests": [
+        "packages/nostr/tests/verifier.test.ts",
+        "packages/nostr/tests/vectors/bip340.test.ts"
+      ]
+    },
+    "vectors": ["vectors/bip340/official.csv"],
+    "rust": {
+      "api": "nostr::Event::verify",
+      "tests": ["crates/interop/tests/core.rs", "crates/interop/tests/bip340.rs"]
+    }
+  },
+  {
+    "id": "core.filter.match",
+    "ts": {
+      "module": "packages/nostr/src/core/filter.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/filter-match.json"],
+    "rust": {
+      "api": "nostr::Filter::match_event",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.filter.limit",
+    "ts": {
+      "module": "packages/nostr/src/core/filter.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/filter-limit.json"],
+    "rust": {
+      "api": "nostr::Filter (deserialization)",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.filter.canonicalize",
+    "ts": {
+      "module": "packages/nostr/src/core/filter.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/filter-canonicalize.json"],
+    "rust": null,
+    "rustNote": "nostr::Filter exposes no canonicalization API"
+  },
+  {
+    "id": "core.filter.fingerprint",
+    "ts": {
+      "module": "packages/nostr/src/core/filter.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/filter-fingerprint.json"],
+    "rust": null,
+    "rustNote": "nostr::Filter exposes no fingerprinting API"
+  },
+  {
+    "id": "core.message.client",
+    "ts": {
+      "module": "packages/nostr/src/core/message.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/message-client.json"],
+    "rust": {
+      "api": "nostr::ClientMessage",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.message.relay",
+    "ts": {
+      "module": "packages/nostr/src/core/message.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts"]
+    },
+    "vectors": ["vectors/core/message-relay.json"],
+    "rust": {
+      "api": "nostr::RelayMessage",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.message.subscription-id",
+    "ts": {
+      "module": "packages/nostr/src/core/message.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/core.test.ts"]
+    },
+    "vectors": ["vectors/core/message-client.json", "vectors/core/message-relay.json"],
+    "rust": {
+      "api": "nostr::SubscriptionId",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "core.count.hll",
+    "ts": {
+      "module": "packages/nostr/src/core/message.ts",
+      "tests": ["packages/nostr/tests/vectors/core.test.ts", "packages/nostr/tests/count.test.ts"]
+    },
+    "vectors": ["vectors/core/count-hll.json"],
+    "rust": null,
+    "rustNote": "rust-nostr has no COUNT / HyperLogLog implementation to compare"
+  },
+  {
+    "id": "core.builder",
+    "ts": {
+      "module": "packages/nostr/src/core/builder.ts",
+      "tests": [
+        "packages/nostr/tests/builder-signer.test.ts",
+        "packages/nostr/tests/vectors/core.test.ts"
+      ]
+    },
+    "vectors": ["vectors/core/builder.json"],
+    "rust": {
+      "api": "nostr::EventBuilder",
+      "tests": ["crates/interop/tests/core.rs"]
+    }
+  },
+  {
+    "id": "nip19.codec",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip19.ts",
+      "tests": ["packages/nostr/tests/nip19.test.ts", "packages/nostr/tests/vectors/nip19.test.ts"]
+    },
+    "vectors": ["vectors/nip19/codec.json", "vectors/nip19/official.json"],
+    "rust": {
+      "api": "nostr::nips::nip19::{Nip19, FromBech32, ToBech32}",
+      "tests": ["crates/interop/tests/nip19.rs"]
+    }
+  },
+  {
+    "id": "nip21.uri",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip21.ts",
+      "tests": [
+        "packages/nostr/tests/nip10-21-27.test.ts",
+        "packages/nostr/tests/vectors/nip21.test.ts"
+      ]
+    },
+    "vectors": ["vectors/nip21/uri.json"],
+    "rust": {
+      "api": "nostr::nips::nip21::Nip21",
+      "tests": ["crates/interop/tests/nip21.rs"]
+    }
+  },
+  {
+    "id": "nip44.v2",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip44.ts",
+      "tests": ["packages/nostr/tests/nip44.test.ts"]
+    },
+    "vectors": [
+      "vectors/nip44/official.json",
+      "vectors/nip44/extended.json",
+      "vectors/nip44/shared-secret.json"
+    ],
+    "rust": {
+      "api": "nostr::nips::nip44::{ConversationKey, encrypt_to_bytes, decrypt_to_bytes}",
+      "tests": ["crates/interop/tests/nip44.rs"]
+    }
+  },
+  {
+    "id": "nip04.codec",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip04.ts",
+      "tests": [
+        "packages/nostr/tests/reconnect-nip04.test.ts",
+        "packages/nostr/tests/vectors/nip04.test.ts"
+      ]
+    },
+    "vectors": ["vectors/nip04/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip04::{encrypt_with_iv, decrypt}",
+      "tests": ["crates/interop/tests/nip04.rs"]
+    }
+  },
+  {
+    "id": "nip49.ncryptsec",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip49.ts",
+      "tests": ["packages/nostr/tests/nip49.test.ts", "packages/nostr/tests/vectors/nip49.test.ts"]
+    },
+    "vectors": [
+      "vectors/nip49/official.json",
+      "vectors/nip49/codec.json",
+      "vectors/nip49/max-logn.json"
+    ],
+    "rust": {
+      "api": "nostr::nips::nip49::EncryptedSecretKey",
+      "tests": ["crates/interop/tests/nip49.rs"]
+    }
+  },
+  {
+    "id": "nip13.pow",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip13.ts",
+      "tests": ["packages/nostr/tests/nip13.test.ts", "packages/nostr/tests/vectors/nip13.test.ts"]
+    },
+    "vectors": ["vectors/nip13/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip13::{get_leading_zero_bits, SingleThreadPow}",
+      "tests": ["crates/interop/tests/nip13.rs"]
+    }
+  },
+  {
+    "id": "nip42.auth-event",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip42.ts",
+      "tests": [
+        "packages/nostr/tests/nip42-65-storage.test.ts",
+        "packages/nostr/tests/vectors/nip42.test.ts"
+      ]
+    },
+    "vectors": ["vectors/nip42/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip42::{ClientAuthentication, MachineReadablePrefix}",
+      "tests": ["crates/interop/tests/nip42.rs"]
+    }
+  },
+  {
+    "id": "nip98.http-auth",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip98.ts",
+      "tests": ["packages/nostr/tests/nip98.test.ts", "packages/nostr/tests/vectors/nip98.test.ts"]
+    },
+    "vectors": ["vectors/nip98/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip98::{HttpData, verify_auth_header}",
+      "tests": ["crates/interop/tests/nip98.rs"]
+    }
+  },
+  {
+    "id": "nip59.wrap",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip59.ts",
+      "tests": ["packages/nostr/tests/nip59.test.ts", "packages/nostr/tests/vectors/nip59.test.ts"]
+    },
+    "vectors": ["vectors/nip59/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip59::UnwrappedGift",
+      "tests": ["crates/interop/tests/nip59.rs"]
+    }
+  },
+  {
+    "id": "nip17.dm",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip17.ts",
+      "tests": ["packages/nostr/tests/nip17.test.ts", "packages/nostr/tests/vectors/nip17.test.ts"]
+    },
+    "vectors": ["vectors/nip17/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip17::{InboxRelayList, extract_relay_list}",
+      "tests": ["crates/interop/tests/nip17.rs"]
+    }
+  },
+  {
+    "id": "nip10.thread",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip10.ts",
+      "tests": [
+        "packages/nostr/tests/nip10-21-27.test.ts",
+        "packages/nostr/tests/vectors/nip10.test.ts"
+      ]
+    },
+    "vectors": ["vectors/nip10/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip10::TextNoteReplyBuilder",
+      "tests": ["crates/interop/tests/nip10.rs"]
+    }
+  },
+  {
+    "id": "nip27.tokenize",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip27.ts",
+      "tests": ["packages/nostr/tests/nip27.test.ts", "packages/nostr/tests/vectors/nip27.test.ts"]
+    },
+    "vectors": ["vectors/nip27/codec.json"],
+    "rust": {
+      "api": "nostr::parser::NostrParser",
+      "tests": ["crates/interop/tests/nip27.rs", "crates/interop/tests/diff.rs"]
+    }
+  },
+  {
+    "id": "nip51.lists",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip51.ts",
+      "tests": ["packages/nostr/tests/nip51.test.ts", "packages/nostr/tests/vectors/nip51.test.ts"]
+    },
+    "vectors": ["vectors/nip51/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip51::{MuteList, PinnedNotes, Bookmarks}",
+      "tests": ["crates/interop/tests/nip51.rs"]
+    }
+  },
+  {
+    "id": "nip57.zap",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip57.ts",
+      "tests": ["packages/nostr/tests/nip57.test.ts", "packages/nostr/tests/vectors/nip57.test.ts"]
+    },
+    "vectors": ["vectors/nip57/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip57::ZapRequestData",
+      "tests": ["crates/interop/tests/nip57.rs"]
+    }
+  },
+  {
+    "id": "nip65.relay-list",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip65.ts",
+      "tests": [
+        "packages/nostr/tests/nip42-65-storage.test.ts",
+        "packages/nostr/tests/vectors/nip65.test.ts"
+      ]
+    },
+    "vectors": ["vectors/nip65/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip65::{extract_relay_list, RelayList}",
+      "tests": ["crates/interop/tests/nip65.rs"]
+    }
+  },
+  {
+    "id": "nip46.codec",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip46.ts",
+      "tests": ["packages/nostr/tests/nip46.test.ts", "packages/nostr/tests/vectors/nip46.test.ts"]
+    },
+    "vectors": ["vectors/nip46/codec.json"],
+    "rust": {
+      "api": "nostr::nips::nip46::{NostrConnectUri, NostrConnectMetadata, NostrConnectMessage}",
+      "tests": ["crates/interop/tests/nip46.rs"]
+    }
+  },
+  {
+    "id": "wasm.backend",
+    "ts": {
+      "module": "packages/nostr-wasm/src/load.ts",
+      "tests": [
+        "packages/nostr-wasm/tests/abi.test.ts",
+        "packages/nostr-wasm/tests/verify.test.ts",
+        "packages/nostr-wasm/tests/sign.test.ts",
+        "packages/nostr-wasm/tests/node-load.test.ts"
+      ]
+    },
+    "vectors": [
+      "vectors/bip340/official.csv",
+      "vectors/core/event-sign.json",
+      "vectors/core/event-serialize.json"
+    ],
+    "rust": null,
+    "rustNote": "the wasm ABI is C now: packages/nostr-wasm/c/nostr_wasm.c over the shared nostr_core.c in packages/nostr-native/cpp; no rust-nostr counterpart to compare"
+  }
+]

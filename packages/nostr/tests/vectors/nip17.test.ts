@@ -20,7 +20,7 @@ import * as nip44 from "../../src/nips/nip44.ts";
 import type { Nip59Crypto, Rumor, WrapOptions } from "../../src/nips/nip59.ts";
 import { createRumor } from "../../src/nips/nip59.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`.
 type VectorRecipient = { pubkey: string; relay_hint?: string };
 
@@ -86,7 +86,7 @@ const vector = JSON.parse(
   relay_list: { build: RelayBuildCase[]; parse: RelayParseCase[] };
 };
 
-/** Sequential reads over the recorded `entropy` hex — the same bytes `nk` replays. */
+/** Sequential reads over the recorded `entropy` hex. */
 class Stream {
   private readonly bytes: Uint8Array;
   private pos = 0;
