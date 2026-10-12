@@ -8,8 +8,8 @@
   {
     "capability": "core.builder",
     "case": "13",
-    "side": "rust-nostr",
-    "reason": "NIP-25 scopes `a` to parameterized-replaceable targets; kind 0 is not, yet rust-nostr emits one."
+    "side": "unspecified",
+    "reason": "NIP-25: `a` SHOULD accompany reactions to addressable events; emitting `a` for a replaceable (kind 0) target is not addressed."
   },
   {
     "capability": "core.builder",
@@ -927,13 +927,13 @@
     "capability": "nip57.zap",
     "case": "event zap addressable emits a and k",
     "side": "rust-nostr",
-    "reason": "NIP-57: an event zap request MUST include `e` and `k` tags; rust-nostr omits `k` (and `e` for addressable targets)."
+    "reason": "NIP-57: clients MUST include `e` when zapping an event; rust-nostr emits only `a` for addressable targets (and omits the optional `k`)."
   },
   {
     "capability": "nip57.zap",
     "case": "event zap kind 1",
-    "side": "rust-nostr",
-    "reason": "NIP-57: an event zap request MUST include `e` and `k` tags; rust-nostr omits `k` (and `e` for addressable targets)."
+    "side": "unspecified",
+    "reason": "NIP-57 lists `k` among the MAY tags; TS emits it, rust-nostr omits it."
   },
   {
     "capability": "nip57.zap",
@@ -999,12 +999,12 @@
     "capability": "nip98.http-auth",
     "case": "validate/16",
     "side": "rust-nostr",
-    "reason": "NIP-98: exactly one `u` tag must be present; rust-nostr accepts when any of several matches."
+    "reason": "NIP-98: the `u` tag MUST equal the request URL, implying a single tag (TS rejects duplicates); rust-nostr validates against the last `u` tag."
   },
   {
     "capability": "nip98.http-auth",
     "case": "validate/17",
     "side": "rust-nostr",
-    "reason": "NIP-98: exactly one `u` tag must be present; rust-nostr accepts when any of several matches."
+    "reason": "NIP-98: the `u` tag MUST equal the request URL, implying a single tag (TS rejects duplicates); rust-nostr validates against the last `u` tag."
   }
 ]
