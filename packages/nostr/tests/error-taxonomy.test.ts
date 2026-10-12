@@ -24,11 +24,15 @@ import {
   createLoaders,
   npubEncode,
   nsecEncode,
-  useWebSocketImplementation,
 } from "../src/index.ts";
 import { DataLoader, LoaderError } from "../src/loaders/dataloader.ts";
 import { subscriptionToAsyncIterable } from "../src/relay/subscription.ts";
-import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
+import {
+  MockWebSocket,
+  MockWebSocketCtor,
+  stubGlobalWebSocket,
+  unstubGlobalWebSocket,
+} from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
@@ -173,14 +177,12 @@ function restoreGlobal(name: string, value: unknown): void {
 }
 
 describe("subscriptionToAsyncIterable close reasons", () => {
-  function started(opts?: { signal?: AbortSignal; includeEose?: boolean }): {
+  function started(opts?: { signal?: AbortSignal }): {
     stream: AsyncIterable<unknown> & { close: (reason?: string) => void };
-    oneose: () => void;
     onclose: (reason: string) => void;
     next: () => Promise<IteratorResult<unknown>>;
   } {
     let handlersRef: {
-      oneose?: (() => void) | undefined;
       onclose?: ((reason: string) => void) | undefined;
     } = {};
     const stream = subscriptionToAsyncIterable((handlers) => {
@@ -197,7 +199,6 @@ describe("subscriptionToAsyncIterable close reasons", () => {
     const iterator = stream[Symbol.asyncIterator]();
     return {
       stream,
-      oneose: () => handlersRef.oneose?.(),
       onclose: (reason: string) => handlersRef.onclose?.(reason),
       next: async () => iterator.next(),
     };
@@ -227,13 +228,6 @@ describe("subscriptionToAsyncIterable close reasons", () => {
     await expect(pending).resolves.toStrictEqual({ value: undefined, done: true });
   });
 
-  test("EOSE auto-close completes without throw", async () => {
-    const { oneose, next } = started({ includeEose: false });
-    const pending = next();
-    oneose();
-    await expect(pending).resolves.toStrictEqual({ value: undefined, done: true });
-  });
-
   test("signal abort completes without throw", async () => {
     const ctrl = new AbortController();
     const { next } = started({ signal: ctrl.signal });
@@ -246,11 +240,12 @@ describe("subscriptionToAsyncIterable close reasons", () => {
 describe("Pool.publishAny rejected OK", () => {
   beforeEach(() => {
     MockWebSocket.reset();
-    useWebSocketImplementation(MockWebSocketCtor);
+    stubGlobalWebSocket();
   });
 
   afterEach(() => {
     MockWebSocket.reset();
+    unstubGlobalWebSocket();
   });
 
   test("rejected OK inner throw is RelayPublishError", async () => {
@@ -391,7 +386,6 @@ describe("ClientError", () => {
 describe("NoSignerError", () => {
   test("is a NostrError and the relay ignores the challenge", async () => {
     MockWebSocket.reset();
-    useWebSocketImplementation(MockWebSocketCtor);
     try {
       const relay = await Relay.connect("wss://nosign.example", {
         websocketImplementation: MockWebSocketCtor,

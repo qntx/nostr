@@ -243,7 +243,7 @@ export class Subscription {
 /** AsyncIterable wrapper over a subscription's events until EOSE or close. */
 export function subscriptionToAsyncIterable(
   start: (handlers: SubscriptionHandlers) => Closer,
-  opts?: { signal?: AbortSignal | undefined; includeEose?: boolean | undefined },
+  opts?: { signal?: AbortSignal | undefined },
 ): AsyncIterable<Event> & Closer {
   const queue: Event[] = [];
   let head = 0;
@@ -285,11 +285,6 @@ export function subscriptionToAsyncIterable(
     onevent(event) {
       queue.push(event);
       notify();
-    },
-    oneose() {
-      if (opts?.includeEose === false) {
-        closeLocal("eose");
-      }
     },
     onclose(reason) {
       // The Subscription's own abort listener fires before this wrapper's,

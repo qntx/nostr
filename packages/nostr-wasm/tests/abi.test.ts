@@ -10,6 +10,7 @@ import type { Event } from "@qntx/nostr";
 import { CryptoError, hexToBytes } from "@qntx/nostr/core";
 
 import { instantiateCryptoWasm, wasmVerify, wasmVerifySerialized } from "../src/abi.ts";
+import type { CryptoWasmExports } from "../src/abi.ts";
 import { createNostrWasmLoader } from "../src/instance.ts";
 import { readBuiltWasm } from "./read-wasm.ts";
 
@@ -85,6 +86,24 @@ describe("nostr byte ABI contract", () => {
     expect(exports.memory.buffer).not.toBe(before);
     // A normal call afterwards must still read the new buffer correctly.
     expect(wasmVerify(exports, BIP340_V0_MSG, BIP340_V0_PK, BIP340_V0_SIG)).toBe(true);
+  });
+
+  test("nostr_buffer returning 0 throws CryptoError", async () => {
+    const instance = await WebAssembly.instantiate(await WebAssembly.compile(bytes), {});
+    const fake: CryptoWasmExports = {
+      memory: instance.exports["memory"] as WebAssembly.Memory,
+      nostr_abi_version: () => 3,
+      nostr_init: () => 0,
+      nostr_buffer: () => 0,
+      nostr_verify: () => 0,
+      nostr_verify_serialized: () => 0,
+      nostr_sign: () => 0,
+      nostr_public_key: () => 0,
+    };
+    expect(() => wasmVerify(fake, BIP340_V0_MSG, BIP340_V0_PK, BIP340_V0_SIG)).toThrow(CryptoError);
+    expect(() => wasmVerify(fake, BIP340_V0_MSG, BIP340_V0_PK, BIP340_V0_SIG)).toThrow(
+      "wasm scratch allocation failed",
+    );
   });
 
   test("ops return 2 before nostr_init succeeds", async () => {

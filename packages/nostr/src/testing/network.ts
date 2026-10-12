@@ -5,7 +5,7 @@ import type { FakeRelay, FakeRelayOptions, RelayTransport } from "./relay-core.t
 
 export { type FakeRelay, type FakeRelayOptions } from "./relay-core.ts";
 export type FakeRelayNetwork = {
-  /** Pass to `Client` / `Pool` / `useWebSocketImplementation`. */
+  /** Pass to `Client` / `Pool` / `Relay` as `websocketImplementation`. */
   readonly websocketImplementation: WebSocketConstructor;
   /** Get-or-create a relay handle by normalized URL. */
   relay: (url: string, opts?: FakeRelayOptions) => FakeRelay;

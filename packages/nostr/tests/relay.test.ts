@@ -12,9 +12,7 @@ import {
   RelayStatus,
   RelayTimeoutError,
   SUBSCRIPTION_ID_MAX_CHARS,
-  WasmPoisonedError,
   isInsecureRelayUrl,
-  useWebSocketImplementation,
   verifyEvent,
 } from "../src/index.ts";
 import type { Event, EventTemplate } from "../src/index.ts";
@@ -26,7 +24,12 @@ import type { Subscription, RelaySubscription } from "../src/relay/subscription.
 import type { WebSocketConstructor } from "../src/relay/websocket.ts";
 import { createFakeRelayNetwork } from "../src/testing/index.ts";
 import type { FakeRelayNetwork } from "../src/testing/index.ts";
-import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
+import {
+  MockWebSocket,
+  MockWebSocketCtor,
+  stubGlobalWebSocket,
+  unstubGlobalWebSocket,
+} from "./helpers/mock-ws.ts";
 import { stubReportError } from "./helpers/report-error.ts";
 
 async function sleep(ms: number): Promise<void> {
@@ -284,11 +287,12 @@ const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
 beforeEach(() => {
   MockWebSocket.reset();
-  useWebSocketImplementation(MockWebSocketCtor);
+  stubGlobalWebSocket();
 });
 
 afterEach(() => {
   MockWebSocket.reset();
+  unstubGlobalWebSocket();
 });
 
 describe("Relay", () => {
@@ -329,6 +333,20 @@ describe("Relay", () => {
     const closeMsg = ws.lastSent() as [string, string];
     expect(closeMsg[0]).toBe("CLOSE");
     relay.close();
+  });
+
+  test("resolves the WebSocket implementation from the global at construction", async () => {
+    const relay = await Relay.connect("wss://global-ws.example");
+    expect(relay.connected).toBe(true);
+    relay.close();
+  });
+
+  test("throws RelayConnectionError when no WebSocket implementation exists", () => {
+    unstubGlobalWebSocket();
+    expect(() => new Relay("wss://no-ws.example")).toThrow(RelayConnectionError);
+    expect(() => new Relay("wss://no-ws.example")).toThrow(
+      "no WebSocket implementation; pass websocketImplementation",
+    );
   });
 
   test("publish waits for OK", async () => {
@@ -820,16 +838,19 @@ describe("Relay", () => {
     }
   });
 
-  test("WasmPoisonedError poisons verify and drops later EVENTs", async () => {
+  test("a throwing verifier emits verifiererror once and drops later EVENTs", async () => {
     let verifies = 0;
-    const notices: string[] = [];
-    const relay = await Relay.connect("wss://poison-instance.example", {
+    const thrown = new Error("verifier exploded");
+    const errors: Error[] = [];
+    const invalids: number[] = [];
+    const relay = await Relay.connect("wss://verify-dead.example", {
       verifyEvent: () => {
         verifies += 1;
-        throw new WasmPoisonedError("wasm instance aborted");
+        throw thrown;
       },
     });
-    relay.on("notice", (msg) => notices.push(msg));
+    relay.on("verifiererror", (e) => errors.push(e));
+    relay.on("invalidevent", () => invalids.push(1));
     const keys = Keys.fromSecretKey(SK);
     const first = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
     const second = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
@@ -841,89 +862,58 @@ describe("Relay", () => {
     ws.receive(JSON.stringify(["EVENT", sub.id, first]));
     expect(verifies).toBe(1);
     expect(events).toStrictEqual([]);
-    expect(notices).toStrictEqual(["wasm-poisoned: instance aborted"]);
+    expect(errors).toStrictEqual([thrown]);
+    expect(invalids).toStrictEqual([]);
     expect(sub.lastCreatedAt).toBeUndefined();
     expect(sub.idsAtWatermark.size).toBe(0);
 
+    // Dead: later EVENTs are dropped silently — no verify call, no events.
     ws.receive(JSON.stringify(["EVENT", sub.id, second]));
+    ws.receive(JSON.stringify(["EVENT", sub.id, first]));
     expect(verifies).toBe(1);
     expect(events).toStrictEqual([]);
-    expect(notices).toStrictEqual(["wasm-poisoned: instance aborted"]);
+    expect(errors).toStrictEqual([thrown]);
+    expect(invalids).toStrictEqual([]);
     expect(sub.idsAtWatermark.size).toBe(0);
     relay.close();
   });
 
-  test("Error named WasmPoisonedError does not poison verify", async () => {
+  test("a non-Error verifier exception is normalized into the verifiererror payload", async () => {
     let verifies = 0;
-    const notices: string[] = [];
-    const relay = await Relay.connect("wss://poison-name.example", {
+    const errors: Error[] = [];
+    const nonError: unknown = "wasm trap";
+    const relay = await Relay.connect("wss://verify-nonerror.example", {
       verifyEvent: () => {
         verifies += 1;
-        const err = new Error("wasm verify aborted");
-        err.name = "WasmPoisonedError";
-        throw err;
+        throw nonError;
       },
     });
-    relay.on("notice", (msg) => notices.push(msg));
+    relay.on("verifiererror", (e) => errors.push(e));
     const keys = Keys.fromSecretKey(SK);
-    const first = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
-    const second = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
-    const events: string[] = [];
-    const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e.id),
-    });
+    const note = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
+    const sub = relay.subscribe([{ kinds: [1] }], { onevent: () => {} });
     const ws = MockWebSocket.last();
-    const firstErr = syncThrow(() => {
-      ws.receive(JSON.stringify(["EVENT", sub.id, first]));
-    });
-    expect(firstErr).toBeInstanceOf(Error);
-    expect(firstErr).not.toBeInstanceOf(WasmPoisonedError);
-    expect((firstErr as Error).name).toBe("WasmPoisonedError");
+    ws.receive(JSON.stringify(["EVENT", sub.id, note]));
     expect(verifies).toBe(1);
-    expect(events).toStrictEqual([]);
-    expect(notices).toStrictEqual([]);
-
-    const secondErr = syncThrow(() => {
-      ws.receive(JSON.stringify(["EVENT", sub.id, second]));
-    });
-    expect(secondErr).toBeInstanceOf(Error);
-    expect(secondErr).not.toBeInstanceOf(WasmPoisonedError);
-    expect(verifies).toBe(2);
-    expect(events).toStrictEqual([]);
-    expect(notices).toStrictEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(Error);
+    expect(errors[0]!.message).toBe("wasm trap");
     relay.close();
   });
 
-  test("WasmPoisonedError from the wasm adapter poisons verify and does not map to false", async () => {
-    let verifies = 0;
-    const notices: string[] = [];
-    const relay = await Relay.connect("wss://poison-runtime.example", {
+  test("a throwing verifier does not escape the message listener", async () => {
+    const relay = await Relay.connect("wss://verify-escape.example", {
       verifyEvent: () => {
-        verifies += 1;
-        // The wasm adapter converts WebAssembly.RuntimeError into
-        // WasmPoisonedError before it reaches the relay.
-        throw new WasmPoisonedError("unreachable");
+        throw new Error("boom");
       },
     });
-    relay.on("notice", (msg) => notices.push(msg));
     const keys = Keys.fromSecretKey(SK);
-    const first = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
-    const second = EventBuilder.textNote("b").createdAt(2).signWithKeys(keys);
-    const events: string[] = [];
-    const sub = relay.subscribe([{ kinds: [1] }], {
-      onevent: (e) => events.push(e.id),
-    });
+    const note = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
+    const sub = relay.subscribe([{ kinds: [1] }], { onevent: () => {} });
     const ws = MockWebSocket.last();
-    ws.receive(JSON.stringify(["EVENT", sub.id, first]));
-    expect(verifies).toBe(1);
-    expect(events).toStrictEqual([]);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]).toBe("wasm-poisoned: instance aborted");
-
-    ws.receive(JSON.stringify(["EVENT", sub.id, second]));
-    expect(verifies).toBe(1);
-    expect(events).toStrictEqual([]);
-    expect(notices).toHaveLength(1);
+    // Before the dead-verifier change a non-poison exception escaped ws.receive
+    // as an uncaught error.
+    expect(() => ws.receive(JSON.stringify(["EVENT", sub.id, note]))).not.toThrow();
     relay.close();
   });
 
@@ -3360,7 +3350,7 @@ describe("connect ownership (issue #134)", () => {
 });
 
 describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
-  function makeIterable(opts?: { signal?: AbortSignal; includeEose?: boolean }) {
+  function makeIterable(opts?: { signal?: AbortSignal }) {
     let handlers: SubscriptionHandlers | undefined;
     const closeReasons: string[] = [];
     const iterable = subscriptionToAsyncIterable((h) => {
@@ -3482,19 +3472,6 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
     const abortedDone = await it.next();
     expect(abortedDone.done).toBe(true);
     expect(closeReasons).toStrictEqual(["aborted"]);
-  });
-
-  test("EOSE with includeEose:false closes locally and completes normally", async () => {
-    const { iterable, fire, closeReasons } = makeIterable({ includeEose: false });
-    const a = note("a", 1);
-    fire().onevent?.(a);
-    fire().oneose?.();
-    const it = iterable[Symbol.asyncIterator]();
-    const eoseNext = await it.next();
-    expect(eoseNext.value?.id).toBe(a.id);
-    const eoseDone = await it.next();
-    expect(eoseDone.done).toBe(true);
-    expect(closeReasons).toStrictEqual(["eose"]);
   });
 
   test("iterable.close() is a local close and completes normally", async () => {

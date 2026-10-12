@@ -24,46 +24,60 @@ function normalizeSharedSecret(privkey: Uint8Array, pubkey: string): Uint8Array 
   }
 }
 
-function resolveSecret(secretKey: string | Uint8Array): Uint8Array {
-  if (typeof secretKey === "string") {
-    return hexToBytes(assertHex32(secretKey, "secret key"));
-  }
-  assertSecretKeyBytes(secretKey);
-  return secretKey;
-}
-
-/** Encrypt plaintext to a peer pubkey (NIP-04). */
-export function encrypt(secretKey: string | Uint8Array, pubkey: string, text: string): string {
-  const privkey = resolveSecret(secretKey);
-  const normalizedKey = normalizeSharedSecret(privkey, pubkey);
-  try {
-    return encryptWithSharedSecret(normalizedKey, text);
-  } finally {
-    normalizedKey.fill(0);
-  }
-}
-
 /**
- * Encrypt with the raw 32-byte ECDH x-coordinate instead of a secret key, for key holders that only
- * expose ECDH ({@link NostrKeyOperations}).
+ * Encrypt plaintext with the raw 32-byte ECDH x-coordinate (NIP-04's key material, like NIP-44's
+ * conversation key), for key holders that only expose ECDH ({@link NostrKeyOperations}).
  */
-export function encryptWithSharedSecret(sharedX: Uint8Array, text: string): string {
-  assertByteLength(sharedX, 32, "shared secret");
+export function encrypt(plaintext: string, sharedSecret: Uint8Array): string {
+  assertByteLength(sharedSecret, 32, "shared secret");
   const iv = randomBytes(16);
-  const plaintext = utf8Encoder.encode(text);
-  const ciphertext = cbc(sharedX, iv).encrypt(plaintext);
+  const plaintextBytes = utf8Encoder.encode(plaintext);
+  const ciphertext = cbc(sharedSecret, iv).encrypt(plaintextBytes);
   return `${base64.encode(ciphertext)}?iv=${base64.encode(iv)}`;
 }
 
-/** Decrypt a NIP-04 payload from a peer pubkey. */
-export function decrypt(secretKey: string | Uint8Array, pubkey: string, data: string): string {
-  const privkey = resolveSecret(secretKey);
-  splitPayload(data);
-  const normalizedKey = normalizeSharedSecret(privkey, pubkey);
+/** Decrypt a NIP-04 payload with the raw 32-byte ECDH x-coordinate. */
+export function decrypt(payload: string, sharedSecret: Uint8Array): string {
+  assertByteLength(sharedSecret, 32, "shared secret");
+  const [ciphertextPart, ivPart] = splitPayload(payload);
   try {
-    return decryptWithSharedSecret(normalizedKey, data);
+    const iv = base64.decode(ivPart);
+    const ciphertext = base64.decode(ciphertextPart);
+    const plaintext = cbc(sharedSecret, iv).decrypt(ciphertext);
+    return utf8Decoder.decode(plaintext);
+  } catch (error) {
+    throw new CryptoError("invalid NIP-04 payload", { cause: error });
+  }
+}
+
+/** Encrypt plaintext to a peer pubkey, deriving the shared secret from `secretKey`. */
+export function encryptToPubkey(
+  plaintext: string,
+  secretKey: Uint8Array,
+  peerPubkey: string,
+): string {
+  assertSecretKeyBytes(secretKey);
+  const sharedSecret = normalizeSharedSecret(secretKey, peerPubkey);
+  try {
+    return encrypt(plaintext, sharedSecret);
   } finally {
-    normalizedKey.fill(0);
+    sharedSecret.fill(0);
+  }
+}
+
+/** Decrypt a NIP-04 payload from a peer pubkey, deriving the shared secret from `secretKey`. */
+export function decryptFromPubkey(
+  payload: string,
+  secretKey: Uint8Array,
+  peerPubkey: string,
+): string {
+  assertSecretKeyBytes(secretKey);
+  splitPayload(payload);
+  const sharedSecret = normalizeSharedSecret(secretKey, peerPubkey);
+  try {
+    return decrypt(payload, sharedSecret);
+  } finally {
+    sharedSecret.fill(0);
   }
 }
 
@@ -80,21 +94,4 @@ function splitPayload(data: string): [ciphertext: string, iv: string] {
     throw new CryptoError("invalid NIP-04 payload: missing iv");
   }
   return [ciphertext, iv];
-}
-
-/**
- * Decrypt a NIP-04 payload with the raw 32-byte ECDH x-coordinate instead of a secret key, for key
- * holders that only expose ECDH ({@link NostrKeyOperations}).
- */
-export function decryptWithSharedSecret(sharedX: Uint8Array, data: string): string {
-  assertByteLength(sharedX, 32, "shared secret");
-  const [ciphertextPart, ivPart] = splitPayload(data);
-  try {
-    const iv = base64.decode(ivPart);
-    const ciphertext = base64.decode(ciphertextPart);
-    const plaintext = cbc(sharedX, iv).decrypt(ciphertext);
-    return utf8Decoder.decode(plaintext);
-  } catch (error) {
-    throw new CryptoError("invalid NIP-04 payload", { cause: error });
-  }
 }

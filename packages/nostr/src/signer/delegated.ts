@@ -137,7 +137,7 @@ export class DelegatedSigner implements NostrSigner {
     this.#assertUsable();
     const shared = await this.#sharedSecret(peer);
     try {
-      return nip04.encryptWithSharedSecret(shared, plaintext);
+      return nip04.encrypt(plaintext, shared);
     } finally {
       shared.fill(0);
     }
@@ -147,7 +147,7 @@ export class DelegatedSigner implements NostrSigner {
     this.#assertUsable();
     const shared = await this.#sharedSecret(peer);
     try {
-      return nip04.decryptWithSharedSecret(shared, ciphertext);
+      return nip04.decrypt(ciphertext, shared);
     } finally {
       shared.fill(0);
     }

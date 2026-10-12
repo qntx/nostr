@@ -415,6 +415,12 @@
   },
   {
     "capability": "core.message.relay",
+    "case": "[\"NEG-ERR\",\"s\",\"error\",\"extra\"]",
+    "side": "rust-nostr",
+    "reason": "NIP-77: NEG-ERR is exactly [\"NEG-ERR\", <subscription id>, <reason>]; rust-nostr silently drops trailing elements."
+  },
+  {
+    "capability": "core.message.relay",
     "case": "[\"NEG-MSG\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"aabb\"]",
     "side": "rust-nostr",
     "reason": "NIP-01: subscription ids are 1-64 characters; rust-nostr accepts empty or over-long ids."

@@ -10,13 +10,17 @@ import {
   encodeClientMessage,
   mergeCountHll,
   parseRelayMessage,
-  useWebSocketImplementation,
 } from "../src/index.ts";
 import type { CountResult, RelayMessage } from "../src/index.ts";
 import { CountTracker } from "../src/relay/count-tracker.ts";
 import { createFakeRelayNetwork } from "../src/testing/index.ts";
 import type { FakeRelayNetwork } from "../src/testing/index.ts";
-import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
+import {
+  MockWebSocket,
+  MockWebSocketCtor,
+  stubGlobalWebSocket,
+  unstubGlobalWebSocket,
+} from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
@@ -114,10 +118,11 @@ describe("mergeCountHll", () => {
 describe("Relay.count", () => {
   beforeEach(() => {
     MockWebSocket.reset();
-    useWebSocketImplementation(MockWebSocketCtor);
+    stubGlobalWebSocket();
   });
   afterEach(() => {
     MockWebSocket.reset();
+    unstubGlobalWebSocket();
   });
 
   test("sends COUNT and resolves payload", async () => {
@@ -557,13 +562,14 @@ describe("Pool.count + createFakeRelayNetwork", () => {
 
   beforeEach(() => {
     MockWebSocket.reset();
-    useWebSocketImplementation(MockWebSocketCtor);
+    stubGlobalWebSocket();
     net = createFakeRelayNetwork();
   });
 
   afterEach(() => {
     net.close();
     MockWebSocket.reset();
+    unstubGlobalWebSocket();
   });
 
   test("counts matching seeded events per relay", async () => {

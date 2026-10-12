@@ -4,7 +4,7 @@
 // Payloads are built with noble AES-256-CBC under FIXED ivs (the TS
 // encrypt API takes no iv), so crates/interop can replay rust-nostr's
 // `encrypt_with_iv` byte-for-byte and `decrypt` on every case.
-// `decryptWithSharedSecret`/`decrypt` run each case here so the recorded
+// `decrypt`/`decryptFromPubkey` run each case here so the recorded
 // `payload`/`error` always reflects the real TS behaviour.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -16,7 +16,7 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { base64 } from "@scure/base";
 
 import { utf8Encoder } from "../../../src/core/util.ts";
-import { decrypt as nip04Decrypt, decryptWithSharedSecret } from "../../../src/nips/nip04.ts";
+import { decrypt, decryptFromPubkey } from "../../../src/nips/nip04.ts";
 
 const SEC1 = "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268";
 const SEC2 = "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa";
@@ -74,11 +74,11 @@ function valid(secret: string, peer: Uint8Array, plaintext: string, iv: Uint8Arr
   const ciphertext = cbc(x, iv).encrypt(utf8Encoder.encode(plaintext));
   const payload = `${base64.encode(ciphertext)}?iv=${base64.encode(iv)}`;
   // Both TS entry points must reproduce the plaintext before the case lands.
-  if (decryptWithSharedSecret(x, payload) !== plaintext) {
-    throw new Error(`decryptWithSharedSecret diverged on ${JSON.stringify(plaintext)}`);
-  }
-  if (nip04Decrypt(hexToBytes(secret), bytesToHex(peer), payload) !== plaintext) {
+  if (decrypt(payload, x) !== plaintext) {
     throw new Error(`nip04.decrypt diverged on ${JSON.stringify(plaintext)}`);
+  }
+  if (decryptFromPubkey(payload, hexToBytes(secret), bytesToHex(peer)) !== plaintext) {
+    throw new Error(`nip04.decryptFromPubkey diverged on ${JSON.stringify(plaintext)}`);
   }
   cases.push({
     sec1: secret,
@@ -93,7 +93,7 @@ function valid(secret: string, peer: Uint8Array, plaintext: string, iv: Uint8Arr
 /** Asserts the TS decrypt throws and records the error class. */
 function bad(reason: string, secret: string, peer: Uint8Array, payload: string): void {
   try {
-    decryptWithSharedSecret(sharedX(secret, peer), payload);
+    decrypt(payload, sharedX(secret, peer));
   } catch (error) {
     invalid.push({
       op: "decrypt",
@@ -165,7 +165,7 @@ bad(
   const payload = `${base64.encode(cbc(x, IV_A).encrypt(utf8Encoder.encode("a".repeat(64))))}?iv=${base64.encode(IV_A)}`;
   for (const wrong of [SEC2, `${SEC1.slice(0, -2)}01`, `${SEC1.slice(0, -2)}02`]) {
     try {
-      decryptWithSharedSecret(sharedX(wrong, PUB1), payload);
+      decrypt(payload, sharedX(wrong, PUB1));
     } catch (error) {
       invalid.push({
         op: "decrypt",
