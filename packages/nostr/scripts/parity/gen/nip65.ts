@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-65 `parseRelayList`/`relayListToTags`/
 // `relayListEventBuilder`/`readRelays`/`writeRelays` semantics as frozen
-// vectors shared by the TS test suite (tests/vectors/nip65.test.ts) and the
+// vectors shared by the TS test suite (tests/vectors/nip65.test.ts) and
 // crates/interop.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
