@@ -144,6 +144,8 @@ export class CountTracker {
 
   #finish(waiter: CountWaiter): void {
     this.clearTimer(waiter);
-    this.#entries.delete(waiter.id);
+    if (this.#entries.get(waiter.id) === waiter) {
+      this.#entries.delete(waiter.id);
+    }
   }
 }

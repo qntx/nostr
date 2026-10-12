@@ -161,6 +161,39 @@ describe("FakeRelay NIP-01 + faults", () => {
     relay.close();
   });
 
+  test("FakeSocket send throws while CONNECTING and silently discards while CLOSED", async () => {
+    const socket = new net.websocketImplementation("wss://sends.example") as unknown as {
+      sent: string[];
+      readyState: number;
+      send: (data: string) => void;
+      close: () => void;
+    };
+    // CONNECTING: the browser throws InvalidStateError.
+    expect(() => socket.send('["REQ","x",{}]')).toThrow("InvalidStateError");
+    await sleep(10); // microtask-opened
+    socket.close();
+    // CLOSED: the browser silently discards.
+    socket.send('["REQ","x",{}]');
+    expect(socket.sent).toStrictEqual([]);
+  });
+
+  test("latency-delayed sends do not reach a closed socket", async () => {
+    net.relay("wss://late-send.example", { latencyMs: 30 }).seed([note("late", 1)]);
+    const socket = new net.websocketImplementation("wss://late-send.example") as unknown as {
+      send: (data: string) => void;
+      close: () => void;
+      addEventListener: (type: string, listener: (ev: unknown) => void) => void;
+    };
+    const received: unknown[] = [];
+    socket.addEventListener("message", (ev) => received.push(ev));
+    await sleep(10); // socket open
+    socket.send('["REQ","s1",{"kinds":[1]}]');
+    // The EVENT/EOSE are still inside the latency window; closing must cancel them.
+    socket.close();
+    await sleep(80);
+    expect(received).toStrictEqual([]);
+  });
+
   test("disconnect drops sockets and the client reconnects", async () => {
     let reconnects = 0;
     const relay = await Relay.connect("wss://bounce.example", {

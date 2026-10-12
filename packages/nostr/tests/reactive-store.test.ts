@@ -52,6 +52,18 @@ describe("ReactiveEventStore writes", () => {
     expect(store.seenOn(e.id)).toStrictEqual([normalizeURL("wss://a"), normalizeURL("wss://b")]);
   });
 
+  test("a malformed relay label skips seenOn without aborting the add", () => {
+    const store = new ReactiveEventStore();
+    const e = note("a", 1);
+    expect(store.add(e, "ftp://not-a-relay")).toBe("accepted");
+    expect(store.get(e.id)?.content).toBe("a");
+    expect(store.seenOn(e.id)).toStrictEqual([]);
+    expect(store.markSeen(e.id, "ftp://not-a-relay")).toBe(true);
+    expect(store.seenOn(e.id)).toStrictEqual([]);
+    expect(store.markSeen(e.id, "wss://ok")).toBe(true);
+    expect(store.seenOn(e.id)).toStrictEqual([normalizeURL("wss://ok")]);
+  });
+
   test("ephemeral events are not stored", () => {
     const store = new ReactiveEventStore();
     const e = new EventBuilder(20001, "gone").createdAt(1).signWithKeys(keys);
@@ -138,6 +150,43 @@ describe("ReactiveEventStore watches", () => {
     await flush();
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(watch.getSnapshot()).toHaveLength(3);
+  });
+
+  test("a subscriber that writes on every notify cannot starve the flush loop", async () => {
+    const stub = stubReportError();
+    try {
+      const store = new ReactiveEventStore();
+      const watch = store.watchQuery([{ kinds: [1] }]);
+      let n = 0;
+      // Bare event objects — signing thousands of them only costs time; the
+      // index validates shape, not signatures. Re-dirty on every notify: an
+      // unbounded in-turn drain would never yield the microtask queue back to
+      // this test. Unsubscribing lets it settle.
+      const stubEvent = (i: number): Event => ({
+        id: i.toString(16).padStart(64, "0"),
+        pubkey: "ab".repeat(32),
+        sig: "cd".repeat(64),
+        kind: 1,
+        created_at: i + 1,
+        content: `w${i}`,
+        tags: [],
+      });
+      const stop = watch.subscribe(() => {
+        n += 1;
+        store.add(stubEvent(1000 + n));
+      });
+      store.add(stubEvent(0));
+      for (let i = 0; i < 64; i++) {
+        // oxlint-disable-next-line no-await-in-loop -- microtask yields pace the flush passes
+        await Promise.resolve();
+      }
+      stop();
+      await flush();
+      expect(n).toBeGreaterThan(0);
+      expect(stub.reported.length).toBeGreaterThan(0);
+    } finally {
+      stub.restore();
+    }
   });
 
   test("getSnapshot is referentially stable without writes", () => {
