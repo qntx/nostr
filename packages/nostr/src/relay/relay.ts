@@ -1,6 +1,6 @@
 import { raceSignal, throwIfAborted } from "../core/abort.ts";
 import { Emitter } from "../core/emitter.ts";
-import { MessageError, WasmPoisonedError } from "../core/error.ts";
+import { MessageError, toError } from "../core/error.ts";
 import type { Event, EventTemplate } from "../core/event.ts";
 import { canonicalizeFilter, canonicalizeFilters } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
@@ -34,7 +34,6 @@ import type { PublishResult } from "./ok-tracker.ts";
 import { DEFAULT_PING_INTERVAL_MS, DEFAULT_PING_TIMEOUT_MS, PingLoop } from "./ping.ts";
 import { SubscriptionRegistry } from "./subscription-registry.ts";
 import type { Closer, RelaySubscription, SubscribeOptions } from "./subscription.ts";
-import { getWebSocketImplementation } from "./websocket.ts";
 import type { WebSocketConstructor, WebSocketLike } from "./websocket.ts";
 
 /**
@@ -94,6 +93,11 @@ export type RelayEventMap = {
    * subscription's filters are dropped silently and are not counted here.
    */
   invalidevent: undefined;
+  /**
+   * Fired once when the event verifier throws: the verifier is considered dead and every later
+   * EVENT is dropped silently instead of letting the exception escape the socket listener.
+   */
+  verifiererror: Error;
 };
 
 type SocketHandlers = {
@@ -151,7 +155,11 @@ export class Relay {
 
   constructor(url: string, opts: RelayOptions = {}) {
     this.url = normalizeURL(url);
-    this.#WS = opts.websocketImplementation ?? getWebSocketImplementation();
+    const wsImpl = opts.websocketImplementation ?? globalThis.WebSocket;
+    if (wsImpl === undefined) {
+      throw new RelayConnectionError("no WebSocket implementation; pass websocketImplementation");
+    }
+    this.#WS = wsImpl;
     this.#verify = opts.verifyEvent ?? verifyEvent;
     this.#publishTimeoutMs = opts.publishTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.#connectTimeoutMs = opts.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
@@ -730,12 +738,9 @@ export class Relay {
       }
       return ok;
     } catch (error) {
-      if (error instanceof WasmPoisonedError) {
-        this.#verifyDead = true;
-        this.#events.emit("notice", "wasm-poisoned: instance aborted");
-        return false;
-      }
-      throw error;
+      this.#verifyDead = true;
+      this.#events.emit("verifiererror", toError(error));
+      return false;
     }
   }
 

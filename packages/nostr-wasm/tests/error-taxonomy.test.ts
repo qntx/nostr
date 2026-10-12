@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vite-plus/test";
 
 import { EventBuilder, Keys } from "@qntx/nostr";
-import { CryptoError, NostrError, WasmPoisonedError } from "@qntx/nostr/core";
+import { CryptoError, NostrError } from "@qntx/nostr/core";
 
-import { createWasmEventVerifier } from "../src/adapter.ts";
+import { WasmPoisonedError, createWasmEventVerifier } from "../src/adapter.ts";
 import { createNostrWasmLoader, fetchWasmUrl, isWasmBytes } from "../src/instance.ts";
 import { loadNostrWasm as loadNostrWasmBrowser } from "../src/load.browser.ts";
 

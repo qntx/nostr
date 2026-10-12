@@ -284,11 +284,7 @@ export function parseRelayMessage(raw: string): RelayMessage {
       return ["NEG-MSG", assertSubscriptionId(items[1]), items[2].toLowerCase()];
 
     case "NEG-ERR":
-      if (
-        (items.length !== 3 && items.length !== 4) ||
-        typeof items[1] !== "string" ||
-        typeof items[2] !== "string"
-      ) {
+      if (items.length !== 3 || typeof items[1] !== "string" || typeof items[2] !== "string") {
         throw new MessageError("invalid NEG-ERR relay message");
       }
       return ["NEG-ERR", assertSubscriptionId(items[1]), items[2]];

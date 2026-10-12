@@ -5,7 +5,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { hexToBytes } from "../../src/core/util.ts";
 import { CryptoError } from "../../src/index.ts";
-import { decrypt, decryptWithSharedSecret } from "../../src/nips/nip04.ts";
+import { decrypt, decryptFromPubkey } from "../../src/nips/nip04.ts";
 
 // Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`.
@@ -32,31 +32,29 @@ const { cases, invalid } = JSON.parse(
 ) as { cases: Case[]; invalid: InvalidCase[] };
 
 describe("vectors/nip04/codec.json", () => {
-  test("decryptWithSharedSecret decrypts every valid payload", () => {
+  test("decrypt decrypts every valid payload with the shared secret", () => {
     for (const c of cases) {
-      expect(decryptWithSharedSecret(hexToBytes(c.shared_secret), c.payload)).toBe(c.plaintext);
+      expect(decrypt(c.payload, hexToBytes(c.shared_secret))).toBe(c.plaintext);
     }
   });
 
-  test("decrypt decrypts every valid payload with key pairs", () => {
+  test("decryptFromPubkey decrypts every valid payload with key pairs", () => {
     for (const c of cases) {
-      expect(decrypt(hexToBytes(c.sec1), c.pub2, c.payload)).toBe(c.plaintext);
+      expect(decryptFromPubkey(c.payload, hexToBytes(c.sec1), c.pub2)).toBe(c.plaintext);
     }
   });
 
-  test("decryptWithSharedSecret rejects every invalid payload", () => {
+  test("decrypt rejects every invalid payload", () => {
     for (const c of invalid.filter((i) => i.op === "decrypt")) {
       expect(c.error).toBe("CryptoError");
-      expect(() => decryptWithSharedSecret(hexToBytes(c.shared_secret), c.payload)).toThrow(
-        CryptoError,
-      );
+      expect(() => decrypt(c.payload, hexToBytes(c.shared_secret))).toThrow(CryptoError);
     }
   });
 
-  test("decrypt rejects every invalid case with key pairs", () => {
+  test("decryptFromPubkey rejects every invalid case with key pairs", () => {
     for (const c of invalid) {
       expect(c.error).toBe("CryptoError");
-      expect(() => decrypt(hexToBytes(c.sec1), c.pub2, c.payload)).toThrow(CryptoError);
+      expect(() => decryptFromPubkey(c.payload, hexToBytes(c.sec1), c.pub2)).toThrow(CryptoError);
     }
   });
 });

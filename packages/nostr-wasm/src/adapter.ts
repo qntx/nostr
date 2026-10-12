@@ -1,7 +1,10 @@
-import { WasmPoisonedError, createEventVerifier } from "@qntx/nostr/core";
+import { NostrError, createEventVerifier } from "@qntx/nostr/core";
 import type { EventVerifier, SerializedEventVerifier } from "@qntx/nostr/core";
 
-export { WasmPoisonedError } from "@qntx/nostr/core";
+/** Wasm instance aborted; later calls on that instance fail. */
+export class WasmPoisonedError extends NostrError {
+  override name = "WasmPoisonedError";
+}
 
 /**
  * Run `fn` unless the instance is already poisoned; a `WebAssembly.RuntimeError` aborts the

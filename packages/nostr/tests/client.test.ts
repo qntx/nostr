@@ -12,11 +12,15 @@ import {
   normalizeURL,
   RelayTimeoutError,
   relayListEventBuilder,
-  useWebSocketImplementation,
   verifyEvent,
 } from "../src/index.ts";
 import type { Event, PutResult } from "../src/index.ts";
-import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
+import {
+  MockWebSocket,
+  MockWebSocketCtor,
+  stubGlobalWebSocket,
+  unstubGlobalWebSocket,
+} from "./helpers/mock-ws.ts";
 import { stubReportError } from "./helpers/report-error.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -174,11 +178,12 @@ function dummyPingReqs(ws: MockWebSocket): unknown[][] {
 
 beforeEach(() => {
   MockWebSocket.reset();
-  useWebSocketImplementation(MockWebSocketCtor);
+  stubGlobalWebSocket();
 });
 
 afterEach(() => {
   MockWebSocket.reset();
+  unstubGlobalWebSocket();
 });
 
 describe("Client", () => {

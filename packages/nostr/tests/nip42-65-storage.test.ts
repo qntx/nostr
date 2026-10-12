@@ -14,12 +14,11 @@ import {
   readRelays,
   relayListEventBuilder,
   relayListToTags,
-  useWebSocketImplementation,
   writeRelays,
 } from "../src/index.ts";
 import type { Event } from "../src/index.ts";
 import * as nip77 from "../src/nips/nip77.ts";
-import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
+import { MockWebSocket, stubGlobalWebSocket, unstubGlobalWebSocket } from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
@@ -37,7 +36,7 @@ describe("nip42", () => {
 
   test("Relay.auth sends AUTH and waits for OK", async () => {
     MockWebSocket.reset();
-    useWebSocketImplementation(MockWebSocketCtor);
+    stubGlobalWebSocket();
     const relay = await Relay.connect("wss://auth.example");
     const keys = Keys.fromSecretKey(SK);
 
@@ -79,7 +78,7 @@ describe("nip42", () => {
 
   test("CLOSED auth-required retries REQ after AUTH", async () => {
     MockWebSocket.reset();
-    useWebSocketImplementation(MockWebSocketCtor);
+    stubGlobalWebSocket();
     const keys = Keys.fromSecretKey(SK);
     const relay = await Relay.connect("wss://auth-retry.example", {
       authSigner: async (template) => {
@@ -789,4 +788,5 @@ beforeEach(() => {
 });
 afterEach(() => {
   MockWebSocket.reset();
+  unstubGlobalWebSocket();
 });

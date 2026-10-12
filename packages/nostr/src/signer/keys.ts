@@ -44,7 +44,7 @@ export class KeysSigner implements NostrSigner {
     this.#assertUsable();
     const secret = this.#keys.secretKey.bytes;
     try {
-      return nip04.encrypt(secret, peer, plaintext);
+      return nip04.encryptToPubkey(plaintext, secret, peer);
     } finally {
       secret.fill(0);
     }
@@ -54,7 +54,7 @@ export class KeysSigner implements NostrSigner {
     this.#assertUsable();
     const secret = this.#keys.secretKey.bytes;
     try {
-      return nip04.decrypt(secret, peer, ciphertext);
+      return nip04.decryptFromPubkey(ciphertext, secret, peer);
     } finally {
       secret.fill(0);
     }

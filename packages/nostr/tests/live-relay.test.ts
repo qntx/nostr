@@ -7,13 +7,9 @@
  */
 import { describe, expect, test } from "vite-plus/test";
 
-import {
-  EventBuilder,
-  Keys,
-  KeysSigner,
-  Client,
-  useWebSocketImplementation,
-} from "../src/index.ts";
+import { EventBuilder, Keys, KeysSigner, Client } from "../src/index.ts";
+import type { WebSocketConstructor } from "../src/relay/websocket.ts";
+import { stubGlobalWebSocket } from "./helpers/mock-ws.ts";
 
 const LIVE = process.env["NOSTR_LIVE_RELAY"]?.trim();
 const describeLive = LIVE ? describe : describe.skip;
@@ -25,9 +21,9 @@ async function ensureNodeWebSocket(): Promise<void> {
   try {
     // Optional peer; avoid static resolve of `ws` types in typecheck.
     const mod = (await import(/* @vite-ignore */ "ws")) as {
-      default: Parameters<typeof useWebSocketImplementation>[0];
+      default: WebSocketConstructor;
     };
-    useWebSocketImplementation(mod.default);
+    stubGlobalWebSocket(mod.default);
   } catch {
     throw new Error("NOSTR_LIVE_RELAY set but no global WebSocket and `ws` is not installed");
   }
