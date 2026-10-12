@@ -14,7 +14,7 @@ authors      = ["QNTX <https://qntx.org>"]
 base64     = "0.23"
 nostr      = { version = "0.45.5", default-features = false, features = ["std", "os-rng", "nip04", "nip44", "nip46", "nip49", "nip59", "nip98"] }
 proptest   = "1.11"
-secp256k1  = "0.30"
+secp256k1  = "0.33"
 serde      = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
 serde_json = { version = "1.0.151", default-features = false, features = ["alloc", "std"] }
 sha2       = { version = "0.11", default-features = false }
