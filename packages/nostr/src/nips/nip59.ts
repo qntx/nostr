@@ -235,9 +235,9 @@ export async function createSeal(
 export function createGiftWrap(seal: Event, recipient: string, opts?: WrapOptions): Event {
   const recipientPk = assertHex32(recipient, "public key");
   const drawBytes = opts?.randomBytes ?? randomBytes;
-  // Ephemeral key: redraw 32-byte candidates until a valid scalar. Stream
-  // order: key → offset → nonce → aux. The
-  // candidates, the ephemeral secret key, and the conversation key are wiped after use.
+  // Ephemeral key: redraw 32-byte candidates until a valid scalar. Stream order: key → offset →
+  // nonce → aux. The candidates, the ephemeral secret key, and the conversation key are wiped
+  // after use.
   let secretKey: SecretKey;
   for (;;) {
     const candidate = drawBytes(32);
