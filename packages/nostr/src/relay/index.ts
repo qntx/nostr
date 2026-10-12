@@ -6,7 +6,6 @@ export {
   RelayTimeoutError,
   RelaySuspendedError,
 } from "./error.ts";
-export { useWebSocketImplementation, getWebSocketImplementation } from "./websocket.ts";
 export type { WebSocketConstructor, WebSocketLike } from "./websocket.ts";
 export { isInsecureRelayUrl } from "./url.ts";
 export { Relay, RelayStatus } from "./relay.ts";

@@ -37,8 +37,3 @@ export class CryptoError extends NostrError {
 export class MessageError extends NostrError {
   override name = "MessageError";
 }
-
-/** Wasm instance aborted; later calls on that instance fail. */
-export class WasmPoisonedError extends NostrError {
-  override name = "WasmPoisonedError";
-}

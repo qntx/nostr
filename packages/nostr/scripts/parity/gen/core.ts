@@ -83,8 +83,7 @@ function emit(capability: string, file: string, cases: unknown, crossCheck?: str
   writeFileSync(join(vectors, file), `${JSON.stringify(doc, null, 2)}\n`);
 }
 
-// Recorded once by scripts/parity/cross-check.ts against the local
-// 3rdparty/nostr-tools checkout (not wired into CI — see that script's header).
+// Recorded once against the local 3rdparty/nostr-tools checkout.
 const CROSS_CHECK_IDS = "nostr-tools 2.24.1 @7fa1ef4: getEventHash/serializeEvent ids match (5/5)";
 const CROSS_CHECK_SIGS = "nostr-tools 2.24.1 @7fa1ef4: verifyEvent signatures match (3/3)";
 const CROSS_CHECK_KINDS =
@@ -620,11 +619,6 @@ const relayMessages = [
   { raw: encodeRelayMessage(["NEG-MSG", "sub", "deadbeef"]) },
   { raw: '["NEG-MSG","sub","AABB"]', encoded: '["NEG-MSG","sub","aabb"]' },
   { raw: encodeRelayMessage(["NEG-ERR", "sub", "error: something"]) },
-  // The optional 4th NEG-ERR element is ignored.
-  {
-    raw: '["NEG-ERR","sub","error: something","ignored"]',
-    encoded: '["NEG-ERR","sub","error: something"]',
-  },
   // COUNT accepts the max safe integer; non-bool approximate and invalid hll are ignored.
   { raw: encodeRelayMessage(["COUNT", "s", { count: 9007199254740991 }]) },
   {
@@ -752,6 +746,7 @@ const invalidRelayMessages = [
   '["NEG-MSG","s",""]',
   '["NEG-ERR","s"]',
   '["NEG-ERR","s",1]',
+  '["NEG-ERR","s","error","extra"]',
   '["UNKNOWN","s"]',
   // Ruling 5: OK requires a 64-char lowercase hex event id.
   '["OK","id",true,""]',

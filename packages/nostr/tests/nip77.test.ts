@@ -238,17 +238,11 @@ describe("NIP-77 message codec", () => {
     ]);
   });
 
-  test("parses 3- or 4-element NEG-ERR and ignores the optional 4th", () => {
-    expect(
-      parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "blocked: too big", 100])),
-    ).toStrictEqual(["NEG-ERR", "n1", "blocked: too big"]);
-    expect(
-      parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "error: boom", "ignored"])),
-    ).toStrictEqual(["NEG-ERR", "n1", "error: boom"]);
-  });
-
-  test("rejects NEG-ERR arity other than 3 or 4", () => {
+  test("rejects NEG-ERR arity other than 3", () => {
     expect(() => parseRelayMessage(JSON.stringify(["NEG-ERR", "n1"]))).toThrow(MessageError);
+    expect(() =>
+      parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "blocked: too big", 100])),
+    ).toThrow(MessageError);
     expect(() =>
       parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "blocked", 1, "extra"])),
     ).toThrow(MessageError);

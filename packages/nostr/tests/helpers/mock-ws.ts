@@ -104,3 +104,12 @@ export class MockWebSocket implements WebSocketLike {
 }
 
 export const MockWebSocketCtor: WebSocketConstructor = MockWebSocket;
+
+/** Install a WebSocket constructor as `globalThis.WebSocket`, as a browser provides. */
+export function stubGlobalWebSocket(impl: WebSocketConstructor = MockWebSocketCtor): void {
+  (globalThis as { WebSocket?: unknown }).WebSocket = impl;
+}
+
+export function unstubGlobalWebSocket(): void {
+  delete (globalThis as { WebSocket?: unknown }).WebSocket;
+}

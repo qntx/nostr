@@ -206,12 +206,12 @@ describe("KeysSigner.dispose", () => {
 
   test("the per-call secret copies are wiped", async () => {
     const signer = new KeysSigner(SK_HEX);
-    const encSpy = vi.spyOn(nip04, "encrypt");
-    const decSpy = vi.spyOn(nip04, "decrypt");
+    const encSpy = vi.spyOn(nip04, "encryptToPubkey");
+    const decSpy = vi.spyOn(nip04, "decryptFromPubkey");
     const ciphertext = await signer.nip04Encrypt(peer, "secret-copy");
     await signer.nip04Decrypt(peer, ciphertext);
-    expect(encSpy.mock.calls[0]?.[0]).toStrictEqual(new Uint8Array(32));
-    expect(decSpy.mock.calls[0]?.[0]).toStrictEqual(new Uint8Array(32));
+    expect(encSpy.mock.calls[0]?.[1]).toStrictEqual(new Uint8Array(32));
+    expect(decSpy.mock.calls[0]?.[1]).toStrictEqual(new Uint8Array(32));
     signer.dispose();
   });
 });

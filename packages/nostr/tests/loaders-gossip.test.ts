@@ -13,22 +13,27 @@ import {
   bareNostrUser,
   createLoaders,
   relayListEventBuilder,
-  useWebSocketImplementation,
 } from "../src/index.ts";
 import { dmRelayListEventBuilder, parseDmRelayList } from "../src/nips/nip17.ts";
 import { createFakeRelayNetwork } from "../src/testing/index.ts";
-import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
+import {
+  MockWebSocket,
+  MockWebSocketCtor,
+  stubGlobalWebSocket,
+  unstubGlobalWebSocket,
+} from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const SK2 = "0000000000000000000000000000000000000000000000000000000000000001";
 
 beforeEach(() => {
   MockWebSocket.reset();
-  useWebSocketImplementation(MockWebSocketCtor);
+  stubGlobalWebSocket();
 });
 
 afterEach(() => {
   MockWebSocket.reset();
+  unstubGlobalWebSocket();
 });
 
 async function respondReplaceables(

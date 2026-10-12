@@ -42,8 +42,7 @@ const version =
     ? String(pkgJson.version)
     : "0.0.0";
 
-// Recorded once by scripts/parity/cross-check.ts against the local
-// 3rdparty/nostr-tools checkout (not wired into CI — see that script's header).
+// Recorded once against the local 3rdparty/nostr-tools checkout.
 const CROSS_CHECK =
   "nostr-tools 2.24.1 @7fa1ef4: 47/63 agree; the 16 diffs are nostr-tools " +
   "laxness, not vector bugs — it has no kind bound (N1: 65536 encodes/" +

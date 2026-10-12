@@ -12,11 +12,15 @@ import {
   groupAuthorsByOutboxRelay,
   relayListEventBuilder,
   normalizeURL,
-  useWebSocketImplementation,
 } from "../src/index.ts";
 import type { Event, EventStore, PutResult } from "../src/index.ts";
 import { BOUND_FLUSH_MS } from "../src/loaders/outbox.ts";
-import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
+import {
+  MockWebSocket,
+  MockWebSocketCtor,
+  stubGlobalWebSocket,
+  unstubGlobalWebSocket,
+} from "./helpers/mock-ws.ts";
 
 const SK_A = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const SK_B = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -227,11 +231,12 @@ async function feedClient(opts: {
 
 beforeEach(() => {
   MockWebSocket.reset();
-  useWebSocketImplementation(MockWebSocketCtor);
+  stubGlobalWebSocket();
 });
 
 afterEach(() => {
   MockWebSocket.reset();
+  unstubGlobalWebSocket();
 });
 
 describe("groupAuthorsByOutboxRelay", () => {

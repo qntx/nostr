@@ -1,5 +1,3 @@
-import { RelayConnectionError } from "./error.ts";
-
 /** Minimal WebSocket surface used by Relay (browser or `ws`). */
 export type WebSocketLike = {
   readyState: number;
@@ -21,27 +19,3 @@ export type WebSocketConstructor = {
   readonly CLOSING: number;
   readonly CLOSED: number;
 };
-
-let impl: WebSocketConstructor | undefined;
-
-try {
-  if (globalThis.WebSocket !== undefined) {
-    impl = globalThis.WebSocket;
-  }
-} catch {
-  // no global WebSocket
-}
-
-/** Inject a WebSocket implementation (required on Node unless undici/global is present). */
-export function useWebSocketImplementation(websocketImplementation: WebSocketConstructor): void {
-  impl = websocketImplementation;
-}
-
-export function getWebSocketImplementation(): WebSocketConstructor {
-  if (!impl) {
-    throw new RelayConnectionError(
-      "No WebSocket implementation available; call useWebSocketImplementation() or run in a browser",
-    );
-  }
-  return impl;
-}

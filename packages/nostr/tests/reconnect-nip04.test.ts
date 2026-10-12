@@ -1,18 +1,18 @@
 import { base64 } from "@scure/base";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
+import { CryptoError, EventBuilder, HexError, Keys, KeysSigner, Relay } from "../src/index.ts";
 import {
-  CryptoError,
-  EventBuilder,
-  HexError,
-  Keys,
-  KeysSigner,
-  Relay,
-  useWebSocketImplementation,
-} from "../src/index.ts";
-import { decrypt as nip04Decrypt, encrypt as nip04Encrypt } from "../src/nips/nip04.ts";
+  decryptFromPubkey as nip04DecryptFromPubkey,
+  encryptToPubkey as nip04EncryptToPubkey,
+} from "../src/nips/nip04.ts";
 import type { Subscription } from "../src/relay/subscription.ts";
-import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
+import {
+  MockWebSocket,
+  MockWebSocketCtor,
+  stubGlobalWebSocket,
+  unstubGlobalWebSocket,
+} from "./helpers/mock-ws.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const SK2 = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -78,12 +78,13 @@ const FailReqCtor = FailReqSocket as unknown as typeof MockWebSocketCtor;
 beforeEach(() => {
   MockWebSocket.reset();
   FailReqSocket.failNextReq = false;
-  useWebSocketImplementation(MockWebSocketCtor);
+  stubGlobalWebSocket();
 });
 
 afterEach(() => {
   FailReqSocket.failNextReq = false;
   MockWebSocket.reset();
+  unstubGlobalWebSocket();
 });
 
 describe("Relay reconnect", () => {
@@ -521,9 +522,9 @@ describe("nip04", () => {
   test("encrypt/decrypt round-trip", () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const cipher = nip04Encrypt(a.secretKey.bytes, b.publicKey, "legacy dm");
+    const cipher = nip04EncryptToPubkey("legacy dm", a.secretKey.bytes, b.publicKey);
     expect(cipher).toContain("?iv=");
-    expect(nip04Decrypt(b.secretKey.bytes, a.publicKey, cipher)).toBe("legacy dm");
+    expect(nip04DecryptFromPubkey(cipher, b.secretKey.bytes, a.publicKey)).toBe("legacy dm");
   });
 
   test("KeysSigner nip04 methods", async () => {
@@ -539,32 +540,34 @@ describe("nip04", () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
     expect(() =>
-      nip04Decrypt(a.secretKey.bytes, b.publicKey, "!!!not-base64!!!?iv=also!!!"),
+      nip04DecryptFromPubkey("!!!not-base64!!!?iv=also!!!", a.secretKey.bytes, b.publicKey),
     ).toThrow(CryptoError);
     expect(() =>
-      nip04Decrypt(a.secretKey.bytes, b.publicKey, "!!!not-base64!!!?iv=also!!!"),
+      nip04DecryptFromPubkey("!!!not-base64!!!?iv=also!!!", a.secretKey.bytes, b.publicKey),
     ).toThrow("invalid NIP-04 payload");
   });
 
   test("corrupted ciphertext throws CryptoError", () => {
     const a = Keys.fromSecretKey(SK);
     const b = Keys.fromSecretKey(SK2);
-    const cipher = nip04Encrypt(a.secretKey.bytes, b.publicKey, "secret");
+    const cipher = nip04EncryptToPubkey("secret", a.secretKey.bytes, b.publicKey);
     const [ct, iv] = cipher.split("?iv=");
     // Drop one byte so the decoded length is not a multiple of the AES block size.
     const corrupted = `${base64.encode(base64.decode(ct!).slice(0, -1))}?iv=${iv}`;
-    expect(() => nip04Decrypt(b.secretKey.bytes, a.publicKey, corrupted)).toThrow(CryptoError);
-    expect(() => nip04Decrypt(b.secretKey.bytes, a.publicKey, corrupted)).toThrow(
+    expect(() => nip04DecryptFromPubkey(corrupted, b.secretKey.bytes, a.publicKey)).toThrow(
+      CryptoError,
+    );
+    expect(() => nip04DecryptFromPubkey(corrupted, b.secretKey.bytes, a.publicKey)).toThrow(
       "invalid NIP-04 payload",
     );
   });
 
   test("31-byte Uint8Array secret key throws HexError", () => {
     const b = Keys.fromSecretKey(SK2);
-    expect(() => nip04Encrypt(new Uint8Array(31), b.publicKey, "x")).toThrow(HexError);
-    const cipher = nip04Encrypt(Keys.fromSecretKey(SK).secretKey.bytes, b.publicKey, "x");
+    expect(() => nip04EncryptToPubkey("x", new Uint8Array(31), b.publicKey)).toThrow(HexError);
+    const cipher = nip04EncryptToPubkey("x", Keys.fromSecretKey(SK).secretKey.bytes, b.publicKey);
     expect(() =>
-      nip04Decrypt(new Uint8Array(31), Keys.fromSecretKey(SK).publicKey, cipher),
+      nip04DecryptFromPubkey(cipher, new Uint8Array(31), Keys.fromSecretKey(SK).publicKey),
     ).toThrow(HexError);
   });
 });

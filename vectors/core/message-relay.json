@@ -50,10 +50,6 @@
       "raw": "[\"NEG-ERR\",\"sub\",\"error: something\"]"
     },
     {
-      "raw": "[\"NEG-ERR\",\"sub\",\"error: something\",\"ignored\"]",
-      "encoded": "[\"NEG-ERR\",\"sub\",\"error: something\"]"
-    },
-    {
       "raw": "[\"COUNT\",\"s\",{\"count\":9007199254740991}]"
     },
     {
@@ -200,6 +196,10 @@
     },
     {
       "raw": "[\"NEG-ERR\",\"s\",1]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-ERR\",\"s\",\"error\",\"extra\"]",
       "error": "MessageError"
     },
     {

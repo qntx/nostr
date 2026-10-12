@@ -66,11 +66,16 @@ function asExports(raw: WebAssembly.Exports): CryptoWasmExports {
 }
 
 /**
- * Reserve `total` bytes in the wasm scratch region and return a fresh view. The view is taken after
- * `nostr_buffer` ran, so a growth inside it cannot leave a detached view in the caller's hands.
+ * Reserve `total` bytes in the wasm scratch region and return a fresh view. `nostr_buffer` returns
+ * NULL when `memory.grow` fails; `__heap_base` is never 0, so 0 is unambiguously an allocation
+ * failure — throw instead of writing at address 0. The view is taken after `nostr_buffer` ran, so a
+ * growth inside it cannot leave a detached view in the caller's hands.
  */
 function scratch(exports: CryptoWasmExports, total: number): { ptr: number; view: Uint8Array } {
   const ptr = exports.nostr_buffer(total) >>> 0;
+  if (ptr === 0) {
+    throw new CryptoError("wasm scratch allocation failed");
+  }
   return { ptr, view: new Uint8Array(exports.memory.buffer, ptr, total) };
 }
 
@@ -125,8 +130,8 @@ export function wasmVerifySerialized(
 }
 
 /**
- * Returns the 64-byte signature, or an empty array on failure (invalid input). The Rust side zeroes
- * the scratch copy of `seckey` before returning.
+ * Returns the 64-byte signature, or an empty array on failure (invalid input). The wasm module
+ * zeroes the scratch copy of `seckey` before returning.
  */
 export function wasmSign(
   exports: CryptoWasmExports,
@@ -147,7 +152,7 @@ export function wasmSign(
 }
 
 /**
- * Returns the 32-byte x-only public key, or an empty array on failure. The Rust side zeroes the
+ * Returns the 32-byte x-only public key, or an empty array on failure. The wasm module zeroes the
  * scratch copy of `seckey` before returning.
  */
 export function wasmPublicKey(exports: CryptoWasmExports, seckey: Uint8Array): Uint8Array {
