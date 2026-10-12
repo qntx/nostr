@@ -15,7 +15,7 @@ import {
   useWebSocketImplementation,
   verifyEvent,
 } from "../src/index.ts";
-import type { Event } from "../src/index.ts";
+import type { Event, PutResult } from "../src/index.ts";
 import { MockWebSocket, MockWebSocketCtor } from "./helpers/mock-ws.ts";
 import { stubReportError } from "./helpers/report-error.ts";
 
@@ -398,6 +398,53 @@ describe("Client", () => {
     expect(sentMessages(silent).some((m) => m[0] === "CLOSE")).toBe(false);
     closer.close();
     await client.shutdown();
+  });
+
+  test("shutdown resolves while a live subscription keeps emitting", async () => {
+    // A storage whose putMany yields a task turn (like IndexedDB/SQLite) keeps the
+    // flush loop alive long enough for a live relay to keep refilling the queue.
+    class SlowStore extends MemoryEventStore {
+      override async putMany(events: ReadonlyArray<Event>): Promise<PutResult[]> {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve);
+        });
+        return super.putMany(events);
+      }
+    }
+    const client = new Client({
+      relays: ["wss://live.example"],
+      websocketImplementation: MockWebSocketCtor,
+      storage: new SlowStore(),
+    });
+    const keys = Keys.fromSecretKey(SK);
+    client.subscribe({ kinds: [1] });
+    await waitUntil(all(socketsExist("live.example"), everySocketSentReq));
+    const ws = must(findWs("live.example"), "socket on live.example");
+    const req = lastReqId(ws);
+
+    let n = 0;
+    const next = (): Event => {
+      n += 1;
+      return EventBuilder.textNote(`m${n}`).createdAt(n).signWithKeys(keys);
+    };
+    // Queued for persistence before shutdown begins — it must be stored.
+    const early = next();
+    ws.receive(JSON.stringify(["EVENT", req, early]));
+
+    const shutdownP = client.shutdown();
+    // The relay keeps emitting while shutdown drains; the drain must not wait on it.
+    const emitter = setInterval(() => {
+      ws.receive(JSON.stringify(["EVENT", req, next()]));
+    }, 1);
+    const outcome = await Promise.race([
+      shutdownP.then(() => "resolved" as const),
+      sleep(500).then(() => "hung" as const),
+    ]);
+    clearInterval(emitter);
+    expect(outcome).toBe("resolved");
+    await shutdownP;
+    const stored = await client.storage.query([{ kinds: [1] }]);
+    expect(stored.map((e) => e.id)).toContain(early.id);
   });
 
   test("gossip subscribe with eoseTimeoutMs fires oneose once", async () => {

@@ -219,63 +219,73 @@ export async function subscribePrivateMessages(
     disposeAbort = onAbort(opts?.signal, markClosed);
   }
 
-  const inner = deps.pool.subscribe(
-    relays,
-    // 21059 is ephemeral (relays MUST NOT store); live inbox has to REQ it.
-    [{ kinds: [Kind.GiftWrap, Kind.GiftWrapEphemeral], "#p": [self], since: opts?.since }],
-    {
-      signal: opts?.signal,
-      oneose: opts?.oneose,
-      onclose: (reason) => {
-        markClosed();
-        opts?.onclose?.(reason);
-      },
-      eoseTimeoutMs: opts?.eoseTimeoutMs,
-      receivedEvent: (id, relayUrl) => {
-        if (closed) {
-          return;
-        }
-        if (processed.has(id)) {
-          deps.markSeen(id, relayUrl);
-          return;
-        }
-        const list = pendingUrls.get(id);
-        if (list === undefined) {
-          pendingUrls.set(id, [relayUrl]);
-        } else if (!list.includes(relayUrl)) {
-          list.push(relayUrl);
-        }
-      },
-      onevent: (wrap, relayUrl) => {
-        if (closed) {
-          return;
-        }
-        void queue.run(async () => {
-          try {
-            if (closed) {
-              return;
-            }
-            const rumor = await unwrap(crypto, wrap);
-            if (closed) {
-              return;
-            }
-            if (seen.has(rumor.id)) {
-              flushSeen(wrap.id);
-              return;
-            }
-            seen.add(rumor.id);
-            if (opts?.observe !== false) {
-              deps.ingest(wrap, relayUrl);
-            }
-            flushSeen(wrap.id);
-            opts?.onevent?.({ wrap, rumor, relayUrl });
-          } catch {
-            // junk / forgery — not stored; keep the queue alive if a handler throws
+  let inner: Closer;
+  try {
+    inner = deps.pool.subscribe(
+      relays,
+      // 21059 is ephemeral (relays MUST NOT store); live inbox has to REQ it.
+      [{ kinds: [Kind.GiftWrap, Kind.GiftWrapEphemeral], "#p": [self], since: opts?.since }],
+      {
+        signal: opts?.signal,
+        oneose: opts?.oneose,
+        onclose: (reason) => {
+          markClosed();
+          opts?.onclose?.(reason);
+        },
+        eoseTimeoutMs: opts?.eoseTimeoutMs,
+        receivedEvent: (id, relayUrl) => {
+          if (closed) {
+            return;
           }
-        });
+          if (processed.has(id)) {
+            deps.markSeen(id, relayUrl);
+            return;
+          }
+          const list = pendingUrls.get(id);
+          if (list === undefined) {
+            pendingUrls.set(id, [relayUrl]);
+          } else if (!list.includes(relayUrl)) {
+            list.push(relayUrl);
+          }
+        },
+        onevent: (wrap, relayUrl) => {
+          if (closed) {
+            return;
+          }
+          void queue.run(async () => {
+            try {
+              if (closed) {
+                return;
+              }
+              const rumor = await unwrap(crypto, wrap);
+              if (closed) {
+                return;
+              }
+              if (seen.has(rumor.id)) {
+                flushSeen(wrap.id);
+                return;
+              }
+              seen.add(rumor.id);
+              if (opts?.observe !== false) {
+                deps.ingest(wrap, relayUrl);
+              }
+              flushSeen(wrap.id);
+              opts?.onevent?.({ wrap, rumor, relayUrl });
+            } catch {
+              // junk / forgery — not stored; keep the queue alive if a handler
+              // throws, and still mark the wrap processed so its buffered relay
+              // receipts flush instead of accumulating in pendingUrls forever.
+              flushSeen(wrap.id);
+            }
+          });
+        },
       },
-    },
-  );
+    );
+  } catch (error) {
+    // A synchronous subscribe throw must not leave the abort listener armed.
+    markClosed();
+    throw error;
+  }
 
   return {
     close: (reason?: string) => {

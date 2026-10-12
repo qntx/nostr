@@ -55,6 +55,8 @@ export type IndexedDbEventStoreOptions = {
 export class IndexedDbEventStore implements EventStore {
   readonly #dbName: string;
   #db: IDBDatabaseLike | undefined;
+  /** Shared so concurrent open()/first-use calls cannot open a second connection. */
+  #opening: Promise<void> | undefined;
   /** Set when this connection closed to unblock a newer-version open; ops then fail fast. */
   #yielded = false;
   readonly #deletion = new DeletionState();
@@ -75,6 +77,17 @@ export class IndexedDbEventStore implements EventStore {
     if (this.#db) {
       return;
     }
+    this.#opening ??= (async (): Promise<void> => {
+      try {
+        await this.#doOpen();
+      } finally {
+        this.#opening = undefined;
+      }
+    })();
+    await this.#opening;
+  }
+
+  async #doOpen(): Promise<void> {
     if (!IndexedDbEventStore.isAvailable()) {
       throw new StorageError("IndexedDB is not available in this environment");
     }
@@ -86,7 +99,18 @@ export class IndexedDbEventStore implements EventStore {
     };
     this.#yielded = false;
     this.#db = db;
-    await this.#loadCaches(db);
+    try {
+      await this.#loadCaches(db);
+    } catch (error) {
+      // Do not keep a connection whose cache mirror failed to load.
+      this.#db = undefined;
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
   }
 
   async #ensure(): Promise<IDBDatabaseLike> {
@@ -135,13 +159,24 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async #putManyLocked(events: ReadonlyArray<Event>): Promise<PutResult[]> {
+    return this.#withWriteTx(WRITE_STORES, async (tx) => this.#putAllInTx(tx, events));
+  }
+
+  /**
+   * Run `fn` inside a readwrite transaction, snapshotting the in-memory deletion/replaceable
+   * mirrors so a transaction abort or thrown error restores them to match the rolled-back rows.
+   */
+  async #withWriteTx<T>(
+    stores: string | string[],
+    fn: (tx: IDBTransactionLike) => T | Promise<T>,
+  ): Promise<T> {
     let db: IDBDatabaseLike;
     try {
       db = await this.#ensure();
     } catch (error) {
       throw toStorageError(error);
     }
-    const tx = db.transaction(WRITE_STORES, "readwrite");
+    const tx = db.transaction(stores, "readwrite");
     const txSettled = new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error ?? new StorageError("IndexedDB transaction failed"));
@@ -157,12 +192,12 @@ export class IndexedDbEventStore implements EventStore {
     })();
     const cache = this.#snapshotCaches();
     try {
-      const results = await this.#putAllInTx(tx, events);
+      const result = await fn(tx);
       const txErr = await txOutcome;
       if (txErr !== undefined) {
         throw toStorageError(txErr);
       }
-      return results;
+      return result;
     } catch (error) {
       this.#restoreCaches(cache);
       try {
@@ -411,19 +446,13 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async #setOutboxBoundLocked(pubkey: string, kind: number, bound: OutboxBound): Promise<void> {
-    try {
-      const db = await this.#ensure();
-      const tx = db.transaction(OUTBOX_BOUNDS, "readwrite");
-      const done = txDone(tx);
+    await this.#withWriteTx(OUTBOX_BOUNDS, (tx) => {
       tx.objectStore(OUTBOX_BOUNDS).put({
         key: outboxBoundKey(pubkey, kind),
         oldest: bound.oldest,
         newest: bound.newest,
       } satisfies OutboxBoundRow);
-      await done;
-    } catch (error) {
-      throw toStorageError(error);
-    }
+    });
   }
 
   async remove(ids: ReadonlyArray<string>): Promise<number> {
@@ -431,23 +460,21 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async #removeLocked(ids: ReadonlyArray<string>): Promise<number> {
-    const db = await this.#ensure();
-    const tx = db.transaction(WRITE_STORES, "readwrite");
-    const tombstones = tx.objectStore(TOMBSTONES);
-    const done = txDone(tx);
-    let n = 0;
-    for (const raw of ids) {
-      const id = raw.toLowerCase();
-      if (await this.#deleteEventRows(tx, id)) {
-        n += 1;
+    return this.#withWriteTx(WRITE_STORES, async (tx) => {
+      const tombstones = tx.objectStore(TOMBSTONES);
+      let n = 0;
+      for (const raw of ids) {
+        const id = raw.toLowerCase();
+        if (await this.#deleteEventRows(tx, id)) {
+          n += 1;
+        }
+        tombstones.put({ key: `id:${id}`, type: "id" } satisfies Tombstone);
+        tombstones.delete(`pending:${id}`);
+        this.#deletion.ids.add(id);
+        this.#deletion.pending.delete(id);
       }
-      tombstones.put({ key: `id:${id}`, type: "id" } satisfies Tombstone);
-      tombstones.delete(`pending:${id}`);
-      this.#deletion.ids.add(id);
-      this.#deletion.pending.delete(id);
-    }
-    await done;
-    return n;
+      return n;
+    });
   }
 
   async clear(): Promise<void> {
@@ -455,16 +482,14 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async #clearLocked(): Promise<void> {
-    const db = await this.#ensure();
     const stores = [...WRITE_STORES, OUTBOX_BOUNDS];
-    const tx = db.transaction(stores, "readwrite");
-    const done = txDone(tx);
-    for (const name of stores) {
-      tx.objectStore(name).clear();
-    }
-    this.#deletion.clear();
-    this.#replaceable.clear();
-    await done;
+    await this.#withWriteTx(stores, (tx) => {
+      for (const name of stores) {
+        tx.objectStore(name).clear();
+      }
+      this.#deletion.clear();
+      this.#replaceable.clear();
+    });
   }
 
   close(): void {

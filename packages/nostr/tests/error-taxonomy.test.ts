@@ -132,6 +132,36 @@ describe("DataLoader batch length", () => {
       "DataLoader batch function must return array of length 2, got 0",
     );
   });
+
+  test("a stale in-flight promise cannot evict a fresh same-key entry", async () => {
+    const gates: Array<() => void> = [];
+    const loader = new DataLoader<string, string>(
+      async (keys) =>
+        new Promise<ReadonlyArray<string>>((resolve) => {
+          gates.push(() => resolve(keys.map((k) => `v:${k}`)));
+        }),
+      { cache: false },
+    );
+    const p1 = loader.load("k");
+    await Promise.resolve(); // first batch dispatched, gated in-flight
+    loader.clear("k");
+    const p2 = loader.load("k");
+    await Promise.resolve(); // second batch dispatched, gated in-flight
+    gates[0]!(); // p1's batch resolves; its finally must not drop p2's entry
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const p3 = loader.load("k");
+    await Promise.resolve(); // let any third batch dispatch
+    // The stale settle deleted p2's inflight entry before the fix: p3 then
+    // fetched again instead of coalescing onto p2.
+    expect(gates).toHaveLength(2);
+    gates[1]!();
+    gates[2]?.();
+    await expect(p2).resolves.toBe("v:k");
+    await expect(p3).resolves.toBe("v:k");
+    await expect(p1).resolves.toBe("v:k");
+  });
 });
 
 function restoreGlobal(name: string, value: unknown): void {

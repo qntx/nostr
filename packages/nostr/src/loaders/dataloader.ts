@@ -58,13 +58,18 @@ export class DataLoader<K, V, C = K> {
         queueMicrotask(() => this.#dispatch());
       }
     });
-    const promise = (async (): Promise<V> => {
+    // Identity guard: clear()+re-load may have registered a fresh entry under
+    // this key; the stale settle must not evict it.
+    const cleanup = async (): Promise<V> => {
       try {
         return await pending;
       } finally {
-        this.#inflight.delete(cacheKey);
+        if (this.#inflight.get(cacheKey) === promise) {
+          this.#inflight.delete(cacheKey);
+        }
       }
-    })();
+    };
+    const promise = cleanup();
 
     this.#inflight.set(cacheKey, promise);
     if (this.#useCache) {
