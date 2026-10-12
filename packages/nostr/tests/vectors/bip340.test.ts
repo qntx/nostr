@@ -8,8 +8,8 @@ import { Keys } from "../../src/core/key.ts";
 import { bytesToHex, hexToBytes } from "../../src/core/util.ts";
 import type { SerializedEventVerifier } from "../../src/core/verifier.ts";
 
-// Official BIP-340 test vectors; nk-vectors asserts the same file in Rust
-// (crates/nk-vectors/tests/bip340.rs). Rows sign/verify an arbitrary 32-byte
+// Official BIP-340 test vectors; crates/interop asserts the same file in
+// Rust (crates/interop/tests/bip340.rs). Rows sign/verify an arbitrary 32-byte
 // "message" — the same (id, pubkey, sig) triple the library's
 // SerializedEventVerifier byte path sees, minus the event-hash pre-check (the
 // vector message plays the role of the event id).

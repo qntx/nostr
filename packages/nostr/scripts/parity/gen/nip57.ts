@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-57 `makeZapRequest`/`parseBolt11`/`validateZapReceipt`
 // semantics as frozen vectors shared by the TS test suite
-// (tests/vectors/nip57.test.ts) and the nk-* Rust crates. Every case output
+// (tests/vectors/nip57.test.ts) and crates/interop. Every case output
 // is produced by the real TS API.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";

@@ -1,13 +1,13 @@
 // Canonical `ContentBlock` JSON for the NIP-27 vectors (`vectors/nip27/
 // codec.json`, produced by gen/nip27.ts) and the `nip27.tokenize`
-// differential stream (diff.ts). Mirrored by the Rust replay in
-// crates/nk-vectors/tests/common/. Key sets are fixed on both sides —
-// absent pointer hints serialize as null.
+// differential stream (diff.ts). Mirrored by `common::content_blocks` in
+// crates/interop/tests/common/. Key sets are fixed on both sides — absent
+// pointer hints serialize as null.
 //
-// The Rust `Reference` enum cannot tell `npub` from a relay-less `nprofile`
-// (both are `ProfilePointer` with `relays: []`), so the canonical shape
-// normalizes by pointer family: `profile` / `event` / `address`, with
-// `relays`/`author`/`kind` filled to `[]`/`null` when absent.
+// The canonical shape normalizes pointers by family — `profile` / `event` /
+// `address`, with `relays`/`author`/`kind` filled to `[]`/`null` when
+// absent — so an `npub` and a relay-less `nprofile` collapse to the same
+// `profile` block.
 // oxlint-disable typescript/no-restricted-types -- the canonical vector JSON encodes absent hints as null
 
 import type { AddressPointer, EventPointer, ProfilePointer } from "../../src/nips/nip19.ts";

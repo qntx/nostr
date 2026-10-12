@@ -25,7 +25,7 @@ Runtime dependencies (`@noble/*`, `@scure/base`) use caret ranges so consumers c
 - `crates/interop` is a standalone Cargo project (test targets only, no library): its `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `rustfmt.toml`, `clippy.toml`, and `deny.toml` all live inside it. The repository root has no Cargo files.
 - Rust crates are not published and are not versioned with the npm packages.
 - Follow the Rust API Guidelines. No panics and no `unwrap`/`expect` outside tests.
-- Shared test vectors live in `vectors/` (see `vectors/README.md`) and every capability is tracked in `parity.json`.
+- Shared test vectors live in `vectors/` (see `vectors/README.md`); `parity.json` lists each protocol capability that has shared vectors, its TS tests, and its rust-nostr counterpart.
 - TOML is formatted by taplo (`.taplo.toml`, aligned `=`); run `taplo fmt`, and keep `taplo fmt --check` green in `bun run lint`.
 
 ## Commands

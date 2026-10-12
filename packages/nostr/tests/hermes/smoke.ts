@@ -160,8 +160,8 @@ export async function main(): Promise<void> {
 
   // Every url-normalize vector through normalizeURL on the whatwg-url
   // polyfill: identical output strings for valid inputs, UrlError for
-  // invalid ones. A mismatch fails the smoke (NK-ADR-003 adjudicates any
-  // three-way divergence between TS, Rust, and Hermes).
+  // invalid ones. A mismatch fails the smoke; any three-way divergence
+  // between TS, rust-nostr, and Hermes is adjudicated, not ignored.
   for (const c of urlNormalizeVector.cases as UrlNormalizeCase[]) {
     if (c.output === undefined) {
       assert(c.error === "UrlError", `url vector error kind ${JSON.stringify(c.input)}`);

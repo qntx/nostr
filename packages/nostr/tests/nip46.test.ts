@@ -156,8 +156,8 @@ describe("nip46 protocol", () => {
   });
 
   // N10: `JSON.parse` accepts `\ud800`-style lone surrogates while serde_json
-  // (`nk::nips`) rejects them — the codec rejects them as invalid JSON so both
-  // sides agree.
+  // (rust-nostr parses with serde_json) rejects them — the codec rejects
+  // them as invalid JSON so both sides agree.
   test("decodeNip46Request rejects lone surrogates in strings and keys", () => {
     const surrogate = String.raw`\ud800`;
     for (const json of [

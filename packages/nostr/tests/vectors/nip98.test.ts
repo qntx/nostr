@@ -13,7 +13,7 @@ import {
   validateAuthEvent,
 } from "../../src/nips/nip98.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`.
 type AuthCase = {
   url: string;

@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-27 `parseContent` tokenizer semantics as frozen
 // vectors shared by the TS test suite (tests/vectors/nip27.test.ts) and the
-// nk-* Rust crates. The canonical `ContentBlock` JSON encoding lives in
+// crates/interop. The canonical `ContentBlock` JSON encoding lives in
 // ../content-json.ts and is shared with the seeded `nip27.tokenize`
 // differential stream (diff.ts).
 

@@ -11,7 +11,7 @@ import type { Tag } from "../../src/core/tag.ts";
 import { buildReplyTags, parseThreadTags, replyTo } from "../../src/nips/nip10.ts";
 import type { ReplyTagsOptions } from "../../src/nips/nip10.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`. The canonical
 // `ThreadReferences` JSON shape lives in scripts/parity/thread-json.ts.
 type ParseCase = {

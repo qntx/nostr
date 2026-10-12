@@ -3,16 +3,16 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-17 `wrapDirectMessage`/`buildChatMessageRumor`/
 // `normalizeRecipients`/relay-list semantics as frozen vectors shared by the
-// TS test suite (tests/vectors/nip17.test.ts) and the nk-* Rust crates.
+// TS test suite (tests/vectors/nip17.test.ts) and crates/interop.
 //
 // Every wrap is produced by the real TS API under a deterministic entropy
 // stream, exactly like gen/nip59.ts: `WrapOptions.randomBytes` feeds each
 // gift wrap's ephemeral key, timestamp offset, NIP-44 nonce and BIP-340 aux,
 // and the injected `Nip59Crypto` wrapper draws each seal's nonce/aux from the
-// same stream — matching `nk`'s draw order per copy (seal: [offset] → nonce
-// → aux; gift wrap: key → [offset] → nonce → aux), self copy first. The
-// consumed prefix is recorded per case as `entropy`, which the Rust runner
-// replays through a scripted `CryptoRng`.
+// same stream — draw order per copy: seal [offset] → nonce → aux; gift
+// wrap key → [offset] → nonce → aux, self copy first. The consumed prefix
+// is recorded per case as `entropy`, which the TS test suite replays
+// through a sequential reader.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-42 `makeAuthEvent`/`isAuthRequired` semantics as frozen
 // vectors shared by the TS test suite (tests/vectors/nip42.test.ts) and the
-// nk-* Rust crates.
+// crates/interop.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

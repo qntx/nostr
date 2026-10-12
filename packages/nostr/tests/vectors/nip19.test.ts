@@ -17,7 +17,7 @@ import {
 } from "../../src/index.ts";
 import type { DecodedResult } from "../../src/nips/nip19.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun packages/nostr/scripts/parity/gen/all.ts`. The runner executes both
 // vectors/nip19/codec.json and vectors/nip19/official.json.
 type EntityJson =

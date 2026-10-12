@@ -28,7 +28,8 @@ packages/nostr-native/ @qntx/nostr-native — React Native Nitro C++ backend
 crates/interop/       qntx-nostr-interop — runs vectors/ and the TS
                       differential streams against rust-nostr
 vectors/              shared cross-language test vectors (see vectors/README.md)
-parity.json           capability ledger consumed by scripts/parity/check.ts
+parity.json           ledger of shared-vector capabilities consumed by
+                      scripts/parity/check.ts
 scripts/              repo tooling (check-version, sync-versions, parity/);
                       script tests run under the root vp test
 ```

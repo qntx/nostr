@@ -4,8 +4,7 @@ import { basename, join } from "node:path";
 
 type JsonObject = Record<string, unknown>;
 
-const TIERS = new Set(["A", "B", "C"]);
-const STATUSES = new Set(["stable", "ts-only", "planned", "n/a"]);
+const ENTRY_KEYS = new Set(["id", "ts", "vectors", "rust", "rustNote"]);
 
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -19,16 +18,6 @@ function asStrings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
-/** The `ts` side of a capability entry: `{ module, tests }`. */
-function tsPaths(side: unknown): { module: string | undefined; tests: string[] } {
-  const record = asRecord(side);
-  const { module } = record;
-  return {
-    module: typeof module === "string" ? module : undefined,
-    tests: asStrings(record["tests"]),
-  };
-}
-
 /**
  * Validates parity.json against the vectors/ tree. Returns error messages; an empty array means the
  * file is consistent.
@@ -40,15 +29,14 @@ export function checkParity(
   readFile: (path: string) => string,
 ): string[] {
   const errors: string[] = [];
-  const { capabilities } = asRecord(parity);
-  if (!Array.isArray(capabilities)) {
-    return ['parity.json: missing "capabilities" array'];
+  if (!Array.isArray(parity)) {
+    return ["parity.json: top level must be an array"];
   }
 
   const seen = new Set<string>();
   const referencedVectors = new Set<string>();
 
-  for (const item of capabilities) {
+  for (const item of parity) {
     const cap = asRecord(item);
     const { id: rawId } = cap;
     const id = typeof rawId === "string" ? rawId : "?";
@@ -61,23 +49,21 @@ export function checkParity(
     }
     seen.add(id);
 
-    const { tier } = cap;
-    if (typeof tier !== "string" || !TIERS.has(tier)) {
-      errors.push(`${label}: tier must be one of A|B|C`);
-    }
-    const { status } = cap;
-    if (typeof status !== "string" || !STATUSES.has(status)) {
-      errors.push(`${label}: status must be one of stable|ts-only|planned|n/a`);
-    } else {
-      if (status === "n/a" && tier !== "C") {
-        errors.push(`${label}: status "n/a" is only allowed for tier C`);
-      }
-      if (tier === "C" && status !== "n/a") {
-        errors.push(`${label}: tier C must have status "n/a"`);
+    for (const key of Object.keys(cap)) {
+      if (!ENTRY_KEYS.has(key)) {
+        errors.push(`${label}: unknown key "${key}"`);
       }
     }
 
-    const ts = tsPaths(cap["ts"]);
+    const ts = asRecord(cap["ts"]);
+    const tsModule = typeof ts["module"] === "string" ? ts["module"] : undefined;
+    if (tsModule === undefined || tsModule === "") {
+      errors.push(`${label}: ts.module must be a non-empty string`);
+    }
+    const tsTests = asStrings(ts["tests"]);
+    if (tsTests.length === 0) {
+      errors.push(`${label}: ts.tests must list at least one test file`);
+    }
 
     // `rust` is either null (capability is not exercised against rust-nostr,
     // `rustNote` explains why) or `{ api, tests }` where `api` names the
@@ -85,7 +71,7 @@ export function checkParity(
     // runner files under crates/interop.
     const rustValue = cap["rust"];
     const { rustNote } = cap;
-    const rust: { api: string | undefined; tests: string[] } = { api: undefined, tests: [] };
+    const rust: { tests: string[] } = { tests: [] };
     if (rustValue === null || rustValue === undefined) {
       if (typeof rustNote !== "string" || rustNote === "") {
         errors.push(`${label}: rust is null but rustNote is missing or empty`);
@@ -94,8 +80,6 @@ export function checkParity(
       const { api } = rustValue;
       if (typeof api !== "string" || api === "") {
         errors.push(`${label}: rust.api must be a non-empty string naming the rust-nostr path`);
-      } else {
-        rust.api = api;
       }
       rust.tests = asStrings(rustValue["tests"]);
       if (rust.tests.length === 0) {
@@ -108,15 +92,18 @@ export function checkParity(
       errors.push(`${label}: rust must be null or an object`);
     }
 
-    const testFiles = [...ts.tests, ...rust.tests];
+    const testFiles = [...tsTests, ...rust.tests];
 
-    for (const path of [ts.module, ...testFiles]) {
+    for (const path of [tsModule, ...testFiles]) {
       if (typeof path === "string" && !fileExists(path)) {
         errors.push(`${label}: referenced path does not exist: ${path}`);
       }
     }
 
     const vectors = asStrings(cap["vectors"]);
+    if (vectors.length === 0) {
+      errors.push(`${label}: vectors must list at least one vector file`);
+    }
     const citedBy = (tests: string[], vector: string): boolean => {
       const needles = [vector, basename(vector)];
       return tests.some((testFile) => {
@@ -133,19 +120,8 @@ export function checkParity(
         errors.push(`${label}: vector file does not exist: ${vector}`);
         continue;
       }
-      // `status` is the TS status only; a listed vector must be cited by at
-      // least one test file on either side.
       if (!citedBy(testFiles, vector)) {
         errors.push(`${label}: vector ${vector} is not referenced by any of its test files`);
-      }
-    }
-
-    if (status === "stable") {
-      if (ts.tests.length === 0) {
-        errors.push(`${label}: "stable" requires non-empty ts.tests`);
-      }
-      if (tier === "A" && vectors.length === 0) {
-        errors.push(`${label}: tier A "stable" requires at least one vector file`);
       }
     }
   }

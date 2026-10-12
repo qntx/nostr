@@ -4,7 +4,7 @@
 // Captures the TS NIP-65 `parseRelayList`/`relayListToTags`/
 // `relayListEventBuilder`/`readRelays`/`writeRelays` semantics as frozen
 // vectors shared by the TS test suite (tests/vectors/nip65.test.ts) and the
-// nk-* Rust crates.
+// crates/interop.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

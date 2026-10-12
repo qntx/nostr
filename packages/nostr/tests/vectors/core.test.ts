@@ -41,7 +41,7 @@ import {
 import { formatEventAddress, parseEventAddress, Tag } from "../../src/core/tag.ts";
 import { assertHex32, bytesToHex, hexToBytes, isHex32, normalizeURL } from "../../src/core/util.ts";
 
-// Shared vectors consumed by the nk-* Rust crates as well; regenerate with
+// Shared vectors also replayed against rust-nostr by crates/interop; regenerate with
 // `bun scripts/parity/gen/core.ts`.
 type Cases<T> = { cases: T[] };
 

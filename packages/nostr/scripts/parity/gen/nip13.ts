@@ -2,7 +2,7 @@
 // Generates vectors/nip13/codec.json — run with
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-13 `getPow`/`minePow` semantics as frozen vectors shared
-// by the TS test suite (tests/vectors/nip13.test.ts) and the nk-* Rust crates.
+// by the TS test suite (tests/vectors/nip13.test.ts) and crates/interop.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
