@@ -14,7 +14,7 @@ import {
 import type { Event } from "../src/index.ts";
 import { MAX_MERGE_CURSORS } from "../src/storage/idb-query.ts";
 import { IDB_VERSION } from "../src/storage/idb-schema.ts";
-import { installIdbMock, seedIdbV1, seedIdbV2, seedIdbV3 } from "./helpers/idb-mock.ts";
+import { installIdbMock, seedIdbV1, seedIdbV2 } from "./helpers/idb-mock.ts";
 import type { IdbMock } from "./helpers/idb-mock.ts";
 
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
@@ -179,36 +179,6 @@ describe("IndexedDbEventStore", () => {
     const q = await b.query([{ kinds: [Kind.TextNote], authors: [keys.publicKey] }]);
     expect(q.map((e) => e.id)).toStrictEqual([note.id]);
     b.close();
-  });
-
-  test("upgrades v1 to v2; query and kind-5 put do not getAll events", async () => {
-    const keys = Keys.fromSecretKey(SK);
-    const other = Keys.generate();
-    const note = EventBuilder.textNote("v1").createdAt(1).signWithKeys(keys);
-    const meta = EventBuilder.metadata({ name: "v1" }).createdAt(10).signWithKeys(keys);
-    const foreign = EventBuilder.deletion([note.id]).createdAt(2).signWithKeys(other);
-    const del = EventBuilder.deletion([note.id]).createdAt(3).signWithKeys(keys);
-    await seedIdbV1("upgrade-db", [note, meta, foreign, del]);
-
-    const store = new IndexedDbEventStore({ dbName: "upgrade-db" });
-    await store.open();
-    await expect(store.get(note.id)).resolves.toBeUndefined();
-    await expect(store.get(del.id)).resolves.toBeDefined();
-    await expect(store.get(meta.id)).resolves.toBeDefined();
-
-    mock.resetStats();
-    const found = await store.query([{ kinds: [1], authors: [keys.publicKey] }]);
-    expect(found).toHaveLength(0);
-    expect(mock.eventsGetAllCount()).toBe(0);
-
-    const extra = EventBuilder.textNote("after").createdAt(4).signWithKeys(keys);
-    await store.put(extra);
-    mock.resetStats();
-    const kill = EventBuilder.deletion([extra.id]).createdAt(5).signWithKeys(keys);
-    await expect(store.put(kill)).resolves.toBe("deleted");
-    expect(mock.eventsGetAllCount()).toBe(0);
-    await expect(store.get(extra.id)).resolves.toBeUndefined();
-    store.close();
   });
 
   test("replaceable replace deletes old tag_refs and addresses", async () => {
@@ -508,26 +478,6 @@ describe("IndexedDbEventStore", () => {
     store.close();
   });
 
-  test("v1 superseded replaceable is omitted after a-tag deletion", async () => {
-    const keys = Keys.fromSecretKey(SK);
-    const meta1 = EventBuilder.metadata({ name: "v1" }).createdAt(10).signWithKeys(keys);
-    const meta2 = EventBuilder.metadata({ name: "v2" }).createdAt(20).signWithKeys(keys);
-    await seedIdbV1("coord-leak", [meta1, meta2]);
-    const store = new IndexedDbEventStore({ dbName: "coord-leak" });
-    await store.open();
-    const del = EventBuilder.deletion([{ address: `0:${keys.publicKey}:` }], "gone")
-      .createdAt(25)
-      .signWithKeys(keys);
-    await expect(store.put(del)).resolves.toBe("deleted");
-    mock.resetStats();
-    const filter = { kinds: [Kind.Metadata], authors: [keys.publicKey] };
-    await expect(store.query([filter])).resolves.toStrictEqual([]);
-    await expect(store.count([filter])).resolves.toBe(0);
-    await expect(store.negentropyItems(filter)).resolves.toStrictEqual([]);
-    expect(mock.eventsGetAllCount()).toBe(0);
-    store.close();
-  });
-
   test("ids+limit still applies authors matchFilter", async () => {
     const keys = Keys.fromSecretKey(SK);
     const other = Keys.generate();
@@ -644,87 +594,45 @@ describe("IndexedDbEventStore", () => {
     store.close();
   });
 
-  test("v3 compact deletes leftover kind 0 and tag_refs", async () => {
+  test("a previous-version database is dropped and recreated empty", async () => {
     const keys = Keys.fromSecretKey(SK);
-    const meta1 = EventBuilder.metadata({ name: "v1" })
-      .tag(["e", EID])
-      .tag(["p", keys.publicKey])
-      .createdAt(10)
+    const stale = EventBuilder.textNote("stale")
+      .tag(["e", EID.toUpperCase()])
+      .createdAt(1)
       .signWithKeys(keys);
-    const meta2 = EventBuilder.metadata({ name: "v2" })
-      .tag(["e", EID])
-      .createdAt(20)
-      .signWithKeys(keys);
-    await seedIdbV1("compact-k0", [meta1, meta2]);
-    const store = new IndexedDbEventStore({ dbName: "compact-k0" });
-    await store.open();
-    mock.resetStats();
-    const found = await store.query([{ kinds: [Kind.Metadata] }]);
-    expect(found).toHaveLength(1);
-    expect(found[0]!.id).toBe(meta2.id);
-    await expect(store.count([{ kinds: [Kind.Metadata] }])).resolves.toBe(1);
-    await expect(store.get(meta1.id)).resolves.toBeUndefined();
-    expect(mock.eventsGetAllCount()).toBe(0);
-    const got9 = await store.query([{ "#e": [EID] }]);
-    expect(got9.map((e) => e.id)).toStrictEqual([meta2.id]);
-    await expect(store.query([{ "#p": [keys.publicKey] }])).resolves.toStrictEqual([]);
-    store.close();
-  });
-
-  test("v2 leftover kind 0 is compacted on open", async () => {
-    const keys = Keys.fromSecretKey(SK);
-    const loser = EventBuilder.metadata({ name: "v1" })
-      .tag(["e", EID])
-      .tag(["p", keys.publicKey])
-      .createdAt(10)
-      .signWithKeys(keys);
-    const winner = EventBuilder.metadata({ name: "v2" })
-      .tag(["e", EID])
-      .createdAt(20)
-      .signWithKeys(keys);
-    const eVal = EID.toLowerCase();
-    const pVal = keys.publicKey.toLowerCase();
-    await seedIdbV2("v2-compact", {
-      events: [loser, winner],
-      addresses: [
-        { address: `0:${keys.publicKey}:`, id: winner.id, created_at: winner.created_at },
-      ],
+    await seedIdbV2("reset-db", {
+      events: [stale],
+      addresses: [{ address: `0:${keys.publicKey}:`, id: stale.id, created_at: stale.created_at }],
       tagRefs: [
         {
-          key: `e:${eVal}:${loser.id.toLowerCase()}`,
+          key: `e:${EID.toUpperCase()}:${stale.id}`,
           name: "e",
-          value: eVal,
-          id: loser.id.toLowerCase(),
-          created_at: loser.created_at,
-        },
-        {
-          key: `p:${pVal}:${loser.id.toLowerCase()}`,
-          name: "p",
-          value: pVal,
-          id: loser.id.toLowerCase(),
-          created_at: loser.created_at,
-        },
-        {
-          key: `e:${eVal}:${winner.id.toLowerCase()}`,
-          name: "e",
-          value: eVal,
-          id: winner.id.toLowerCase(),
-          created_at: winner.created_at,
+          value: EID.toUpperCase(),
+          id: stale.id,
+          created_at: stale.created_at,
         },
       ],
     });
-    const store = new IndexedDbEventStore({ dbName: "v2-compact" });
+    const store = new IndexedDbEventStore({ dbName: "reset-db" });
     await store.open();
-    const found = await store.query([{ kinds: [0] }]);
-    expect(found).toHaveLength(1);
-    expect(found[0]!.id).toBe(winner.id);
-    await expect(store.get(loser.id)).resolves.toBeUndefined();
-    const got10 = await store.query([{ "#e": [EID] }]);
-    expect(got10.map((e) => e.id)).toStrictEqual([winner.id]);
-    await expect(store.query([{ "#p": [keys.publicKey] }])).resolves.toStrictEqual([]);
-    mock.resetStats();
-    await store.query([{ kinds: [0] }]);
-    expect(mock.eventsGetAllCount()).toBe(0);
+    await expect(store.get(stale.id)).resolves.toBeUndefined();
+    await expect(store.query([{ "#e": [EID.toUpperCase()] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ kinds: [1] }])).resolves.toStrictEqual([]);
+    // The recreated schema is fully usable.
+    await expect(store.put(stale)).resolves.toBe("accepted");
+    await expect(store.get(stale.id)).resolves.toBeDefined();
+    store.close();
+  });
+
+  test("a v1 database (events-only schema) is reset the same way", async () => {
+    const keys = Keys.fromSecretKey(SK);
+    const stale = EventBuilder.textNote("stale").createdAt(1).signWithKeys(keys);
+    await seedIdbV1("reset-v1-db", [stale]);
+    const store = new IndexedDbEventStore({ dbName: "reset-v1-db" });
+    await store.open();
+    await expect(store.get(stale.id)).resolves.toBeUndefined();
+    await expect(store.query([{ kinds: [1] }])).resolves.toStrictEqual([]);
+    await expect(store.put(stale)).resolves.toBe("accepted");
     store.close();
   });
 
@@ -876,23 +784,6 @@ describe("IndexedDbEventStore", () => {
       { id: high.id, created_at: 5 },
     ]);
     expect(itemCompare(low, high)).toBeLessThan(0);
-    store.close();
-  });
-
-  test("v1 non-canonical rows are dropped on upgrade", async () => {
-    const keys = Keys.fromSecretKey(SK);
-    const note = EventBuilder.textNote("v1").tag(["e", EID]).createdAt(1).signWithKeys(keys);
-    const bad = { ...note, pubkey: note.pubkey.toUpperCase() };
-    const good = EventBuilder.textNote("ok").createdAt(2).signWithKeys(keys);
-    await seedIdbV1("case-upgrade", [bad, good]);
-    const store = new IndexedDbEventStore({ dbName: "case-upgrade" });
-    await store.open();
-    mock.resetStats();
-    await expect(store.query([{ kinds: [1] }])).resolves.toHaveLength(1);
-    await expect(store.get(bad.id)).resolves.toBeUndefined();
-    const got17 = await store.get(good.id);
-    expect(got17?.id).toBe(good.id);
-    expect(mock.eventsGetAllCount()).toBe(0);
     store.close();
   });
 
@@ -1072,19 +963,6 @@ describe("IndexedDbEventStore", () => {
     await reopened.clear();
     await expect(reopened.getOutboxBound(keys.publicKey, Kind.TextNote)).resolves.toBeUndefined();
     reopened.close();
-  });
-
-  test("v3 db gains outbox_bounds on open", async () => {
-    const keys = Keys.fromSecretKey(SK);
-    await seedIdbV3("v3-bounds");
-    const store = new IndexedDbEventStore({ dbName: "v3-bounds" });
-    await store.open();
-    await store.setOutboxBound(keys.publicKey, 1, { oldest: 4, newest: 8 });
-    await expect(store.getOutboxBound(keys.publicKey, 1)).resolves.toStrictEqual({
-      oldest: 4,
-      newest: 8,
-    });
-    store.close();
   });
 
   test("outbox bound derive uses prefix heads not getAll", async () => {

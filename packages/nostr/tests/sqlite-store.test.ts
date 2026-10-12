@@ -140,6 +140,40 @@ describe("SqliteEventStore", () => {
     }
   });
 
+  test("a fresh database is stamped with the current schema version", async () => {
+    const { driver, store } = await openStore();
+    try {
+      const rows = await driver.all<{ user_version: number }>("PRAGMA user_version");
+      expect(rows[0]?.user_version).toBe(2);
+      await expect(store.put(note(alice(), "x", 1))).resolves.toBe("accepted");
+    } finally {
+      driver.close();
+    }
+  });
+
+  test("a non-current schema version is dropped and recreated empty", async () => {
+    const { driver, store } = await openStore();
+    try {
+      const stale = note(alice(), "stale", 1, [["e", "AA".repeat(32)]]);
+      await expect(store.put(stale)).resolves.toBe("accepted");
+      // Pretend the database was written by the previous schema.
+      await driver.exec("PRAGMA user_version = 1");
+
+      const reopened = await SqliteEventStore.open(driver);
+      await expect(reopened.get(stale.id)).resolves.toBeUndefined();
+      await expect(reopened.query([{ "#e": ["AA".repeat(32)] }])).resolves.toStrictEqual([]);
+      await expect(reopened.query([{ kinds: [1] }])).resolves.toStrictEqual([]);
+
+      // The recreated schema is fully usable.
+      await expect(reopened.put(stale)).resolves.toBe("accepted");
+      await expect(reopened.get(stale.id)).resolves.toBeDefined();
+      const rows = await driver.all<{ user_version: number }>("PRAGMA user_version");
+      expect(rows[0]?.user_version).toBe(2);
+    } finally {
+      driver.close();
+    }
+  });
+
   test("#e and #p tag filters match case-insensitively", async () => {
     const { driver, store } = await openStore();
     try {

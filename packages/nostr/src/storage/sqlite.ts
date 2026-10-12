@@ -65,7 +65,9 @@ export type SqlDriver = {
 
 /** Bound values per `IN (...)` list; stays below every host's variable limit. */
 const IN_CHUNK = 500;
-const SCHEMA_VERSION = 1;
+// Bump on any schema change: a database whose user_version does not match is
+// dropped and recreated, not migrated (the stores are caches of relay data).
+const SCHEMA_VERSION = 2;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS events (
@@ -108,6 +110,15 @@ CREATE TABLE IF NOT EXISTS outbox_bounds (
   newest INTEGER NOT NULL,
   PRIMARY KEY(pubkey, kind)
 );
+`;
+
+// Dropping a table also drops its indexes. Child tables go before `events`
+// so the drop is safe under `PRAGMA foreign_keys`.
+const DROP_SQL = `
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS tombstones;
+DROP TABLE IF EXISTS outbox_bounds;
+DROP TABLE IF EXISTS events;
 `;
 
 type EventRow = {
@@ -285,15 +296,16 @@ export class SqliteEventStore implements EventStore {
     try {
       const rows = await this.#driver.all<{ user_version: number }>("PRAGMA user_version");
       const version = rows[0]?.user_version ?? 0;
-      if (version !== 0 && version !== SCHEMA_VERSION) {
-        throw toStorageError(new Error(`unsupported sqlite event store schema version ${version}`));
+      if (version === SCHEMA_VERSION) {
+        return;
       }
-      // Every statement is IF NOT EXISTS, so this is a no-op on an existing schema and also
-      // picks up objects (indexes) added to SCHEMA_SQL after a database was created.
-      await this.#driver.exec(SCHEMA_SQL);
-      if (version === 0) {
-        await this.#driver.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-      }
+      await this.#driver.transaction(async (tx) => {
+        if (version !== 0) {
+          await tx.exec(DROP_SQL);
+        }
+        await tx.exec(SCHEMA_SQL);
+        await tx.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+      });
     } catch (error) {
       throw toStorageError(error);
     }
