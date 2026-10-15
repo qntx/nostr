@@ -484,7 +484,7 @@ describe("createFakeNip46Signer", () => {
           secret: "s",
         },
         {
-          clientSecretKey: clientKeys.secretKey,
+          clientSigner: new KeysSigner(clientKeys),
           createPool: () =>
             new Pool({
               websocketImplementation: net.websocketImplementation,

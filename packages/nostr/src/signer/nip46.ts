@@ -5,14 +5,11 @@ import { errorMessage } from "../core/error.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "../core/event.ts";
 import { signedMatchesUnsigned, validateSignedEvent } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
-import { SecretKey, finalizeEvent, getPublicKey, toSecretKey } from "../core/key.ts";
-import type { SecretKeyInput } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import { invokeSafely } from "../core/report.ts";
 import { Tag } from "../core/tag.ts";
 import { bytesToHex, isHex32, nowSeconds } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
-import { decrypt, encrypt, getConversationKey } from "../nips/nip44.ts";
 import {
   Nip46Error,
   decodeNip46Response,
@@ -69,8 +66,12 @@ export type Nip46SignerOptions = {
   relays?: ReadonlyArray<string> | undefined;
   /** Bunker connection secret when the pointer or bunker:// URL has none. */
   secret?: string | undefined;
-  /** Local client key used to encrypt RPC (not the remote user key). */
-  clientSecretKey?: SecretKeyInput | undefined;
+  /**
+   * Local client identity used to encrypt and sign RPC (not the remote user key). Must implement
+   * `nip44Encrypt`/`nip44Decrypt` — the NIP-46 encryption layer is NIP-44. Construction rejects a
+   * signer without them.
+   */
+  clientSigner: NostrSigner;
   /** Called when bunker returns `auth_url` for a pending request. */
   onAuthUrl?: ((url: string) => void) | undefined;
   /** Per-request timeout in ms. Default 30s. */
@@ -86,11 +87,40 @@ export type Nip46SignerOptions = {
   metadata?: ClientMetadata | undefined;
 };
 
-function resolveClientSecret(key?: SecretKeyInput): SecretKey {
-  if (key === undefined) {
-    return SecretKey.generate();
+/** The client-signer surface NIP-46 needs: signing plus the NIP-44 encryption layer. */
+type ClientSigner = Pick<NostrSigner, "getPublicKey" | "signEvent"> &
+  Required<Pick<NostrSigner, "nip44Encrypt" | "nip44Decrypt">>;
+
+/**
+ * Validate `opts.clientSigner` up front — a missing signer or one without NIP-44 cannot run the RPC
+ * encryption layer, so construction fails closed with {@link Nip46Error} rather than timing out
+ * mid-handshake.
+ */
+function requireClientSigner(opts: Nip46SignerOptions): ClientSigner {
+  const signer = opts.clientSigner;
+  if (signer === undefined) {
+    throw new Nip46Error("Nip46Signer requires clientSigner");
   }
-  return toSecretKey(key);
+  const { nip44Encrypt, nip44Decrypt } = signer;
+  if (typeof nip44Encrypt !== "function" || typeof nip44Decrypt !== "function") {
+    throw new Nip46Error("clientSigner must implement nip44Encrypt and nip44Decrypt");
+  }
+  // Member calls keep the signer's `this` (e.g. KeysSigner private state).
+  return {
+    getPublicKey: async () => signer.getPublicKey(),
+    signEvent: async (unsigned) => signer.signEvent(unsigned),
+    nip44Encrypt: async (peer, plaintext) => nip44Encrypt.call(signer, peer, plaintext),
+    nip44Decrypt: async (peer, payload) => nip44Decrypt.call(signer, peer, payload),
+  };
+}
+
+async function clientPublicKeyOf(signer: ClientSigner): Promise<string> {
+  const reported = await signer.getPublicKey();
+  const pubkey = reported.toLowerCase();
+  if (!isHex32(pubkey)) {
+    throw new Nip46Error("clientSigner returned an invalid public key");
+  }
+  return pubkey;
 }
 
 function resolveTransport(opts: Nip46SignerOptions): { pool: Nip46Transport; ownsPool: boolean } {
@@ -162,10 +192,9 @@ type PendingRequest = {
 export class Nip46Signer implements NostrSigner {
   readonly #pool: Nip46Transport;
   readonly #ownsPool: boolean;
-  readonly #clientSecret: SecretKey;
+  readonly #clientSigner: ClientSigner;
   readonly #clientPubkey: string;
   readonly #pointer: BunkerPointer;
-  readonly #conversationKey: Uint8Array;
   readonly #onAuthUrl: ((url: string) => void) | undefined;
   readonly #timeoutMs: number;
   readonly #authTimeoutMs: number;
@@ -178,7 +207,8 @@ export class Nip46Signer implements NostrSigner {
   #cachedRemotePubkey: string | undefined;
 
   private constructor(
-    clientSecret: SecretKey,
+    clientSigner: ClientSigner,
+    clientPubkey: string,
     pointer: BunkerPointer,
     pool: Nip46Transport,
     ownsPool: boolean,
@@ -187,8 +217,8 @@ export class Nip46Signer implements NostrSigner {
     if (pointer.relays.length === 0) {
       throw new Nip46Error("bunker pointer has no relays");
     }
-    this.#clientSecret = clientSecret;
-    this.#clientPubkey = getPublicKey(clientSecret);
+    this.#clientSigner = clientSigner;
+    this.#clientPubkey = clientPubkey;
     this.#pointer = {
       pubkey: pointer.pubkey.toLowerCase(),
       relays: [...pointer.relays],
@@ -197,7 +227,6 @@ export class Nip46Signer implements NostrSigner {
     this.#relays = [...pointer.relays];
     this.#pool = pool;
     this.#ownsPool = ownsPool;
-    this.#conversationKey = getConversationKey(clientSecret.bytes, this.#pointer.pubkey);
     this.#onAuthUrl = opts.onAuthUrl;
     this.#timeoutMs = opts.timeoutMs ?? 30_000;
     this.#authTimeoutMs = opts.authTimeoutMs ?? 300_000;
@@ -219,20 +248,15 @@ export class Nip46Signer implements NostrSigner {
 
   /**
    * Subscribe to an already-known bunker pointer. Does not send the `connect` RPC (reconnect
-   * without a new handshake). Requires `clientSecretKey` — reconnect must reuse the original client
-   * identity.
+   * without a new handshake). Requires `clientSigner` — reconnect must reuse the original client
+   * identity. Async because the client public key comes from the signer.
    */
-  static fromBunker(
-    pointer: BunkerPointer,
-    opts: Nip46SignerOptions & { clientSecretKey: SecretKeyInput },
-  ): Nip46Signer {
-    if (opts.clientSecretKey === undefined) {
-      throw new Nip46Error("fromBunker requires clientSecretKey");
-    }
+  static async fromBunker(pointer: BunkerPointer, opts: Nip46SignerOptions): Promise<Nip46Signer> {
+    const clientSigner = requireClientSigner(opts);
+    const clientPubkey = await clientPublicKeyOf(clientSigner);
     const resolved = applyPointerOpts(pointer, opts);
-    const sk = resolveClientSecret(opts.clientSecretKey);
     const { pool, ownsPool } = resolveTransport(opts);
-    const signer = new Nip46Signer(sk, resolved, pool, ownsPool, opts);
+    const signer = new Nip46Signer(clientSigner, clientPubkey, resolved, pool, ownsPool, opts);
     signer.#startSubscription();
     return signer;
   }
@@ -244,13 +268,10 @@ export class Nip46Signer implements NostrSigner {
    */
   static async connect(
     input: string | BunkerPointer,
-    opts: Nip46SignerOptions = {},
+    opts: Nip46SignerOptions,
   ): Promise<Nip46Signer> {
     const pointer = resolveBunkerPointer(input);
-    const signer = Nip46Signer.fromBunker(pointer, {
-      ...opts,
-      clientSecretKey: resolveClientSecret(opts.clientSecretKey),
-    });
+    const signer = await Nip46Signer.fromBunker(pointer, opts);
     try {
       await signer.connectRemote();
       try {
@@ -268,28 +289,26 @@ export class Nip46Signer implements NostrSigner {
 
   /**
    * Wait for a bunker to complete a client-initiated `nostrconnect://` handshake. Requires
-   * `clientSecretKey` whose pubkey matches the URI client pubkey (build the URI with
-   * {@link createNostrConnectURI} after generating keys).
+   * `clientSigner` whose pubkey matches the URI client pubkey (build the URI with
+   * {@link createNostrConnectURI} and the signer's public key).
    */
   static async fromNostrConnectURI(
     connectionURI: string,
     opts: Nip46SignerOptions & {
-      clientSecretKey: SecretKeyInput;
       signal?: AbortSignal;
       handshakeTimeoutMs?: number;
     },
   ): Promise<Nip46Signer> {
     throwIfAborted(opts.signal);
+    const clientSigner = requireClientSigner(opts);
     const params = parseNostrConnectURI(connectionURI);
-    const sk = resolveClientSecret(opts.clientSecretKey);
-    const clientPubkey = getPublicKey(sk);
-
-    if (clientPubkey !== params.clientPubkey) {
-      throw new Nip46Error("client secret key does not match nostrconnect client pubkey");
-    }
 
     const { pool, ownsPool } = resolveTransport(opts);
     const handshakeTimeoutMs = opts.handshakeTimeoutMs ?? 300_000;
+
+    // The signer's pubkey resolves async while the handshake subscription is already live —
+    // subscribing must stay synchronous so early handshake events are not missed.
+    const clientPubkeyPromise = clientPublicKeyOf(clientSigner);
 
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -319,33 +338,57 @@ export class Nip46Signer implements NostrSigner {
         finish(new Nip46Error("nostrconnect handshake timed out"));
       }, handshakeTimeoutMs);
 
+      // The URI's client pubkey gates the handshake: the signer must own that key.
+      void (async () => {
+        try {
+          const pubkey = await clientPubkeyPromise;
+          if (pubkey !== params.clientPubkey) {
+            finish(
+              new Nip46Error("clientSigner public key does not match nostrconnect client pubkey"),
+            );
+          }
+        } catch (error) {
+          finish(error instanceof Error ? error : new Nip46Error(String(error)));
+        }
+      })();
+
       sub = pool.subscribe(
         params.relays,
-        [{ kinds: [Kind.NostrConnect], "#p": [clientPubkey], limit: 0 }],
+        [{ kinds: [Kind.NostrConnect], "#p": [params.clientPubkey], limit: 0 }],
         {
           signal: opts.signal,
           onEvent: (event) => {
-            try {
-              const convKey = getConversationKey(sk.bytes, event.pubkey);
-              const payload = decrypt(event.content, convKey);
-              const response = decodeNip46Response(payload);
-              if (response.result !== params.secret) {
-                return;
-              }
-              // A duplicate connect response must not spin up a second signer.
-              if (handshaking) {
-                return;
-              }
-              handshaking = true;
+            void (async () => {
+              try {
+                const clientPubkey = await clientPubkeyPromise;
+                if (settled || clientPubkey !== params.clientPubkey) {
+                  return;
+                }
+                const payload = await clientSigner.nip44Decrypt(event.pubkey, event.content);
+                const response = decodeNip46Response(payload);
+                if (response.result !== params.secret) {
+                  return;
+                }
+                // A duplicate connect response must not spin up a second signer.
+                if (handshaking) {
+                  return;
+                }
+                handshaking = true;
 
-              const pointer: BunkerPointer = {
-                pubkey: event.pubkey.toLowerCase(),
-                relays: params.relays,
-                secret: params.secret,
-              };
-              const signer = new Nip46Signer(sk, pointer, pool, ownsPool, opts);
-              signer.#startSubscription();
-              void (async () => {
+                const pointer: BunkerPointer = {
+                  pubkey: event.pubkey.toLowerCase(),
+                  relays: params.relays,
+                  secret: params.secret,
+                };
+                const signer = new Nip46Signer(
+                  clientSigner,
+                  clientPubkey,
+                  pointer,
+                  pool,
+                  ownsPool,
+                  opts,
+                );
+                signer.#startSubscription();
                 try {
                   await signer.switchRelays();
                 } catch {
@@ -359,10 +402,10 @@ export class Nip46Signer implements NostrSigner {
                   await signer.close();
                   finish(error instanceof Error ? error : new Nip46Error(String(error)));
                 }
-              })();
-            } catch {
-              // ignore non-matching events
-            }
+              } catch {
+                // ignore non-matching events
+              }
+            })();
           },
           onClose: (reason) => {
             if (reason !== "connected" && reason !== "failed") {
@@ -388,37 +431,7 @@ export class Nip46Signer implements NostrSigner {
       ],
       {
         onEvent: (event) => {
-          try {
-            const payload = decrypt(event.content, this.#conversationKey);
-            const { id, result, error } = decodeNip46Response(payload);
-
-            if (result === "auth_url" && this.#listeners.has(id)) {
-              const listener = this.#listeners.get(id);
-              if (!listener) {
-                return;
-              }
-              if (error !== undefined && error !== "") {
-                invokeSafely(() => this.#onAuthUrl?.(error));
-              }
-              clearTimeout(listener.timer);
-              listener.timer = this.#requestTimer(id, listener, this.#authTimeoutMs);
-              return;
-            }
-
-            const listener = this.#dropRequest(id);
-            if (!listener) {
-              return;
-            }
-            if (error !== undefined && error !== "") {
-              listener.reject(new Nip46Error(error));
-            } else if (result === undefined) {
-              listener.reject(new Nip46Error("empty NIP-46 response"));
-            } else {
-              listener.resolve(result);
-            }
-          } catch {
-            // ignore decrypt failures from unrelated events
-          }
+          void this.#handleResponseEvent(event);
         },
         onClose: () => {
           this.#sub = undefined;
@@ -426,6 +439,40 @@ export class Nip46Signer implements NostrSigner {
       },
     );
     this.#open = true;
+  }
+
+  async #handleResponseEvent(event: Event): Promise<void> {
+    try {
+      const payload = await this.#clientSigner.nip44Decrypt(event.pubkey, event.content);
+      const { id, result, error } = decodeNip46Response(payload);
+
+      if (result === "auth_url" && this.#listeners.has(id)) {
+        const listener = this.#listeners.get(id);
+        if (!listener) {
+          return;
+        }
+        if (error !== undefined && error !== "") {
+          invokeSafely(() => this.#onAuthUrl?.(error));
+        }
+        clearTimeout(listener.timer);
+        listener.timer = this.#requestTimer(id, listener, this.#authTimeoutMs);
+        return;
+      }
+
+      const listener = this.#dropRequest(id);
+      if (!listener) {
+        return;
+      }
+      if (error !== undefined && error !== "") {
+        listener.reject(new Nip46Error(error));
+      } else if (result === undefined) {
+        listener.reject(new Nip46Error("empty NIP-46 response"));
+      } else {
+        listener.resolve(result);
+      }
+    } catch {
+      // ignore decrypt failures from unrelated events
+    }
   }
 
   async connectRemote(overrides?: {
@@ -577,17 +624,26 @@ export class Nip46Signer implements NostrSigner {
 
     const id = bytesToHex(randomBytes(16));
     const req: Nip46Request = { id, method, params };
-    const encrypted = encrypt(encodeNip46Request(req), this.#conversationKey);
-
-    const event = finalizeEvent(
-      {
-        kind: Kind.NostrConnect,
-        tags: [Tag.p(this.#pointer.pubkey)],
-        content: encrypted,
-        created_at: nowSeconds(),
-      },
-      this.#clientSecret,
+    const encrypted = await this.#clientSigner.nip44Encrypt(
+      this.#pointer.pubkey,
+      encodeNip46Request(req),
     );
+
+    const unsigned: UnsignedEvent = {
+      kind: Kind.NostrConnect,
+      tags: [Tag.p(this.#pointer.pubkey)],
+      content: encrypted,
+      created_at: nowSeconds(),
+      pubkey: this.#clientPubkey,
+    };
+    const event = await this.#clientSigner.signEvent(unsigned);
+    // The client signer is untrusted code: check it actually signed the request we sent.
+    if (!verifyEvent(event)) {
+      throw new Nip46Error("clientSigner returned an improperly signed request event");
+    }
+    if (!signedMatchesUnsigned(event, unsigned)) {
+      throw new Nip46Error("clientSigner signed an event that does not match the request");
+    }
 
     const resultPromise = new Promise<string>((resolve, reject) => {
       const listener: PendingRequest = { resolve, reject, method };
