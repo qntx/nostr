@@ -4,6 +4,7 @@ import { nowSeconds } from "../src/core/util.ts";
 import {
   EventBuilder,
   Keys,
+  KeysSigner,
   Kind,
   Nip46Signer,
   Pool,
@@ -11,7 +12,7 @@ import {
   getPublicKey,
   verifyEvent,
 } from "../src/index.ts";
-import type { Nip46SubscribeOptions, Nip46Transport } from "../src/index.ts";
+import type { Nip46SubscribeOptions, Nip46Transport, NostrSigner } from "../src/index.ts";
 import {
   getConversationKey,
   decrypt as nip44Decrypt,
@@ -35,6 +36,10 @@ import { stubReportError } from "./helpers/report-error.ts";
 const BUNKER_SK = "0000000000000000000000000000000000000000000000000000000000000001";
 const CLIENT_SK = "0000000000000000000000000000000000000000000000000000000000000002";
 const USER_SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
+
+function clientSigner(): KeysSigner {
+  return new KeysSigner(Keys.fromSecretKey(CLIENT_SK));
+}
 
 let net: FakeRelayNetwork;
 
@@ -215,7 +220,7 @@ describe("Nip46Signer", () => {
 
     try {
       const signer = await Nip46Signer.connect(url, {
-        clientSecretKey: CLIENT_SK,
+        clientSigner: clientSigner(),
         createPool: testPool,
         timeoutMs: 3000,
       });
@@ -261,7 +266,7 @@ describe("Nip46Signer", () => {
 
     try {
       const signer = await Nip46Signer.connect(url, {
-        clientSecretKey: CLIENT_SK,
+        clientSigner: clientSigner(),
         createPool: testPool,
         timeoutMs: 3000,
       });
@@ -289,7 +294,7 @@ describe("Nip46Signer", () => {
       relays: ["wss://bunker.example"],
       secret: undefined,
     });
-    await expect(Nip46Signer.connect(url, { clientSecretKey: CLIENT_SK })).rejects.toThrow(
+    await expect(Nip46Signer.connect(url, { clientSigner: clientSigner() })).rejects.toThrow(
       /pool or createPool/,
     );
   });
@@ -316,7 +321,7 @@ describe("Nip46Signer", () => {
 
     try {
       const signer = await Nip46Signer.connect(url, {
-        clientSecretKey: CLIENT_SK,
+        clientSigner: clientSigner(),
         createPool: testPool,
         timeoutMs: 3000,
         onAuthUrl: (u) => authUrls.push(u),
@@ -332,7 +337,7 @@ describe("Nip46Signer", () => {
   test("connect rejects NIP-05 identifiers", async () => {
     await expect(
       Nip46Signer.connect("alice@example.com", {
-        clientSecretKey: CLIENT_SK,
+        clientSigner: clientSigner(),
         createPool: testPool,
         timeoutMs: 3000,
         secret: "tok",
@@ -341,7 +346,7 @@ describe("Nip46Signer", () => {
     ).rejects.toThrow(/invalid bunker input/);
     await expect(
       Nip46Signer.connect("bunker@example.com", {
-        clientSecretKey: CLIENT_SK,
+        clientSigner: clientSigner(),
         createPool: testPool,
         relays: ["wss://bunker.example"],
       }),
@@ -350,7 +355,7 @@ describe("Nip46Signer", () => {
 
   test("connect rejects empty, garbage, and nostrconnect strings", async () => {
     const opts = {
-      clientSecretKey: CLIENT_SK,
+      clientSigner: clientSigner(),
       createPool: testPool,
       relays: ["wss://bunker.example"],
     };
@@ -369,14 +374,14 @@ describe("Nip46Signer", () => {
 
   test("fromBunker does not send connect", async () => {
     const bunkerPk = getPublicKey(BUNKER_SK);
-    const signer = Nip46Signer.fromBunker(
+    const signer = await Nip46Signer.fromBunker(
       {
         pubkey: bunkerPk,
         relays: ["wss://bunker.example"],
         secret: "tok",
       },
       {
-        clientSecretKey: CLIENT_SK,
+        clientSigner: clientSigner(),
         createPool: testPool,
         timeoutMs: 3000,
       },
@@ -391,8 +396,8 @@ describe("Nip46Signer", () => {
     await signer.close();
   });
 
-  test("fromBunker requires clientSecretKey", () => {
-    expect(() =>
+  test("fromBunker requires clientSigner", async () => {
+    await expect(
       Nip46Signer.fromBunker(
         {
           pubkey: getPublicKey(BUNKER_SK),
@@ -401,7 +406,25 @@ describe("Nip46Signer", () => {
         },
         { createPool: testPool } as never,
       ),
-    ).toThrow(/fromBunker requires clientSecretKey/);
+    ).rejects.toThrow(/requires clientSigner/);
+  });
+
+  test("construction rejects a client signer without NIP-44", async () => {
+    const noNip44: NostrSigner = {
+      getPublicKey: async () => Promise.resolve(getPublicKey(CLIENT_SK)),
+      signEvent: async (unsigned) => clientSigner().signEvent(unsigned),
+    };
+    const pointer = {
+      pubkey: getPublicKey(BUNKER_SK),
+      relays: ["wss://bunker.example"],
+      secret: undefined,
+    };
+    await expect(
+      Nip46Signer.fromBunker(pointer, { clientSigner: noNip44, createPool: testPool }),
+    ).rejects.toThrow(/nip44Encrypt and nip44Decrypt/);
+    await expect(
+      Nip46Signer.connect(pointer, { clientSigner: noNip44, createPool: testPool }),
+    ).rejects.toThrow(/nip44Encrypt and nip44Decrypt/);
   });
 
   test("connectRemote accepts the bunker secret as connect result", async () => {
@@ -419,7 +442,7 @@ describe("Nip46Signer", () => {
     try {
       const signer = await Nip46Signer.connect(
         { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret },
-        { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
+        { clientSigner: clientSigner(), createPool: testPool, timeoutMs: 3000 },
       );
       await expect(signer.getPublicKey()).resolves.toBe(getPublicKey(USER_SK));
       await signer.close();
@@ -443,7 +466,7 @@ describe("Nip46Signer", () => {
       await expect(
         Nip46Signer.connect(
           { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: "tok" },
-          { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
+          { clientSigner: clientSigner(), createPool: testPool, timeoutMs: 3000 },
         ),
       ).rejects.toThrow(/connect result is not ack or secret: ok/);
     } finally {
@@ -466,7 +489,7 @@ describe("Nip46Signer", () => {
       await expect(
         Nip46Signer.connect(
           { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: "tok" },
-          { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
+          { clientSigner: clientSigner(), createPool: testPool, timeoutMs: 3000 },
         ),
       ).rejects.toThrow(/connect result is not ack or secret: other-secret/);
     } finally {
@@ -493,7 +516,7 @@ describe("Nip46Signer", () => {
             relays: ["wss://bunker.example"],
             secret: undefined,
           },
-          { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
+          { clientSigner: clientSigner(), createPool: testPool, timeoutMs: 3000 },
         ),
       ).rejects.toThrow(/connect result is not ack or secret: tok/);
     } finally {
@@ -512,7 +535,7 @@ describe("Nip46Signer", () => {
           secret: "tok",
         },
         {
-          clientSecretKey: CLIENT_SK,
+          clientSigner: clientSigner(),
           createPool: () => ({
             subscribe: () => ({
               close: () => {
@@ -553,7 +576,7 @@ describe("Nip46Signer", () => {
     });
     try {
       const handshake = Nip46Signer.fromNostrConnectURI(uri, {
-        clientSecretKey: CLIENT_SK,
+        clientSigner: clientSigner(),
         createPool: testPool,
         handshakeTimeoutMs: 3000,
         timeoutMs: 3000,
@@ -597,7 +620,7 @@ describe("Nip46Signer", () => {
           secret: "tok",
         }),
         {
-          clientSecretKey: CLIENT_SK,
+          clientSigner: clientSigner(),
           createPool: testPool,
           timeoutMs: 3000,
           perms: ["sign_event:1", "nip44_encrypt"],
@@ -636,12 +659,145 @@ describe("Nip46Signer", () => {
           relays: ["wss://bunker.example"],
           secret: "tok",
         }),
-        { clientSecretKey: CLIENT_SK, createPool: testPool, timeoutMs: 3000 },
+        { clientSigner: clientSigner(), createPool: testPool, timeoutMs: 3000 },
       );
       expect(signer.bunker.relays).toStrictEqual(["wss://new.example"]);
       await signer.logout();
     } finally {
       remote.close();
+    }
+  });
+
+  test("a NostrSigner that exposes no secret key runs connect, sign, reconnect and nostrconnect", async () => {
+    // Only the interface — the secret never leaves the wrapped signer.
+    const keys = Keys.fromSecretKey(CLIENT_SK);
+    const inner = new KeysSigner(keys);
+    const opaque: NostrSigner = {
+      getPublicKey: async () => inner.getPublicKey(),
+      signEvent: async (unsigned) => inner.signEvent(unsigned),
+      nip44Encrypt: async (peer, plaintext) => inner.nip44Encrypt(peer, plaintext),
+      nip44Decrypt: async (peer, payload) => inner.nip44Decrypt(peer, payload),
+    };
+    const bunkerPk = getPublicKey(BUNKER_SK);
+    const remote = createFakeNip46Signer({
+      network: net,
+      relayUrl: "wss://bunker.example",
+      bunkerSk: BUNKER_SK,
+      userSk: USER_SK,
+      clientPubkey: keys.publicKey,
+    });
+    const ncRemote = createFakeNip46Signer({
+      network: net,
+      relayUrl: "wss://nc.example",
+      bunkerSk: BUNKER_SK,
+      userSk: USER_SK,
+      clientPubkey: keys.publicKey,
+    });
+    try {
+      const signer = await Nip46Signer.connect(
+        toBunkerURL({ pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: "tok" }),
+        { clientSigner: opaque, createPool: testPool, timeoutMs: 3000 },
+      );
+      const unsigned = EventBuilder.textNote("opaque signer")
+        .createdAt(7)
+        .buildUnsigned(getPublicKey(USER_SK));
+      const signed = await signer.signEvent(unsigned);
+      expect(verifyEvent(signed)).toBe(true);
+      expect(signed.pubkey).toBe(getPublicKey(USER_SK));
+
+      // Reconnect reuses the same client identity — no handshake RPC.
+      const reconnected = await Nip46Signer.fromBunker(
+        { pubkey: bunkerPk, relays: ["wss://bunker.example"], secret: "tok" },
+        { clientSigner: opaque, createPool: testPool, timeoutMs: 3000 },
+      );
+      await expect(reconnected.ping()).resolves.toBeUndefined();
+      await reconnected.close();
+      await signer.close();
+
+      // nostrconnect handshake: the URI client pubkey must equal the signer's.
+      const secret = "hs-secret";
+      const uri = createNostrConnectURI({
+        clientPubkey: keys.publicKey,
+        relays: ["wss://nc.example"],
+        secret,
+      });
+      const handshake = Nip46Signer.fromNostrConnectURI(uri, {
+        clientSigner: opaque,
+        createPool: testPool,
+        handshakeTimeoutMs: 3000,
+        timeoutMs: 3000,
+      });
+      // Wait for the client handshake subscription to be live (EOSE done) — kind 24133 is
+      // ephemeral, so an event injected earlier is never replayed.
+      const probe = finalizeEvent(
+        {
+          kind: Kind.NostrConnect,
+          tags: [["p", keys.publicKey]],
+          content: "x",
+          created_at: nowSeconds(),
+        },
+        Keys.generate(),
+      );
+      await waitFor(() => net.relay("wss://nc.example").matchingLiveSubscribers(probe) > 0);
+      ncRemote.confirmHandshake(secret);
+      const viaUri = await handshake;
+      expect(viaUri.clientPublicKey).toBe(keys.publicKey);
+      await expect(viaUri.getPublicKey()).resolves.toBe(getPublicKey(USER_SK));
+      await viaUri.close();
+    } finally {
+      remote.close();
+      ncRemote.close();
+    }
+  });
+
+  test("a client signer that returns a forged or mismatched event fails the request", async () => {
+    const inner = clientSigner();
+    const wrongKey = new KeysSigner(Keys.generate());
+    // Valid signature under the wrong key — the request event must carry the client pubkey.
+    const wrongKeySigner: NostrSigner = {
+      getPublicKey: async () => inner.getPublicKey(),
+      signEvent: async (unsigned) =>
+        wrongKey.signEvent({ ...unsigned, pubkey: wrongKey.keys.publicKey }),
+      nip44Encrypt: async (peer, plaintext) => inner.nip44Encrypt(peer, plaintext),
+      nip44Decrypt: async (peer, payload) => inner.nip44Decrypt(peer, payload),
+    };
+    // Right key, but the returned event does not match the request content.
+    const tamperedSigner: NostrSigner = {
+      getPublicKey: async () => inner.getPublicKey(),
+      signEvent: async (unsigned) => inner.signEvent({ ...unsigned, content: "forged" }),
+      nip44Encrypt: async (peer, plaintext) => inner.nip44Encrypt(peer, plaintext),
+      nip44Decrypt: async (peer, payload) => inner.nip44Decrypt(peer, payload),
+    };
+    // Garbage in event clothing — not a valid signed event at all.
+    const garbageSigner: NostrSigner = {
+      getPublicKey: async () => inner.getPublicKey(),
+      signEvent: async (unsigned) =>
+        Promise.resolve({ ...unsigned, id: "0".repeat(64), sig: "f".repeat(128) }),
+      nip44Encrypt: async (peer, plaintext) => inner.nip44Encrypt(peer, plaintext),
+      nip44Decrypt: async (peer, payload) => inner.nip44Decrypt(peer, payload),
+    };
+
+    const pointer = {
+      pubkey: getPublicKey(BUNKER_SK),
+      relays: ["wss://bunker.example"],
+      secret: undefined,
+    };
+    for (const [evil, pattern] of [
+      [wrongKeySigner, /does not match/],
+      [tamperedSigner, /does not match/],
+      [garbageSigner, /improperly signed/],
+    ] as const) {
+      // Each signer is exercised and closed before the next case.
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      const signer = await Nip46Signer.fromBunker(pointer, {
+        clientSigner: evil,
+        createPool: testPool,
+        timeoutMs: 3000,
+      });
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      await expect(signer.ping()).rejects.toThrow(pattern);
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      await signer.close();
     }
   });
 });
@@ -662,14 +818,14 @@ describe("issue #130", () => {
     });
 
     try {
-      const signer = Nip46Signer.fromBunker(
+      const signer = await Nip46Signer.fromBunker(
         {
           pubkey: getPublicKey(BUNKER_SK),
           relays: ["wss://bunker.example"],
           secret: undefined,
         },
         {
-          clientSecretKey: CLIENT_SK,
+          clientSigner: clientSigner(),
           createPool: testPool,
           timeoutMs: 60,
           authTimeoutMs: 2000,
@@ -687,14 +843,14 @@ describe("issue #130", () => {
   });
 
   test("publish rejected by every relay fails fast", async () => {
-    const signer = Nip46Signer.fromBunker(
+    const signer = await Nip46Signer.fromBunker(
       {
         pubkey: getPublicKey(BUNKER_SK),
         relays: ["wss://bunker.example"],
         secret: undefined,
       },
       {
-        clientSecretKey: CLIENT_SK,
+        clientSigner: clientSigner(),
         createPool: () => ({
           subscribe: () => ({ close: () => {} }),
           publish: async () => {
@@ -730,14 +886,14 @@ describe("issue #130", () => {
     });
 
     try {
-      const signer = Nip46Signer.fromBunker(
+      const signer = await Nip46Signer.fromBunker(
         {
           pubkey: getPublicKey(BUNKER_SK),
           relays: ["wss://bunker.example"],
           secret: undefined,
         },
         {
-          clientSecretKey: CLIENT_SK,
+          clientSigner: clientSigner(),
           createPool: testPool,
           timeoutMs: 2000,
           onAuthUrl: () => {
@@ -838,7 +994,7 @@ describe("Nip46Signer.fromNostrConnectURI hardening", () => {
     controller.abort();
     let poolCreated = false;
     const reason = await Nip46Signer.fromNostrConnectURI(connectURI(), {
-      clientSecretKey: CLIENT_SK,
+      clientSigner: clientSigner(),
       signal: controller.signal,
       handshakeTimeoutMs: 300,
       createPool: () => {
@@ -856,7 +1012,7 @@ describe("Nip46Signer.fromNostrConnectURI hardening", () => {
   test("duplicate handshake events create exactly one signer", async () => {
     const { transport, subs, handshakeEvent } = mockNostrConnectTransport();
     const handshake = Nip46Signer.fromNostrConnectURI(connectURI(), {
-      clientSecretKey: CLIENT_SK,
+      clientSigner: clientSigner(),
       pool: transport,
       handshakeTimeoutMs: 3000,
       timeoutMs: 3000,
@@ -876,7 +1032,7 @@ describe("Nip46Signer.fromNostrConnectURI hardening", () => {
       getPublicKeyError: "boom",
     });
     const handshake = Nip46Signer.fromNostrConnectURI(connectURI(), {
-      clientSecretKey: CLIENT_SK,
+      clientSigner: clientSigner(),
       pool: transport,
       handshakeTimeoutMs: 3000,
       timeoutMs: 3000,
