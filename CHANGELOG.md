@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-15
+
 ### Changed
 
 - **BREAKING:** `Nip46Signer` no longer takes a raw client secret key — `Nip46SignerOptions.clientSecretKey` is replaced by the required `clientSigner: NostrSigner`, which signs kind-24133 request events and encrypts/decrypts the NIP-44 RPC payloads (the signer must implement `nip44Encrypt`/`nip44Decrypt`; construction rejects one that does not). The response event from `signEvent` is verified against the request (`signedMatchesUnsigned` + `verifyEvent`), and `fromNostrConnectURI` compares `clientSigner.getPublicKey()` with the URI's client pubkey. `fromBunker` is now `async` (the client public key comes from the signer). Migrate with `clientSigner: new KeysSigner(Keys.fromSecretKey(secretKey))` — generate/persist the key as before, e.g. `Keys.generate().secretKey.toHex()`.
@@ -414,7 +416,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/qntx/nostr/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/qntx/nostr/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/qntx/nostr/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/qntx/nostr/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/qntx/nostr/compare/v0.11.0...v0.12.0
