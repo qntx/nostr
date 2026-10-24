@@ -16,10 +16,14 @@ mod sqlite;
 
 pub use error::{BackendError, Error, Result};
 
-// The benches declare `criterion` as a dev-dependency the lib does not use.
+pub use memory::MemoryStore;
+
+// Dev-dependencies used only by benches and integration tests; without the
+// `sqlite` feature the lib test target does not use `serde_json` either.
 #[cfg(test)]
 use criterion as _;
-pub use memory::MemoryStore;
+#[cfg(all(test, not(feature = "sqlite")))]
+use serde_json as _;
 #[cfg(feature = "sqlite")]
 pub use sqlite::SqliteStore;
 

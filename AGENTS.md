@@ -39,11 +39,13 @@ bun run test:parity                                 # generates the diff
                                                     # streams and replays
                                                     # them through nk-core
 cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo clippy --workspace --all-targets --no-default-features -- -D warnings
-cargo test --workspace --all-features
-cargo test --workspace --no-default-features
-cargo hack check -p nk-core --each-feature --no-dev-deps
+for p in nk-core nk-store; do                       # per package, like CI:
+  for f in --all-features --no-default-features; do # workspace runs unify
+    cargo clippy -p "$p" --all-targets "$f" -- -D warnings # features and
+    cargo test -p "$p" "$f"                         # hide gaps
+  done
+  cargo hack check -p "$p" --each-feature --no-dev-deps
+done
 CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" \
     cargo check -p nk-core --target wasm32-unknown-unknown --no-default-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
