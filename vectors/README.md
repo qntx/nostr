@@ -44,6 +44,13 @@ JSON files share a single envelope:
   (`MessageError`, `EventValidationError`) or a null expectation field
   (`parsed: null`, `output: null`). Runners branch on the case fields; a file
   may mix case shapes (e.g. `tag-address.json` uses `op: "parse" | "format"`).
+- `nonCanonicalJson` — when `true`, the case's raw JSON input uses a form
+  `JSON.parse` accepts but strict parsers must reject: an integral-valued
+  number spelled with a fraction or exponent (`1e3`, `1.0`,
+  `9007199254740991.0`), the spelling `-0`, or a duplicate object key
+  (ADR-0007 rule 4). TypeScript accepts the input (`JSON.parse` normalizes
+  it, last duplicate wins); Rust must reject it. The flag only appears on
+  raw-text inputs; the field is absent otherwise.
 
 `vectors/core/*.json` are generated deterministically by
 `bun packages/nostr/scripts/parity/gen/all.ts` (`gen/core.ts`, `gen/nip19.ts`); never edit them by hand.

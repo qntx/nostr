@@ -1,0 +1,84 @@
+[package]
+name                   = "nk-core"
+description            = "Nostr protocol core: events, keys, filters, messages and NIP codecs; no_std, sans-IO."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+authors.workspace      = true
+keywords.workspace     = true
+categories             = ["cryptography", "network-programming", "no-std"]
+readme                 = "README.md"
+documentation          = "https://docs.rs/nk-core"
+include                = ["src/**/*", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["std", "clock", "os-rng"]
+std     = ["url/std", "serde/std", "serde_json/std", "secp256k1/std", "secp256k1/global-context"]
+clock   = ["std"]
+# os-rng owns the optional getrandom: `generate` constructors and the
+# `SysRng` re-export. Portable --no-default-features builds never see it.
+os-rng = ["dep:getrandom"]
+# NIP modules behind an extra dependency; every other NIP is always
+# compiled. `nip44` also enables the NIP-17/NIP-59 modules and the NIP-51
+# private-tag helpers.
+nip04 = ["dep:aes", "dep:cbc"]
+nip44 = ["dep:chacha20", "dep:hkdf", "dep:hmac"]
+nip49 = ["dep:chacha20poly1305", "dep:scrypt", "dep:unicode-normalization"]
+
+[dependencies]
+aes                   = { workspace = true, optional = true }
+base64ct              = { workspace = true }
+bech32                = { workspace = true }
+cbc                   = { workspace = true, optional = true, features = ["block-padding"] }
+chacha20              = { workspace = true, optional = true, features = ["cipher"] }
+chacha20poly1305      = { workspace = true, optional = true }
+faster-hex            = { workspace = true }
+getrandom             = { workspace = true, optional = true, features = ["sys_rng"] }
+hkdf                  = { workspace = true, optional = true }
+hmac                  = { workspace = true, optional = true }
+rand_core             = { workspace = true }
+scrypt                = { workspace = true, optional = true }
+secp256k1             = { workspace = true, features = ["alloc"] }
+serde                 = { workspace = true }
+serde_json            = { workspace = true }
+sha2                  = { workspace = true }
+thiserror             = { workspace = true }
+unicode-normalization = { workspace = true, optional = true }
+unicode-properties    = { workspace = true, features = ["general-category"] }
+url                   = { workspace = true }
+zeroize               = { workspace = true }
+
+[dev-dependencies]
+criterion  = { workspace = true, features = ["html_reports"] }
+serde_json = { workspace = true }
+
+[[test]]
+name    = "it"
+path    = "tests/it/main.rs"
+harness = true
+
+[[bench]]
+name    = "deserialize"
+harness = false
+
+[[bench]]
+name    = "verify"
+harness = false
+
+[[bench]]
+name    = "pow"
+harness = false
+
+[[bench]]
+name    = "tokenize"
+harness = false
+
+[lints]
+workspace = true
