@@ -13,7 +13,6 @@
 //! @see <https://github.com/nostr-protocol/nips/blob/master/46.md>
 
 use alloc::borrow::Cow;
-use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
@@ -35,7 +34,7 @@ pub enum Error {
     InvalidUri {
         /// The URL parser failure.
         #[source]
-        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+        source: url::ParseError,
     },
     /// The URI uses a different scheme than the type requires.
     #[error("expected a {expected}: URI")]
@@ -57,7 +56,7 @@ pub enum Error {
     InvalidJson {
         /// The serde error describing the offending field.
         #[source]
-        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+        source: crate::JsonError,
     },
 }
 
@@ -112,7 +111,7 @@ impl FromStr for BunkerUri {
     /// identifiers), and [`Error::InvalidPublicKey`] when the authority is
     /// not a 64-hex public key.
     fn from_str(input: &str) -> Result<Self, Error> {
-        let url = Url::parse(trim_js(input)).map_err(|e| Error::InvalidUri { source: e.into() })?;
+        let url = Url::parse(trim_js(input)).map_err(|e| Error::InvalidUri { source: e })?;
         if url.scheme() != "bunker" {
             return Err(Error::UnexpectedScheme { expected: "bunker" });
         }
@@ -277,7 +276,7 @@ impl FromStr for NostrConnectUri {
     /// [`Error::MissingSecret`] for an absent or empty `secret`, and
     /// [`Error::MissingRelays`] for zero `relay` pairs.
     fn from_str(uri: &str) -> Result<Self, Error> {
-        let url = Url::parse(uri).map_err(|e| Error::InvalidUri { source: e.into() })?;
+        let url = Url::parse(uri).map_err(|e| Error::InvalidUri { source: e })?;
         if url.scheme() != "nostrconnect" {
             return Err(Error::UnexpectedScheme {
                 expected: "nostrconnect",

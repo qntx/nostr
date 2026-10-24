@@ -8,13 +8,12 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
+use core::str::FromStr;
 
 use crate::{Coordinate, Event, EventBuilder, Kind, PublicKey, RelayUrl, Tag, Tags};
 use bech32::primitives::decode::CheckedHrpstring;
 use bech32::{Checksum, Fe32, Fe32IterExt, Fe1024};
 use sha2::{Digest, Sha256};
-
-use crate::nips::error::{Error, ErrorKind, Result};
 
 /// `Number.MAX_SAFE_INTEGER` — invoice amounts and the `x` field beyond this
 /// lose precision in JS, so both sides treat them as absent (N8).
@@ -33,9 +32,24 @@ const TAG_DESCRIPTION: u8 = 13;
 const TAG_DESCRIPTION_HASH: u8 = 23;
 const DEFAULT_EXPIRY_SECONDS: u64 = 3600;
 
-fn validation(message: &'static str) -> Error {
-    Error::new(ErrorKind::EventValidation, message)
+const fn validation(message: &'static str) -> Error {
+    Error::Validation(message)
 }
+
+/// The error type returned by NIP-57 operations.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// A zap-request argument is out of spec.
+    #[error("{0}")]
+    Validation(&'static str),
+    /// The invoice string is not parseable bolt11.
+    #[error("invalid bolt11")]
+    Bolt11,
+}
+
+/// Result type for NIP-57 operations.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 /// Target of a zap request: a profile (`pubkey`) or an existing event.
 #[allow(
@@ -58,43 +72,50 @@ pub enum ZapTarget<'a> {
 /// `EventValidation` on a non-positive or non-safe-integer `amount_msats`, an
 /// empty `relays` list, or an addressable event without a `d` tag — the three
 /// throws of the TS function.
-pub fn zap_request(
-    target: ZapTarget<'_>,
-    amount_msats: u64,
-    relays: &[RelayUrl],
-    comment: &str,
-    lnurl: Option<&str>,
-) -> Result<EventBuilder> {
-    if amount_msats == 0 || amount_msats > MAX_SAFE_INTEGER {
-        return Err(validation("zap amount must be a positive integer (msats)"));
-    }
-    if relays.is_empty() {
-        return Err(validation("relays tag requires one or more relays"));
-    }
-    let (recipient, event) = match target {
-        ZapTarget::Profile(pubkey) => (pubkey, None),
-        ZapTarget::Event(event) => (event.pubkey(), Some(event)),
-    };
-    let mut tags = Vec::with_capacity(8);
-    tags.push(Tag::public_key(recipient, None, None));
-    tags.push(Tag::custom("amount", [amount_msats.to_string()]));
-    tags.push(Tag::custom("relays", relays.iter().map(RelayUrl::as_str)));
-    if let Some(event) = event {
-        tags.push(Tag::event(event.id(), None, None, None));
-        if event.kind().is_addressable() {
-            if event.tags().identifier().is_none() {
+impl EventBuilder {
+    /// Builds the kind-9734 zap-request template (TS `makeZapRequest`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Validation`] on a non-positive or non-safe-integer
+    /// `amount_msats`, an empty `relays` list, or an addressable event
+    /// without a `d` tag — the three throws of the TS function.
+    pub fn zap_request(
+        target: ZapTarget<'_>,
+        amount_msats: u64,
+        relays: &[RelayUrl],
+        comment: &str,
+        lnurl: Option<&str>,
+    ) -> Result<Self> {
+        if amount_msats == 0 || amount_msats > MAX_SAFE_INTEGER {
+            return Err(validation("zap amount must be a positive integer (msats)"));
+        }
+        if relays.is_empty() {
+            return Err(validation("relays tag requires one or more relays"));
+        }
+        let (recipient, event) = match target {
+            ZapTarget::Profile(pubkey) => (pubkey, None),
+            ZapTarget::Event(event) => (event.pubkey(), Some(event)),
+        };
+        let mut tags = Vec::with_capacity(8);
+        tags.push(Tag::public_key(recipient, None, None));
+        tags.push(Tag::custom("amount", [amount_msats.to_string()]));
+        tags.push(Tag::custom("relays", relays.iter().map(RelayUrl::as_str)));
+        if let Some(event) = event {
+            tags.push(Tag::event(event.id(), None, None, None));
+            if event.kind().is_addressable() && event.tags().identifier().is_none() {
                 return Err(validation("d tag not found"));
             }
-            if let Some(address) = event.address() {
-                tags.push(Tag::address(&address, None));
+            if event.kind().is_addressable() {
+                tags.extend(event.address().map(|a| Tag::address(&a, None)));
             }
+            tags.push(Tag::kind(event.kind()));
         }
-        tags.push(Tag::kind(event.kind()));
+        if let Some(lnurl) = lnurl.filter(|value| !value.is_empty()) {
+            tags.push(Tag::custom("lnurl", [lnurl]));
+        }
+        Ok(Self::new(Kind::ZAP_REQUEST, comment).tags(tags))
     }
-    if let Some(lnurl) = lnurl.filter(|value| !value.is_empty()) {
-        tags.push(Tag::custom("lnurl", [lnurl]));
-    }
-    Ok(EventBuilder::new(Kind::ZAP_REQUEST, comment).tags(tags))
 }
 
 /// `bech32::Bech32` without a code-length cap — real invoices exceed the
@@ -186,13 +207,20 @@ fn amount_msats_from_hrp(hrp: &str) -> Option<u64> {
     }
 }
 
-/// Decode the tagged fields of a BOLT11 invoice.
-///
-/// Returns `None` for any malformed string or an invoice without a `p`
-/// field — TS `parseBolt11` returns `null` the same way. The whole string is
+impl FromStr for Bolt11 {
+    type Err = Error;
+
+    /// Parses a bolt11 invoice (TS `parseBolt11` — which returns `null` on
+    /// failure). The whole string is lowercased first.
+    fn from_str(pr: &str) -> Result<Self> {
+        parse_bolt11(pr).ok_or(Error::Bolt11)
+    }
+}
+
+/// Decode the tagged fields of a BOLT11 invoice, or `None` for any
+/// malformed string or an invoice without a `p` field — the whole string is
 /// lowercased first (`bech32` requires single case).
-#[must_use]
-pub fn parse_bolt11(pr: &str) -> Option<Bolt11> {
+fn parse_bolt11(pr: &str) -> Option<Bolt11> {
     let lowered = pr.to_lowercase();
     let checked = CheckedHrpstring::new::<Bolt11Bech32>(&lowered).ok()?;
     let hrp = checked.hrp();
@@ -576,7 +604,7 @@ mod tests {
         let recipient =
             PublicKey::from_hex("b1e2d3c4b5a6978899aabbccddeeff00112233445566778899aabbccddeeff00")
                 .unwrap();
-        let builder = zap_request(
+        let builder = EventBuilder::zap_request(
             ZapTarget::Profile(recipient),
             21_000,
             &relays(),
@@ -605,7 +633,8 @@ mod tests {
     #[test]
     fn event_zap_request_emits_e_a_k() {
         let target = event(30_023, &[&["d", "article-1"]]);
-        let builder = zap_request(ZapTarget::Event(&target), 1, &relays(), "", None).unwrap();
+        let builder =
+            EventBuilder::zap_request(ZapTarget::Event(&target), 1, &relays(), "", None).unwrap();
         let unsigned = builder.build_at(
             PublicKey::from_hex(SK).unwrap(),
             Timestamp::from_secs(1_700_000_000),
@@ -631,9 +660,9 @@ mod tests {
     #[test]
     fn zap_request_rejections() {
         let pk = PublicKey::from_hex(SK).unwrap();
-        assert!(zap_request(ZapTarget::Profile(pk), 0, &relays(), "", None).is_err());
+        assert!(EventBuilder::zap_request(ZapTarget::Profile(pk), 0, &relays(), "", None).is_err());
         assert!(
-            zap_request(
+            EventBuilder::zap_request(
                 ZapTarget::Profile(pk),
                 MAX_SAFE_INTEGER + 1,
                 &relays(),
@@ -642,9 +671,11 @@ mod tests {
             )
             .is_err()
         );
-        assert!(zap_request(ZapTarget::Profile(pk), 1, &[], "", None).is_err());
+        assert!(EventBuilder::zap_request(ZapTarget::Profile(pk), 1, &[], "", None).is_err());
         let no_d = event(30_023, &[&["title", "x"]]);
-        assert!(zap_request(ZapTarget::Event(&no_d), 1, &relays(), "", None).is_err());
+        assert!(
+            EventBuilder::zap_request(ZapTarget::Event(&no_d), 1, &relays(), "", None).is_err()
+        );
     }
 
     #[test]

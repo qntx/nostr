@@ -53,6 +53,7 @@ import {
 import { blocksJson } from "./content-json.ts";
 import type { EntityJson } from "./gen/entities.ts";
 import { encodeEntity, toJson } from "./gen/entities.ts";
+import { isNonCanonicalJson } from "./non-canonical.ts";
 import { threadJson } from "./thread-json.ts";
 
 /* oxlint-disable eslint/no-bitwise -- a PRNG is bit arithmetic by design */
@@ -1233,7 +1234,13 @@ function nip27TokenizeInputText(): string {
   return JSON.stringify(input);
 }
 
-type CaseRecord = { i: number; input: string; out?: unknown; err?: string };
+type CaseRecord = {
+  i: number;
+  input: string;
+  out?: unknown;
+  err?: string;
+  nonCanonicalJson?: boolean;
+};
 
 function capture(run: () => unknown): { out?: unknown; err?: string } {
   try {
@@ -1497,7 +1504,11 @@ for (const capability of CAPABILITIES) {
   useStream(seed); // same seed → same stream for every capability
   const lines: string[] = [JSON.stringify({ capability: capability.name, seed, count })];
   for (let i = 0; i < count; i++) {
-    lines.push(JSON.stringify({ ...capability.make(), i }));
+    const rec = capability.make();
+    if (isNonCanonicalJson(rec.input)) {
+      rec.nonCanonicalJson = true;
+    }
+    lines.push(JSON.stringify({ ...rec, i }));
   }
   writeFileSync(join(out, `${capability.name}.jsonl`), `${lines.join("\n")}\n`);
   console.log(`${capability.name}: ${count} cases`);

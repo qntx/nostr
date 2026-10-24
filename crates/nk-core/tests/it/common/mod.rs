@@ -73,3 +73,42 @@ impl rand_core::TryRng for AuxRng {
 }
 
 impl rand_core::TryCryptoRng for AuxRng {}
+
+/// A `TryCryptoRng` that answers `try_fill_bytes` from a scripted entropy
+/// stream, consumed in draw order.
+pub(crate) struct BytesRng(pub(crate) Vec<u8>);
+
+impl rand_core::TryRng for BytesRng {
+    type Error = core::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut b = [0u8; 4];
+        self.try_fill_bytes(&mut b)?;
+        Ok(u32::from_be_bytes(b))
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut b = [0u8; 8];
+        self.try_fill_bytes(&mut b)?;
+        Ok(u64::from_be_bytes(b))
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+        let n = dest.len();
+        let take = self.0.drain(..n.min(self.0.len()));
+        dest.copy_from_slice(&take.collect::<Vec<u8>>());
+        Ok(())
+    }
+}
+
+impl rand_core::TryCryptoRng for BytesRng {}
+
+/// Lowercase hex of `bytes`.
+pub(crate) fn hex_str(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(char::from_digit((b >> 4).into(), 16).unwrap());
+        out.push(char::from_digit((b & 0x0f).into(), 16).unwrap());
+    }
+    out
+}

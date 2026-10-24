@@ -13,7 +13,7 @@
 //! |---------|---------|--------|
 //! | `std`   | yes     | OS facilities; global secp256k1 context; base for `clock`/`os-rng` |
 //! | `clock` | yes     | `Timestamp::now` (wall clock; off on platforms without one) |
-//! | `os-rng` | yes    | `SecretKey::generate`, `Keys::generate`, `SubscriptionId::generate`, [`SysRng`] |
+//! | `os-rng` | yes    | `SecretKey::generate`, `Keys::generate`, `SubscriptionId::generate`, `SysRng` |
 //! | `nip04` | no      | legacy encrypted DMs (aes, cbc) |
 //! | `nip44` | no      | v2 payload encryption (chacha20, hkdf, hmac); also enables `nips::nip17`, `nips::nip59` and the NIP-51 private-tag helpers |
 //! | `nip49` | no      | `ncryptsec` secret-key encryption (scrypt, chacha20poly1305) |

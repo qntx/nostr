@@ -96,23 +96,30 @@ pub struct ParseOptions<'a> {
 /// Unicode simple case folding for the letters the patterns use — JS `iu`
 /// canonicalization maps ASCII case plus U+212A KELVIN SIGN to `k` and
 /// U+017F LATIN SMALL LETTER LONG S to `s`; nothing else reaches these rules.
+/// `String.toLowerCase()` semantics for the folding that matters here:
+/// `K` (U+212A Kelvin) folds to `k`, but `ſ` (U+017F, already
+/// lowercase) does not fold to `s`.
 const fn fold(c: char) -> char {
     match c {
         'A'..='Z' => c.to_ascii_lowercase(),
         '\u{212a}' => 'k',
-        '\u{17f}' => 's',
         _ => c,
     }
 }
 
-/// Matches an ASCII literal with `iu` folding; returns the consumed bytes,
-/// which exceed `lit.len()` when a foldable non-ASCII char (ſ, K) matched.
+/// ASCII-only case folding — the literal prefixes (`nostr:`, `https`,
+/// `lightning:`) are matched ASCII-insensitively (`asciiCi` in TS).
+const fn fold_ascii(c: char) -> char {
+    c.to_ascii_lowercase()
+}
+
+/// Matches an ASCII literal case-insensitively (ASCII fold only).
 fn lit_at(rest: &str, lit: &str) -> Option<usize> {
     let mut consumed = 0;
     let mut chars = rest.char_indices();
     for want in lit.chars() {
         match chars.next() {
-            Some((i, c)) if fold(c) == want => consumed = i + c.len_utf8(),
+            Some((i, c)) if fold_ascii(c) == want => consumed = i + c.len_utf8(),
             _ => return None,
         }
     }
@@ -183,7 +190,7 @@ fn sep_then_data(rest: &str, at: usize) -> Option<usize> {
 }
 
 /// `nostr:` + NIP-19 prefix + `1` + charset. Returns `(code_start, end)` —
-/// `code_start` skips the URI prefix, which ſ can lengthen by a byte.
+/// `code_start` skips the URI prefix.
 fn nostr_at(rest: &str) -> Option<(usize, usize)> {
     let code_start = lit_at(rest, "nostr:")?;
     let mut at = code_start;
@@ -196,8 +203,8 @@ fn nostr_at(rest: &str) -> Option<(usize, usize)> {
 fn url_at(rest: &str, ws: bool) -> Option<usize> {
     let base = if ws { "ws" } else { "http" };
     let mut at = lit_at(rest, base)?;
-    // `s?` — optional second s, possibly the multi-byte ſ.
-    if let Some(c) = rest[at..].chars().next().filter(|c| fold(*c) == 's') {
+    // `s?` — optional second s, ASCII-only folding.
+    if let Some(c) = rest[at..].chars().next().filter(|c| fold_ascii(*c) == 's') {
         at += c.len_utf8();
     }
     at += lit_at(&rest[at..], "://")?;

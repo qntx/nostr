@@ -10,7 +10,6 @@
 //! @see <https://github.com/nostr-protocol/nips/blob/master/19.md>
 
 use alloc::borrow::ToOwned;
-use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -70,7 +69,7 @@ pub enum Error {
     Bech32 {
         /// The decode failure.
         #[source]
-        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+        source: DecodeError,
     },
     /// The encoded string exceeds [`BECH32_MAX_LEN`] characters.
     #[error("bech32 string exceeds 5000 characters: {len}")]
@@ -129,11 +128,14 @@ pub enum Error {
     },
 }
 
-/// The decode failure [`Error::Bech32`] boxes: a checksum/format error from
-/// the `bech32` crate or the non-canonical-padding check NIP-19 adds on top.
+/// The decode failure inside [`Error::Bech32`]: a checksum/format error
+/// from the `bech32` crate or the non-canonical-padding check NIP-19 adds
+/// on top.
 #[derive(Debug)]
-pub(crate) enum DecodeError {
+pub enum DecodeError {
+    /// Bech32 encoding/decoding failure.
     Bech32(CheckedHrpstringError),
+    /// Non-canonical or invalid padding.
     Padding,
 }
 
@@ -185,7 +187,7 @@ pub(crate) fn decode_bech32(code: &str) -> Result<(Hrp, Vec<u8>), DecodeError> {
 
 /// [`decode_bech32`] with the module error.
 fn decode_nip19_bech32(code: &str) -> Result<(Hrp, Vec<u8>), Error> {
-    decode_bech32(code).map_err(|e| Error::Bech32 { source: e.into() })
+    decode_bech32(code).map_err(|e| Error::Bech32 { source: e })
 }
 
 /// A profile pointer (`nprofile`): a pubkey plus relay hints.
@@ -339,11 +341,11 @@ impl ProfilePointer {
     /// [`BECH32_MAX_LEN`].
     pub fn to_bech32(&self) -> Result<String, Error> {
         let mut data = Vec::new();
-        // TLVs are written in descending type order (3, 2, 1, 0).
+        // TLVs are written in ascending type order (0 special, 1 relays).
+        push_tlv(&mut data, TLV_SPECIAL, self.pubkey.as_bytes())?;
         for relay in &self.relays {
             push_tlv(&mut data, TLV_RELAY, relay.as_bytes())?;
         }
-        push_tlv(&mut data, TLV_SPECIAL, self.pubkey.as_bytes())?;
         encode_bech32_tlv(HRP_NPROFILE, &data)
     }
 
@@ -374,16 +376,17 @@ impl EventPointer {
     /// [`BECH32_MAX_LEN`].
     pub fn to_bech32(&self) -> Result<String, Error> {
         let mut data = Vec::new();
-        if let Some(kind) = self.kind {
-            push_tlv(&mut data, TLV_KIND, &u32::from(kind.as_u16()).to_be_bytes())?;
+        // Ascending type order: 0 special, 1 relays, 2 author, 3 kind.
+        push_tlv(&mut data, TLV_SPECIAL, self.id.as_bytes())?;
+        for relay in &self.relays {
+            push_tlv(&mut data, TLV_RELAY, relay.as_bytes())?;
         }
         if let Some(author) = self.author {
             push_tlv(&mut data, TLV_AUTHOR, author.as_bytes())?;
         }
-        for relay in &self.relays {
-            push_tlv(&mut data, TLV_RELAY, relay.as_bytes())?;
+        if let Some(kind) = self.kind {
+            push_tlv(&mut data, TLV_KIND, &u32::from(kind.as_u16()).to_be_bytes())?;
         }
-        push_tlv(&mut data, TLV_SPECIAL, self.id.as_bytes())?;
         encode_bech32_tlv(HRP_NEVENT, &data)
     }
 
@@ -414,16 +417,17 @@ impl AddressPointer {
     /// [`BECH32_MAX_LEN`].
     pub fn to_bech32(&self) -> Result<String, Error> {
         let mut data = Vec::new();
+        // Ascending type order: 0 special, 1 relays, 2 author, 3 kind.
+        push_tlv(&mut data, TLV_SPECIAL, self.identifier.as_bytes())?;
+        for relay in &self.relays {
+            push_tlv(&mut data, TLV_RELAY, relay.as_bytes())?;
+        }
+        push_tlv(&mut data, TLV_AUTHOR, self.pubkey.as_bytes())?;
         push_tlv(
             &mut data,
             TLV_KIND,
             &u32::from(self.kind.as_u16()).to_be_bytes(),
         )?;
-        push_tlv(&mut data, TLV_AUTHOR, self.pubkey.as_bytes())?;
-        for relay in &self.relays {
-            push_tlv(&mut data, TLV_RELAY, relay.as_bytes())?;
-        }
-        push_tlv(&mut data, TLV_SPECIAL, self.identifier.as_bytes())?;
         encode_bech32_tlv(HRP_NADDR, &data)
     }
 
@@ -452,6 +456,25 @@ impl Entity {
     /// [`Error::TlvTooLong`] when a pointer's relay hint or identifier
     /// exceeds 255 bytes; [`Error::TooLong`] when the encoded string
     /// exceeds [`BECH32_MAX_LEN`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use nk_core::nips::nip19::Entity;
+    /// use nk_core::PublicKey;
+    ///
+    /// let key = PublicKey::from_hex(
+    ///     "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+    /// )
+    /// .unwrap();
+    /// let code = Entity::Public(key).to_bech32()?;
+    /// assert_eq!(
+    ///     code,
+    ///     "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6"
+    /// );
+    /// assert_eq!(Entity::from_bech32(&code)?.to_bech32()?, code);
+    /// # Ok::<(), nk_core::nips::nip19::Error>(())
+    /// ```
     pub fn to_bech32(&self) -> Result<String, Error> {
         match self {
             Self::Profile(pointer) => pointer.to_bech32(),
@@ -837,7 +860,7 @@ mod tests {
     }
 
     #[test]
-    fn tlv_write_order_is_descending() {
+    fn tlv_write_order_is_ascending() {
         let pointer = EventPointer {
             id: event_id(),
             relays: vec!["r".to_owned()],
@@ -845,11 +868,11 @@ mod tests {
             kind: Some(Kind::new(1)),
         };
         let (_, data) = decode_nip19_bech32(&pointer.to_bech32().unwrap()).unwrap();
-        // Kind(3), author(2), relay(1), id(0).
-        assert_eq!(data.first(), Some(&TLV_KIND));
-        assert_eq!(data.get(6), Some(&TLV_AUTHOR));
-        assert_eq!(data.get(40), Some(&TLV_RELAY));
-        assert_eq!(data.get(43), Some(&TLV_SPECIAL));
+        // Id(0) at 0, relay(1) at 34, author(2) at 37, kind(3) at 71.
+        assert_eq!(data.first(), Some(&TLV_SPECIAL));
+        assert_eq!(data.get(34), Some(&TLV_RELAY));
+        assert_eq!(data.get(37), Some(&TLV_AUTHOR));
+        assert_eq!(data.get(71), Some(&TLV_KIND));
     }
 
     #[test]

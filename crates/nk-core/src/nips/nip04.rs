@@ -19,7 +19,7 @@ use cbc::cipher::block_padding::Pkcs7;
 use cbc::cipher::{Block, BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::nips::{Error, ErrorKind, Result};
+use crate::nips::ecdh;
 
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
@@ -27,17 +27,28 @@ type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 const BLOCK: usize = 16;
 const IV_LEN: usize = 16;
 
-fn crypto_error(message: &'static str) -> Error {
-    Error::new(ErrorKind::Crypto, message)
+/// The error type returned by NIP-04 operations.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// The peer's bytes do not lift to a curve point.
+    #[error("invalid public key")]
+    Derive,
+    /// `rng` failed to fill the initialization vector.
+    #[error("rng failed")]
+    Rng,
+    /// The payload does not split into exactly two non-empty parts on
+    /// `?iv=`.
+    #[error("invalid NIP-04 payload: missing iv")]
+    MissingIv,
+    /// Any other payload failure: bad base64, wrong IV length, or bad
+    /// padding (like TS there is no padding-oracle distinction).
+    #[error("invalid NIP-04 payload")]
+    InvalidPayload,
 }
 
-fn missing_iv() -> Error {
-    crypto_error("invalid NIP-04 payload: missing iv")
-}
-
-fn invalid() -> Error {
-    crypto_error("invalid NIP-04 payload")
-}
+/// Result type for NIP-04 operations.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 /// The 32-byte ECDH x coordinate shared with a peer (TS `sharedX` —
 /// `secp256k1.getSharedSecret(...).slice(1, 33)`). NIP-04 AES-CBC keys this
@@ -55,17 +66,63 @@ impl SharedSecret {
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Crypto`] when `peer`'s bytes do not lift to a curve
-    /// point.
+    /// [`Error::Derive`] when `peer`'s bytes do not lift to a curve point.
     pub fn derive(secret: &SecretKey, peer: &PublicKey) -> Result<Self> {
-        crate::nips::ecdh::shared_secret_x(secret, peer).map(|x| Self(*x))
+        ecdh::shared_secret_x(secret, peer)
+            .map(|x| Self(*x))
+            .ok_or(Error::Derive)
     }
 
     /// Wraps a raw ECDH x coordinate produced by an external key holder (TS
     /// `encryptWithSharedSecret` / `decryptWithSharedSecret`, #223).
-    #[must_use]
-    pub const fn from_bytes(shared_x: [u8; 32]) -> Self {
+    #[cfg(test)]
+    pub(crate) const fn from_bytes(shared_x: [u8; 32]) -> Self {
         Self(shared_x)
+    }
+
+    /// Encrypts `text` under this shared secret with an IV drawn from `rng`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Rng`] when `rng` fails.
+    pub fn encrypt<R>(&self, text: &str, rng: &mut R) -> Result<String>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        let mut iv = Zeroizing::new([0u8; IV_LEN]);
+        rng.try_fill_bytes(iv.as_mut_slice())
+            .map_err(|_| Error::Rng)?;
+        Ok(encrypt_with_iv(self, text, &iv))
+    }
+
+    /// Decrypts a NIP-04 `<base64(ct)>?iv=<base64(iv)>` payload under this
+    /// shared secret. Plaintext is UTF-8 lossy-decoded like `TextDecoder`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::MissingIv`] when the payload does not split into exactly
+    /// two non-empty parts on `?iv=`; [`Error::InvalidPayload`] for every
+    /// other failure (bad base64, wrong IV length, bad padding).
+    pub fn decrypt(&self, data: &str) -> Result<String> {
+        let mut parts = data.split("?iv=");
+        let (Some(ciphertext_b64), Some(iv_b64), None) = (parts.next(), parts.next(), parts.next())
+        else {
+            return Err(Error::MissingIv);
+        };
+        if ciphertext_b64.is_empty() || iv_b64.is_empty() {
+            return Err(Error::MissingIv);
+        }
+        let iv = Base64::decode_vec(iv_b64).map_err(|_| Error::InvalidPayload)?;
+        let mut buf =
+            Zeroizing::new(Base64::decode_vec(ciphertext_b64).map_err(|_| Error::InvalidPayload)?);
+        let Ok(iv) = <&[u8; IV_LEN]>::try_from(iv.as_slice()) else {
+            return Err(Error::InvalidPayload);
+        };
+        let cipher = Aes256CbcDec::new((&self.0).into(), iv.into());
+        let plaintext = cipher
+            .decrypt_padded::<Pkcs7>(buf.as_mut_slice())
+            .map_err(|_| Error::InvalidPayload)?;
+        Ok(String::from_utf8_lossy(plaintext).into_owned())
     }
 }
 
@@ -85,8 +142,7 @@ impl ZeroizeOnDrop for SharedSecret {}
 
 /// Encrypts `text` under `key` with an explicit `iv` — the deterministic
 /// form used by shared test vectors.
-#[must_use]
-pub fn encrypt_with_iv(key: &SharedSecret, text: &str, iv: &[u8; IV_LEN]) -> String {
+pub(crate) fn encrypt_with_iv(key: &SharedSecret, text: &str, iv: &[u8; IV_LEN]) -> String {
     let plaintext = text.as_bytes();
     // PKCS#7: append 1..=16 bytes, each holding the pad length.
     let pad_len = u8::try_from(BLOCK - plaintext.len() % BLOCK).unwrap_or_default();
@@ -104,59 +160,6 @@ pub fn encrypt_with_iv(key: &SharedSecret, text: &str, iv: &[u8; IV_LEN]) -> Str
     payload
 }
 
-/// Encrypts `text` under `key` with an IV drawn from `rng`.
-#[must_use]
-pub fn encrypt_with_rng<R>(key: &SharedSecret, text: &str, rng: &mut R) -> String
-where
-    R: rand_core::CryptoRng + ?Sized,
-{
-    let mut iv = Zeroizing::new([0u8; IV_LEN]);
-    rng.fill_bytes(iv.as_mut_slice());
-    encrypt_with_iv(key, text, &iv)
-}
-
-/// Encrypts `text` under `key` with an OS-entropy IV.
-///
-/// # Panics
-///
-/// When the OS entropy source fails — the same contract as
-/// [`crate::SecretKey::generate`].
-#[cfg(feature = "os-rng")]
-#[must_use]
-pub fn encrypt(key: &SharedSecret, text: &str) -> String {
-    encrypt_with_rng(key, text, &mut rand_core::UnwrapErr(getrandom::SysRng))
-}
-
-/// Decrypts a NIP-04 `<base64(ct)>?iv=<base64(iv)>` payload under `key`.
-/// Plaintext is UTF-8 lossy-decoded like `TextDecoder`.
-///
-/// # Errors
-///
-/// [`ErrorKind::Crypto`]: `"missing iv"` when the payload does not split
-/// into exactly two non-empty parts on `?iv=`, and `"invalid NIP-04
-/// payload"` for every other failure (bad base64, wrong IV length, bad
-/// padding) — like TS there is no padding-oracle distinction.
-pub fn decrypt(key: &SharedSecret, data: &str) -> Result<String> {
-    let mut parts = data.split("?iv=");
-    let (Some(ciphertext_b64), Some(iv_b64), None) = (parts.next(), parts.next(), parts.next())
-    else {
-        return Err(missing_iv());
-    };
-    if ciphertext_b64.is_empty() || iv_b64.is_empty() {
-        return Err(missing_iv());
-    }
-    let iv = Base64::decode_vec(iv_b64).map_err(|_| invalid())?;
-    let mut buf = Zeroizing::new(Base64::decode_vec(ciphertext_b64).map_err(|_| invalid())?);
-    let Ok(iv) = <&[u8; IV_LEN]>::try_from(iv.as_slice()) else {
-        return Err(invalid());
-    };
-    let cipher = Aes256CbcDec::new((&key.0).into(), iv.into());
-    let plaintext = cipher
-        .decrypt_padded::<Pkcs7>(buf.as_mut_slice())
-        .map_err(|_| invalid())?;
-    Ok(String::from_utf8_lossy(plaintext).into_owned())
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(
@@ -167,17 +170,11 @@ mod tests {
     )]
 
     use alloc::format;
-    use alloc::string::ToString;
     use alloc::vec::Vec;
 
-    use super::*;
+    use serde::Deserialize;
 
-    const SEC1: &str = "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268";
-    const PUB2: &str = "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e";
-    // Vector values from vectors/nip04/codec.json (plaintext "hi").
-    const SHARED: &str = "d5f1424c2796acf26048369b21aa426ea9908cbae8fafed428dc6d16f0aac669";
-    const IV: [u8; 16] = [0xaa; 16];
-    const PAYLOAD: &str = "GaqpqgDySizH9H4RBmRQ2g==?iv=qqqqqqqqqqqqqqqqqqqqqg==";
+    use super::*;
 
     fn unhex(s: &str) -> Vec<u8> {
         (0..s.len())
@@ -186,53 +183,69 @@ mod tests {
             .collect()
     }
 
-    fn shared() -> SharedSecret {
-        SharedSecret::from_bytes(unhex(SHARED).try_into().unwrap())
+    /// `vectors/nip04/codec.json`: `derive`/`encrypt_with_iv`/`decrypt` are all
+    /// internals, so the capability runs as an in-crate test.
+    #[test]
+    fn codec_vectors() {
+        #[derive(Deserialize)]
+        struct Case {
+            sec1: String,
+            pub2: String,
+            iv: String,
+            plaintext: String,
+            payload: String,
+        }
+        #[derive(Deserialize)]
+        struct Vec_ {
+            cases: Vec<Case>,
+        }
+        let v: Vec_ = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../vectors/nip04/codec.json"
+        )))
+        .unwrap();
+        for (i, c) in v.cases.iter().enumerate() {
+            let secret = SecretKey::from_hex(&c.sec1).unwrap();
+            let peer = PublicKey::from_hex(&c.pub2).unwrap();
+            let shared = SharedSecret::derive(&secret, &peer).unwrap();
+            let iv: [u8; 16] = unhex(&c.iv).try_into().unwrap();
+            let payload = encrypt_with_iv(&shared, &c.plaintext, &iv);
+            assert_eq!(payload, c.payload, "case {i}: encrypt");
+            assert_eq!(
+                shared.decrypt(&c.payload).unwrap(),
+                c.plaintext,
+                "case {i}: decrypt"
+            );
+        }
     }
 
     #[test]
-    fn derive_and_encrypt_match_the_vector() {
-        let secret = SecretKey::from_hex(SEC1).unwrap();
-        let peer = PublicKey::from_hex(PUB2).unwrap();
-        let derived = SharedSecret::derive(&secret, &peer).unwrap();
-        for key in [derived, shared()] {
-            assert_eq!(encrypt_with_iv(&key, "hi", &IV), PAYLOAD);
-            assert_eq!(decrypt(&key, PAYLOAD).unwrap(), "hi");
-        }
-        assert_eq!(format!("{:?}", shared()), "SharedSecret(..)");
-    }
-
-    /// Deterministic rng emitting iv 00..0f — `rand_core` exposes no canned
-    /// test rng.
-    struct Seq(u8);
-    impl rand_core::TryRng for Seq {
-        type Error = rand_core::Infallible;
-        fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-            let mut out = [0u8; 4];
-            self.try_fill_bytes(&mut out)?;
-            Ok(u32::from_le_bytes(out))
-        }
-        fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-            let mut out = [0u8; 8];
-            self.try_fill_bytes(&mut out)?;
-            Ok(u64::from_le_bytes(out))
-        }
-        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
-            for byte in dest {
-                *byte = self.0;
-                self.0 = self.0.wrapping_add(1);
+    fn encrypt_rng_uses_the_rng() {
+        struct Seq(u8);
+        impl rand_core::TryRng for Seq {
+            type Error = rand_core::Infallible;
+            fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+                Ok(0)
             }
-            Ok(())
+            fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+                Ok(0)
+            }
+            fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+                let next = self.0;
+                dest.iter_mut()
+                    .zip(0u8..)
+                    .for_each(|(byte, n)| *byte = next.wrapping_add(n));
+                self.0 = next.wrapping_add(u8::try_from(dest.len()).unwrap_or(u8::MAX));
+                Ok(())
+            }
         }
-    }
-    impl rand_core::TryCryptoRng for Seq {}
+        impl rand_core::TryCryptoRng for Seq {}
 
-    #[test]
-    fn encrypt_with_rng_uses_the_rng() {
+        let shared = SharedSecret::from_bytes([7; 32]);
         assert_eq!(
-            encrypt_with_rng(&shared(), "hi", &mut Seq(0)),
+            shared.encrypt("hi", &mut Seq(0)).unwrap(),
             encrypt_with_iv(
-                &shared(),
+                &shared,
                 "hi",
                 &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
             )
@@ -241,27 +254,25 @@ mod tests {
 
     #[test]
     fn decrypt_error_shapes() {
-        let key = shared();
-        // Missing iv: no separator, empty side, or a second separator.
+        let key = SharedSecret::from_bytes([7; 32]);
         for payload in ["abc", "?iv=abc", "abc?iv=", "abc?iv=def?iv=ghi", ""] {
-            let err = decrypt(&key, payload).unwrap_err();
-            assert_eq!(err.kind(), ErrorKind::Crypto);
-            assert_eq!(
-                err.to_string(),
-                "crypto: invalid NIP-04 payload: missing iv"
-            );
+            assert!(matches!(
+                key.decrypt(payload).unwrap_err(),
+                Error::MissingIv
+            ));
         }
-        // Everything else reports the generic message.
         for payload in [
-            "!!!?iv=AAAAAAAAAAAAAAAAAAAAAA==",      // bad ct base64
-            "aGVsbG8=?iv=!!!",                      // bad iv base64
-            "aGVsbG8=?iv=AAAA",                     // 2-byte iv
-            "aGVsbG8=?iv=AAAAAAAAAAAAAAAAAAAAAA==", // ct not a block multiple
-            "FBcOBdVOrSZCvx8l6/hzpw==?iv=qqqqqqqqqqqqqqqqqqqqqg==", // bad padding
+            "!!!?iv=AAAAAAAAAAAAAAAAAAAAAA==",
+            "aGVsbG8=?iv=!!!",
+            "aGVsbG8=?iv=AAAA",
+            "aGVsbG8=?iv=AAAAAAAAAAAAAAAAAAAAAA==",
+            "FBcOBdVOrSZCvx8l6/hzpw==?iv=qqqqqqqqqqqqqqqqqqqqqg==",
         ] {
-            let err = decrypt(&key, payload).unwrap_err();
-            assert_eq!(err.kind(), ErrorKind::Crypto);
-            assert_eq!(err.to_string(), "crypto: invalid NIP-04 payload");
+            assert!(matches!(
+                key.decrypt(payload).unwrap_err(),
+                Error::InvalidPayload
+            ));
         }
+        assert_eq!(format!("{key:?}"), "SharedSecret(..)");
     }
 }

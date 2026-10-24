@@ -26,7 +26,7 @@ use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::nips::{Error, ErrorKind, Result};
+use crate::nips::ecdh;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -44,9 +44,44 @@ const MIN_DATA_LEN: usize = 1 + NONCE_LEN + SHORT_PREFIX_LEN + 32 + MAC_LEN;
 /// Shortest base64 payload (132 chars for 99 bytes, padded).
 const MIN_PAYLOAD_CHARS: usize = 132;
 
-fn crypto_error(message: impl Into<alloc::borrow::Cow<'static, str>>) -> Error {
-    Error::new(ErrorKind::Crypto, message)
+/// The error type returned by NIP-44 operations.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// The peer's bytes do not lift to a curve point.
+    #[error("invalid public key")]
+    Derive,
+    /// `rng` failed to fill the nonce.
+    #[error("rng failed")]
+    Rng,
+    /// The plaintext is empty or exceeds the `u32` length prefix.
+    #[error("invalid plaintext size: must be between 1 and 4294967295 bytes")]
+    PlaintextSize,
+    /// The padded length does not fit `usize` (32-bit targets).
+    #[error("padded length exceeds the platform's address space")]
+    PaddedOverflow,
+    /// The payload is outside the allowed base64 length window.
+    #[error("invalid payload length")]
+    PayloadLength,
+    /// The payload version is not 2 (or starts with `#`).
+    #[error("unknown encryption version")]
+    UnknownVersion,
+    /// The payload is not padded standard-alphabet base64.
+    #[error("invalid base64")]
+    InvalidBase64,
+    /// The decoded payload is too short for version + nonce + mac.
+    #[error("invalid data length")]
+    DataLength,
+    /// The payload MAC did not verify in constant time.
+    #[error("invalid MAC")]
+    Mac,
+    /// The decrypted padding block is malformed.
+    #[error("invalid padding")]
+    Padding,
 }
+
+/// Result type for NIP-44 operations.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 /// Builds an `HMAC-SHA256` for a 32-byte key. `KeyInit::new` takes a
 /// block-size key; a 32-byte key zero-padded to 64 bytes is exactly what
@@ -87,22 +122,37 @@ pub struct ConversationKey([u8; 32]);
 impl ConversationKey {
     /// Derives the key from our `secret` and the peer's `peer` public key:
     /// `secp256k1::ecdh::shared_secret_point` with the peer lifted to an
-    /// even-parity x-only key, then [`Self::from_shared_secret`] on the x
-    /// coordinate. The temporary `secp256k1::SecretKey` and shared point are
-    /// erased before returning.
+    /// even-parity x-only key, then HKDF-extract on the x coordinate. The
+    /// temporary `secp256k1::SecretKey` and shared point are erased before
+    /// returning.
     ///
     /// # Errors
     ///
-    /// [`ErrorKind::Crypto`] when `peer`'s bytes do not lift to a curve point.
+    /// [`Error::Derive`] when `peer`'s bytes do not lift to a curve point.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use nk_core::nips::nip44::ConversationKey;
+    /// use nk_core::{SecretKey, Keys};
+    ///
+    /// let alice = SecretKey::from_bytes([1; 32]).unwrap();
+    /// let bob = SecretKey::from_bytes([2; 32]).unwrap();
+    /// let key = ConversationKey::derive(&alice, &bob.public_key())?;
+    /// let mut rng = nk_core::SysRng;
+    /// let payload = key.encrypt("hi", &mut rng)?;
+    /// assert_eq!(key.decrypt(&payload)?, "hi");
+    /// # Ok::<(), nk_core::nips::nip44::Error>(())
+    /// ```
     pub fn derive(secret: &SecretKey, peer: &PublicKey) -> Result<Self> {
-        crate::nips::ecdh::shared_secret_x(secret, peer)
+        ecdh::shared_secret_x(secret, peer)
             .map(|shared_x| Self::from_shared_secret(&shared_x))
+            .ok_or(Error::Derive)
     }
 
     /// HKDF-extracts a conversation key from a raw ECDH x coordinate (TS
     /// `getConversationKeyFromSharedSecret`).
-    #[must_use]
-    pub fn from_shared_secret(shared_x: &[u8; 32]) -> Self {
+    pub(crate) fn from_shared_secret(shared_x: &[u8; 32]) -> Self {
         let (mut prk, hkdf) = Hkdf::<Sha256>::extract(Some(b"nip44-v2"), shared_x);
         let mut key = [0u8; 32];
         key.copy_from_slice(&prk);
@@ -114,15 +164,111 @@ impl ConversationKey {
     }
 
     /// Wraps already-derived key bytes.
-    #[must_use]
-    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+    #[cfg(test)]
+    pub(crate) const fn from_bytes(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
 
     /// A copy of the 32 key bytes.
-    #[must_use]
-    pub const fn to_bytes(&self) -> [u8; 32] {
+    #[cfg(test)]
+    pub(crate) const fn to_bytes(&self) -> [u8; 32] {
         self.0
+    }
+
+    /// Encrypts `plaintext` with a nonce drawn from `rng` (TS
+    /// `nip44.encrypt`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Rng`] when `rng` fails; [`Error::PlaintextSize`] or
+    /// [`Error::PaddedOverflow`] on an out-of-range plaintext size.
+    pub fn encrypt<R>(&self, plaintext: &str, rng: &mut R) -> Result<String>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        let mut nonce = Zeroizing::new([0u8; NONCE_LEN]);
+        rng.try_fill_bytes(nonce.as_mut_slice())
+            .map_err(|_| Error::Rng)?;
+        self.encrypt_with_nonce(plaintext, &nonce)
+    }
+
+    /// Encrypts `plaintext` with a caller-supplied `nonce` — the
+    /// deterministic form used by shared test vectors.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::PlaintextSize`] or [`Error::PaddedOverflow`] on an
+    /// out-of-range plaintext size.
+    pub(crate) fn encrypt_with_nonce(&self, plaintext: &str, nonce: &[u8; 32]) -> Result<String> {
+        let keys = MessageKeys::derive(self, nonce);
+        let mut data = pad(plaintext)?;
+        ChaCha20::new(keys.chacha_key().into(), keys.chacha_nonce().into())
+            .apply_keystream(data.as_mut_slice());
+        let mac = hmac_aad(keys.hmac_key(), data.as_slice(), nonce);
+        let mut payload = Vec::with_capacity(1 + NONCE_LEN + data.len() + MAC_LEN);
+        payload.push(VERSION);
+        payload.extend_from_slice(nonce);
+        payload.extend_from_slice(data.as_slice());
+        payload.extend_from_slice(&mac);
+        Ok(Base64::encode_string(&payload))
+    }
+
+    /// Decrypts a NIP-44 `payload` under [`DEFAULT_MAX_PAYLOAD_CHARS`].
+    ///
+    /// For a different cap use [`ConversationKey::decrypt_with_limit`].
+    ///
+    /// The order matches TS and the spec: `#`/length/version checks first,
+    /// then a constant-time MAC verify (decryption does not run on MAC
+    /// failure), then padding validation. Plaintext is UTF-8 lossy-decoded
+    /// like `TextDecoder`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::UnknownVersion`], [`Error::PayloadLength`],
+    /// [`Error::InvalidBase64`], [`Error::DataLength`], [`Error::Mac`], or
+    /// [`Error::Padding`].
+    pub fn decrypt(&self, payload: &str) -> Result<String> {
+        self.decrypt_with_limit(payload, DEFAULT_MAX_PAYLOAD_CHARS)
+    }
+
+    /// [`Self::decrypt`] rejecting payloads longer than `max_payload_chars`
+    /// base64 characters.
+    /// Decrypts `payload`, rejecting ciphertexts longer than
+    /// `max_payload_len` characters — TS `decrypt`'s `maxPayloadChars`
+    /// option. Pass [`DEFAULT_MAX_PAYLOAD_CHARS`] for the spec default.
+    ///
+    /// # Errors
+    ///
+    /// The same conditions as [`ConversationKey::decrypt`].
+    pub fn decrypt_with_limit(&self, payload: &str, max_payload_chars: usize) -> Result<String> {
+        if payload.starts_with('#') {
+            return Err(Error::UnknownVersion);
+        }
+        if payload.len() < MIN_PAYLOAD_CHARS || payload.len() > max_payload_chars {
+            return Err(Error::PayloadLength);
+        }
+        let mut buf = Zeroizing::new(vec![0u8; payload.len()]);
+        let data = Base64::decode(payload.as_bytes(), buf.as_mut_slice())
+            .map_err(|_| Error::InvalidBase64)?;
+        if data.len() < MIN_DATA_LEN {
+            return Err(Error::DataLength);
+        }
+        if data.first() != Some(&VERSION) {
+            return Err(Error::UnknownVersion);
+        }
+        let Some((nonce, ciphertext, mac)) = split_payload(data) else {
+            return Err(Error::DataLength);
+        };
+        let keys = MessageKeys::derive(self, nonce);
+        hmac_sha256(keys.hmac_key())
+            .chain_update(nonce)
+            .chain_update(ciphertext)
+            .verify_slice(mac)
+            .map_err(|_| Error::Mac)?;
+        let mut padded = Zeroizing::new(ciphertext.to_vec());
+        ChaCha20::new(keys.chacha_key().into(), keys.chacha_nonce().into())
+            .apply_keystream(padded.as_mut_slice());
+        unpad(padded.as_slice())
     }
 }
 
@@ -144,7 +290,7 @@ impl ZeroizeOnDrop for ConversationKey {}
 /// `getMessageKeys`): `HKDF-expand(conversation_key, nonce, 76)` split into
 /// `chacha_key` (32) / `chacha_nonce` (12) / `hmac_key` (32).
 #[derive(Clone)]
-pub struct MessageKeys {
+pub(crate) struct MessageKeys {
     chacha_key: [u8; 32],
     chacha_nonce: [u8; 12],
     hmac_key: [u8; 32],
@@ -154,8 +300,7 @@ impl MessageKeys {
     /// `HKDF-expand(PRK = key, info = nonce, L = 76)`: three 32-byte
     /// `HMAC-SHA256` blocks, the last truncated to 12 bytes. All inputs are
     /// fixed-size, so every HMAC is infallible.
-    #[must_use]
-    pub fn derive(key: &ConversationKey, nonce: &[u8; 32]) -> Self {
+    pub(crate) fn derive(key: &ConversationKey, nonce: &[u8; 32]) -> Self {
         let block = |prev: &[u8], counter: u8| -> [u8; 32] {
             hmac_sha256_tag(&key.0, &[prev, nonce, &[counter]])
         };
@@ -177,21 +322,15 @@ impl MessageKeys {
         }
     }
 
-    /// The 32-byte `ChaCha20` key.
-    #[must_use]
-    pub const fn chacha_key(&self) -> &[u8; 32] {
+    pub(crate) const fn chacha_key(&self) -> &[u8; 32] {
         &self.chacha_key
     }
 
-    /// The 12-byte `ChaCha20` nonce.
-    #[must_use]
-    pub const fn chacha_nonce(&self) -> &[u8; 12] {
+    pub(crate) const fn chacha_nonce(&self) -> &[u8; 12] {
         &self.chacha_nonce
     }
 
-    /// The 32-byte `HMAC-SHA256` key.
-    #[must_use]
-    pub const fn hmac_key(&self) -> &[u8; 32] {
+    pub(crate) const fn hmac_key(&self) -> &[u8; 32] {
         &self.hmac_key
     }
 }
@@ -217,23 +356,19 @@ impl ZeroizeOnDrop for MessageKeys {}
 ///
 /// # Errors
 ///
-/// [`ErrorKind::Crypto`] when `len` is zero or exceeds the `u32` maximum
-/// (TS also rejects non-integers and negatives — unrepresentable in
-/// `usize`), or when the padded length does not fit `usize` (32-bit
-/// targets: NIP-44 padded lengths reach `2^32`).
-pub fn calc_padded_len(len: usize) -> Result<usize> {
-    let len = u64::try_from(len).map_err(|_| crypto_error("invalid plaintext size"))?;
-    usize::try_from(padded_len(len)?)
-        .map_err(|_| crypto_error("padded length exceeds the platform's address space"))
+/// [`Error::PlaintextSize`] when `len` is zero or exceeds the `u32` maximum,
+/// [`Error::PaddedOverflow`] when the padded length does not fit `usize`
+/// (32-bit targets: NIP-44 padded lengths reach `2^32`).
+pub(crate) fn calc_padded_len(len: usize) -> Result<usize> {
+    let len = u64::try_from(len).map_err(|_| Error::PlaintextSize)?;
+    usize::try_from(padded_len(len)?).map_err(|_| Error::PaddedOverflow)
 }
 
 /// `calc_padded_len` computed in `u64` so the `2^32` padded-length ceiling
 /// exists on 32-bit targets instead of overflowing `usize`.
 fn padded_len(len: u64) -> Result<u64> {
     if !(1..=u64::from(u32::MAX)).contains(&len) {
-        return Err(crypto_error(
-            "invalid plaintext size: must be between 1 and 4294967295 bytes",
-        ));
+        return Err(Error::PlaintextSize);
     }
     if len <= 32 {
         return Ok(32);
@@ -255,9 +390,7 @@ fn pad(plaintext: &str) -> Result<Zeroizing<Vec<u8>>> {
     let unpadded = plaintext.as_bytes();
     let len = unpadded.len();
     if !(MIN_PLAINTEXT_LEN..=MAX_PLAINTEXT_LEN).contains(&len) {
-        return Err(crypto_error(
-            "invalid plaintext size: must be between 1 and 4294967295 bytes",
-        ));
+        return Err(Error::PlaintextSize);
     }
     let padded_len = calc_padded_len(len)?;
     let prefix_len = if len >= EXTENDED_PREFIX_THRESHOLD {
@@ -265,21 +398,18 @@ fn pad(plaintext: &str) -> Result<Zeroizing<Vec<u8>>> {
     } else {
         SHORT_PREFIX_LEN
     };
-    let Some(total) = prefix_len.checked_add(padded_len) else {
-        return Err(crypto_error(
-            "padded length exceeds the platform's address space",
-        ));
-    };
+    let total = prefix_len
+        .checked_add(padded_len)
+        .ok_or(Error::PaddedOverflow)?;
     let mut padded = Zeroizing::new(Vec::with_capacity(total));
     if len >= EXTENDED_PREFIX_THRESHOLD {
         // `len <= u32::MAX` is guaranteed by the range check above.
-        let len32 =
-            u32::try_from(len).map_err(|_| crypto_error("invalid plaintext size: too large"))?;
+        let len32 = u32::try_from(len).map_err(|_| Error::PlaintextSize)?;
         padded.extend_from_slice(&[0, 0]);
         padded.extend_from_slice(&len32.to_be_bytes());
     } else {
         // `len < 65536` here, so the conversion cannot fail.
-        let len16 = u16::try_from(len).map_err(|_| crypto_error("invalid plaintext size"))?;
+        let len16 = u16::try_from(len).map_err(|_| Error::PlaintextSize)?;
         padded.extend_from_slice(&len16.to_be_bytes());
     }
     padded.extend_from_slice(unpadded);
@@ -288,11 +418,8 @@ fn pad(plaintext: &str) -> Result<Zeroizing<Vec<u8>>> {
 }
 
 fn unpad(padded: &[u8]) -> Result<String> {
-    fn invalid<T>() -> Result<T> {
-        Err(crypto_error("invalid padding"))
-    }
     let Some(&prefix) = padded.first_chunk::<2>() else {
-        return invalid();
+        return Err(Error::Padding);
     };
     let first_two = u16::from_be_bytes(prefix);
     let (unpadded_len, prefix_len) = if first_two == 0 {
@@ -300,27 +427,27 @@ fn unpad(padded: &[u8]) -> Result<String> {
             .get(SHORT_PREFIX_LEN..EXTENDED_PREFIX_LEN)
             .and_then(|s| <[u8; 4]>::try_from(s).ok())
         else {
-            return invalid();
+            return Err(Error::Padding);
         };
         let len = u32::from_be_bytes(len_bytes) as usize;
         if len < EXTENDED_PREFIX_THRESHOLD {
-            return invalid();
+            return Err(Error::Padding);
         }
         (len, EXTENDED_PREFIX_LEN)
     } else {
         (usize::from(first_two), SHORT_PREFIX_LEN)
     };
     if !(MIN_PLAINTEXT_LEN..=MAX_PLAINTEXT_LEN).contains(&unpadded_len) {
-        return invalid();
+        return Err(Error::Padding);
     }
     let Some(end) = prefix_len.checked_add(unpadded_len) else {
-        return invalid();
+        return Err(Error::Padding);
     };
     let Some(unpadded) = padded.get(prefix_len..end) else {
-        return invalid();
+        return Err(Error::Padding);
     };
-    if padded.len() != prefix_len + calc_padded_len(unpadded_len)? {
-        return invalid();
+    if padded.len() != prefix_len + calc_padded_len(unpadded_len).map_err(|_| Error::Padding)? {
+        return Err(Error::Padding);
     }
     Ok(String::from_utf8_lossy(unpadded).into_owned())
 }
@@ -340,133 +467,43 @@ fn split_payload(data: &[u8]) -> Option<(&[u8; 32], &[u8], &[u8; 32])> {
     Some((nonce, ciphertext, mac))
 }
 
-/// Encrypts `plaintext` with a caller-supplied `nonce` (TS
-/// `nip44.encrypt(plaintext, key, nonce)`).
-///
-/// # Errors
-///
-/// [`ErrorKind::Crypto`] on an out-of-range plaintext size.
-pub fn encrypt_with_nonce(
-    plaintext: &str,
-    key: &ConversationKey,
-    nonce: &[u8; 32],
-) -> Result<String> {
-    let keys = MessageKeys::derive(key, nonce);
-    let mut data = pad(plaintext)?;
-    ChaCha20::new(keys.chacha_key().into(), keys.chacha_nonce().into())
-        .apply_keystream(data.as_mut_slice());
-    let mac = hmac_aad(keys.hmac_key(), data.as_slice(), nonce);
-    let mut payload = Vec::with_capacity(1 + NONCE_LEN + data.len() + MAC_LEN);
-    payload.push(VERSION);
-    payload.extend_from_slice(nonce);
-    payload.extend_from_slice(data.as_slice());
-    payload.extend_from_slice(&mac);
-    Ok(Base64::encode_string(&payload))
-}
-
-/// Encrypts `plaintext` with a nonce drawn from `rng`.
-///
-/// # Errors
-///
-/// [`ErrorKind::Crypto`] on an out-of-range plaintext size.
-pub fn encrypt_with_rng<R>(plaintext: &str, key: &ConversationKey, rng: &mut R) -> Result<String>
-where
-    R: rand_core::CryptoRng + ?Sized,
-{
-    let mut nonce = Zeroizing::new([0u8; NONCE_LEN]);
-    rng.fill_bytes(nonce.as_mut_slice());
-    encrypt_with_nonce(plaintext, key, &nonce)
-}
-
-/// Encrypts `plaintext` with an OS-entropy nonce.
-///
-/// # Errors
-///
-/// [`ErrorKind::Crypto`] on an out-of-range plaintext size.
-///
-/// # Panics
-///
-/// When the OS entropy source fails — the same contract as
-/// [`crate::SecretKey::generate`].
-#[cfg(feature = "os-rng")]
-pub fn encrypt(plaintext: &str, key: &ConversationKey) -> Result<String> {
-    encrypt_with_rng(plaintext, key, &mut rand_core::UnwrapErr(getrandom::SysRng))
-}
-
-/// Decrypts a NIP-44 `payload` under [`DEFAULT_MAX_PAYLOAD_CHARS`].
-///
-/// # Errors
-///
-/// [`ErrorKind::Crypto`] — see [`decrypt_with_max_len`].
-pub fn decrypt(payload: &str, key: &ConversationKey) -> Result<String> {
-    decrypt_with_max_len(payload, key, DEFAULT_MAX_PAYLOAD_CHARS)
-}
-
-/// Decrypts a NIP-44 `payload`, rejecting payloads longer than
-/// `max_payload_chars` base64 characters.
-///
-/// The order matches TS and the spec: `#`/length/version checks first, then a
-/// constant-time MAC verify (`verify_slice` — decryption does not run on MAC
-/// failure), then padding validation. Plaintext is UTF-8 lossy-decoded like
-/// `TextDecoder`.
-///
-/// # Errors
-///
-/// [`ErrorKind::Crypto`] on a bad length, unknown version, bad base64, MAC
-/// mismatch, or invalid padding.
-pub fn decrypt_with_max_len(
-    payload: &str,
-    key: &ConversationKey,
-    max_payload_chars: usize,
-) -> Result<String> {
-    if payload.starts_with('#') {
-        return Err(crypto_error("unknown encryption version"));
-    }
-    if payload.len() < MIN_PAYLOAD_CHARS || payload.len() > max_payload_chars {
-        return Err(crypto_error("invalid payload length"));
-    }
-    let mut buf = Zeroizing::new(vec![0u8; payload.len()]);
-    let data = Base64::decode(payload.as_bytes(), buf.as_mut_slice())
-        .map_err(|_| crypto_error("invalid base64"))?;
-    if data.len() < MIN_DATA_LEN {
-        return Err(crypto_error("invalid data length"));
-    }
-    if data.first() != Some(&VERSION) {
-        return Err(crypto_error("unknown encryption version"));
-    }
-    let Some((nonce, ciphertext, mac)) = split_payload(data) else {
-        return Err(crypto_error("invalid data length"));
-    };
-    let keys = MessageKeys::derive(key, nonce);
-    hmac_sha256(keys.hmac_key())
-        .chain_update(nonce)
-        .chain_update(ciphertext)
-        .verify_slice(mac)
-        .map_err(|_| crypto_error("invalid MAC"))?;
-    let mut padded = Zeroizing::new(ciphertext.to_vec());
-    ChaCha20::new(keys.chacha_key().into(), keys.chacha_nonce().into())
-        .apply_keystream(padded.as_mut_slice());
-    unpad(padded.as_slice())
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(
         clippy::unwrap_used,
         clippy::expect_used,
         clippy::panic,
+        clippy::indexing_slicing,
+        clippy::excessive_nesting,
+        clippy::missing_assert_message,
+        clippy::option_if_let_else,
+        clippy::or_fun_call,
+        clippy::str_to_string,
         reason = "tests fail by panicking"
     )]
 
     use alloc::format;
-    use alloc::vec;
     use alloc::vec::Vec;
+
+    use serde::Deserialize;
+    use sha2::Digest;
 
     use super::*;
 
-    const SEC1: &str = "315e59ff51cb9209768cf7da80791ddcaae56ac9775eb25b6dee1234bc5d2268";
-    const PUB2: &str = "c2f9d9948dc8c7c38321e4b85c8558872eafa0641cd269db76848a6073e69133";
-    const NONCE: &[u8; 32] = &[0x0b; 32];
+    fn unhex(s: &str) -> Vec<u8> {
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    fn hex_arr<const N: usize>(s: &str) -> Option<[u8; N]> {
+        crate::hex::decode_caller::<N>(s).ok()
+    }
+
+    fn unhex_arr<const N: usize>(s: &str) -> [u8; N] {
+        unhex(s).try_into().expect("hex length")
+    }
 
     fn hex(bytes: &[u8]) -> String {
         use core::fmt::Write as _;
@@ -476,194 +513,410 @@ mod tests {
         })
     }
 
-    fn conversation_key() -> ConversationKey {
-        let secret = SecretKey::from_hex(SEC1).unwrap();
-        let peer = PublicKey::from_hex(PUB2).unwrap();
-        ConversationKey::derive(&secret, &peer).unwrap()
-    }
+    const OFFICIAL: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../vectors/nip44/official.json"
+    ));
+    const EXTENDED: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../vectors/nip44/extended.json"
+    ));
+    const SHARED_SECRET: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../vectors/nip44/shared-secret.json"
+    ));
 
     #[test]
-    fn derive_matches_the_official_vector() {
-        let key = conversation_key();
-        assert_eq!(
-            hex(&key.to_bytes()),
-            "3dfef0ce2a4d80a25e7a328accf73448ef67096f65f79588e358d9a0eb9013f1"
-        );
-        assert_eq!(format!("{key:?}"), "ConversationKey(..)");
-    }
+    fn official_valid() {
+        #[derive(Deserialize)]
+        struct CkCase {
+            sec1: String,
+            pub2: String,
+            conversation_key: String,
+        }
+        #[derive(Deserialize)]
+        struct MkNonce {
+            nonce: String,
+            chacha_key: String,
+            chacha_nonce: String,
+            hmac_key: String,
+        }
+        #[derive(Deserialize)]
+        struct MkCase {
+            conversation_key: String,
+            keys: Vec<MkNonce>,
+        }
+        #[derive(Deserialize)]
+        struct EdCase {
+            conversation_key: String,
+            nonce: String,
+            plaintext: String,
+            payload: String,
+        }
+        #[derive(Deserialize)]
+        struct LongCase {
+            conversation_key: String,
+            nonce: String,
+            pattern: String,
+            repeat: usize,
+            plaintext_sha256: String,
+            payload_sha256: String,
+        }
+        #[derive(Deserialize)]
+        struct Valid {
+            get_conversation_key: Vec<CkCase>,
+            get_message_keys: MkCase,
+            calc_padded_len: Vec<[usize; 2]>,
+            encrypt_decrypt: Vec<EdCase>,
+            encrypt_decrypt_long_msg: Vec<LongCase>,
+        }
+        #[derive(Deserialize)]
+        struct V2 {
+            valid: Valid,
+        }
+        #[derive(Deserialize)]
+        struct Doc {
+            v2: V2,
+        }
+        let doc: Doc = serde_json::from_str(OFFICIAL).unwrap();
 
-    #[test]
-    fn from_shared_secret_matches_derive() {
-        // The ECDH x-coordinate of the first shared-secret vector case.
-        let shared = unhex("5ad01c0fc57ed5f92a0518b6440ca876eb1f247ddbb237ba1caaabbf4cebbdce");
-        let shared: [u8; 32] = shared.try_into().unwrap();
-        assert_eq!(
-            hex(&ConversationKey::from_shared_secret(&shared).to_bytes()),
-            "3dfef0ce2a4d80a25e7a328accf73448ef67096f65f79588e358d9a0eb9013f1"
-        );
-    }
+        for (i, c) in doc.v2.valid.get_conversation_key.iter().enumerate() {
+            let secret = SecretKey::from_hex(&c.sec1).unwrap();
+            let peer = PublicKey::from_hex(&c.pub2).unwrap();
+            let key = ConversationKey::derive(&secret, &peer).unwrap();
+            assert_eq!(hex(&key.to_bytes()), c.conversation_key, "ck case {i}");
+        }
 
-    fn unhex(s: &str) -> Vec<u8> {
-        (0..s.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
-            .collect()
-    }
-
-    #[test]
-    fn message_keys_match_the_official_vector() {
-        let key = ConversationKey::from_bytes(
-            unhex("a1a3d60f3470a8612633924e91febf96dc5366ce130f658b1f0fc652c20b3b54")
-                .try_into()
-                .unwrap(),
-        );
-        let keys = MessageKeys::derive(
-            &key,
-            &unhex("e1e6f880560d6d149ed83dcc7e5861ee62a5ee051f7fde9975fe5d25d2a02d72")
-                .try_into()
-                .unwrap(),
-        );
-        assert_eq!(
-            hex(keys.chacha_key()),
-            "f145f3bed47cb70dbeaac07f3a3fe683e822b3715edb7c4fe310829014ce7d76"
-        );
-        assert_eq!(hex(keys.chacha_nonce()), "c4ad129bb01180c0933a160c");
-        assert_eq!(
-            hex(keys.hmac_key()),
-            "027c1db445f05e2eee864a0975b0ddef5b7110583c8c192de3732571ca5838c4"
-        );
-        assert_eq!(format!("{keys:?}"), "MessageKeys(..)");
-    }
-
-    #[test]
-    fn calc_padded_len_boundaries() {
-        assert_eq!(calc_padded_len(0).unwrap_err().kind(), ErrorKind::Crypto);
-        assert_eq!(calc_padded_len(1).unwrap(), 32);
-        assert_eq!(calc_padded_len(32).unwrap(), 32);
-        assert_eq!(calc_padded_len(33).unwrap(), 64);
-        assert_eq!(calc_padded_len(250).unwrap(), 256);
-        assert_eq!(calc_padded_len(320).unwrap(), 320);
-        assert_eq!(calc_padded_len(515).unwrap(), 640);
-        assert_eq!(calc_padded_len(65535).unwrap(), 65536);
-        assert_eq!(calc_padded_len(65536).unwrap(), 65536);
-        // len - 1 is exactly 2^16: the bucket switches to the 2^17 table.
-        assert_eq!(calc_padded_len(65537).unwrap(), 81920);
-    }
-
-    #[test]
-    fn calc_padded_len_uses_64_bit_math() {
-        // The spec ceiling: the u32 length prefix allows plaintexts up to
-        // 0xFFFF_FFFF, whose padded length is exactly 2^32 — past `usize::MAX`
-        // on 32-bit targets, so the helper is exercised directly.
-        assert_eq!(padded_len(u64::from(u32::MAX)).unwrap(), 0x1_0000_0000);
-        assert_eq!(
-            padded_len(u64::from(u32::MAX) + 1).unwrap_err().kind(),
-            ErrorKind::Crypto
-        );
-        #[cfg(target_pointer_width = "64")]
         {
-            assert_eq!(calc_padded_len(u32::MAX as usize).unwrap(), 0x1_0000_0000);
+            let c = &doc.v2.valid.get_message_keys;
+            let ck = ConversationKey::from_bytes(unhex_arr(&c.conversation_key));
+            for (j, n) in c.keys.iter().enumerate() {
+                let keys = MessageKeys::derive(&ck, &unhex_arr(&n.nonce));
+                assert_eq!(hex(keys.chacha_key()), n.chacha_key, "mk {j} chacha_key");
+                assert_eq!(
+                    hex(keys.chacha_nonce()),
+                    n.chacha_nonce,
+                    "mk {j} chacha_nonce"
+                );
+                assert_eq!(hex(keys.hmac_key()), n.hmac_key, "mk {j} hmac_key");
+            }
+        }
+
+        for [input, expected] in &doc.v2.valid.calc_padded_len {
+            assert_eq!(calc_padded_len(*input).unwrap(), *expected, "pad {input}");
+        }
+
+        for (i, c) in doc.v2.valid.encrypt_decrypt.iter().enumerate() {
+            let ck = ConversationKey::from_bytes(unhex_arr(&c.conversation_key));
+            let payload = ck
+                .encrypt_with_nonce(&c.plaintext, &unhex_arr(&c.nonce))
+                .unwrap();
+            assert_eq!(payload, c.payload, "ed case {i}: encrypt");
             assert_eq!(
-                calc_padded_len(u32::MAX as usize + 1).unwrap_err().kind(),
-                ErrorKind::Crypto
+                ck.decrypt(&c.payload).unwrap(),
+                c.plaintext,
+                "ed case {i}: decrypt"
+            );
+        }
+
+        for (i, c) in doc.v2.valid.encrypt_decrypt_long_msg.iter().enumerate() {
+            let ck = ConversationKey::from_bytes(unhex_arr(&c.conversation_key));
+            let plaintext = c.pattern.repeat(c.repeat);
+            assert_eq!(
+                hex(&Sha256::digest(plaintext.as_bytes())),
+                c.plaintext_sha256,
+                "long {i}: plaintext sha"
+            );
+            let payload = ck
+                .encrypt_with_nonce(&plaintext, &unhex_arr(&c.nonce))
+                .unwrap();
+            assert_eq!(
+                hex(&Sha256::digest(payload.as_bytes())),
+                c.payload_sha256,
+                "long {i}: payload sha"
+            );
+            assert_eq!(
+                ck.decrypt(&payload).unwrap(),
+                plaintext,
+                "long {i}: decrypt"
             );
         }
     }
 
     #[test]
-    fn encrypt_matches_the_official_vector() {
-        let key = ConversationKey::from_bytes(
-            unhex("c41c775356fd92eadc63ff5a0dc1da211b268cbea22316767095b2871ea1412d")
-                .try_into()
-                .unwrap(),
-        );
-        let mut nonce = [0u8; 32];
-        *nonce.last_mut().unwrap() = 1;
-        let payload = encrypt_with_nonce("a", &key, &nonce).unwrap();
-        assert_eq!(
-            payload,
-            "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABee0G5VSK0/9YypIObAtDKfYEAjD35uVkHyB0F4DwrcNaCXlCWZKaArsGrY6M9wnuTMxWfp1RTN9Xga8no+kF5Vsb"
-        );
+    fn official_invalid() {
+        #[derive(Deserialize)]
+        struct DecCase {
+            conversation_key: String,
+            payload: String,
+        }
+        #[derive(Deserialize)]
+        struct CkCase {
+            sec1: String,
+            pub2: String,
+        }
+        #[derive(Deserialize)]
+        struct Invalid {
+            encrypt_msg_lengths: Vec<usize>,
+            get_conversation_key: Vec<CkCase>,
+            decrypt: Vec<DecCase>,
+        }
+        #[derive(Deserialize)]
+        struct V2 {
+            invalid: Invalid,
+        }
+        #[derive(Deserialize)]
+        struct Doc {
+            v2: V2,
+        }
+        let doc: Doc = serde_json::from_str(OFFICIAL).unwrap();
+
+        let key = ConversationKey::from_bytes([7; 32]);
+        for len in &doc.v2.invalid.encrypt_msg_lengths {
+            let plaintext = "a".repeat(*len);
+            // Mirrors packages/nostr/tests/nip44.test.ts: only 0 must fail —
+            // the extended u32 prefix (3rdparty/nips/44.md) makes 65536+
+            // encryptable; entries over 1 MiB are skipped like the TS test.
+            if *len == 0 {
+                assert!(
+                    key.encrypt_with_nonce(&plaintext, &[0; 32]).is_err(),
+                    "encrypt must reject length {len}"
+                );
+            } else if *len <= 0x10_0000 {
+                assert!(
+                    key.encrypt_with_nonce(&plaintext, &[0; 32]).is_ok(),
+                    "encrypt must accept length {len}"
+                );
+            }
+        }
+
+        for (i, c) in doc.v2.invalid.get_conversation_key.iter().enumerate() {
+            let secret = SecretKey::from_hex(&c.sec1);
+            let peer = PublicKey::from_hex(&c.pub2);
+            // The invalid scalar/xonly inputs are rejected at parsing.
+            if let (Ok(secret), Ok(peer)) = (secret, peer) {
+                assert!(
+                    ConversationKey::derive(&secret, &peer).is_err(),
+                    "ck invalid {i}"
+                );
+            }
+        }
+
+        for (i, c) in doc.v2.invalid.decrypt.iter().enumerate() {
+            let ck = ConversationKey::from_bytes(unhex_arr(&c.conversation_key));
+            assert!(ck.decrypt(&c.payload).is_err(), "decrypt invalid {i}");
+        }
     }
 
     #[test]
-    fn round_trip() {
-        let key = conversation_key();
-        let payload = encrypt_with_nonce("hi", &key, NONCE).unwrap();
-        assert_eq!(decrypt(&payload, &key).unwrap(), "hi");
-        assert_eq!(decrypt("#", &key).unwrap_err().kind(), ErrorKind::Crypto);
-        assert_eq!(
-            decrypt_with_max_len(&payload, &key, payload.len() - 1)
-                .unwrap_err()
-                .kind(),
-            ErrorKind::Crypto
-        );
-        let mut corrupted = payload;
-        let at = corrupted.len() - 5;
-        corrupted.replace_range(at..=at, "A");
-        assert_eq!(
-            decrypt(&corrupted, &key).unwrap_err().kind(),
-            ErrorKind::Crypto
-        );
+    fn extended_round_trips() {
+        #[derive(Deserialize)]
+        struct Case {
+            pattern: String,
+            repeat: usize,
+            conversation_key: String,
+            nonce: String,
+            plaintext_sha256: String,
+            payload_sha256: String,
+        }
+        #[derive(Deserialize)]
+        struct Vec_ {
+            cases: Vec<Case>,
+        }
+        let v: Vec_ = serde_json::from_str(EXTENDED).unwrap();
+        for (i, c) in v.cases.iter().enumerate() {
+            let ck = ConversationKey::from_bytes(unhex_arr(&c.conversation_key));
+            let plaintext = c.pattern.repeat(c.repeat);
+            assert_eq!(
+                hex(&Sha256::digest(plaintext.as_bytes())),
+                c.plaintext_sha256,
+                "ext {i}: plaintext sha"
+            );
+            let payload = ck
+                .encrypt_with_nonce(&plaintext, &unhex_arr(&c.nonce))
+                .unwrap();
+            assert_eq!(
+                hex(&Sha256::digest(payload.as_bytes())),
+                c.payload_sha256,
+                "ext {i}: payload sha"
+            );
+            assert_eq!(ck.decrypt(&payload).unwrap(), plaintext, "ext {i}: decrypt");
+        }
     }
 
     #[test]
-    fn base64_strictness_matches_scure() {
-        let key = conversation_key();
-        // A 33-byte plaintext pads to 34 + 32 + 66 + 32 = 131 decoded bytes,
-        // which base64-encodes with a trailing `=` to exercise the
-        // unpadded/extra-padding rejections.
-        let payload = encrypt_with_nonce(&"a".repeat(33), &key, NONCE).unwrap();
+    fn shared_secret_vectors() {
+        #[derive(Deserialize)]
+        struct Case {
+            sec1: String,
+            pub2: String,
+            shared_secret: String,
+            conversation_key: String,
+        }
+        #[derive(Deserialize)]
+        struct Vec_ {
+            cases: Vec<Case>,
+        }
+        let v: Vec_ = serde_json::from_str(SHARED_SECRET).unwrap();
+        for (i, c) in v.cases.iter().enumerate() {
+            let secret = SecretKey::from_hex(&c.sec1).unwrap();
+            let peer = PublicKey::from_hex(&c.pub2).unwrap();
+            let derived = ConversationKey::derive(&secret, &peer).unwrap();
+            let from_shared = ConversationKey::from_shared_secret(&unhex_arr(&c.shared_secret));
+            assert_eq!(
+                hex(&derived.to_bytes()),
+                c.conversation_key,
+                "shared {i}: derive"
+            );
+            assert_eq!(
+                hex(&from_shared.to_bytes()),
+                c.conversation_key,
+                "shared {i}: from_shared_secret"
+            );
+        }
+    }
+
+    #[test]
+    fn calc_padded_len_uses_64_bit_math() {
+        assert_eq!(padded_len(u64::from(u32::MAX)).unwrap(), 0x1_0000_0000);
+        assert!(matches!(
+            padded_len(u64::from(u32::MAX) + 1),
+            Err(Error::PlaintextSize)
+        ));
+        #[cfg(target_pointer_width = "64")]
+        {
+            assert_eq!(calc_padded_len(u32::MAX as usize).unwrap(), 0x1_0000_0000);
+            assert!(matches!(
+                calc_padded_len(u32::MAX as usize + 1),
+                Err(Error::PlaintextSize)
+            ));
+        }
+    }
+
+    #[test]
+    fn decrypt_error_shapes() {
+        let secret = SecretKey::from_bytes([1; 32]).unwrap();
+        let peer =
+            PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+                .unwrap();
+        let key = ConversationKey::derive(&secret, &peer).unwrap();
+        let payload = key
+            .encrypt_with_nonce(&"a".repeat(33), &[0x0b; 32])
+            .unwrap();
+        assert_eq!(key.decrypt(&payload).unwrap(), "a".repeat(33));
+        assert!(matches!(
+            key.decrypt("#"),
+            Err(Error::PayloadLength | Error::UnknownVersion)
+        ));
+        assert!(matches!(
+            key.decrypt_with_limit(&payload, payload.len() - 1),
+            Err(Error::PayloadLength)
+        ));
+        let mut corrupted = payload.clone();
+        let at = corrupted.len() - 20;
+        let replacement = if corrupted.as_bytes().get(at) == Some(&b'A') {
+            "B"
+        } else {
+            "A"
+        };
+        corrupted.replace_range(at..=at, replacement);
+        assert!(matches!(key.decrypt(&corrupted), Err(Error::Mac)));
+
+        // Base64 strictness: unpadded, whitespace, extra padding.
         assert!(payload.ends_with('='));
-        let mut rejects = vec![
+        for bad in [
             String::from(payload.trim_end_matches('=')),
             format!("{payload} "),
             format!(" {payload}"),
             format!("{payload}\n"),
             format!("{payload}="),
-        ];
-        // URL-safe alphabet substitutions only diverge when present.
-        if payload.contains('+') {
-            rejects.push(payload.replace('+', "-"));
-        }
-        if payload.contains('/') {
-            rejects.push(payload.replace('/', "_"));
-        }
-        for bad in rejects {
-            assert_eq!(
-                decrypt(&bad, &key).unwrap_err().kind(),
-                ErrorKind::Crypto,
+        ] {
+            assert!(
+                matches!(
+                    key.decrypt(&bad),
+                    Err(Error::InvalidBase64 | Error::PayloadLength)
+                ),
                 "{bad:?}"
             );
         }
+        assert_eq!(format!("{key:?}"), "ConversationKey(..)");
     }
 
+    /// Replays the `nip44.v2` differential stream (`NK_DIFF_DIR`) — the
+    /// `encrypt`/`decrypt` ops take explicit `conversation_key`/`nonce`, so
+    /// the replay needs the crate-internal helpers.
     #[test]
-    fn plaintext_size_limits() {
-        let key = conversation_key();
-        assert_eq!(
-            encrypt_with_nonce("", &key, NONCE).unwrap_err().kind(),
-            ErrorKind::Crypto
-        );
-        assert!(encrypt_with_nonce("a", &key, NONCE).is_ok());
-        // 65536 uses the extended u32 prefix; 65535 stays on u16.
-        assert!(encrypt_with_nonce(&"a".repeat(65536), &key, NONCE).is_ok());
-        assert_eq!(
-            decrypt(
-                &encrypt_with_nonce(&"a".repeat(65536), &key, NONCE).unwrap(),
-                &key
-            )
-            .unwrap()
-            .len(),
-            65536
-        );
-    }
+    #[ignore = "requires NK_DIFF_DIR"]
+    fn diff_stream() {
+        use alloc::string::ToString;
+        use std::path::PathBuf;
 
-    #[cfg(feature = "os-rng")]
-    #[test]
-    fn encrypt_draws_an_os_nonce() {
-        let key = conversation_key();
-        let payload = encrypt("os-rng round trip", &key).unwrap();
-        assert_eq!(decrypt(&payload, &key).unwrap(), "os-rng round trip");
+        use serde_json::Value;
+
+        let dir = std::env::var("NK_DIFF_DIR")
+            .expect("NK_DIFF_DIR is not set — run `bun packages/nostr/scripts/parity/diff.ts`");
+        assert!(!dir.is_empty(), "NK_DIFF_DIR must not be empty");
+        let text = std::fs::read_to_string(PathBuf::from(dir).join("nip44.v2.jsonl")).unwrap();
+        let mut lines = text.lines();
+        assert_eq!(
+            serde_json::from_str::<Value>(lines.next().unwrap()).unwrap()["capability"],
+            "nip44.v2"
+        );
+        let mut samples: Vec<String> = Vec::new();
+        let mut mismatches = 0usize;
+        for line in lines {
+            let case: Value = serde_json::from_str(line).unwrap();
+            let i = case["i"].as_u64().unwrap_or(0);
+            let input: Value = serde_json::from_str(case["input"].as_str().unwrap()).unwrap();
+            let got: core::result::Result<String, ()> = match input["op"].as_str() {
+                Some("encrypt") => {
+                    match (
+                        hex_arr::<32>(input["conversation_key"].as_str().unwrap_or("")),
+                        hex_arr::<32>(input["nonce"].as_str().unwrap_or("")),
+                    ) {
+                        (Some(key), Some(nonce)) => ConversationKey::from_bytes(key)
+                            .encrypt_with_nonce(input["plaintext"].as_str().unwrap_or(""), &nonce)
+                            .map_err(|_| ()),
+                        _ => Err(()),
+                    }
+                }
+                Some("decrypt") => {
+                    match hex_arr::<32>(input["conversation_key"].as_str().unwrap_or("")) {
+                        Some(a) => ConversationKey::from_bytes(a)
+                            .decrypt(input["payload"].as_str().unwrap_or(""))
+                            .map_err(|_| ()),
+                        None => Err(()),
+                    }
+                }
+                _ => Err(()),
+            };
+            let want = case["out"].clone();
+            let got_v = got.ok().map(Value::String);
+            if got_v
+                != (if want.is_null() {
+                    None
+                } else {
+                    Some(want.clone())
+                })
+            {
+                mismatches += 1;
+                if samples.len() < 10 {
+                    samples.push(format!(
+                        "  i={i}: input={}\n    got:  {}\n    want: {}",
+                        case["input"],
+                        got_v
+                            .as_ref()
+                            .map_or("<err>".to_string(), ToString::to_string),
+                        want,
+                    ));
+                }
+            }
+        }
+        assert_eq!(
+            mismatches,
+            0,
+            "nip44.v2: {mismatches} mismatches\n{}",
+            samples.join("\n")
+        );
     }
 }

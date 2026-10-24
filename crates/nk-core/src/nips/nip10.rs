@@ -2,8 +2,8 @@
 //! plus `q` quotes and `p` profiles out of an event's tag list, and building
 //! reply tags in the preferred marked style.
 //!
-//! [`parse_thread_tags`] is the counterpart of the TS `parseThreadTags`;
-//! [`reply_tags`]/[`reply_to`] mirror `buildReplyTags`/`replyTo` (marked
+//! [`ThreadReferences`] is the counterpart of the TS `parseThreadTags`;
+//! `reply_tags`/`text_reply` mirror `buildReplyTags`/`replyTo` (marked
 //! `root`/`reply` style, `q` tags appended last). Relay strings read from
 //! tags stay raw [`String`]s and are written back verbatim; the optional
 //! caller-supplied relay hint is a normalized [`RelayUrl`] (NK3-00 N4).
@@ -15,8 +15,19 @@ use alloc::vec::Vec;
 
 use crate::{Coordinate, Event, EventBuilder, EventId, Kind, PublicKey, RelayUrl, Tag, Tags};
 
-use crate::nips::error::{Error, ErrorKind, Result};
 use crate::nips::nip19::{AddressPointer, EventPointer, ProfilePointer};
+
+/// The error type returned by NIP-10 operations.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// A NIP-10 operation was attempted on a non-kind-1 event.
+    #[error("{0}")]
+    Validation(&'static str),
+}
+
+/// Result type for NIP-10 operations.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 /// A quoted event (`q` tag): an event id or an addressable coordinate.
 /// Discriminate by variant — the counterpart of TS `"id" in quote`.
@@ -137,8 +148,15 @@ fn inherit_hints(mut ptr: EventPointer, profiles: &[ProfilePointer]) -> EventPoi
 /// mentions drop whichever ids became root or reply; event pointers inherit
 /// relay hints from a `p` tag on the same author (dedup, order kept).
 /// `q` and `p` entries collect in the same scan order.
-#[must_use]
-pub fn parse_thread_tags(tags: &Tags) -> ThreadReferences {
+impl From<&Tags> for ThreadReferences {
+    /// Extracts the NIP-10 thread references from `e`/`q`/`p` tags (TS
+    /// `parseThreadTags`).
+    fn from(tags: &Tags) -> Self {
+        parse_thread_tags(tags)
+    }
+}
+
+fn parse_thread_tags(tags: &Tags) -> ThreadReferences {
     let mut mentions = Vec::new();
     let mut quotes = Vec::new();
     let mut profiles = Vec::new();
@@ -350,12 +368,13 @@ fn quote_to_tag(quote: &Quote) -> BuiltQuote {
 ///
 /// [`ErrorKind::EventValidation`] `NIP-10 replyTo is for kind 1` — NIP-10 is
 /// kind 1 only (comments are NIP-22).
-pub fn reply_tags(parent: &Event, relay_hint: Option<&RelayUrl>, quotes: &[Quote]) -> Result<Tags> {
+pub(crate) fn reply_tags(
+    parent: &Event,
+    relay_hint: Option<&RelayUrl>,
+    quotes: &[Quote],
+) -> Result<Tags> {
     if parent.kind() != Kind::TEXT_NOTE {
-        return Err(Error::new(
-            ErrorKind::EventValidation,
-            "NIP-10 replyTo is for kind 1",
-        ));
+        return Err(Error::Validation("NIP-10 replyTo is for kind 1"));
     }
     let thread = parse_thread_tags(parent.tags());
     let root = thread.root.unwrap_or_else(|| EventPointer {
@@ -417,20 +436,21 @@ pub fn reply_tags(parent: &Event, relay_hint: Option<&RelayUrl>, quotes: &[Quote
     Ok(tags.into_iter().collect())
 }
 
-/// A kind-1 [`EventBuilder`] reply with NIP-10 tags — the TS `replyTo`.
-/// Lives here (not on `EventBuilder`) so nk does not depend on NIPs.
-///
-/// # Errors
-///
-/// [`ErrorKind::EventValidation`] `NIP-10 replyTo is for kind 1` — same as
-/// [`reply_tags`].
-pub fn reply_to(
-    parent: &Event,
-    content: &str,
-    relay_hint: Option<&RelayUrl>,
-    quotes: &[Quote],
-) -> Result<EventBuilder> {
-    Ok(EventBuilder::text_note(content).tags(reply_tags(parent, relay_hint, quotes)?))
+impl EventBuilder {
+    /// A kind-1 reply with NIP-10 tags — the TS `replyTo`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Validation`] `NIP-10 replyTo is for kind 1` — same as
+    /// `reply_tags`.
+    pub fn text_reply(
+        parent: &Event,
+        content: &str,
+        relay_hint: Option<&RelayUrl>,
+        quotes: &[Quote],
+    ) -> Result<Self> {
+        Ok(Self::text_note(content).tags(reply_tags(parent, relay_hint, quotes)?))
+    }
 }
 
 #[cfg(test)]
@@ -505,11 +525,8 @@ mod tests {
     fn reply_tags_rejects_non_kind1() {
         let parent = note(&[], 6);
         let error = reply_tags(&parent, None, &[]).unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::EventValidation);
-        assert_eq!(
-            error.to_string(),
-            "event validation: NIP-10 replyTo is for kind 1"
-        );
+        assert!(matches!(error, Error::Validation(_)));
+        assert_eq!(error.to_string(), "NIP-10 replyTo is for kind 1");
     }
 
     #[test]

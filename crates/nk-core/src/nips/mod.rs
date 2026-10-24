@@ -7,8 +7,6 @@
 //! NIP-layer error types; the crate-root modules each carry their own
 //! error enum.
 
-pub mod error;
-
 #[cfg(any(feature = "nip04", feature = "nip44"))]
 mod ecdh;
 mod util;
@@ -35,8 +33,6 @@ pub mod nip59;
 pub mod nip65;
 pub mod nip98;
 
-pub use error::{Error, ErrorKind, Result};
-
 // Consumed only by feature-gated NIP modules and tests; the underscore
 // imports keep `unused_crate_dependencies` quiet under minimal features.
 #[cfg(feature = "os-rng")]
@@ -48,8 +44,22 @@ use criterion as _;
 
 const _: () = {
     const fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<Error>();
-    assert_send_sync::<ErrorKind>();
+    assert_send_sync::<nip19::Error>();
+    assert_send_sync::<nip46::Error>();
+    assert_send_sync::<nip51::Error>();
+    assert_send_sync::<nip57::Error>();
+    assert_send_sync::<nip65::Error>();
+    assert_send_sync::<nip98::Error>();
+    #[cfg(feature = "nip04")]
+    assert_send_sync::<nip04::Error>();
+    #[cfg(feature = "nip44")]
+    {
+        assert_send_sync::<nip17::Error>();
+        assert_send_sync::<nip44::Error>();
+        assert_send_sync::<nip59::Error>();
+    }
+    #[cfg(feature = "nip49")]
+    assert_send_sync::<nip49::Error>();
 
     assert_send_sync::<nip19::AddressPointer>();
     assert_send_sync::<nip19::Entity>();
@@ -71,7 +81,6 @@ const _: () = {
     #[cfg(feature = "nip44")]
     {
         assert_send_sync::<nip44::ConversationKey>();
-        assert_send_sync::<nip44::MessageKeys>();
     }
     assert_send_sync::<nip46::BunkerUri>();
     assert_send_sync::<nip46::Method>();

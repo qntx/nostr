@@ -1,9 +1,9 @@
 //! NIP-98 HTTP auth (kind 27235).
 //!
-//! [`auth_event`] builds the unsigned auth-event template the caller signs;
+//! [`EventBuilder::http_auth`](crate::EventBuilder::http_auth) builds the unsigned auth-event template the caller signs;
 //! [`token`] and [`authorization_header`] encode a signed event as the
 //! standard-base64 `Nostr` bearer token; [`unpack_token`] reverses it;
-//! [`validate_auth_event`] checks a decoded event against the request.
+//! [`validate`] checks a decoded event against the request.
 //!
 //! @see <https://github.com/nostr-protocol/nips/blob/master/98.md>
 
@@ -15,11 +15,50 @@ use base64ct::{Base64, Encoding};
 use core::fmt::Write as _;
 use sha2::{Digest, Sha256};
 
-use crate::nips::Result;
-use crate::nips::error::{Error, ErrorKind};
+/// The error type returned by NIP-98 operations.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// The token string was empty.
+    #[error("missing token")]
+    MissingToken,
+    /// The token is not padded standard-alphabet base64.
+    #[error("invalid token encoding")]
+    TokenEncoding(#[source] base64ct::Error),
+    /// The decoded token is not a JSON object.
+    #[error("invalid token")]
+    InvalidToken,
+    /// The decoded token is malformed JSON (TS `JSON.parse` failure).
+    #[error("invalid token JSON")]
+    TokenJson(#[source] crate::JsonError),
+    /// Well-formed JSON that is not a signed event.
+    #[error("token is not a signed event")]
+    NotSignedEvent(#[source] crate::JsonError),
+    /// The event signature did not verify.
+    #[error("invalid signature")]
+    Signature,
+    /// The event kind is not 27235.
+    #[error("expected kind 27235, got {0}")]
+    Kind(u16),
+    /// `|now - created_at|` exceeds `max_skew_secs`.
+    #[error("created_at outside the allowed skew")]
+    Skew,
+    /// The first `u` tag does not equal the expected URL.
+    #[error("u tag mismatch")]
+    Url,
+    /// The first `method` tag does not match (case-insensitive).
+    #[error("method tag mismatch")]
+    Method,
+    /// The first `payload` tag does not equal the body hash.
+    #[error("payload tag mismatch")]
+    Payload,
+}
+
+/// Result type for NIP-98 operations.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
 use crate::nips::util::is_js_whitespace;
 
-/// Default `|now − created_at|` window for [`validate_auth_event`] (TS
+/// Default `|now − created_at|` window for [`validate`] (TS
 /// `DEFAULT_MAX_SKEW_SEC`).
 pub const DEFAULT_MAX_SKEW_SECS: u64 = 60;
 
@@ -63,24 +102,26 @@ fn decode_padded(encoded: &str) -> Result<Vec<u8>> {
         }
         padded.as_str()
     };
-    Base64::decode_vec(encoded)
-        .map_err(|e| Error::with_source(ErrorKind::Nip98, "invalid token encoding", e))
+    Base64::decode_vec(encoded).map_err(Error::TokenEncoding)
 }
 
-/// An unsigned NIP-98 HTTP-auth event template.
-///
-/// Kind 27235 with `["u", url]`, `["method", method]`, and — when `payload` is
-/// `Some` — `["payload", sha256_hex(payload)]`; `created_at` is fixed by
-/// [`EventBuilder::build`] (`clock` feature) or [`EventBuilder::build_at`].
-/// `payload` is the raw request body; TS object payloads (`JSON.stringify`)
-/// are TS-only — pass the serialized bytes instead.
-pub fn auth_event(url: &str, method: &str, payload: Option<&[u8]>, content: &str) -> EventBuilder {
-    let mut builder = EventBuilder::new(Kind::HTTP_AUTH, content)
-        .tags([Tag::custom("u", [url]), Tag::custom("method", [method])]);
-    if let Some(payload) = payload {
-        builder = builder.tag(Tag::custom("payload", [payload_hash(payload)]));
+impl EventBuilder {
+    /// An unsigned NIP-98 HTTP-auth event template.
+    ///
+    /// Kind 27235 with `["u", url]`, `["method", method]`, and — when
+    /// `payload` is `Some` — `["payload", sha256_hex(payload)]`;
+    /// `created_at` is fixed by `EventBuilder::build` (`clock` feature)
+    /// or [`EventBuilder::build_at`]. `payload` is the raw request body; TS
+    /// object payloads (`JSON.stringify`) are TS-only — pass the
+    /// serialized bytes instead.
+    pub fn http_auth(url: &str, method: &str, payload: Option<&[u8]>, content: &str) -> Self {
+        let mut builder = Self::new(Kind::HTTP_AUTH, content)
+            .tags([Tag::custom("u", [url]), Tag::custom("method", [method])]);
+        if let Some(payload) = payload {
+            builder = builder.tag(Tag::custom("payload", [payload_hash(payload)]));
+        }
+        builder
     }
-    builder
 }
 
 /// The NIP-98 token of a signed event: standard padded base64 of the event
@@ -115,28 +156,24 @@ pub fn authorization_header(event: &Event) -> String {
 /// invalid JSON, or JSON that is not a signed event.
 pub fn unpack_token(token: &str) -> Result<Event> {
     if token.is_empty() {
-        return Err(Error::new(ErrorKind::Nip98, "missing token"));
+        return Err(Error::MissingToken);
     }
     let encoded = strip_scheme(token);
 
     let bytes = decode_padded(encoded)?;
     let json = String::from_utf8_lossy(&bytes);
     if !json.starts_with('{') {
-        return Err(Error::new(ErrorKind::Nip98, "invalid token"));
+        return Err(Error::InvalidToken);
     }
     serde_json::from_str(&json).map_err(|e| {
-        let message = match e.classify() {
-            // Malformed JSON — the inputs `JSON.parse` rejects.
-            serde_json::error::Category::Syntax | serde_json::error::Category::Eof => {
-                "invalid token JSON"
-            }
-            // Well-formed JSON that is not a signed event — TS
-            // `validateSignedEvent` fails on the parsed object.
-            serde_json::error::Category::Data | serde_json::error::Category::Io => {
-                "token is not a signed event"
-            }
-        };
-        Error::with_source(ErrorKind::Nip98, message, e)
+        if matches!(
+            e.classify(),
+            serde_json::error::Category::Syntax | serde_json::error::Category::Eof
+        ) {
+            Error::TokenJson(e.into())
+        } else {
+            Error::NotSignedEvent(e.into())
+        }
     })
 }
 
@@ -146,39 +183,61 @@ pub fn unpack_token(token: &str) -> Result<Event> {
 /// within `max_skew_secs`, first `u` tag equal to `url` exactly, first
 /// `method` tag equal case-insensitively (Unicode `toLowerCase`), and — when
 /// `payload` is `Some` — first `payload` tag equal to its SHA-256 hex.
-#[must_use]
-pub fn validate_auth_event(
+/// Validates `event` as a NIP-98 auth event for `url` + `method`.
+///
+/// TS `validateAuthEvent` order: signature, kind 27235, `|now −
+/// created_at|` within `max_skew_secs`, first `u` tag equal to `url`
+/// exactly, first `method` tag equal case-insensitively (Unicode
+/// `toLowerCase`), and — when `payload` is `Some` — first `payload` tag
+/// equal to its SHA-256 hex.
+///
+/// # Errors
+///
+/// The first failing check's [`Error`] variant, in the order above.
+pub fn validate(
     event: &Event,
     url: &str,
     method: &str,
     payload: Option<&[u8]>,
     now: Timestamp,
     max_skew_secs: u64,
-) -> bool {
-    if event.verify().is_err() {
-        return false;
-    }
+) -> Result<()> {
+    event.verify().map_err(|_| Error::Signature)?;
     if event.kind() != Kind::HTTP_AUTH {
-        return false;
+        return Err(Error::Kind(event.kind().as_u16()));
     }
     if now.as_secs().abs_diff(event.created_at().as_secs()) > max_skew_secs {
-        return false;
+        return Err(Error::Skew);
     }
-    if event.tags().first_value("u") != Some(url) {
-        return false;
+    // TS requires exactly one `u` tag and one `method` tag.
+    let us: Vec<&str> = event
+        .tags()
+        .iter()
+        .filter(|t| t.name() == "u")
+        .filter_map(|t| t.value())
+        .collect();
+    let methods: Vec<&str> = event
+        .tags()
+        .iter()
+        .filter(|t| t.name() == "method")
+        .filter_map(|t| t.value())
+        .collect();
+    if us.len() != 1 || methods.len() != 1 {
+        return Err(Error::Url);
     }
-    let Some(m) = event.tags().first_value("method") else {
-        return false;
-    };
-    if m.to_lowercase() != method.to_lowercase() {
-        return false;
+    if us.first() != Some(&url) {
+        return Err(Error::Url);
+    }
+    if methods.first().map(|m| m.to_lowercase()).as_deref() != Some(method.to_lowercase().as_str())
+    {
+        return Err(Error::Method);
     }
     if let Some(payload) = payload
         && event.tags().first_value("payload") != Some(payload_hash(payload).as_str())
     {
-        return false;
+        return Err(Error::Payload);
     }
-    true
+    Ok(())
 }
 
 #[cfg(test)]
@@ -198,14 +257,14 @@ mod tests {
 
     fn signed_auth(url: &str, method: &str, payload: Option<&[u8]>, now: u64) -> Event {
         let keys = keys();
-        let unsigned = auth_event(url, method, payload, "")
+        let unsigned = EventBuilder::http_auth(url, method, payload, "")
             .build_at(keys.public_key(), Timestamp::from_secs(now));
         crate::testutil::sign_with_aux(&keys, unsigned, [0x42; 32])
     }
 
     #[test]
     fn auth_event_shape() {
-        let event = auth_event(
+        let event = EventBuilder::http_auth(
             "https://api.example.com/upload",
             "POST",
             Some(b"body".as_slice()),
@@ -228,7 +287,7 @@ mod tests {
             ]
         );
         // No payload argument → no payload tag.
-        let without = auth_event("https://a", "GET", None, "content")
+        let without = EventBuilder::http_auth("https://a", "GET", None, "content")
             .build_at(keys().public_key(), Timestamp::from_secs(0));
         assert_eq!(without.tags().len(), 2);
         assert_eq!(without.content(), "content");
@@ -258,36 +317,33 @@ mod tests {
         let mut t = String::from("nostr\u{85}");
         t.push_str(&token);
         let err = unpack_token(&t).unwrap_err();
-        assert_eq!(err.to_string(), "nip98: invalid token encoding");
+        assert_eq!(err.to_string(), "invalid token encoding");
     }
 
     #[test]
     fn unpack_token_errors() {
-        assert_eq!(
-            unpack_token("").unwrap_err().to_string(),
-            "nip98: missing token"
-        );
+        assert_eq!(unpack_token("").unwrap_err().to_string(), "missing token");
         assert_eq!(
             unpack_token("!!!").unwrap_err().to_string(),
-            "nip98: invalid token encoding"
+            "invalid token encoding"
         );
         // Valid base64 that does not start with "{".
         assert_eq!(
             unpack_token("aGVsbG8=").unwrap_err().to_string(),
-            "nip98: invalid token"
+            "invalid token"
         );
         // "{x" — malformed JSON.
         assert_eq!(
             unpack_token(&Base64::encode_string(b"{x"))
                 .unwrap_err()
                 .to_string(),
-            "nip98: invalid token JSON"
+            "invalid token JSON"
         );
         // "{}", "[]"-shaped valid JSON that is not a signed event — and the
         // unsigned form of a real event.
         assert_eq!(
             unpack_token("e30=").unwrap_err().to_string(),
-            "nip98: token is not a signed event"
+            "token is not a signed event"
         );
         let unsigned_json =
             serde_json::to_string(&signed_auth("https://a/", "GET", None, 0).into_unsigned())
@@ -296,7 +352,7 @@ mod tests {
             unpack_token(&Base64::encode_string(unsigned_json.as_bytes()))
                 .unwrap_err()
                 .to_string(),
-            "nip98: token is not a signed event"
+            "token is not a signed event"
         );
     }
 
@@ -315,66 +371,87 @@ mod tests {
         let event = signed_auth(url, "POST", Some(b"body"), now);
         let now = Timestamp::from_secs(now);
 
-        assert!(validate_auth_event(
-            &event,
-            url,
-            "post",
-            Some(b"body"),
-            now,
-            DEFAULT_MAX_SKEW_SECS
-        ));
+        assert!(
+            validate(
+                &event,
+                url,
+                "post",
+                Some(b"body"),
+                now,
+                DEFAULT_MAX_SKEW_SECS
+            )
+            .is_ok()
+        );
         // Skew boundaries: exactly ±60 ok, ±61 rejected.
-        assert!(validate_auth_event(
-            &event,
-            url,
-            "POST",
-            None,
-            Timestamp::from_secs(now.as_secs() + 60),
-            DEFAULT_MAX_SKEW_SECS
-        ));
-        assert!(!validate_auth_event(
-            &event,
-            url,
-            "POST",
-            None,
-            Timestamp::from_secs(now.as_secs() + 61),
-            DEFAULT_MAX_SKEW_SECS
-        ));
-        assert!(!validate_auth_event(
-            &event,
-            "https://other.example.com/",
-            "POST",
-            None,
-            now,
-            DEFAULT_MAX_SKEW_SECS
-        ));
-        assert!(!validate_auth_event(
-            &event,
-            url,
-            "POST",
-            Some(b"other"),
-            now,
-            DEFAULT_MAX_SKEW_SECS
-        ));
+        assert!(
+            validate(
+                &event,
+                url,
+                "POST",
+                None,
+                Timestamp::from_secs(now.as_secs() + 60),
+                DEFAULT_MAX_SKEW_SECS
+            )
+            .is_ok()
+        );
+        assert!(
+            validate(
+                &event,
+                url,
+                "POST",
+                None,
+                Timestamp::from_secs(now.as_secs() + 61),
+                DEFAULT_MAX_SKEW_SECS
+            )
+            .is_err()
+        );
+        assert!(
+            validate(
+                &event,
+                "https://other.example.com/",
+                "POST",
+                None,
+                now,
+                DEFAULT_MAX_SKEW_SECS
+            )
+            .is_err()
+        );
+        assert!(
+            validate(
+                &event,
+                url,
+                "POST",
+                Some(b"other"),
+                now,
+                DEFAULT_MAX_SKEW_SECS
+            )
+            .is_err()
+        );
         // Payload tag absent → a Some(payload) check fails.
         let no_payload = signed_auth(url, "POST", None, now.as_secs());
-        assert!(!validate_auth_event(
-            &no_payload,
-            url,
-            "POST",
-            Some(b"body"),
-            now,
-            DEFAULT_MAX_SKEW_SECS
-        ));
+        assert!(
+            validate(
+                &no_payload,
+                url,
+                "POST",
+                Some(b"body"),
+                now,
+                DEFAULT_MAX_SKEW_SECS
+            )
+            .is_err()
+        );
         // Custom skew window.
-        assert!(!validate_auth_event(
-            &event,
-            url,
-            "POST",
-            None,
-            Timestamp::from_secs(now.as_secs() + 5),
-            4
-        ));
+        assert!(
+            validate(
+                &event,
+                url,
+                "POST",
+                None,
+                Timestamp::from_secs(now.as_secs() + 5),
+                4
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -386,27 +463,33 @@ mod tests {
             .tag(Tag::custom("method", ["GET"]))
             .build_at(keys.public_key(), Timestamp::from_secs(now));
         let wrong_kind = crate::testutil::sign_with_aux(&keys, unsigned, [0x42; 32]);
-        assert!(!validate_auth_event(
-            &wrong_kind,
-            "https://a/",
-            "GET",
-            None,
-            Timestamp::from_secs(now),
-            DEFAULT_MAX_SKEW_SECS
-        ));
+        assert!(
+            validate(
+                &wrong_kind,
+                "https://a/",
+                "GET",
+                None,
+                Timestamp::from_secs(now),
+                DEFAULT_MAX_SKEW_SECS
+            )
+            .is_err()
+        );
         // Tamper the content → the id/signature no longer match.
         let tampered_json = serde_json::to_string(&signed_auth("https://a/", "GET", None, now))
             .unwrap()
             .replace("\"content\":\"\"", "\"content\":\"x\"");
         let tampered: Event = serde_json::from_str(&tampered_json).unwrap();
-        assert!(!validate_auth_event(
-            &tampered,
-            "https://a/",
-            "GET",
-            None,
-            Timestamp::from_secs(now),
-            DEFAULT_MAX_SKEW_SECS
-        ));
+        assert!(
+            validate(
+                &tampered,
+                "https://a/",
+                "GET",
+                None,
+                Timestamp::from_secs(now),
+                DEFAULT_MAX_SKEW_SECS
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -21,19 +21,21 @@ use alloc::vec::Vec;
 use crate::{EventId, Tag, Timestamp, UnsignedEvent};
 use sha2::{Digest, Sha256};
 
-/// The leading zero bits of `id` — the TS `getPow`, `0..=256`.
-#[must_use]
-pub fn pow(id: &EventId) -> u32 {
-    let mut count = 0u32;
-    for &byte in id.as_bytes() {
-        if byte == 0 {
-            count += 8;
-        } else {
-            count += byte.leading_zeros();
-            break;
+impl EventId {
+    /// The leading zero bits of this id — the TS `getPow`, `0..=256`.
+    #[must_use]
+    pub fn difficulty(&self) -> u32 {
+        let mut count = 0u32;
+        for &byte in self.as_bytes() {
+            if byte == 0 {
+                count += 8;
+            } else {
+                count += byte.leading_zeros();
+                break;
+            }
         }
+        count
     }
-    count
 }
 
 /// A paused NIP-13 mining session.
@@ -61,7 +63,7 @@ pub struct PowMiner {
 
 impl PowMiner {
     /// Starts a mining session for `unsigned` at `difficulty` — the same
-    /// scale as [`pow`].
+    /// scale as [`EventId::difficulty`].
     #[must_use]
     pub const fn new(unsigned: UnsignedEvent, difficulty: u32) -> Self {
         Self {
@@ -88,7 +90,7 @@ impl PowMiner {
             hasher.update(write_u64(self.counter, &mut digits));
             hasher.update(&self.tail);
             let id = EventId::from_bytes(hasher.finalize().into());
-            if pow(&id) >= self.difficulty {
+            if id.difficulty() >= self.difficulty {
                 return Some((self.event(), id));
             }
         }
@@ -215,26 +217,26 @@ mod tests {
     #[test]
     fn pow_counts_leading_zero_bits() {
         let mut bytes = [0xffu8; 32];
-        assert_eq!(pow(&EventId::from_bytes(bytes)), 0);
+        assert_eq!(EventId::from_bytes(bytes).difficulty(), 0);
         bytes[0] = 0x01;
-        assert_eq!(pow(&EventId::from_bytes(bytes)), 7);
+        assert_eq!(EventId::from_bytes(bytes).difficulty(), 7);
         bytes[0] = 0;
         bytes[1] = 0x80;
-        assert_eq!(pow(&EventId::from_bytes(bytes)), 8);
+        assert_eq!(EventId::from_bytes(bytes).difficulty(), 8);
         bytes = [0u8; 32];
-        assert_eq!(pow(&EventId::from_bytes(bytes)), 256);
+        assert_eq!(EventId::from_bytes(bytes).difficulty(), 256);
         // The NIP-13 worked example id.
         let id =
             EventId::from_hex("000006d8c378af1779d2feebc7603a125d99eca0ccf1085959b307f64e5dd358")
                 .unwrap();
-        assert_eq!(pow(&id), 21);
+        assert_eq!(id.difficulty(), 21);
     }
 
     #[test]
     fn mined_id_is_the_canonical_hash() {
         let mut miner = PowMiner::new(unsigned(), 8);
         let (event, id) = miner.mine(Timestamp::from_secs(0), 100_000).unwrap();
-        assert!(pow(&id) >= 8);
+        assert!(id.difficulty() >= 8);
         assert_eq!(id, event.id());
         let nonce = event
             .tags()

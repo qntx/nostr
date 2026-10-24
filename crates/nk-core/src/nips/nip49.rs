@@ -18,7 +18,6 @@
 //! @see <https://github.com/nostr-protocol/nips/blob/master/49.md>
 
 use alloc::borrow::ToOwned;
-use alloc::boxed::Box;
 use alloc::string::String;
 
 use core::fmt;
@@ -56,7 +55,7 @@ pub enum Error {
     Bech32 {
         /// The decode failure.
         #[source]
-        source: Box<dyn core::error::Error + Send + Sync + 'static>,
+        source: crate::nips::nip19::DecodeError,
     },
     /// The human-readable prefix is not `ncryptsec`.
     #[error("unexpected prefix {found}: expected ncryptsec")]
@@ -82,6 +81,9 @@ pub enum Error {
         /// The byte that was found.
         byte: u8,
     },
+    /// `rng` failed to fill the salt or nonce.
+    #[error("rng failed")]
+    Rng,
     /// A `log_n` argument is outside `1..=22`.
     #[error("invalid log_n {log_n}: expected 1-22")]
     InvalidLogN {
@@ -158,7 +160,7 @@ impl EncryptedSecretKey {
     /// # Errors
     ///
     /// [`Error::InvalidLogN`] when `log_n` is outside `1..=22`.
-    pub fn encrypt_with(
+    pub(crate) fn encrypt_with(
         secret: &SecretKey,
         password: &str,
         log_n: u8,
@@ -200,9 +202,9 @@ impl EncryptedSecretKey {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidLogN`] on the same conditions as
-    /// [`EncryptedSecretKey::encrypt_with`].
-    pub fn encrypt_with_rng<R>(
+    /// [`Error::Rng`] when `rng` fails; [`Error::InvalidLogN`] on the same
+    /// conditions as `encrypt_with`.
+    pub fn encrypt<R>(
         secret: &SecretKey,
         password: &str,
         log_n: u8,
@@ -210,39 +212,14 @@ impl EncryptedSecretKey {
         rng: &mut R,
     ) -> Result<Self, Error>
     where
-        R: rand_core::CryptoRng + ?Sized,
+        R: rand_core::TryCryptoRng + ?Sized,
     {
+        check_log_n(log_n)?;
         let mut salt = [0u8; SALT_LEN];
         let mut nonce = [0u8; NONCE_LEN];
-        rng.fill_bytes(&mut salt);
-        rng.fill_bytes(&mut nonce);
+        rng.try_fill_bytes(&mut salt).map_err(|_| Error::Rng)?;
+        rng.try_fill_bytes(&mut nonce).map_err(|_| Error::Rng)?;
         Self::encrypt_with(secret, password, log_n, key_security, &salt, &nonce)
-    }
-
-    /// Encrypts `secret` with OS entropy.
-    ///
-    /// When the OS entropy source fails — the same contract as
-    /// [`crate::SecretKey::generate`].
-    ///
-    /// # Errors
-    ///
-    /// [`Error::InvalidLogN`] on the same conditions as
-    /// [`EncryptedSecretKey::encrypt_with`]; panics if the OS RNG fails
-    /// (see `getrandom::SysRng`).
-    #[cfg(feature = "os-rng")]
-    pub fn encrypt(
-        secret: &SecretKey,
-        password: &str,
-        log_n: u8,
-        key_security: KeySecurity,
-    ) -> Result<Self, Error> {
-        Self::encrypt_with_rng(
-            secret,
-            password,
-            log_n,
-            key_security,
-            &mut rand_core::UnwrapErr(getrandom::SysRng),
-        )
     }
 
     /// The scrypt `log2(N)` work factor recorded in the payload.
@@ -314,7 +291,7 @@ impl FromStr for EncryptedSecretKey {
     /// [`Error::InvalidKeySecurity`].
     fn from_str(ncryptsec: &str) -> Result<Self, Error> {
         let (hrp, payload) = crate::nips::nip19::decode_bech32(ncryptsec)
-            .map_err(|e| Error::Bech32 { source: e.into() })?;
+            .map_err(|e| Error::Bech32 { source: e })?;
         if hrp != HRP_NCRYPTSEC {
             return Err(Error::UnexpectedPrefix {
                 found: hrp.as_str().to_owned(),
@@ -597,5 +574,144 @@ mod tests {
             parsed.decrypt("pw", LOG_N_MAX),
             Err(Error::InvalidSecretKey)
         ));
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    reason = "tests exercise fixed vectors by panicking"
+)]
+mod vectors {
+    use alloc::string::ToString;
+    use alloc::vec::Vec;
+
+    use serde_json::Value;
+
+    use crate::SecretKey;
+
+    use super::*;
+
+    fn unhex(s: &str) -> Vec<u8> {
+        (0..s.len() / 2)
+            .map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).unwrap())
+            .collect()
+    }
+    fn unhex_arr<const N: usize>(s: &str) -> [u8; N] {
+        unhex(s).try_into().unwrap()
+    }
+
+    #[test]
+    fn vector_codec() {
+        let doc: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../vectors/nip49/codec.json"
+        )))
+        .unwrap();
+        for case in doc["cases"].as_array().unwrap() {
+            if let (
+                Some(secret),
+                Some(password),
+                Some(log_n),
+                Some(ks),
+                Some(salt),
+                Some(nonce),
+                Some(out),
+            ) = (
+                case["secret"].as_str(),
+                case["password"].as_str(),
+                case["log_n"].as_u64(),
+                case["key_security"].as_u64(),
+                case["salt"].as_str(),
+                case["nonce"].as_str(),
+                case["ncryptsec"].as_str(),
+            ) {
+                let secret = SecretKey::from_bytes(unhex_arr(secret)).unwrap();
+                let key_security = match ks {
+                    0 => KeySecurity::Insecure,
+                    1 => KeySecurity::Secure,
+                    _ => KeySecurity::Unknown,
+                };
+                let esk = EncryptedSecretKey::encrypt_with(
+                    &secret,
+                    password,
+                    log_n as u8,
+                    key_security,
+                    &unhex_arr(salt),
+                    &unhex_arr(nonce),
+                )
+                .unwrap();
+                assert_eq!(esk.to_string(), out);
+                let back = EncryptedSecretKey::from_str(out).unwrap();
+                assert_eq!(back.to_string(), out);
+                assert_eq!(
+                    back.decrypt(password, 22).unwrap().public_key().to_hex(),
+                    secret.public_key().to_hex()
+                );
+            }
+            // cases with `error`/`err` are covered by the official suite.
+        }
+    }
+
+    #[test]
+    fn vector_official() {
+        let doc: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../vectors/nip49/official.json"
+        )))
+        .unwrap();
+        for case in doc["cases"].as_array().unwrap() {
+            let esk = EncryptedSecretKey::from_str(case["ncryptsec"].as_str().unwrap()).unwrap();
+            let secret = esk
+                .decrypt(
+                    case["password"].as_str().unwrap(),
+                    case["max_log_n"].as_u64().unwrap() as u8,
+                )
+                .unwrap();
+            if let Some(nsec) = case.get("nsec").and_then(Value::as_str) {
+                assert_eq!(secret.to_bech32(), nsec);
+            } else if let Some(hex_want) = case.get("secret").and_then(Value::as_str) {
+                assert_eq!(secret.with_secret_bytes(|b| hex(b)), hex_want);
+            }
+        }
+    }
+
+    #[test]
+    fn vector_max_logn() {
+        let doc: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../vectors/nip49/max-logn.json"
+        )))
+        .unwrap();
+        for case in doc["cases"].as_array().unwrap() {
+            let input = case["input"].as_str().unwrap();
+            let r = input.parse::<EncryptedSecretKey>();
+            match (&case["error"], r) {
+                (Value::Null, Ok(esk)) if case.get("secret").and_then(Value::as_str).is_some() => {
+                    let want = case["secret"].as_str().unwrap();
+                    let s = esk
+                        .decrypt(
+                            case["password"].as_str().unwrap_or(""),
+                            case["maxLogN"].as_u64().unwrap_or(22) as u8,
+                        )
+                        .unwrap_or_else(|e| panic!("decrypt failed: {e}"));
+                    assert_eq!(s.with_secret_bytes(|b| hex(b)), want);
+                }
+                (Value::Null, Err(e)) => panic!("parse failed: {e}"),
+                _ => {}
+            }
+        }
+    }
+    fn hex(b: &[u8]) -> String {
+        b.iter()
+            .fold(String::with_capacity(b.len() * 2), |mut out, x| {
+                const H: &[u8; 16] = b"0123456789abcdef";
+                out.push(char::from(H[usize::from(x >> 4)]));
+                out.push(char::from(H[usize::from(x & 0xf)]));
+                out
+            })
     }
 }

@@ -11,7 +11,7 @@
 )]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use nk_core::nips::nip13::{PowMiner, pow};
+use nk_core::nips::nip13::PowMiner;
 use nk_core::{EventId, Kind, PublicKey, Tag, Tags, Timestamp, UnsignedEvent};
 use sha2::{Digest, Sha256};
 
@@ -48,7 +48,7 @@ fn naive_attempts(unsigned: &UnsignedEvent, difficulty: u32, budget: u64) -> Opt
         );
         let canonical = probe.canonical_json();
         let id = EventId::from_bytes(Sha256::digest(canonical.as_bytes()).into());
-        if pow(&id) >= difficulty {
+        if id.difficulty() >= difficulty {
             return Some(id);
         }
     }

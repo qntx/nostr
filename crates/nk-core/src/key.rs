@@ -7,7 +7,7 @@
 //! stack-allocated context per call under `no_std`. No public `_with_ctx`
 //! variants exist. Randomness is always caller-provided through
 //! [`rand_core::TryCryptoRng`]; the `os-rng` feature adds only the
-//! `generate` constructors and the [`SysRng`](getrandom::SysRng) re-export.
+//! `generate` constructors and the `SysRng` re-export.
 
 use alloc::string::String;
 use core::fmt;

@@ -8,9 +8,9 @@
 //!
 //! The private-tag layer follows the same split as NIP-59: TS injects an
 //! async `Nip51Crypto` while Rust offers the pure steps
-//! ([`private_tags_plaintext`]/[`parse_private_tags`]) plus the local-key flow
-//! [`encrypt_private_tags_with_rng`]/[`encrypt_private_tags`]/
-//! [`decrypt_private_tags`]. Remote-signer composition lives in nk-signer.
+//! (`private_tags_plaintext`/`parse_private_tags`) plus the local-key flow
+//! `encrypt_private_tags`/`decrypt_private_tags`. Remote-signer
+//! composition lives in nk-signer.
 //!
 //! @see <https://github.com/nostr-protocol/nips/blob/master/51.md>
 
@@ -19,11 +19,41 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "nip44")]
 use crate::Keys;
-use crate::{Coordinate, Event, EventBuilder, EventId, Kind, PublicKey, RelayUrl, Tag, Tags};
+use crate::{Event, EventBuilder, EventId, Kind, PublicKey, RelayUrl, Tag, Tags};
 
-use crate::nips::error::{Error, ErrorKind, Result};
 #[cfg(feature = "nip44")]
-use crate::nips::nip44::{self, ConversationKey};
+use crate::nips::nip44::ConversationKey;
+
+/// The error type returned by NIP-51 operations.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// The event kind differs from the required one.
+    #[error("expected kind {expected}, got {found}")]
+    WrongKind {
+        /// The required kind value.
+        expected: u16,
+        /// The event's actual kind.
+        found: u16,
+    },
+    /// The event author is not the expected key's owner, or the private
+    /// plaintext is not a tag array.
+    #[error("{0}")]
+    Validation(&'static str),
+    /// `rng` failed.
+    #[error("rng failed")]
+    Rng,
+    /// A NIP-44 operation failed.
+    #[error("{0}")]
+    #[cfg(feature = "nip44")]
+    Crypto(#[from] crate::nips::nip44::Error),
+    /// The private-tags JSON failed to parse.
+    #[error("invalid NIP-51 private tags")]
+    PrivateJson(#[source] crate::JsonError),
+}
+
+/// Result type for NIP-51 operations.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 /// A public mute-list item (`p`/`e`/`t`/`word` tags). `Word` values are
 /// lowercased like TS `toLowerCase()`.
@@ -109,14 +139,10 @@ pub struct FollowPack {
 /// `expected kind <expected>, got <actual>`.
 fn require_kind(event: &Event, kind: Kind) -> Result<()> {
     if event.kind() != kind {
-        return Err(Error::new(
-            ErrorKind::EventValidation,
-            alloc::format!(
-                "expected kind {}, got {}",
-                kind.as_u16(),
-                event.kind().as_u16()
-            ),
-        ));
+        return Err(Error::WrongKind {
+            expected: kind.as_u16(),
+            found: event.kind().as_u16(),
+        });
     }
     Ok(())
 }
@@ -212,203 +238,289 @@ pub fn mute_items(tags: &Tags) -> Vec<MuteItem> {
     items
 }
 
-/// Parses the public `p`/`e`/`t`/`word` tags of a kind-10000 mute list — the
-/// TS `parseMuteList`.
-///
-/// # Errors
-///
-/// [`ErrorKind::EventValidation`] `expected kind 10000, got <kind>`.
-pub fn parse_mute_list(event: &Event) -> Result<Vec<MuteItem>> {
-    require_kind(event, Kind::MUTE_LIST)?;
-    Ok(mute_items(event.tags()))
+/// A parsed kind-10000 mute list (TS `parseMuteList` result).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MuteList {
+    items: Vec<MuteItem>,
 }
 
-/// An unsigned kind-10000 [`EventBuilder`] from public mute items — the TS
-/// `muteListEventBuilder`. Empty hashtag/word items are not written; words
-/// are lowercased.
-pub fn mute_list(items: &[MuteItem]) -> EventBuilder {
-    let mut tags = Vec::new();
-    for item in items {
-        match item {
-            MuteItem::PublicKey(pubkey) => tags.push(Tag::public_key(*pubkey, None, None)),
-            MuteItem::Event(id) => tags.push(Tag::event(*id, None, None, None)),
-            MuteItem::Hashtag(hashtag) => {
-                if !hashtag.is_empty() {
+impl MuteList {
+    /// The public mute items, in wire order.
+    #[must_use]
+    pub fn items(&self) -> &[MuteItem] {
+        &self.items
+    }
+
+    /// Builds a mute list from tags — the same `p`/`e`/`t`/`word` scan
+    /// applied to a decrypted private-tags plaintext, or to an event's
+    /// public tags.
+    #[must_use]
+    pub fn from_tags(tags: &Tags) -> Self {
+        Self {
+            items: mute_items(tags),
+        }
+    }
+
+    /// Wraps public mute items.
+    #[must_use]
+    pub const fn new(items: Vec<MuteItem>) -> Self {
+        Self { items }
+    }
+}
+
+impl TryFrom<&Event> for MuteList {
+    type Error = Error;
+
+    /// Parses the public `p`/`e`/`t`/`word` tags of a kind-10000 event.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongKind`] `expected kind 10000, got <kind>`.
+    fn try_from(event: &Event) -> Result<Self> {
+        require_kind(event, Kind::MUTE_LIST)?;
+        Ok(Self::from_tags(event.tags()))
+    }
+}
+
+impl From<MuteList> for EventBuilder {
+    /// An unsigned kind-10000 builder — TS `muteListEventBuilder`. Empty
+    /// hashtag/word items are not written; words are lowercased.
+    fn from(list: MuteList) -> Self {
+        let mut tags = Vec::new();
+        for item in &list.items {
+            match item {
+                MuteItem::PublicKey(pubkey) => tags.push(Tag::public_key(*pubkey, None, None)),
+                MuteItem::Event(id) => tags.push(Tag::event(*id, None, None, None)),
+                MuteItem::Hashtag(hashtag) if !hashtag.is_empty() => {
                     tags.push(Tag::hashtag(hashtag));
                 }
-            }
-            MuteItem::Word(word) => {
-                if !word.is_empty() {
+                MuteItem::Word(word) if !word.is_empty() => {
                     tags.push(Tag::custom("word", [word.to_lowercase()]));
                 }
+                _ => {}
             }
         }
+        Self::new(Kind::MUTE_LIST, "").tags(tags)
     }
-    EventBuilder::new(Kind::MUTE_LIST, "").tags(tags)
 }
 
-/// Parses the public `e` tags of a kind-10001 pin list — the TS
-/// `parsePinList`. Non-hex values are skipped.
-///
-/// # Errors
-///
-/// [`ErrorKind::EventValidation`] `expected kind 10001, got <kind>`.
-pub fn parse_pin_list(event: &Event) -> Result<Vec<EventId>> {
-    require_kind(event, Kind::PIN_LIST)?;
-    Ok(event
-        .tags()
-        .iter()
-        .filter(|tag| tag.name() == "e")
-        .filter_map(|tag| tag.value())
-        .filter_map(|value| EventId::from_hex(value).ok())
-        .collect())
+/// A parsed kind-10001 pin list (TS `parsePinList` result).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PinList {
+    ids: Vec<EventId>,
 }
 
-/// An unsigned kind-10001 [`EventBuilder`] from event ids — the TS
-/// `pinListEventBuilder`.
-pub fn pin_list(ids: &[EventId]) -> EventBuilder {
-    EventBuilder::new(Kind::PIN_LIST, "")
-        .tags(ids.iter().map(|id| Tag::event(*id, None, None, None)))
+impl PinList {
+    /// The pinned event ids, in wire order.
+    #[must_use]
+    pub fn ids(&self) -> &[EventId] {
+        &self.ids
+    }
+
+    /// Wraps event ids.
+    #[must_use]
+    pub const fn new(ids: Vec<EventId>) -> Self {
+        Self { ids }
+    }
 }
 
-/// Parses the public `e`/`a` tags of a kind-10003 bookmark list — the TS
-/// `parseBookmarkList`. `a` values are stored verbatim.
-///
-/// # Errors
-///
-/// [`ErrorKind::EventValidation`] `expected kind 10003, got <kind>`.
-pub fn parse_bookmark_list(event: &Event) -> Result<BookmarkList> {
-    require_kind(event, Kind::BOOKMARK_LIST)?;
-    let mut list = BookmarkList::default();
-    for tag in event.tags() {
-        let Some(value) = non_empty_value(tag) else {
-            continue;
-        };
-        match tag.name() {
-            "e" => {
-                if let Ok(id) = EventId::from_hex(value) {
-                    list.events.push(id);
-                }
+impl TryFrom<&Event> for PinList {
+    type Error = Error;
+
+    /// Parses the public `e` tags of a kind-10001 event. Non-hex values are
+    /// skipped.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongKind`] `expected kind 10001, got <kind>`.
+    fn try_from(event: &Event) -> Result<Self> {
+        require_kind(event, Kind::PIN_LIST)?;
+        Ok(Self {
+            ids: event
+                .tags()
+                .iter()
+                .filter(|tag| tag.name() == "e")
+                .filter_map(|tag| tag.value())
+                .filter_map(|value| EventId::from_hex(value).ok())
+                .collect(),
+        })
+    }
+}
+
+impl From<PinList> for EventBuilder {
+    /// An unsigned kind-10001 builder — TS `pinListEventBuilder`.
+    fn from(list: PinList) -> Self {
+        Self::new(Kind::PIN_LIST, "")
+            .tags(list.ids.iter().map(|id| Tag::event(*id, None, None, None)))
+    }
+}
+
+impl TryFrom<&Event> for BookmarkList {
+    type Error = Error;
+
+    /// Parses the public `e`/`a` tags of a kind-10003 event — TS
+    /// `parseBookmarkList`. `a` values are stored verbatim.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongKind`] `expected kind 10003, got <kind>`.
+    fn try_from(event: &Event) -> Result<Self> {
+        require_kind(event, Kind::BOOKMARK_LIST)?;
+        let mut list = Self::default();
+        for tag in event.tags() {
+            let Some(value) = non_empty_value(tag) else {
+                continue;
+            };
+            match tag.name() {
+                "e" => list.events.extend(EventId::from_hex(value).ok()),
+                "a" => list.addresses.push(String::from(value)),
+                _ => {}
             }
-            "a" => list.addresses.push(String::from(value)),
-            _ => {}
         }
+        Ok(list)
     }
-    Ok(list)
 }
 
-/// An unsigned kind-10003 [`EventBuilder`] — the TS `bookmarkListEventBuilder`.
-/// `e` tags are written before `a` tags.
-pub fn bookmark_list(events: &[EventId], addresses: &[Coordinate]) -> EventBuilder {
-    EventBuilder::new(Kind::BOOKMARK_LIST, "").tags(
-        events
-            .iter()
-            .map(|id| Tag::event(*id, None, None, None))
-            .chain(addresses.iter().map(|a| Tag::address(a, None))),
-    )
+impl From<BookmarkList> for EventBuilder {
+    /// An unsigned kind-10003 builder — TS `bookmarkListEventBuilder`.
+    /// `e` tags are written before `a` tags; `a` values are verbatim
+    /// coordinate strings.
+    fn from(list: BookmarkList) -> Self {
+        Self::new(Kind::BOOKMARK_LIST, "").tags(
+            list.events
+                .iter()
+                .map(|id| Tag::event(*id, None, None, None))
+                .chain(
+                    list.addresses
+                        .iter()
+                        .map(|a| Tag::custom("a", [a.as_str()])),
+                ),
+        )
+    }
 }
 
-/// Parses the public `emoji`/`a` tags of a kind-10030 user emoji list — the
-/// TS `parseUserEmojiList`.
-///
-/// # Errors
-///
-/// [`ErrorKind::EventValidation`] `expected kind 10030, got <kind>`.
-pub fn parse_user_emoji_list(event: &Event) -> Result<UserEmojiList> {
-    require_kind(event, Kind::USER_EMOJI_LIST)?;
-    let sets = event
-        .tags()
-        .iter()
-        .filter(|tag| tag.name() == "a")
-        .filter_map(non_empty_value)
-        .map(String::from)
-        .collect();
-    Ok(UserEmojiList {
-        emoji: collect_emoji(event.tags()),
-        sets,
-    })
-}
+impl TryFrom<&Event> for UserEmojiList {
+    type Error = Error;
 
-/// Parses the `d`/`relay` tags of a kind-30002 relay set — the TS
-/// `parseRelaySet`.
-///
-/// # Errors
-///
-/// [`ErrorKind::EventValidation`] `expected kind 30002, got <kind>`.
-pub fn parse_relay_set(event: &Event) -> Result<RelaySet> {
-    require_kind(event, Kind::RELAY_SETS)?;
-    Ok(RelaySet {
-        identifier: identifier(event.tags()),
-        relays: collect_relays(event.tags()),
-    })
-}
-
-/// Parses the `relay`/`a` tags of a kind-10012 favorite-relays list — the TS
-/// `parseFavoriteRelays`. Only `a` values shaped like kind-30002 coordinates
-/// are kept as `sets`.
-///
-/// # Errors
-///
-/// [`ErrorKind::EventValidation`] `expected kind 10012, got <kind>`.
-pub fn parse_favorite_relays(event: &Event) -> Result<FavoriteRelays> {
-    require_kind(event, Kind::FAVORITE_RELAYS)?;
-    let sets = event
-        .tags()
-        .iter()
-        .filter(|tag| tag.name() == "a")
-        .filter_map(|tag| tag.value())
-        .filter(|value| is_relay_set_address(value))
-        .map(String::from)
-        .collect();
-    Ok(FavoriteRelays {
-        relays: collect_relays(event.tags()),
-        sets,
-    })
-}
-
-/// Parses the `d`/`title`/`emoji` tags of a kind-30030 emoji set — the TS
-/// `parseEmojiSet`. An empty `title` is treated as absent.
-///
-/// # Errors
-///
-/// [`ErrorKind::EventValidation`] `expected kind 30030, got <kind>`.
-pub fn parse_emoji_set(event: &Event) -> Result<EmojiSet> {
-    require_kind(event, Kind::EMOJI_SET)?;
-    Ok(EmojiSet {
-        identifier: identifier(event.tags()),
-        title: event
-            .tags()
-            .first_value("title")
-            .filter(|title| !title.is_empty())
-            .map(String::from),
-        emoji: collect_emoji(event.tags()),
-    })
-}
-
-/// Parses the `d`/`p` tags of a kind-39089 starter pack — the TS
-/// `parseFollowPack`.
-///
-/// # Errors
-///
-/// [`ErrorKind::EventValidation`] `expected kind 39089, got <kind>`.
-pub fn parse_follow_pack(event: &Event) -> Result<FollowPack> {
-    require_kind(event, Kind::STARTER_PACK)?;
-    Ok(FollowPack {
-        identifier: identifier(event.tags()),
-        pubkeys: event
+    /// Parses the public `emoji`/`a` tags of a kind-10030 event — TS
+    /// `parseUserEmojiList`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongKind`] `expected kind 10030, got <kind>`.
+    fn try_from(event: &Event) -> Result<Self> {
+        require_kind(event, Kind::USER_EMOJI_LIST)?;
+        let sets = event
             .tags()
             .iter()
-            .filter(|tag| tag.name() == "p")
+            .filter(|tag| tag.name() == "a")
+            .filter_map(non_empty_value)
+            .map(String::from)
+            .collect();
+        Ok(Self {
+            emoji: collect_emoji(event.tags()),
+            sets,
+        })
+    }
+}
+
+impl TryFrom<&Event> for RelaySet {
+    type Error = Error;
+
+    /// Parses the `d`/`relay` tags of a kind-30002 event — TS
+    /// `parseRelaySet`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongKind`] `expected kind 30002, got <kind>`.
+    fn try_from(event: &Event) -> Result<Self> {
+        require_kind(event, Kind::RELAY_SETS)?;
+        Ok(Self {
+            identifier: identifier(event.tags()),
+            relays: collect_relays(event.tags()),
+        })
+    }
+}
+
+impl TryFrom<&Event> for FavoriteRelays {
+    type Error = Error;
+
+    /// Parses the `relay`/`a` tags of a kind-10012 event — TS
+    /// `parseFavoriteRelays`. Only `a` values shaped like kind-30002
+    /// coordinates are kept as `sets`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongKind`] `expected kind 10012, got <kind>`.
+    fn try_from(event: &Event) -> Result<Self> {
+        require_kind(event, Kind::FAVORITE_RELAYS)?;
+        let sets = event
+            .tags()
+            .iter()
+            .filter(|tag| tag.name() == "a")
             .filter_map(|tag| tag.value())
-            .filter_map(|value| PublicKey::from_hex(value).ok())
-            .collect(),
-    })
+            .filter(|value| is_relay_set_address(value))
+            .map(String::from)
+            .collect();
+        Ok(Self {
+            relays: collect_relays(event.tags()),
+            sets,
+        })
+    }
+}
+
+impl TryFrom<&Event> for EmojiSet {
+    type Error = Error;
+
+    /// Parses the `d`/`title`/`emoji` tags of a kind-30030 event — TS
+    /// `parseEmojiSet`. An empty `title` is treated as absent.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongKind`] `expected kind 30030, got <kind>`.
+    fn try_from(event: &Event) -> Result<Self> {
+        require_kind(event, Kind::EMOJI_SET)?;
+        Ok(Self {
+            identifier: identifier(event.tags()),
+            title: event
+                .tags()
+                .first_value("title")
+                .filter(|title| !title.is_empty())
+                .map(String::from),
+            emoji: collect_emoji(event.tags()),
+        })
+    }
+}
+
+impl TryFrom<&Event> for FollowPack {
+    type Error = Error;
+
+    /// Parses the `d`/`p` tags of a kind-39089 event — TS
+    /// `parseFollowPack`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongKind`] `expected kind 39089, got <kind>`.
+    fn try_from(event: &Event) -> Result<Self> {
+        require_kind(event, Kind::STARTER_PACK)?;
+        Ok(Self {
+            identifier: identifier(event.tags()),
+            pubkeys: event
+                .tags()
+                .iter()
+                .filter(|tag| tag.name() == "p")
+                .filter_map(|tag| tag.value())
+                .filter_map(|value| PublicKey::from_hex(value).ok())
+                .collect(),
+        })
+    }
 }
 
 /// The plaintext serialized private tags — `JSON.stringify(tags)` on the TS
 /// side, compact serde JSON here. Serializing a `Tags` cannot fail.
 #[must_use]
-pub fn private_tags_plaintext(tags: &Tags) -> String {
+#[cfg(feature = "nip44")]
+pub(crate) fn private_tags_plaintext(tags: &Tags) -> String {
     serde_json::to_string(tags).unwrap_or_default()
 }
 
@@ -420,9 +532,11 @@ pub fn private_tags_plaintext(tags: &Tags) -> String {
 ///
 /// [`ErrorKind::EventValidation`] `invalid NIP-51 private tags` for any
 /// non-array, non-tag-array, or malformed JSON input.
-pub fn parse_private_tags(plaintext: &str) -> Result<Tags> {
+#[cfg(feature = "nip44")]
+pub(crate) fn parse_private_tags(plaintext: &str) -> Result<Tags> {
     serde_json::from_str::<Tags>(plaintext)
-        .map_err(|_| Error::new(ErrorKind::EventValidation, "invalid NIP-51 private tags"))
+        .map_err(|e| Error::PrivateJson(e.into()))
+        .map_err(|_| Error::Validation("invalid NIP-51 private tags"))
 }
 
 /// NIP-44 ciphertext of the private tags, conversation peer = the author's
@@ -430,30 +544,17 @@ pub fn parse_private_tags(plaintext: &str) -> Result<Tags> {
 ///
 /// # Errors
 ///
-/// [`ErrorKind::Crypto`] on a NIP-44 failure.
+/// [`Error::Crypto`] on a NIP-44 failure; [`Error::Rng`] when `rng` fails.
 #[cfg(feature = "nip44")]
-pub fn encrypt_private_tags_with_rng<R>(keys: &Keys, tags: &Tags, rng: &mut R) -> Result<String>
+pub fn encrypt_private_tags<R>(keys: &Keys, tags: &Tags, rng: &mut R) -> Result<String>
 where
-    R: rand_core::CryptoRng + ?Sized,
+    R: rand_core::TryCryptoRng + ?Sized,
 {
     let own = keys.public_key();
     let conversation = ConversationKey::derive(keys.secret_key(), &own)?;
-    nip44::encrypt_with_rng(&private_tags_plaintext(tags), &conversation, rng)
-}
-
-/// [`encrypt_private_tags_with_rng`] with an OS-entropy nonce.
-///
-/// # Errors
-///
-/// [`ErrorKind::Crypto`] on a NIP-44 failure.
-///
-/// # Panics
-///
-/// When the OS entropy source fails — the same contract as
-/// [`crate::SecretKey::generate`].
-#[cfg(all(feature = "nip44", feature = "os-rng"))]
-pub fn encrypt_private_tags(keys: &Keys, tags: &Tags) -> Result<String> {
-    encrypt_private_tags_with_rng(keys, tags, &mut rand_core::UnwrapErr(getrandom::SysRng))
+    conversation
+        .encrypt(&private_tags_plaintext(tags), rng)
+        .map_err(Error::Crypto)
 }
 
 /// Decrypts NIP-51 `.content` — the TS `decryptPrivateTags` for a local key.
@@ -462,9 +563,9 @@ pub fn encrypt_private_tags(keys: &Keys, tags: &Tags) -> Result<String> {
 ///
 /// # Errors
 ///
-/// [`ErrorKind::EventValidation`] `NIP-51 private content is only for the
+/// [`Error::Validation`] `NIP-51 private content is only for the
 /// author` when the event pubkey differs, or `invalid NIP-51 private tags`
-/// when the plaintext is not a tag array. [`ErrorKind::Crypto`] on a NIP-44
+/// when the plaintext is not a tag array. [`Error::Crypto`] on a NIP-44
 /// failure.
 #[cfg(feature = "nip44")]
 pub fn decrypt_private_tags(keys: &Keys, event: &Event) -> Result<Tags> {
@@ -473,13 +574,12 @@ pub fn decrypt_private_tags(keys: &Keys, event: &Event) -> Result<Tags> {
     }
     let own = keys.public_key();
     if event.pubkey() != own {
-        return Err(Error::new(
-            ErrorKind::EventValidation,
+        return Err(Error::Validation(
             "NIP-51 private content is only for the author",
         ));
     }
     let conversation = ConversationKey::derive(keys.secret_key(), &own)?;
-    let plaintext = nip44::decrypt(event.content(), &conversation)?;
+    let plaintext = conversation.decrypt(event.content())?;
     parse_private_tags(&plaintext)
 }
 
@@ -545,7 +645,7 @@ mod tests {
             ],
             10000,
         );
-        let items = parse_mute_list(&event).unwrap();
+        let items = MuteList::try_from(&event).unwrap().items().to_vec();
         assert_eq!(
             items,
             vec![
@@ -567,7 +667,8 @@ mod tests {
             MuteItem::Hashtag(String::new()),
             MuteItem::Word(String::new()),
         ];
-        let unsigned = mute_list(&items).build_at(pk(PK1), Timestamp::from_secs(0));
+        let unsigned =
+            EventBuilder::from(MuteList::new(items)).build_at(pk(PK1), Timestamp::from_secs(0));
         assert_eq!(unsigned.kind(), Kind::MUTE_LIST);
         assert_eq!(unsigned.content(), "");
         let slices: Vec<Vec<String>> = unsigned
@@ -589,12 +690,9 @@ mod tests {
     #[test]
     fn parse_rejects_wrong_kind() {
         let event = event(&[], 1);
-        let error = parse_mute_list(&event).unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::EventValidation);
-        assert_eq!(
-            error.to_string(),
-            "event validation: expected kind 10000, got 1"
-        );
+        let error = MuteList::try_from(&event).unwrap_err();
+        assert!(matches!(error, Error::WrongKind { .. }));
+        assert_eq!(error.to_string(), "expected kind 10000, got 1");
     }
 
     #[test]
@@ -627,7 +725,7 @@ mod tests {
             ],
             10012,
         );
-        let parsed = parse_favorite_relays(&event).unwrap();
+        let parsed = FavoriteRelays::try_from(&event).unwrap();
         assert_eq!(parsed.relays.len(), 1);
         assert_eq!(
             parsed.sets,
@@ -671,7 +769,7 @@ mod tests {
     fn private_tags_round_trip() {
         let keys = keys();
         let list = tags(&[&["p", PK1], &["word", "secret"]]);
-        let content = encrypt_private_tags_with_rng(&keys, &list, &mut ZeroRng).unwrap();
+        let content = encrypt_private_tags(&keys, &list, &mut ZeroRng).unwrap();
         assert_ne!(content, private_tags_plaintext(&list));
         let event = {
             let unsigned = crate::UnsignedEvent::new(
@@ -724,10 +822,10 @@ mod tests {
         }))
         .unwrap();
         let error = decrypt_private_tags(&keys, &foreign).unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::EventValidation);
+        assert!(matches!(error, Error::Validation(_)));
         assert_eq!(
             error.to_string(),
-            "event validation: NIP-51 private content is only for the author"
+            "NIP-51 private content is only for the author"
         );
 
         // Empty content means no private tags — not ciphertext.
