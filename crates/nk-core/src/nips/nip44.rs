@@ -139,9 +139,11 @@ impl ConversationKey {
     /// let alice = SecretKey::from_bytes([1; 32]).unwrap();
     /// let bob = SecretKey::from_bytes([2; 32]).unwrap();
     /// let key = ConversationKey::derive(&alice, &bob.public_key())?;
-    /// let mut rng = nk_core::SysRng;
-    /// let payload = key.encrypt("hi", &mut rng)?;
+    /// # #[cfg(feature = "os-rng")]
+    /// # {
+    /// let payload = key.encrypt("hi", &mut nk_core::SysRng)?;
     /// assert_eq!(key.decrypt(&payload)?, "hi");
+    /// # }
     /// # Ok::<(), nk_core::nips::nip44::Error>(())
     /// ```
     pub fn derive(secret: &SecretKey, peer: &PublicKey) -> Result<Self> {

@@ -114,6 +114,7 @@ pub enum DeletionTarget {
 /// let unsigned = EventBuilder::text_note("hello")
 ///     .tag(Tag::hashtag("nostr"))
 ///     .build_at(keys.public_key(), Timestamp::from_secs(1_700_000_000));
+/// # #[cfg(feature = "os-rng")]
 /// let signed = keys.sign_event(unsigned, &mut nk_core::SysRng)?;
 /// # Ok(())
 /// # }

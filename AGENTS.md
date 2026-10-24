@@ -42,6 +42,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 cargo test --workspace --all-features
+cargo test --workspace --no-default-features
 cargo hack check -p nk-core --each-feature --no-dev-deps
 CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" \
     cargo check -p nk-core --target wasm32-unknown-unknown --no-default-features

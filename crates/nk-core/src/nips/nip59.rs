@@ -212,10 +212,12 @@ impl Rumor {
     ///     seal: Timestamp::from_secs(1_700_000_100),
     ///     wrap: Timestamp::from_secs(1_700_000_200),
     /// });
-    /// let mut rng = nk_core::SysRng;
-    /// let gift = rumor.wrap(&alice, &bob.public_key(), &options, &mut rng)?;
+    /// # #[cfg(feature = "os-rng")]
+    /// # {
+    /// let gift = rumor.wrap(&alice, &bob.public_key(), &options, &mut nk_core::SysRng)?;
     /// let back = Rumor::from_gift_wrap(&gift, &bob)?;
     /// assert_eq!(back.unsigned().content(), "hello bob");
+    /// # }
     /// # Ok::<(), nk_core::nips::nip59::Error>(())
     /// ```
     pub fn wrap<R>(
