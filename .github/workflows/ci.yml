@@ -48,15 +48,27 @@ jobs:
       doc: true
       package-check: true
       each-feature: true
-      packages: nk-core
+      packages: nk-core nk-store
 
   rust-minimal:
     uses: qntx/workflows/.github/workflows/ci-rust.yml@v2
     permissions:
       contents: read
     with:
-      packages: nk-core
+      packages: nk-core nk-store
       features: --no-default-features
+
+  # nk-store with rusqlite bundled: the C SQLite sources must build for the
+  # mobile targets. --all-features enables `sqlite`.
+  portable-store:
+    uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
+    permissions:
+      contents: read
+    with:
+      targets: aarch64-linux-android x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
+      packages: nk-store
+      features: --all-features
+      forbid-deps: tokio
 
   # secp256k1-sys compiles C on every target; ci-rust-cross supplies the
   # wasm clang, Android NDK and iOS SDK toolchains.

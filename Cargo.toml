@@ -1,5 +1,5 @@
 [workspace]
-members  = ["crates/nk-core"]
+members  = ["crates/nk-core", "crates/nk-store"]
 exclude  = ["fuzz"]
 resolver = "3"
 
@@ -28,6 +28,7 @@ getrandom             = { version = "0.4", default-features = false }
 hkdf                  = { version = "0.13", default-features = false }
 hmac                  = { version = "0.13", default-features = false, features = ["zeroize"] }
 rand_core             = { version = "0.10", default-features = false }
+rusqlite              = { version = "0.40.2", features = ["bundled"] }
 scrypt                = { version = "0.12", default-features = false }
 secp256k1             = { version = "0.33", default-features = false }
 serde                 = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }

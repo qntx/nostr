@@ -255,6 +255,30 @@ impl Event {
         out
     }
 
+    /// Constructs an event from its wire fields. Shape-valid by
+    /// construction — like [`Self::from_json`], this does not verify the id
+    /// or the signature; call [`Self::verify`] when that matters.
+    #[must_use]
+    pub const fn new(
+        id: EventId,
+        pubkey: PublicKey,
+        created_at: Timestamp,
+        kind: Kind,
+        tags: Tags,
+        content: String,
+        sig: Signature,
+    ) -> Self {
+        Self {
+            id,
+            pubkey,
+            created_at,
+            kind,
+            tags,
+            content,
+            sig,
+        }
+    }
+
     /// Parses the wire JSON object.
     ///
     /// # Errors
@@ -448,6 +472,28 @@ mod tests {
             alloc::format!("[0,\"{PK}\",0,0,[],\"{escaped}\"]")
         );
         assert_eq!(event.id(), EventId::hash(event.canonical_json().as_bytes()));
+    }
+
+    #[test]
+    fn new_round_trips_wire_json() {
+        let sig = "ab".repeat(64);
+        let json = alloc::format!(
+            r#"{{"id":"{}","pubkey":"{}","created_at":1700000000,"kind":1,"tags":[["t","smoke"]],"content":"hello","sig":"{sig}"}}"#,
+            "cd".repeat(32),
+            PK,
+        );
+        let original = signed(&json);
+        let rebuilt = Event::new(
+            original.id(),
+            original.pubkey(),
+            original.created_at(),
+            original.kind(),
+            original.tags().clone(),
+            alloc::string::String::from(original.content()),
+            original.sig(),
+        );
+        assert_eq!(rebuilt, original);
+        assert_eq!(rebuilt.to_json(), original.to_json());
     }
 
     #[test]

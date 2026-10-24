@@ -32,6 +32,9 @@ packages/nostr-native/ @qntx/nostr-native — React Native Nitro C++ backend
 crates/nk-core/       nk-core — the owned Rust protocol crate (no_std +
                       alloc, sans-IO); runs vectors/ and the TS differential
                       streams in tests/it/ plus in-crate vector tests
+crates/nk-store/      nk-store — synchronous EventStore trait with memory
+                      and sqlite (feature-gated) backends sharing one put
+                      policy
 fuzz/                 standalone cargo-fuzz workspace over nk-core
 vectors/              shared cross-language test vectors (see vectors/README.md)
 parity.json           ledger of shared-vector capabilities consumed by
