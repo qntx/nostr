@@ -20,7 +20,7 @@ yanked  = "deny"
 ignore  = []
 
 [licenses]
-allow                = ["MIT", "Apache-2.0", "Unicode-3.0", "CC0-1.0", "Zlib"]
+allow                = ["MIT", "Apache-2.0", "BSD-3-Clause", "CDLA-Permissive-2.0", "ISC", "MPL-2.0", "Unicode-3.0", "CC0-1.0", "Zlib"]
 confidence-threshold = 0.93
 exceptions           = []
 

@@ -35,6 +35,8 @@ crates/nk-core/       nk-core — the owned Rust protocol crate (no_std +
 crates/nk-store/      nk-store — synchronous EventStore trait with memory
                       and sqlite (feature-gated) backends sharing one put
                       policy
+crates/nk/            nk — the SDK crate: tokio/yawc single-relay client
+                      with a sans-IO session and a `test-util` MockRelay
 fuzz/                 standalone cargo-fuzz workspace over nk-core
 vectors/              shared cross-language test vectors (see vectors/README.md)
 parity.json           ledger of shared-vector capabilities consumed by
@@ -53,7 +55,7 @@ bun run lint && bun run typecheck && bun run test   # lint includes taplo,
                                                     # parity checks
 bun run test:parity
 cargo fmt --all --check
-for p in nk-core nk-store; do                       # per package, like CI:
+for p in nk-core nk-store nk; do                       # per package, like CI:
   for f in --all-features --no-default-features; do # workspace runs unify
     cargo clippy -p "$p" --all-targets "$f" -- -D warnings # features and
     cargo test -p "$p" "$f"                         # hide gaps

@@ -1,0 +1,47 @@
+[package]
+name                   = "nk"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+homepage.workspace     = true
+repository.workspace   = true
+keywords.workspace     = true
+categories             = ["network-programming"]
+readme                 = "README.md"
+description            = "Nostr SDK: relays, clients, and signing on top of nk-core"
+documentation          = "https://docs.rs/nk"
+include                = ["src/**/*", "Cargo.toml", "README.md", "LICENSE-*"]
+
+[lints]
+workspace = true
+
+[[test]]
+name              = "it"
+required-features = ["test-util"]
+
+[features]
+test-util = ["dep:nk-store", "dep:hyper", "dep:hyper-util", "dep:http-body-util", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread"]
+
+[dependencies]
+nk-core      = { workspace = true, features = ["std", "clock", "os-rng"] }
+tokio        = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+yawc         = { workspace = true }
+futures-util = { workspace = true }
+tracing      = { workspace = true }
+thiserror    = { workspace = true }
+url          = { workspace = true }
+
+# test-util only
+nk-store       = { workspace = true, optional = true }
+hyper          = { version = "1", optional = true }
+hyper-util     = { version = "0.1.21", optional = true, features = ["server", "tokio"] }
+http-body-util = { version = "0.1", optional = true }
+
+[dev-dependencies]
+nk           = { path = ".", features = ["test-util"] }
+nk-core      = { workspace = true, features = ["std", "clock", "os-rng"] }
+nk-store     = { workspace = true }
+futures-util = { workspace = true }
+tokio        = { workspace = true, features = ["rt-multi-thread", "test-util"] }

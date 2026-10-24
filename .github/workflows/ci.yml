@@ -48,14 +48,14 @@ jobs:
       doc: true
       package-check: true
       each-feature: true
-      packages: nk-core nk-store
+      packages: nk nk-core nk-store
 
   rust-minimal:
     uses: qntx/workflows/.github/workflows/ci-rust.yml@v2
     permissions:
       contents: read
     with:
-      packages: nk-core nk-store
+      packages: nk nk-core nk-store
       features: --no-default-features
 
   # nk-store with rusqlite bundled: the C SQLite sources must build for the
