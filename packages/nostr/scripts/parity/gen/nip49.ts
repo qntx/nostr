@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // codec.json payloads are built with noble scrypt + XChaCha20-Poly1305
 // under FIXED salts/nonces and low log_n (1..4 keeps generation fast),
-// so crates/interop can replay rust-nostr's
+// so crates/nk-core can replay the internal
 // `EncryptedSecretKey::new_with_salt_and_nonce` byte-for-byte and
 // `decrypt` on every case; TS `decrypt` runs each case here so the
 // recorded `ncryptsec`/`error` always reflects the real behaviour.

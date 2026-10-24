@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-21 `nostr:` URI parser's behaviour as frozen vectors
 // shared by the TS test suite (tests/vectors/nip21.test.ts) and
-// crates/interop.
+// crates/nk-core.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

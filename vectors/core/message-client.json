@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.12.1",
+    "version": "0.14.0",
     "cross_check": null
   },
   "cases": [
@@ -27,31 +27,38 @@
     },
     {
       "raw": "[\"REQ\",\"s\",{\"kinds\":[9],\"kinds\":[1],\"limit\":1e2}]",
-      "encoded": "[\"REQ\",\"s\",{\"kinds\":[1],\"limit\":100}]"
+      "encoded": "[\"REQ\",\"s\",{\"kinds\":[1],\"limit\":100}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"since\":\"x\",\"since\":5}]",
-      "encoded": "[\"REQ\",\"s\",{\"since\":5}]"
+      "encoded": "[\"REQ\",\"s\",{\"since\":5}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"kinds\":[{}],\"kinds\":[7]}]",
-      "encoded": "[\"REQ\",\"s\",{\"kinds\":[7]}]"
+      "encoded": "[\"REQ\",\"s\",{\"kinds\":[7]}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"ids\":[123],\"ids\":[\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"]}]",
-      "encoded": "[\"REQ\",\"s\",{\"ids\":[\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"]}]"
+      "encoded": "[\"REQ\",\"s\",{\"ids\":[\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"]}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"limit\":null,\"limit\":3}]",
-      "encoded": "[\"REQ\",\"s\",{\"limit\":3}]"
+      "encoded": "[\"REQ\",\"s\",{\"limit\":3}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"since\":1e3,\"until\":2.0,\"limit\":-0}]",
-      "encoded": "[\"REQ\",\"s\",{\"limit\":0,\"since\":1000,\"until\":2}]"
+      "encoded": "[\"REQ\",\"s\",{\"limit\":0,\"since\":1000,\"until\":2}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"until\":9007199254740991.0}]",
-      "encoded": "[\"REQ\",\"s\",{\"until\":9007199254740991}]"
+      "encoded": "[\"REQ\",\"s\",{\"until\":9007199254740991}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"CLOSE\",\"sub1\"]"
@@ -182,7 +189,8 @@
     },
     {
       "raw": "[\"REQ\",\"s\",{\"kinds\":[1e10]}]",
-      "error": "MessageError"
+      "error": "MessageError",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"search\":1}]",
@@ -246,11 +254,13 @@
     },
     {
       "raw": "[\"REQ\",\"s\",{\"since\":5,\"since\":\"x\"}]",
-      "error": "MessageError"
+      "error": "MessageError",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"kinds\":[7],\"kinds\":\"x\"}]",
-      "error": "MessageError"
+      "error": "MessageError",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"COUNT\",\"s\",{\"authors\":[1]}]",

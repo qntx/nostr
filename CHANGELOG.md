@@ -9,6 +9,20 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Added
+
+- `nk` (`crates/nk`) — the SDK crate: `Relay` (single-relay client with lazy connect, WebSocket ping liveness, and jittered exponential-backoff reconnect replaying open `REQ`s), `Subscription` (a `Stream` ended by `EOSE`/`CLOSED`/lag/`close()` and sending `CLOSE` on drop), `fetch`/`publish`/`status`/`close`, and `testing::MockRelay` behind `test-util`.
+- `nk-store` (`crates/nk-store`) — the synchronous `EventStore` trait (`put`/`put_many`/`get`/`query`/`count`/`negentropy_items`/`remove`/`clear` with `PutOutcome` semantics), `MemoryStore`, and `SqliteStore` behind the `sqlite` feature; a shared private `policy` module keeps insertion/deletion rules identical across backends, and the SQLite schema is byte-identical to the TS store so files are interchangeable.
+- `nk-core` (`crates/nk-core`) — the owned Rust implementation of the protocol: a `no_std + alloc`, platform-neutral, sans-IO leaf crate covering the core types and every NIP codec of the TypeScript surface; features gate optional dependencies only (`nip04`, `nip44`, `nip49`, `os-rng`, `clock`, `std`). One `#[non_exhaustive]` error enum per module, one RNG-taking function per operation, no third-party types in public APIs beyond `rand_core` traits and `serde` impls. Shared vectors and the seeded differential streams run on both languages with zero divergence; crates are versioned lockstep with the npm packages and published from release tags.
+
+### Removed
+
+- `crates/interop` and the rust-nostr divergence registry — the Rust implementation is now owned (`nk-core`), so the cross-library comparison harness is obsolete.
+
+### Changed
+
+- Vector cases whose input is non-canonical JSON (duplicate keys, non-integral number spellings, `-0`) now carry `"nonCanonicalJson": true`; Rust rejects those inputs while `JSON.parse` accepts them — the single permitted platform difference.
+
 ## [0.14.0] - 2026-10-15
 
 ### Changed
@@ -108,6 +122,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Added
 
+- `nk` (`crates/nk`) — the SDK crate: `Relay` (single-relay client with lazy connect, WebSocket ping liveness, and jittered exponential-backoff reconnect replaying open `REQ`s), `Subscription` (a `Stream` ended by `EOSE`/`CLOSED`/lag/`close()` and sending `CLOSE` on drop), `fetch`/`publish`/`status`/`close`, and `testing::MockRelay` behind `test-util`.
+- `nk-store` (`crates/nk-store`) — the synchronous `EventStore` trait (`put`/`put_many`/`get`/`query`/`count`/`negentropy_items`/`remove`/`clear` with `PutOutcome` semantics), `MemoryStore`, and `SqliteStore` behind the `sqlite` feature; a shared private `policy` module keeps insertion/deletion rules identical across backends, and the SQLite schema is byte-identical to the TS store so files are interchangeable.
 - `nk-core` is published to crates.io from this release on. The crate is a from-scratch implementation inside this repository and is unrelated to the old `nk` 0.3.x crates on crates.io.
 - `nk-core` crate foundation: `no_std` + `alloc` error type, limits, internal hex codec, `Timestamp`, and `RelayUrl` — the Rust counterpart of `normalizeURL`/`normalizeRelayUrls`, verified byte-for-byte against the shared `vectors/core/url-normalize.json` cases by the new `nk-vectors` runner. The Hermes smoke test now runs the same vectors through the `whatwg-url` polyfill.
 - `nk-core` event model: `Kind`/`KindClass` (every named `Kind` constant), `PublicKey`, `EventId`, `Signature`, `Tag`/`Tags`/`EventAddress`, `UnsignedEvent`/`Event`, canonical NIP-01 serialization and SHA-256 event ids, `cmp_newest_first`/`cmp_oldest_first`, and `ErrorKind::EventValidation` — parity-verified by the shared kind/tag/event/hex vectors in `nk-vectors`.

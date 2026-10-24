@@ -1,10 +1,12 @@
 # vectors/
 
 Shared cross-language test vectors. The TypeScript tests (`tests/vectors/`,
-`tests/nip44.test.ts`) are the reference run; `crates/interop` replays the
-same files against rust-nostr's public API and records factual differences in
-`crates/interop/divergences.json` (unlisted divergences and stale entries
-fail). Capabilities with no rust-nostr counterpart are marked `rust: null` in
+`tests/nip44.test.ts`) are the reference run; `crates/nk-core` runs the
+same files through the shared-vector tests in `tests/it/` (in-crate tests for
+internals). Both sides must match exactly: the only permitted platform
+difference is Rust's strict rejection of non-canonical JSON forms that
+`JSON.parse` accepts. Capabilities with no Rust counterpart are marked
+`rust: null` in
 `parity.json`.
 
 ## Layout
@@ -44,6 +46,13 @@ JSON files share a single envelope:
   (`MessageError`, `EventValidationError`) or a null expectation field
   (`parsed: null`, `output: null`). Runners branch on the case fields; a file
   may mix case shapes (e.g. `tag-address.json` uses `op: "parse" | "format"`).
+- `nonCanonicalJson` — when `true`, the case's raw JSON input uses a form
+  `JSON.parse` accepts but strict parsers must reject: an integral-valued
+  number spelled with a fraction or exponent (`1e3`, `1.0`,
+  `9007199254740991.0`), the spelling `-0`, or a duplicate object key.
+  TypeScript accepts the input (`JSON.parse` normalizes
+  it, last duplicate wins); Rust must reject it. The flag only appears on
+  raw-text inputs; the field is absent otherwise.
 
 `vectors/core/*.json` are generated deterministically by
 `bun packages/nostr/scripts/parity/gen/all.ts` (`gen/core.ts`, `gen/nip19.ts`); never edit them by hand.

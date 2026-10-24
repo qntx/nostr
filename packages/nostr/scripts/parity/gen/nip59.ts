@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-59 `createSeal`/`createGiftWrap`/`wrap`/`unwrap`
 // semantics as frozen vectors shared by the TS test suite
-// (tests/vectors/nip59.test.ts) and crates/interop.
+// (tests/vectors/nip59.test.ts) and crates/nk-core.
 //
 // Every event is produced by the real TS API under a deterministic entropy
 // stream: `WrapOptions.randomBytes` feeds the gift wrap's ephemeral key,

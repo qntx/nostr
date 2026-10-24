@@ -15,15 +15,9 @@ function cap(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     id: "core.example",
     ts: { module: "src/x.ts", tests: ["tests/x.test.ts"] },
     vectors: ["vectors/x.json"],
-    rust: null,
-    rustNote: "no rust-nostr counterpart",
+    rust: { tests: ["tests/x.rs"] },
     ...overrides,
   };
-  // rustNote is only valid with rust: null; an explicit rust object drops
-  // the default note unless the override sets one on purpose.
-  if (overrides["rust"] !== null && overrides["rust"] !== undefined && !("rustNote" in overrides)) {
-    delete c["rustNote"];
-  }
   return c;
 }
 
@@ -66,7 +60,6 @@ describe("parity check", () => {
     );
     expect(errors).toStrictEqual([
       'capability "core.example": ts.tests must list at least one test file',
-      'capability "core.example": vector vectors/x.json is not referenced by any of its test files',
     ]);
   });
 
@@ -87,36 +80,55 @@ describe("parity check", () => {
     expect(errors).toStrictEqual([
       'capability "core.example": referenced path does not exist: src/x.ts',
       'capability "core.example": referenced path does not exist: tests/x.test.ts',
+      'capability "core.example": referenced path does not exist: tests/x.rs',
       'capability "core.example": vector file does not exist: vectors/x.json',
     ]);
   });
 
-  test("rejects rust null without rustNote", () => {
-    const c = cap();
-    delete c["rustNote"];
-    const errors = checkParity([c], ["vectors/x.json"], TRUE, CITES);
+  test("rejects rust null on a non-TS-only capability", () => {
+    const errors = checkParity(
+      [cap({ rust: null, rustNote: "no counterpart" })],
+      ["vectors/x.json"],
+      TRUE,
+      CITES,
+    );
     expect(errors).toStrictEqual([
-      'capability "core.example": rust is null but rustNote is missing or empty',
+      'capability "core.example": rust is null but only TS-only capabilities may skip Rust tests',
     ]);
   });
 
-  test("rejects a rust object without an api", () => {
-    const errors = checkParity([cap({ rust: { tests: ["tests/x.rs"] } })], [], TRUE, CITES);
+  test("accepts rust null on a TS-only capability with a note", () => {
+    const errors = checkParity(
+      [cap({ id: "wasm.backend", rust: null, rustNote: "the wasm ABI has no Rust twin" })],
+      ["vectors/x.json"],
+      TRUE,
+      CITES,
+    );
+    expect(errors).toStrictEqual([]);
+  });
+
+  test("rejects rust null on a TS-only capability without a note", () => {
+    const errors = checkParity(
+      [cap({ id: "wasm.backend", rust: null })],
+      ["vectors/x.json"],
+      TRUE,
+      CITES,
+    );
     expect(errors).toStrictEqual([
-      'capability "core.example": rust.api must be a non-empty string naming the rust-nostr path',
+      'capability "wasm.backend": rust is null but rustNote is missing or empty',
     ]);
   });
 
   test("rejects a rust object without tests", () => {
-    const errors = checkParity([cap({ rust: { api: "nostr::Event" } })], [], TRUE, CITES);
+    const errors = checkParity([cap({ rust: {} })], [], TRUE, CITES);
     expect(errors).toStrictEqual([
-      'capability "core.example": rust.tests must list at least one runner file',
+      'capability "core.example": rust.tests must list at least one test file',
     ]);
   });
 
   test("rejects rustNote alongside a rust object", () => {
     const errors = checkParity(
-      [cap({ rust: { api: "nostr::Event", tests: ["tests/x.rs"] }, rustNote: "kept" })],
+      [cap({ rust: { tests: ["tests/x.rs"] }, rustNote: "kept" })],
       ["vectors/x.json"],
       TRUE,
       CITES,
@@ -137,6 +149,7 @@ describe("parity check", () => {
     const files = new Map([
       ["src/x.ts", ""],
       ["tests/x.test.ts", "reads nothing relevant"],
+      ["tests/x.rs", "reads nothing relevant"],
       ["vectors/x.json", "{}"],
     ]);
     const errors = checkParity([cap()], ["vectors/x.json"], (p) => files.has(p), mapReader(files));
@@ -149,6 +162,7 @@ describe("parity check", () => {
     const files = new Map([
       ["src/x.ts", ""],
       ["tests/x.test.ts", 'readFileSync("vectors/x.json")'],
+      ["tests/x.rs", ""],
       ["vectors/x.json", "{}"],
     ]);
     const errors = checkParity([cap()], ["vectors/x.json"], (p) => files.has(p), mapReader(files));
@@ -157,7 +171,7 @@ describe("parity check", () => {
 
   test("accepts a vector cited only by rust tests (rust object keeps ts vectors)", () => {
     const c = cap({
-      rust: { api: "nostr::x", tests: ["tests/x.rs"] },
+      rust: { tests: ["tests/x.rs"] },
     });
     const files = new Map([
       ["src/x.ts", ""],

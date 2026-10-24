@@ -2,8 +2,8 @@
 // Generates vectors/core/*.json — run with
 // `bun packages/nostr/scripts/parity/gen/core.ts`.
 // Captures the TS core's wire output as frozen vectors shared by the TS test
-// suite (tests/vectors/core.test.ts) and replayed against rust-nostr by
-// crates/interop.
+// suite (tests/vectors/core.test.ts) and replayed against nk-core by
+// crates/nk-core's vector tests.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -50,6 +50,7 @@ import {
   normalizeURL,
   utf8Encoder,
 } from "../../../src/core/util.ts";
+import { isNonCanonicalJson } from "../non-canonical.ts";
 
 const PK = "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23";
 const SK = "0000000000000000000000000000000000000000000000000000000000000003";
@@ -69,6 +70,23 @@ const version =
     : "0.0.0";
 
 function emit(capability: string, file: string, cases: unknown, crossCheck?: string): void {
+  // Tag every case whose raw JSON input uses a form `JSON.parse` accepts
+  // but strict parsers must reject, so vector consumers can pin the
+  // platform rule instead of guessing it from the text.
+  if (Array.isArray(cases)) {
+    for (const c of cases) {
+      const item: unknown = c;
+      if (
+        typeof item === "object" &&
+        item !== null &&
+        "raw" in item &&
+        typeof item.raw === "string" &&
+        isNonCanonicalJson(item.raw)
+      ) {
+        Object.assign(item, { nonCanonicalJson: true });
+      }
+    }
+  }
   const doc = {
     schema: 1,
     capability,

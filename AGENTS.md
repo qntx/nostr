@@ -20,12 +20,12 @@ Runtime dependencies (`@noble/*`, `@scure/base`) use caret ranges so consumers c
 
 ## Rust
 
-- The Rust side does not implement the protocol. Rust consumers use rust-nostr (`nostr`, `nostr-sdk`, ...) from crates.io; this repository does not fork or copy it, and upstream defects go upstream as issues or pull requests.
-- `crates/interop` (`qntx-nostr-interop`) runs the shared vectors in `vectors/` and the TS differential streams against rust-nostr. Only protocol behavior is compared. Known divergences are listed in `crates/interop/divergences.json`; unlisted divergences and stale entries fail the tests.
-- `crates/interop` is a standalone Cargo project (test targets only, no library): its `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `rustfmt.toml`, `clippy.toml`, and `deny.toml` all live inside it. The repository root has no Cargo files.
-- Rust crates are not published and are not versioned with the npm packages.
+- The repository owns the Rust implementation; rust-nostr is a design reference only (no dependency, no copied code). `crates/nk-core` is the leaf protocol crate — `no_std + alloc`, platform-neutral, and sans-IO — covering the core types and every NIP codec of the TS surface; higher-level crates land per milestone (`nk-store`, then `nk`). Crates are split only at hard boundaries (platform/runtime guarantee, dependency closure, artifact type, unhideable public dependency); everything else is a module. CI enforces the boundaries: no `std` without the `std` feature, no `getrandom`/`tokio` in `no_std` builds (`forbid-deps` on the cross targets).
+- Features gate dependencies or platform capabilities only (`std`, `clock`, `os-rng`, `nip04`, `nip44`, `nip49`); NIPs without extra dependencies are always compiled. No third-party types in public APIs except `rand_core` RNG traits and `serde` impls. One `#[non_exhaustive]` error enum per module; one RNG-taking function per operation — no `_with_rng` twins, no OS-rng convenience wrappers.
 - Follow the Rust API Guidelines. No panics and no `unwrap`/`expect` outside tests.
-- Shared test vectors live in `vectors/` (see `vectors/README.md`); `parity.json` lists each protocol capability that has shared vectors, its TS tests, and its rust-nostr counterpart.
+- `crates/nk` is the SDK crate: a sans-IO relay session (subscription table, pending publishes, REQ replay) behind a tokio/yawc driver task; `Subscription` is a `Stream` whose drop sends `CLOSE`, bounded per-subscription channels end a lagged consumer with `Closed(Lagged)`, and the `test-util` feature provides `MockRelay` (hyper + yawc upgrade over `MemoryStore`) for integration tests.
+- Shared test vectors live in `vectors/` (see `vectors/README.md`) and `parity.json` lists each capability, its TS tests, and the nk-core test files that run the same vectors — zero divergence, no skip or expected-failure lists. The only permitted platform difference is the `nonCanonicalJson` class: Rust rejects non-canonical JSON forms (duplicate keys, non-integral number spellings, `-0`) that `JSON.parse` accepts; vector cases and diff-stream records carry the flag.
+- npm packages and crates are versioned lockstep: `[workspace.package].version` equals every package.json version, members inherit `version.workspace = true`, internal path deps pin `=<version>`, and `scripts/check-version.ts` + `scripts/sync-versions.ts` keep Cargo.toml/Cargo.lock/bun.lock in sync on bump. Crates are published from release tags (`publish-crates.yml`).
 - TOML is formatted by taplo (`.taplo.toml`, aligned `=`); run `taplo fmt`, and keep `taplo fmt --check` green in `bun run lint`.
 
 ## Commands
@@ -36,13 +36,28 @@ Local gate before a pull request:
 bun run lint && bun run typecheck && bun run test   # lint includes taplo,
                                                     # version and
                                                     # parity checks
-cd crates/interop
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+bun run test:parity                                 # generates the diff
+                                                    # streams and replays
+                                                    # them through nk-core
+cargo fmt --all --check
+for p in nk-core nk-store nk; do                       # per package, like CI:
+  for f in --all-features --no-default-features; do # workspace runs unify
+    cargo clippy -p "$p" --all-targets "$f" -- -D warnings # features and
+    cargo test -p "$p" "$f"                         # hide gaps
+  done
+  cargo hack check -p "$p" --each-feature --no-dev-deps
+done
+CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" \
+    cargo check -p nk-core --target wasm32-unknown-unknown --no-default-features
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 cargo deny check
-cd ../..
 cd packages/nostr-wasm
 CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" bun run build:wasm
 bun run test:wasm
+```
+
+Fuzz one target locally (needs a nightly toolchain and cargo-fuzz):
+
+```bash
+cargo +nightly fuzz run <target> -- -max_total_time=60   # run from fuzz/
 ```
