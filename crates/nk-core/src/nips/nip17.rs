@@ -49,7 +49,7 @@ pub enum Error {
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 /// A parsed kind `10050` DM relay list — the normalized relay URLs, in
-/// first-seen order (TS `parseDmRelayList` + `dmRelayListToTags`).
+/// first-seen order.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct DmRelayList {
     relays: Vec<RelayUrl>,
@@ -66,7 +66,7 @@ impl DmRelayList {
 impl TryFrom<&Event> for DmRelayList {
     type Error = Error;
 
-    /// Parses a kind `10050` event (TS `parseDmRelayList`). Each `["relay",
+    /// Parses a kind `10050` event. Each `["relay",
     /// <url>]` tag's value is normalized like `normalizeRelayUrls` (invalid
     /// entries skipped, first-seen dedup).
     ///
@@ -108,7 +108,7 @@ impl From<DmRelayList> for EventBuilder {
 }
 
 impl DmRelayList {
-    /// Encodes relay URLs as a relay list (TS `dmRelayListToTags`): each
+    /// Encodes relay URLs as a relay list: each
     /// entry is normalized, invalid/empty entries skipped, results
     /// deduplicated first-seen.
     ///
@@ -129,7 +129,7 @@ impl DmRelayList {
     }
 }
 
-/// A direct-message recipient — TS `Recipient`. The relay hint goes on the
+/// A direct-message recipient. The relay hint goes on the
 /// wrap's `p` tag.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Recipient {
@@ -139,7 +139,7 @@ pub struct Recipient {
     pub relay_hint: Option<RelayUrl>,
 }
 
-/// The event a chat message replies to — TS `ReplyTo`.
+/// The event a chat message replies to.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ReplyTo {
     /// The replied-to event id.
@@ -149,7 +149,7 @@ pub struct ReplyTo {
     pub relay_hint: Option<RelayUrl>,
 }
 
-/// A kind `14` chat-message rumor builder — TS `buildChatMessageRumor` +
+/// A kind `14` chat-message rumor builder:
 /// `ChatMessageOptions`. Tag order: one `p` per recipient (with relay
 /// hint), then the unmarked reply `e` tag, then `subject`.
 #[derive(Clone, Debug)]
@@ -176,7 +176,7 @@ impl ChatMessage {
         }
     }
 
-    /// TS `replyTo`: the unmarked `["e", <id>, <relay-or-"">]` reply tag,
+    /// `replyTo`: the unmarked `["e", <id>, <relay-or-"">]` reply tag,
     /// appended after the `p` tags.
     #[must_use]
     pub fn reply_to(mut self, reply: ReplyTo) -> Self {
@@ -184,7 +184,7 @@ impl ChatMessage {
         self
     }
 
-    /// TS `subject`: the `["subject", <subject>]` tag, appended last.
+    /// `subject`: the `["subject", <subject>]` tag, appended last.
     #[must_use]
     pub fn subject(mut self, subject: impl Into<String>) -> Self {
         self.subject = Some(subject.into());
@@ -238,7 +238,7 @@ impl ChatMessage {
     }
 }
 
-/// TS `normalizeRecipients`: dedupes by public key, keeping the first
+/// Dedupes by public key, keeping the first
 /// occurrence (and its relay hint).
 pub(crate) fn normalize_recipients<I: IntoIterator<Item = Recipient>>(
     recipients: I,
@@ -253,7 +253,7 @@ pub(crate) fn normalize_recipients<I: IntoIterator<Item = Recipient>>(
     out
 }
 
-/// Wraps `rumor` once per wrap target — TS `wrapDirectMessage` driven by a
+/// Wraps `rumor` once per wrap target; a
 /// local `Keys`.
 ///
 /// Targets mirror `wrapTargets(rumor.pubkey, recipients)` exactly: the

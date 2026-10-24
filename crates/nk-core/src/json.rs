@@ -1,7 +1,7 @@
 //! Strict wire-JSON helpers shared by the event, filter and message
 //! visitors, plus the public [`JsonError`] wrapper.
 //!
-//! The wire profile (ADR-0007 rule 4): integers are plain JSON integers in
+//! The wire profile: integers are plain JSON integers in
 //! `0..=2^53-1` (`1e3`, `1.0`, `-0` and negative spellings are rejected —
 //! `serde_json` itself reports them as floats or negatives), object keys
 //! are unique, and unknown fields are ignored.

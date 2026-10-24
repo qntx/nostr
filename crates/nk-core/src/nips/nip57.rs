@@ -1,9 +1,9 @@
-//! NIP-57 Lightning Zaps (TS `nips/nip57.ts`).
+//! NIP-57 Lightning Zaps.
 //!
 //! Kind-9734 zap-request templates, BOLT11 invoice field decoding, and
 //! kind-9735 receipt validation. All functions are pure — no LNURL fetching,
 //! no relay publishing. Receipt checks never error; a [`ZapRejection`]
-//! mirrors the TS `reason` strings one-to-one.
+//! mirrors the wire `reason` strings one-to-one.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -65,7 +65,7 @@ pub enum ZapTarget<'a> {
     Event(&'a Event),
 }
 
-/// Build the kind-9734 template (TS `makeZapRequest`).
+/// Build the kind-9734 zap-request template.
 ///
 /// # Errors
 ///
@@ -73,7 +73,7 @@ pub enum ZapTarget<'a> {
 /// empty `relays` list, or an addressable event without a `d` tag — the three
 /// throws of the TS function.
 impl EventBuilder {
-    /// Builds the kind-9734 zap-request template (TS `makeZapRequest`).
+    /// Builds the kind-9734 zap-request template.
     ///
     /// # Errors
     ///
@@ -119,7 +119,7 @@ impl EventBuilder {
 }
 
 /// `bech32::Bech32` without a code-length cap — real invoices exceed the
-/// stock 1023 characters (TS `bech32.decode(pr, false)`); the checksum
+/// stock 1023 characters (the bech32 spec limit); the checksum
 /// constants are stock Bech32 (not Bech32m).
 enum Bolt11Bech32 {}
 
@@ -210,7 +210,7 @@ fn amount_msats_from_hrp(hrp: &str) -> Option<u64> {
 impl FromStr for Bolt11 {
     type Err = Error;
 
-    /// Parses a bolt11 invoice (TS `parseBolt11` — which returns `null` on
+    /// Parses a bolt11 invoice (the reference implementation returns `null` on
     /// failure). The whole string is lowercased first.
     fn from_str(pr: &str) -> Result<Self> {
         parse_bolt11(pr).ok_or(Error::Bolt11)
@@ -275,7 +275,7 @@ fn parse_bolt11(pr: &str) -> Option<Bolt11> {
     })
 }
 
-/// Why a zap receipt failed validation — `Display` is the TS `reason`
+/// Why a zap receipt failed validation — `Display` is the protocol `reason`
 /// string verbatim.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -321,7 +321,7 @@ pub enum ZapRejection {
 }
 
 impl fmt::Display for ZapRejection {
-    /// The TS `reason` string verbatim.
+    /// The `reason` string verbatim.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::InvalidReceipt => "invalid receipt",
@@ -433,16 +433,16 @@ fn decode_hex(value: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-/// Full NIP-57 receipt check (TS `validateZapReceipt`).
+/// Full NIP-57 receipt check.
 ///
 /// The receipt is a verified kind-9735 by `nostr_pubkey`, its `description`
 /// embeds a structurally valid zap request, and the bolt11 invoice matches
 /// that request. `lnurl`, when given, must match the request's `lnurl` tag
-/// case-insensitively (TS `toLowerCase`).
+/// case-insensitively.
 ///
 /// # Errors
 ///
-/// [`ZapRejection`] — the TS `reason` string verbatim.
+/// [`ZapRejection`] — the rejection reason string verbatim.
 pub fn validate_zap_receipt(
     receipt: &Event,
     nostr_pubkey: &PublicKey,

@@ -50,7 +50,7 @@ pub struct RelayListItem {
     pub marker: RelayMarker,
 }
 
-/// A parsed kind-10002 relay list — the TS `parseRelayList` result.
+/// A parsed kind-10002 relay list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct RelayList {
     items: Vec<RelayListItem>,
@@ -69,7 +69,7 @@ impl RelayList {
         &self.items
     }
 
-    /// URLs of the read-enabled items (`read` and `both`) — TS `readRelays`.
+    /// URLs of the read-enabled items (`read` and `both`).
     pub fn read(&self) -> impl Iterator<Item = &RelayUrl> {
         self.items
             .iter()
@@ -90,7 +90,7 @@ impl RelayList {
 impl TryFrom<&Event> for RelayList {
     type Error = Error;
 
-    /// Parses a kind-10002 event into a relay list (TS `parseRelayList`).
+    /// Parses a kind-10002 event into a relay list.
     ///
     /// `r` tags with a missing or empty value are skipped; values that fail
     /// [`RelayUrl::parse`] normalization are skipped; entries are
@@ -136,7 +136,7 @@ impl TryFrom<&Event> for RelayList {
 
 impl From<RelayList> for EventBuilder {
     /// An unsigned kind-10002 builder carrying the list's `r` tags — the
-    /// TS `relayListEventBuilder`. `Both` is unmarked.
+    /// `Both` is unmarked.
     fn from(list: RelayList) -> Self {
         let tags: Tags = list
             .items

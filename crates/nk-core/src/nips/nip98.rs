@@ -28,7 +28,7 @@ pub enum Error {
     /// The decoded token is not a JSON object.
     #[error("invalid token")]
     InvalidToken,
-    /// The decoded token is malformed JSON (TS `JSON.parse` failure).
+    /// The decoded token is malformed JSON.
     #[error("invalid token JSON")]
     TokenJson(#[source] crate::JsonError),
     /// Well-formed JSON that is not a signed event.
@@ -179,13 +179,13 @@ pub fn unpack_token(token: &str) -> Result<Event> {
 
 /// Whether `event` is a valid NIP-98 auth event for `url` + `method`.
 ///
-/// TS `validateAuthEvent` order: signature, kind 27235, `|now − created_at|`
+/// Validation order: signature, kind 27235, `|now − created_at|`
 /// within `max_skew_secs`, first `u` tag equal to `url` exactly, first
 /// `method` tag equal case-insensitively (Unicode `toLowerCase`), and — when
 /// `payload` is `Some` — first `payload` tag equal to its SHA-256 hex.
 /// Validates `event` as a NIP-98 auth event for `url` + `method`.
 ///
-/// TS `validateAuthEvent` order: signature, kind 27235, `|now −
+/// Validation order: signature, kind 27235, `|now −
 /// created_at|` within `max_skew_secs`, first `u` tag equal to `url`
 /// exactly, first `method` tag equal case-insensitively (Unicode
 /// `toLowerCase`), and — when `payload` is `Some` — first `payload` tag

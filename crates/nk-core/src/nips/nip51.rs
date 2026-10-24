@@ -1,7 +1,7 @@
 //! NIP-51 lists: parse the public tags of the standard list kinds and encode
 //! or decode the NIP-44 private `.content` the author encrypts to themselves.
 //!
-//! The list parsers mirror the TS `parseMuteList`/`parsePinList`/
+//! The list parsers mirror the reference `parseMuteList`/`parsePinList`/
 //! `parseBookmarkList`/`parseUserEmojiList`/`parseRelaySet`/
 //! `parseFavoriteRelays`/`parseEmojiSet`/`parseFollowPack`; [`mute_items`] is
 //! the kind-unchecked variant TS reuses on decrypted private tags.
@@ -56,7 +56,7 @@ pub enum Error {
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 /// A public mute-list item (`p`/`e`/`t`/`word` tags). `Word` values are
-/// lowercased like TS `toLowerCase()`.
+/// lowercased.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MuteItem {
     /// A muted public key (`p` tag).
@@ -135,7 +135,7 @@ pub struct FollowPack {
     pub pubkeys: Vec<PublicKey>,
 }
 
-/// The kind check every `parse_*` entry point performs — TS `requireKind`:
+/// The kind check every list parser performs:
 /// `expected kind <expected>, got <actual>`.
 fn require_kind(event: &Event, kind: Kind) -> Result<()> {
     if event.kind() != kind {
@@ -153,7 +153,7 @@ fn non_empty_value(tag: &Tag) -> Option<&str> {
     tag.value().filter(|value| !value.is_empty())
 }
 
-/// `emoji` tags with a non-empty shortcode and URL — TS `collectEmoji`.
+/// `emoji` tags with a non-empty shortcode and URL.
 fn collect_emoji(tags: &Tags) -> Vec<Emoji> {
     let mut out = Vec::new();
     for tag in tags {
@@ -175,7 +175,7 @@ fn collect_emoji(tags: &Tags) -> Vec<Emoji> {
     out
 }
 
-/// `relay` tag values normalized like TS `collectRelays`: empty and invalid
+/// `relay` tag values normalized: empty and invalid
 /// entries are skipped, results deduplicated in first-seen order.
 fn collect_relays(tags: &Tags) -> Vec<RelayUrl> {
     RelayUrl::normalize_all(tags.iter().filter_map(|tag| {
@@ -187,18 +187,18 @@ fn collect_relays(tags: &Tags) -> Vec<RelayUrl> {
     }))
 }
 
-/// The `d` tag identifier or `""` — TS `identifier(tags)`.
+/// The `d` tag identifier or `""`.
 fn identifier(tags: &Tags) -> String {
     String::from(tags.identifier().unwrap_or(""))
 }
 
 /// The NIP-51 a-tag shape `30002:<64-hex-pubkey>:<d>` with `d` possibly
-/// containing `:` — TS `isRelaySetAddress`.
+/// containing `:`.
 fn is_relay_set_address(value: &str) -> bool {
     let Some(kind_sep) = value.find(':') else {
         return false;
     };
-    // String equality like TS `!== String(Kind.RelaySets)` — "030002" rejects.
+    // String equality — "030002" rejects.
     if &value[..kind_sep] != "30002" {
         return false;
     }
@@ -238,7 +238,7 @@ pub fn mute_items(tags: &Tags) -> Vec<MuteItem> {
     items
 }
 
-/// A parsed kind-10000 mute list (TS `parseMuteList` result).
+/// A parsed kind-10000 mute list.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MuteList {
     items: Vec<MuteItem>,
@@ -283,7 +283,7 @@ impl TryFrom<&Event> for MuteList {
 }
 
 impl From<MuteList> for EventBuilder {
-    /// An unsigned kind-10000 builder — TS `muteListEventBuilder`. Empty
+    /// An unsigned kind-10000 builder. Empty
     /// hashtag/word items are not written; words are lowercased.
     fn from(list: MuteList) -> Self {
         let mut tags = Vec::new();
@@ -304,7 +304,7 @@ impl From<MuteList> for EventBuilder {
     }
 }
 
-/// A parsed kind-10001 pin list (TS `parsePinList` result).
+/// A parsed kind-10001 pin list.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PinList {
     ids: Vec<EventId>,
@@ -348,7 +348,7 @@ impl TryFrom<&Event> for PinList {
 }
 
 impl From<PinList> for EventBuilder {
-    /// An unsigned kind-10001 builder — TS `pinListEventBuilder`.
+    /// An unsigned kind-10001 builder.
     fn from(list: PinList) -> Self {
         Self::new(Kind::PIN_LIST, "")
             .tags(list.ids.iter().map(|id| Tag::event(*id, None, None, None)))
@@ -382,7 +382,7 @@ impl TryFrom<&Event> for BookmarkList {
 }
 
 impl From<BookmarkList> for EventBuilder {
-    /// An unsigned kind-10003 builder — TS `bookmarkListEventBuilder`.
+    /// An unsigned kind-10003 builder.
     /// `e` tags are written before `a` tags; `a` values are verbatim
     /// coordinate strings.
     fn from(list: BookmarkList) -> Self {
@@ -526,7 +526,7 @@ pub(crate) fn private_tags_plaintext(tags: &Tags) -> String {
 
 /// Parses a decrypted private-tag plaintext — the array-of-nonempty-string-
 /// arrays shape TS validates with `isTag`. `serde_json` also rejects the lone
-/// surrogates `JSON.parse` accepts (N10).
+/// surrogates the permissive JSON grammar accepts.
 ///
 /// # Errors
 ///
@@ -540,7 +540,7 @@ pub(crate) fn parse_private_tags(plaintext: &str) -> Result<Tags> {
 }
 
 /// NIP-44 ciphertext of the private tags, conversation peer = the author's
-/// own public key — the TS `encryptPrivateTags` for a local key.
+/// own public key.
 ///
 /// # Errors
 ///
@@ -557,7 +557,7 @@ where
         .map_err(Error::Crypto)
 }
 
-/// Decrypts NIP-51 `.content` — the TS `decryptPrivateTags` for a local key.
+/// Decrypts NIP-51 `.content` for a local key.
 /// An empty `content` is no private tags, not ciphertext; the event author
 /// must be `keys` (the author encrypts to themselves).
 ///

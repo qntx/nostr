@@ -1,7 +1,7 @@
 //! NIP-13 proof of work.
 //!
 //! `pow` counts the leading zero bits of an event id. [`PowMiner`] is the
-//! sans-IO counterpart of the TS `minePow`: the caller supplies the current
+//! sans-IO proof-of-work mining: the caller supplies the current
 //! time and a per-call attempt budget and decides where the loop runs and
 //! when it stops (dropping the miner cancels it). The result event's tags are
 //! the original tags plus `["nonce", "<n>", "<difficulty>"]`, and `created_at`
@@ -22,7 +22,7 @@ use crate::{EventId, Tag, Timestamp, UnsignedEvent};
 use sha2::{Digest, Sha256};
 
 impl EventId {
-    /// The leading zero bits of this id — the TS `getPow`, `0..=256`.
+    /// The leading zero bits of this id, `0..=256`.
     #[must_use]
     pub fn difficulty(&self) -> u32 {
         let mut count = 0u32;

@@ -1,5 +1,5 @@
 //! NIP-27 content tokenization: a hand-written scanner that reproduces the
-//! TS `parseContent` regex (`SCAN_BODY`, flags `giu`) left-to-right.
+//! a single left-to-right scan matching the reference tokenizer.
 //!
 //! The JS semantics reproduced here:
 //!
@@ -33,7 +33,7 @@ use crate::nips::util::is_js_whitespace;
 /// A decoded NIP-19 reference carried by [`ContentBlock::Reference`].
 ///
 /// `npub` yields a [`ProfilePointer`] with no relay hints, `note` an
-/// [`EventPointer`] with only the id — matching the TS `referenceFor` mapping.
+/// [`EventPointer`] with only the id — the bare `note` mapping.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Reference {
     /// `npub` or `nprofile`.
@@ -86,7 +86,7 @@ pub enum ContentBlock<'a> {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ParseOptions<'a> {
     /// Also recognize bare `npub`/`nprofile`/`note`/`nevent`/`naddr` without
-    /// the `nostr:` prefix (TS `legacyBech32`, default `false`).
+    /// the `nostr:` prefix (the NIP-27 legacy form, default `false`).
     pub legacy_bech32: bool,
     /// URL → MIME map (the `m` field of NIP-92 `imeta` tags); consulted before
     /// extension classification and never for relay blocks.
@@ -294,7 +294,7 @@ enum Token {
 }
 
 /// First textual match at `pos` — the leftmost-first alternation order of
-/// the TS `SCAN_BODY`. Returns the token kind and the raw match end
+/// the tokenizer. Returns the token kind and the raw match end
 /// (byte offset relative to `rest`).
 fn candidate_at(rest: &str, legacy: bool) -> Option<(Token, usize)> {
     if let Some((code_start, end)) = nostr_at(rest) {

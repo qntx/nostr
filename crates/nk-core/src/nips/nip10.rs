@@ -2,7 +2,7 @@
 //! plus `q` quotes and `p` profiles out of an event's tag list, and building
 //! reply tags in the preferred marked style.
 //!
-//! [`ThreadReferences`] is the counterpart of the TS `parseThreadTags`;
+//! [`ThreadReferences`] parses the `e`/`q`/`p` thread tags;
 //! `reply_tags`/`text_reply` mirror `buildReplyTags`/`replyTo` (marked
 //! `root`/`reply` style, `q` tags appended last). Relay strings read from
 //! tags stay raw [`String`]s and are written back verbatim; the optional
@@ -30,7 +30,7 @@ pub enum Error {
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 /// A quoted event (`q` tag): an event id or an addressable coordinate.
-/// Discriminate by variant — the counterpart of TS `"id" in quote`.
+/// Discriminate by variant — event quotes carry an id, address quotes an address.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Quote {
     /// An `EventPointer` (`id` plus relay/author hints).
@@ -54,7 +54,7 @@ pub struct ThreadReferences {
     pub profiles: Vec<ProfilePointer>,
 }
 
-/// 64-hex of any case, the counterpart of TS `isHex32(v.toLowerCase())`.
+/// 64-hex of any case is accepted and normalized to lowercase.
 fn is_hex32(value: &str) -> bool {
     EventId::from_hex(value).is_ok()
 }
@@ -81,7 +81,7 @@ fn e_tag_author(items: &[String]) -> Option<PublicKey> {
     None
 }
 
-/// TS `eventPointerFromETag`: `["e", id, relay?, …]` with a mixed-case
+/// `["e", id, relay?, …]` with a mixed-case
 /// hex32 id; relay hint kept verbatim, author from index 4 or 3.
 fn event_pointer(items: &[String]) -> Option<EventPointer> {
     let id = EventId::from_hex(items.get(1)?).ok()?;
@@ -95,7 +95,7 @@ fn event_pointer(items: &[String]) -> Option<EventPointer> {
     Some(pointer)
 }
 
-/// TS `quoteFromQTag`: a hex32 value is an [`EventPointer`] (index 3 is the
+/// A `q` tag whose value is hex32 is an [`EventPointer`] (index 3 is the
 /// author slot); anything else is parsed as an address and invalid values are
 /// ignored. Address-form `q` tags never use index 3.
 fn quote_from_tag(items: &[String]) -> Option<Quote> {
@@ -123,7 +123,7 @@ fn quote_from_tag(items: &[String]) -> Option<Quote> {
 }
 
 /// Merges a matching `p` tag's relay hints into `ptr` (dedup, order kept) —
-/// the TS `inheritHints` closure.
+/// the hint-inheritance step.
 fn inherit_hints(mut ptr: EventPointer, profiles: &[ProfilePointer]) -> EventPointer {
     let Some(author) = ptr.author else {
         return ptr;
@@ -141,7 +141,7 @@ fn inherit_hints(mut ptr: EventPointer, profiles: &[ProfilePointer]) -> EventPoi
 
 /// Parses NIP-10 thread markers and legacy positional e-tags from `tags`.
 ///
-/// Mirrors the TS `parseThreadTags` rule by rule: the scan runs from the last
+/// The scan runs from the last
 /// tag backwards; `root`/`reply` markers win; a 64-hex index 3 is a NIP-01
 /// pubkey, not a marker; without markers the last unmarked `e` is the parent
 /// and the second-to-last the root; `root`/`reply` back-fill each other;
@@ -307,7 +307,7 @@ struct BuiltQuote {
     relay: Option<String>,
 }
 
-/// TS `quoteToTag` for typed quotes: `["q", id]` / `["q", id, relay]` /
+/// A typed quote serializes as `["q", id]` / `["q", id, relay]` /
 /// `["q", id, relay, author]` for events (author forces the relay slot, `""`
 /// when absent) and `["q", coord]` / `["q", coord, relay]` for addresses.
 fn quote_to_tag(quote: &Quote) -> BuiltQuote {
@@ -356,7 +356,7 @@ fn quote_to_tag(quote: &Quote) -> BuiltQuote {
     }
 }
 
-/// NIP-10 e/p/q tags for a reply to `parent` — the TS `buildReplyTags`.
+/// NIP-10 e/p/q tags for a reply to `parent`.
 ///
 /// Preferred marked style: an `e` tag for the thread root (`root` marker,
 /// the root's first relay hint falling back to `relay_hint`), an `e` tag for
@@ -437,7 +437,7 @@ pub(crate) fn reply_tags(
 }
 
 impl EventBuilder {
-    /// A kind-1 reply with NIP-10 tags — the TS `replyTo`.
+    /// A kind-1 reply with NIP-10 tags.
     ///
     /// # Errors
     ///

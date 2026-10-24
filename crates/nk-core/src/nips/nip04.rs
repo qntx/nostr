@@ -50,7 +50,7 @@ pub enum Error {
 /// Result type for NIP-04 operations.
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
-/// The 32-byte ECDH x coordinate shared with a peer (TS `sharedX` —
+/// The 32-byte ECDH x coordinate shared with a peer (
 /// `secp256k1.getSharedSecret(...).slice(1, 33)`). NIP-04 AES-CBC keys this
 /// value directly, without hashing.
 ///

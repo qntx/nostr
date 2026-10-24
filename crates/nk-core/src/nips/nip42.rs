@@ -13,7 +13,7 @@ use crate::{EventBuilder, Kind, RelayUrl, Tag};
 ///
 /// Kind 22242 with `["relay", relay]` and `["challenge", challenge]` tags and
 /// empty content; `created_at` is fixed by `EventBuilder::build` (`clock`
-/// feature) or [`EventBuilder::build_at`]. Unlike the TS `makeAuthEvent` —
+/// feature) or `EventBuilder::build_at`. Unlike a timestamp-free builder —
 /// which takes any string — `relay` is a [`RelayUrl`], so the tag always
 /// carries the normalized form.
 impl EventBuilder {
@@ -31,7 +31,7 @@ impl EventBuilder {
 }
 
 /// Whether a relay `CLOSED` reason requests NIP-42 authentication — the
-/// `"auth-required:"` prefix, exactly as the TS `isAuthRequired`.
+/// `"auth-required:"` prefix, as the NIP-42 flow requires.
 #[must_use]
 pub fn is_auth_required(reason: &str) -> bool {
     reason.starts_with("auth-required:")

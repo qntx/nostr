@@ -104,14 +104,14 @@ fn hmac_sha256_tag(key: &[u8; 32], parts: &[&[u8]]) -> [u8; 32] {
     out
 }
 
-/// Same constant as TS `DEFAULT_MAX_PAYLOAD_CHARS`: the base64 length of a
+/// The default payload cap: the base64 length of a
 /// payload carrying exactly 1 MiB (`0x100000` bytes) of plaintext — version(1)
 /// + nonce(32) + extended prefix(6) + `calc_padded_len`(1 MiB) + mac(32).
 pub const DEFAULT_MAX_PAYLOAD_CHARS: usize =
     (1 + NONCE_LEN + EXTENDED_PREFIX_LEN + 0x10_0000 + MAC_LEN).div_ceil(3) * 4;
 
 /// `HKDF-extract(SHA-256, salt = "nip44-v2", shared_x)` — the conversation key
-/// shared with a peer (TS `getConversationKey` /
+/// shared with a peer (NIP-44 `getConversationKey` equivalent /
 /// `getConversationKeyFromSharedSecret`).
 ///
 /// No `PartialEq`, `Display`, `FromStr`, or serde: secret material is never
@@ -234,7 +234,7 @@ impl ConversationKey {
     /// [`Self::decrypt`] rejecting payloads longer than `max_payload_chars`
     /// base64 characters.
     /// Decrypts `payload`, rejecting ciphertexts longer than
-    /// `max_payload_len` characters — TS `decrypt`'s `maxPayloadChars`
+    /// `max_payload_len` characters, overriding the default
     /// option. Pass [`DEFAULT_MAX_PAYLOAD_CHARS`] for the spec default.
     ///
     /// # Errors
@@ -351,7 +351,7 @@ impl Drop for MessageKeys {
 
 impl ZeroizeOnDrop for MessageKeys {}
 
-/// The padded plaintext length for `len` (TS `calcPaddedLen`): 32-byte chunks
+/// The padded plaintext length for `len`: 32-byte chunks
 /// up to a 256-byte power of two, then eighths of the next power of two.
 ///
 /// # Errors

@@ -24,7 +24,7 @@ use crate::{Event, EventId, Keys, Kind, PublicKey, RelayUrl, Tag, Tags, Timestam
 
 use crate::nips::nip44;
 
-/// TS `TWO_DAYS_SECS` — the uniform random-offset window for `Random`
+/// The two-day window — the uniform random-offset window for `Random`
 /// timestamps.
 pub const TWO_DAYS_SECS: u64 = 172_800;
 
@@ -45,10 +45,11 @@ pub enum Error {
     /// The ephemeral wrap key could not be generated.
     #[error("ephemeral key generation failed")]
     EphemeralKey(#[source] crate::key::Error),
-    /// The unsigned event's pubkey does not match the signing key.
-    #[error("unsigned event pubkey does not match secret key")]
+    /// The unsigned event could not be signed (the pubkey does not match the
+    /// signing key).
+    #[error("could not sign the unsigned event")]
     Sign(#[source] crate::key::Error),
-    /// A JSON input was syntactically malformed (TS `JSON.parse` failure).
+    /// A JSON input was syntactically malformed.
     #[error("invalid JSON")]
     Json(#[source] JsonError),
     /// Well-formed JSON that is not a valid seal/gift-wrap wire shape (TS
@@ -63,21 +64,21 @@ pub enum Error {
     #[error("invalid rumor")]
     InvalidRumor,
     /// The input kind is not 1059 or 21059.
-    #[error("expected gift wrap")]
+    #[error("not a gift wrap event")]
     NotGiftWrap,
     /// The gift wrap's signature did not verify.
-    #[error("gift wrap signature")]
+    #[error("invalid gift wrap signature")]
     GiftWrapSignature(#[source] EventError),
     /// The seal's kind is not 13, carries illegal tags, or its signature did
     /// not verify.
-    #[error("expected seal")]
+    #[error("not a seal event")]
     NotSeal,
     /// A seal tag other than `expiration` (with an all-digits value) was
     /// present.
-    #[error("seal tags must be empty")]
+    #[error("seal carries a non-expiration tag")]
     SealTags,
     /// The seal's signature did not verify.
-    #[error("seal signature")]
+    #[error("invalid seal signature")]
     SealSignature(#[source] EventError),
     /// The seal author and the rumor author differ.
     #[error("seal pubkey does not match rumor pubkey")]
@@ -92,7 +93,7 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 impl Kind {
     /// Whether this kind is a NIP-59 gift wrap kind — `1059`, or `21059` for
-    /// the ephemeral variant (TS `isGiftWrapKind`).
+    /// the ephemeral variant.
     #[must_use]
     pub const fn is_gift_wrap(self) -> bool {
         self.as_u16() == 1059 || self.as_u16() == 21059
@@ -100,7 +101,7 @@ impl Kind {
 }
 
 /// An unsigned event plus its computed id — the plaintext payload of a gift
-/// wrap (TS `createRumor` / `rumorToJson` / `parseRumor`).
+/// wrap (rumor construction, JSON wire form, and parsing).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Rumor {
     unsigned: UnsignedEvent,
@@ -133,7 +134,7 @@ impl Rumor {
         self.unsigned
     }
 
-    /// TS `rumorToJson`: `id`, `pubkey`, `created_at`, `kind`, `tags`,
+    /// The rumor wire form: `id`, `pubkey`, `created_at`, `kind`, `tags`,
     /// `content` in that order.
     #[must_use]
     pub fn to_json(&self) -> String {
@@ -154,7 +155,7 @@ impl Rumor {
         json
     }
 
-    /// TS `parseRumor`.
+    /// Parse a rumor from its JSON wire form.
     ///
     /// The parsed object must satisfy `validateEvent` for an unsigned event,
     /// must not carry a `sig` property, and when it carries a string `id` the
@@ -183,7 +184,7 @@ impl Rumor {
     }
 
     /// Seals and gift-wraps this rumor for `recipient`, signed by `sender`
-    /// (TS `wrap`). `rng` consumption: the random seal/wrap offsets (per
+    /// `rng` consumption: the random seal/wrap offsets (per
     /// [`WrapOptions`]' timestamp strategy), the ephemeral key draw, each
     /// NIP-44 nonce, then each BIP-340 auxiliary draw.
     ///
@@ -231,7 +232,7 @@ impl Rumor {
         gift_wrap(&seal, recipient, options, rng)
     }
 
-    /// Unwraps a NIP-59 gift wrap addressed to `recipient` (TS `unwrap`).
+    /// Unwraps a NIP-59 gift wrap addressed to `recipient`.
     ///
     /// # Errors
     ///
@@ -259,7 +260,7 @@ pub enum Timestamps {
         /// Which layer(s) are randomized.
         scope: RandomScope,
     },
-    /// TS `timestamps`: explicit per-layer timestamps, used by vectors and
+    /// `timestamps`: explicit per-layer timestamps, used by vectors and
     /// tests.
     Fixed {
         /// `created_at` of the seal.
@@ -272,10 +273,10 @@ pub enum Timestamps {
 /// Which timestamp(s) [`Timestamps::Random`] randomizes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RandomScope {
-    /// TS `randomize: "seal+wrap"` (the default): both layers are
+    /// `randomize: "seal+wrap"` (the default): both layers are
     /// randomized.
     SealAndWrap,
-    /// TS `randomize: "wrap"`: the seal keeps the rumor's `created_at` and
+    /// `randomize: "wrap"`: the seal keeps the rumor's `created_at` and
     /// only the gift wrap is randomized.
     WrapOnly,
 }
@@ -303,28 +304,28 @@ impl WrapOptions {
         }
     }
 
-    /// TS `relayHint`: relay hint embedded in the wrap's `p` tag.
+    /// `relayHint`: relay hint embedded in the wrap's `p` tag.
     #[must_use]
     pub fn relay_hint(mut self, relay: RelayUrl) -> Self {
         self.relay_hint = Some(relay);
         self
     }
 
-    /// TS `extraTags`: appended to the wrap after `p` and `expiration`.
+    /// `extraTags`: appended to the wrap after `p` and `expiration`.
     #[must_use]
     pub fn extra_tags<I: IntoIterator<Item = Tag>>(mut self, tags: I) -> Self {
         self.extra_tags.extend(tags);
         self
     }
 
-    /// TS `expiration`: an `["expiration", <unix secs>]` tag on both layers.
+    /// `expiration`: an `["expiration", <unix secs>]` tag on both layers.
     #[must_use]
     pub const fn expiration(mut self, at: Timestamp) -> Self {
         self.expiration = Some(at);
         self
     }
 
-    /// TS `ephemeral`: use kind `21059` instead of `1059` for the wrap.
+    /// `ephemeral`: use kind `21059` instead of `1059` for the wrap.
     #[must_use]
     pub const fn ephemeral(mut self, ephemeral: bool) -> Self {
         self.ephemeral = ephemeral;
@@ -333,7 +334,7 @@ impl WrapOptions {
 
     /// Per-recipient gift-wrap options for `nip17::wrap_direct_message`:
     /// same timestamps, expiration, and ephemeral flag, the target's relay
-    /// hint, and no extra tags — TS `wrapDirectMessage` forwards only those.
+    /// hint, and no extra tags — the DM wrapper forwards only those.
     pub(crate) const fn dm_wrap(&self, relay_hint: Option<RelayUrl>) -> Self {
         Self {
             timestamps: self.timestamps,
@@ -464,7 +465,7 @@ pub(crate) fn seal_template(
     UnsignedEvent::new(author, created_at, Kind::SEAL, tags, encrypted_rumor)
 }
 
-/// TS `checkGiftWrap`: kind must be a gift wrap kind and the signature must
+/// Kind must be a gift wrap kind and the signature must
 /// verify.
 pub(crate) fn check_gift_wrap(event: &Event) -> Result<()> {
     if !event.kind().is_gift_wrap() {
@@ -474,10 +475,10 @@ pub(crate) fn check_gift_wrap(event: &Event) -> Result<()> {
     Ok(())
 }
 
-/// TS `parseSeal`: a valid signed kind-13 event with no tags besides an
+/// A valid signed kind-13 event with no tags besides an
 /// optional all-digits `expiration`.
 pub(crate) fn parse_seal(json: &str) -> Result<Event> {
-    let seal = parse_event_json(json, "expected seal")?;
+    let seal = parse_event_json(json, "not a seal event")?;
     if seal.kind() != Kind::SEAL {
         return Err(Error::NotSeal);
     }
@@ -494,7 +495,7 @@ pub(crate) fn parse_seal(json: &str) -> Result<Event> {
     Ok(seal)
 }
 
-/// TS `openRumor`: the seal author must equal the rumor author.
+/// The seal author must equal the rumor author.
 pub(crate) fn open_rumor(seal: &Event, rumor_json: &str) -> Result<Rumor> {
     let rumor = Rumor::from_json(rumor_json)?;
     if seal.pubkey() != rumor.unsigned().pubkey() {
@@ -524,7 +525,7 @@ fn random_past<R: rand_core::TryCryptoRng + ?Sized>(
 }
 
 /// Conversation-key derivation + NIP-44 encryption with a `rng`-drawn nonce —
-/// TS `nip44Encrypt`, whose failures surface as `failed to encrypt`.
+/// NIP-44 encryption, whose failures surface as `failed to encrypt`.
 fn encrypt_layer<R>(plaintext: &str, keys: &Keys, peer: &PublicKey, rng: &mut R) -> Result<String>
 where
     R: rand_core::TryCryptoRng + ?Sized,
@@ -539,10 +540,13 @@ fn sign<R>(unsigned: UnsignedEvent, keys: &Keys, rng: &mut R) -> Result<Event>
 where
     R: rand_core::TryCryptoRng + ?Sized,
 {
-    keys.sign_event(unsigned, rng).map_err(Error::Sign)
+    keys.sign_event(unsigned, rng).map_err(|e| match e {
+        crate::key::Error::Rng => Error::Rng,
+        e => Error::Sign(e),
+    })
 }
 
-/// Conversation-key derivation + NIP-44 decryption — TS `decryptLayer`,
+/// Conversation-key derivation + NIP-44 decryption:
 /// which wraps both into `failed to decrypt`.
 fn decrypt_layer(ciphertext: &str, recipient: &Keys, peer: &PublicKey) -> Result<String> {
     let conversation =
@@ -551,8 +555,8 @@ fn decrypt_layer(ciphertext: &str, recipient: &Keys, peer: &PublicKey) -> Result
 }
 
 /// `serde_json` deserialization distinguishing malformed JSON (`invalid
-/// JSON`, TS `JSON.parse` failure) from well-formed JSON of the wrong shape
-/// (TS `validateSignedEvent` failure) — the same split as nip98.
+/// JSON` parse failures) from well-formed JSON of the wrong shape
+/// (event-shape validation failure) — the same split as nip98.
 fn parse_event_json(json: &str, shape_message: &'static str) -> Result<Event> {
     serde_json::from_str(json).map_err(|e| {
         if matches!(

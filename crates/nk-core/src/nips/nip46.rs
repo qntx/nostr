@@ -684,7 +684,7 @@ relay=wss%3A%2F%2Frelay.damus.io&secret=hunter2&perms=nip44_encrypt%2Csign_event
     fn request_json_errors() {
         let cases = [
             "{",
-            // serde_json rejects the lone-surrogate escapes JSON.parse takes.
+            // serde_json rejects lone-surrogate escapes; that is a strict-JSON difference.
             r#"{"id":"\ud800","method":"m","params":[]}"#,
             "[]",
             r#"{"id":1,"method":"m","params":[]}"#,
