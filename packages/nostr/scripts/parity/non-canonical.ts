@@ -1,8 +1,8 @@
 /**
  * True when `raw` JSON text contains a form `JSON.parse` accepts but the canonical wire profile
- * (ADR-0007 rule 4) rejects: an integral-valued number spelled with a fraction or exponent (`1e3`,
- * `1.0`, `1700000000.0`), the spelling `-0`, or a duplicate object key. Strings are skipped, so
- * digits inside quoted text never flag a case.
+ * rejects: an integral-valued number spelled with a fraction or exponent (`1e3`, `1.0`,
+ * `1700000000.0`), the spelling `-0`, or a duplicate object key. Strings are skipped, so digits
+ * inside quoted text never flag a case.
  */
 export function isNonCanonicalJson(raw: string): boolean {
   let i = 0;

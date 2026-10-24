@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-17 `wrapDirectMessage`/`buildChatMessageRumor`/
 // `normalizeRecipients`/relay-list semantics as frozen vectors shared by the
-// TS test suite (tests/vectors/nip17.test.ts) and crates/interop.
+// TS test suite (tests/vectors/nip17.test.ts) and crates/nk-core.
 //
 // Every wrap is produced by the real TS API under a deterministic entropy
 // stream, exactly like gen/nip59.ts: `WrapOptions.randomBytes` feeds each

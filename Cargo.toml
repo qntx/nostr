@@ -1,6 +1,6 @@
 [workspace]
 members  = ["crates/nk-core"]
-exclude  = ["crates/interop", "fuzz"]
+exclude  = ["fuzz"]
 resolver = "3"
 
 [workspace.package]

@@ -1,7 +1,7 @@
 // Canonical `ContentBlock` JSON for the NIP-27 vectors (`vectors/nip27/
 // codec.json`, produced by gen/nip27.ts) and the `nip27.tokenize`
 // differential stream (diff.ts). Mirrored by `common::content_blocks` in
-// crates/interop/tests/common/. Key sets are fixed on both sides — absent
+// crates/nk-core/tests/it/common/. Key sets are fixed on both sides — absent
 // pointer hints serialize as null.
 //
 // The canonical shape normalizes pointers by family — `profile` / `event` /

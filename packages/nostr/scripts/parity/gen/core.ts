@@ -2,8 +2,8 @@
 // Generates vectors/core/*.json — run with
 // `bun packages/nostr/scripts/parity/gen/core.ts`.
 // Captures the TS core's wire output as frozen vectors shared by the TS test
-// suite (tests/vectors/core.test.ts) and replayed against rust-nostr by
-// crates/interop.
+// suite (tests/vectors/core.test.ts) and replayed against nk-core by
+// crates/nk-core's vector tests.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

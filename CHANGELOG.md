@@ -9,6 +9,18 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Added
+
+- `nk-core` (`crates/nk-core`) — the owned Rust implementation of the protocol: a `no_std + alloc`, platform-neutral, sans-IO leaf crate covering the core types and every NIP codec of the TypeScript surface; features gate optional dependencies only (`nip04`, `nip44`, `nip49`, `os-rng`, `clock`, `std`). One `#[non_exhaustive]` error enum per module, one RNG-taking function per operation, no third-party types in public APIs beyond `rand_core` traits and `serde` impls. Shared vectors and the seeded differential streams run on both languages with zero divergence; crates are versioned lockstep with the npm packages and published from release tags.
+
+### Removed
+
+- `crates/interop` and the rust-nostr divergence registry — the Rust implementation is now owned (`nk-core`), so the cross-library comparison harness is obsolete.
+
+### Changed
+
+- Vector cases whose input is non-canonical JSON (duplicate keys, non-integral number spellings, `-0`) now carry `"nonCanonicalJson": true`; Rust rejects those inputs while `JSON.parse` accepts them — the single permitted platform difference.
+
 ## [0.14.0] - 2026-10-15
 
 ### Changed

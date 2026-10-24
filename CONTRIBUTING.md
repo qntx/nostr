@@ -3,16 +3,20 @@
 ## Prerequisites
 
 - **Bun 1.4** — package scripts, tests, and tooling.
-- **Rust** — via `crates/interop/rust-toolchain.toml` (interop crate only).
+- **Rust** — via the root `rust-toolchain.toml` (`crates/nk-core` is the
+  protocol crate; `fuzz/` builds with the nightly toolchain).
 - **LLVM clang** for `wasm32-unknown-unknown` — `@qntx/nostr-wasm` compiles the
-  shared C core with a wasm-capable clang; Apple clang will not work.
+  shared C core with a wasm-capable clang, and nk-core's wasm32 no-default-features
+  check uses the same toolchain; Apple clang will not work.
 
   ```bash
   brew install llvm
   export CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang"
   ```
 
-- `cargo-deny` for the supply-chain check (`cargo install cargo-deny`).
+- `cargo-deny` for the supply-chain check and `cargo-hack` for the
+  each-feature matrix (`cargo install cargo-deny cargo-hack`).
+- `cargo-fuzz` + a nightly toolchain only for fuzzing (`cargo install cargo-fuzz`).
 
 ## Repository layout
 
@@ -25,8 +29,10 @@ packages/nostr-wasm/  @qntx/nostr-wasm — wasm32 build of the shared C core
 packages/nostr-native/ @qntx/nostr-native — React Native Nitro C++ backend
                       over vendored libsecp256k1 (iOS/Android); its
                       cpp/nostr_core.c is the shared C core
-crates/interop/       qntx-nostr-interop — runs vectors/ and the TS
-                      differential streams against rust-nostr
+crates/nk-core/       nk-core — the owned Rust protocol crate (no_std +
+                      alloc, sans-IO); runs vectors/ and the TS differential
+                      streams in tests/it/ plus in-crate vector tests
+fuzz/                 standalone cargo-fuzz workspace over nk-core
 vectors/              shared cross-language test vectors (see vectors/README.md)
 parity.json           ledger of shared-vector capabilities consumed by
                       scripts/parity/check.ts
@@ -42,12 +48,16 @@ Run before opening a pull request:
 bun run lint && bun run typecheck && bun run test   # lint includes taplo,
                                                     # version and
                                                     # parity checks
-cd crates/interop
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+bun run test:parity
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets --no-default-features -- -D warnings
+cargo test --workspace --all-features
+cargo hack check -p nk-core --each-feature --no-dev-deps
+CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" \
+    cargo check -p nk-core --target wasm32-unknown-unknown --no-default-features
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 cargo deny check
-cd ../..
 cd packages/nostr-wasm
 CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" bun run build:wasm
 bun run test:wasm
@@ -67,11 +77,13 @@ and `docs/meta.json` stubs.
 
 ## Versioning and release
 
-Only the npm packages carry a release version; the crates under `crates/` are
-unpublished (`version = "0.0.0"`) and are not versioned with them.
-`bump.config.ts` bumps the `packages/*/package.json` files and runs
-`bun scripts/sync-versions.ts`, which syncs internal `@qntx/*` ranges and
-refreshes `bun.lock` via `bun install --lockfile-only`; `release` runs
+npm packages and Cargo workspace crates are versioned lockstep:
+`[workspace.package].version` equals every package.json version.
+`bump.config.ts` bumps the `packages/*/package.json` files and `Cargo.toml`
+(`[workspace.package].version` plus the `nk-core = "=x.y.z"` pin) and runs
+`bun scripts/sync-versions.ts`, which syncs internal `@qntx/*` ranges,
+refreshes `Cargo.lock` via `cargo update --workspace`, and refreshes
+`bun.lock` via `bun install --lockfile-only`; `release` runs
 `bumpp`, which pushes a
 `release/vX.Y.Z` branch and opens the release pull request via `gh`.
 After the release PR merges, tag the merge commit and push the tag:
@@ -81,7 +93,10 @@ git tag -a vX.Y.Z <merge-sha> -m vX.Y.Z && git push origin vX.Y.Z
 ```
 
 `scripts/check-version.ts` fails the lint gate when the internal `@qntx/*`
-ranges or bun.lock workspace entries drift from the manifests.
+ranges, the Cargo workspace version, member `version.workspace = true`
+inheritance, internal `=<version>` pins, Cargo.lock workspace-member entries,
+or bun.lock workspace entries drift from the manifests. The pushed tag also
+triggers `publish-crates.yml`, which publishes `nk-core` to crates.io.
 
 ## License
 

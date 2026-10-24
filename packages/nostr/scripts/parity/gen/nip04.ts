@@ -2,7 +2,7 @@
 // Generates vectors/nip04/codec.json — run with
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Payloads are built with noble AES-256-CBC under FIXED ivs (the TS
-// encrypt API takes no iv), so crates/interop can replay rust-nostr's
+// encrypt API takes no iv), so crates/nk-core can replay the internal
 // `encrypt_with_iv` byte-for-byte and `decrypt` on every case.
 // `decrypt`/`decryptFromPubkey` run each case here so the recorded
 // `payload`/`error` always reflects the real TS behaviour.

@@ -1,6 +1,0 @@
-[toolchain]
-# Pin to the package MSRV (edition 2024). Bumping this requires
-# updating rust-version under [package] in Cargo.toml.
-channel    = "1.99"
-components = ["rustfmt", "clippy"]
-profile    = "minimal"

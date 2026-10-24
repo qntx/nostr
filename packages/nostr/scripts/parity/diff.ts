@@ -1,5 +1,5 @@
 /// <reference types="node" />
-// Differential-input generator for the TS ↔ rust-nostr parity streams.
+// Differential-input generator for the TS ↔ nk-core parity streams.
 //
 //   bun packages/nostr/scripts/parity/diff.ts --seed <n> --count <n> --out target/parity
 //
@@ -8,7 +8,7 @@
 // `--out`: the first line is {"capability", "seed", "count"} and every
 // following line is {"i", "input", "out" | "err"}. Inputs are raw JSON text so
 // number spellings (1e3, 1.0, -0), duplicate keys, and dropped keys survive;
-// crates/interop/tests/diff.rs replays them through rust-nostr (INTEROP_DIFF_DIR).
+// crates/nk-core/tests/it/diff.rs replays them through nk-core (NK_DIFF_DIR).
 //
 // Capabilities: core.event.serialize, core.event.id, core.filter.match,
 // core.filter.canonicalize, core.message.client, core.message.relay,
@@ -546,7 +546,7 @@ function matchInputText(): string {
 
 // A 64-char hex field for pointers: mostly canonical, occasionally corrupted.
 // Any-case hex stays in the domain — TS `assertHex32` lowercases first and
-// rust-nostr's `from_hex` accepts mixed case, so both accept the same inputs.
+// nk-core's `from_hex` accepts mixed case, so both accept the same inputs.
 function randHex32(corrupt: boolean): string {
   if (corrupt) {
     return pick([randHex(62), randHex(66), `${randHex(60)}zzzz`, randString(64), ""]);
@@ -555,7 +555,7 @@ function randHex32(corrupt: boolean): string {
 }
 
 // A 32-byte secret for `nsec` encode entities. Well-formed secrets must be
-// valid scalars: rust-nostr's `SecretKey` cannot express an invalid scalar,
+// valid scalars: nk-core's `SecretKey` cannot express an invalid scalar,
 // so encode-side scalar rejection has no TS counterpart. Invalid scalars are
 // exercised on the decode side instead (both decoders reject them).
 function randSecretHex(): string {
