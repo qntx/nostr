@@ -151,6 +151,7 @@ async fn replay(session: &Session, ws: &mut Sock) {
 /// `CLOSED`, or the deadline.
 async fn collect_fetch(
     rx: &mut mpsc::Receiver<SubscriptionEvent>,
+    terminal: &std::sync::Mutex<Option<CloseReason>>,
     timeout: Duration,
 ) -> FetchOutcome {
     let mut events = Vec::new();
@@ -170,11 +171,23 @@ async fn collect_fetch(
                     end: FetchEnd::Closed(r),
                 };
             }
-            Ok(Some(SubscriptionEvent::Closed(_)) | None) | Err(_) => {
+            Ok(Some(SubscriptionEvent::Closed(_))) | Err(_) => {
                 return FetchOutcome {
                     events,
                     end: FetchEnd::Timeout,
                 };
+            }
+            // Channel end without a terminal item: the driver's mark.
+            Ok(None) => {
+                let reason = terminal
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take();
+                let end = match reason {
+                    Some(CloseReason::Relay(r)) => FetchEnd::Closed(r),
+                    Some(_) | None => FetchEnd::Timeout,
+                };
+                return FetchOutcome { events, end };
             }
         }
     }
@@ -368,11 +381,12 @@ impl Driver {
             return;
         }
         let (tx, mut rx) = mpsc::channel(256);
+        let terminal = Arc::new(std::sync::Mutex::new(None));
         self.subs.insert(
             id.clone(),
             SubHandles {
                 tx,
-                terminal: Arc::new(std::sync::Mutex::new(None)),
+                terminal: Arc::clone(&terminal),
             },
         );
         if was_connected {
@@ -380,7 +394,7 @@ impl Driver {
         }
         let cmd = self.cmd.clone();
         tokio::spawn(async move {
-            let outcome = collect_fetch(&mut rx, timeout).await;
+            let outcome = collect_fetch(&mut rx, &terminal, timeout).await;
             drop(cmd.send(Cmd::CloseSub { id }).await);
             drop(reply.send(Ok(outcome)));
         });
@@ -421,11 +435,13 @@ impl Driver {
         }
     }
 
-    /// Ends `id` with `reason`: terminal mark, sender dropped.
+    /// Ends `id` with `reason`: enqueue the terminal item where it fits,
+    /// always set the terminal mark, then drop the sender.
     fn end_sub(&mut self, id: &SubscriptionId, reason: CloseReason) {
         let Some(h) = self.subs.remove(id) else {
             return;
         };
+        drop(h.tx.try_send(SubscriptionEvent::Closed(reason.clone())));
         if let Ok(mut t) = h.terminal.lock() {
             *t = Some(reason);
         }

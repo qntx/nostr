@@ -3,7 +3,7 @@
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use futures_util::{SinkExt, StreamExt};
 use http_body_util::Empty;
@@ -58,9 +58,15 @@ async fn on_req(
     ws: &mut yawc::HttpWebSocket,
     store: &MemoryStore,
     open: &mut Vec<(SubscriptionId, Vec<nk_core::Filter>)>,
+    hold: &AtomicBool,
     id: &SubscriptionId,
     filters: &[nk_core::Filter],
 ) {
+    // Held REQs are recorded but get no stored events and no EOSE — tests
+    // drive the reply themselves through `send_raw`.
+    if hold.load(Ordering::Relaxed) {
+        return;
+    }
     for ev in store.query(filters).unwrap_or_default() {
         let frame = format!(r#"["EVENT","{}",{}]"#, id.as_str(), ev.to_json());
         drop(ws.send(Frame::text(frame)).await);
@@ -75,6 +81,7 @@ async fn on_client_frame(
     ws: &mut yawc::HttpWebSocket,
     store: &MemoryStore,
     open: &mut Vec<(SubscriptionId, Vec<nk_core::Filter>)>,
+    hold: &AtomicBool,
     text: &str,
 ) -> bool {
     let Ok(msg) = ClientMessage::from_json(text) else {
@@ -85,7 +92,7 @@ async fn on_client_frame(
         ClientMessage::Req {
             subscription_id,
             filters,
-        } => on_req(ws, store, open, &subscription_id, &filters).await,
+        } => on_req(ws, store, open, hold, &subscription_id, &filters).await,
         ClientMessage::Close(id) => {
             open.retain(|(s, _)| s != id.as_ref());
             let closed = format!(
@@ -102,6 +109,7 @@ async fn on_client_frame(
 async fn serve_ws(
     mut ws: yawc::HttpWebSocket,
     store: Arc<MemoryStore>,
+    hold: Arc<AtomicBool>,
     mut hook_rx: broadcast::Receiver<Hook>,
     log: mpsc::Sender<String>,
 ) {
@@ -120,7 +128,7 @@ async fn serve_ws(
                     continue;
                 };
                 drop(log.send(text.to_owned()).await);
-                if !on_client_frame(&mut ws, &store, &mut open, text).await {
+                if !on_client_frame(&mut ws, &store, &mut open, &hold, text).await {
                     return;
                 }
             }
@@ -139,6 +147,7 @@ async fn serve_ws(
 async fn serve_conn(
     stream: tokio::net::TcpStream,
     store: Arc<MemoryStore>,
+    hold: Arc<AtomicBool>,
     rx: broadcast::Receiver<Hook>,
     log: mpsc::Sender<String>,
     conns: Arc<AtomicUsize>,
@@ -149,6 +158,7 @@ async fn serve_conn(
         std::future::ready(Ok::<_, Infallible>(serve_request(
             req,
             Arc::clone(&store),
+            Arc::clone(&hold),
             rx.resubscribe(),
             log.clone(),
         )))
@@ -166,6 +176,7 @@ async fn serve_conn(
 fn serve_request(
     mut req: Request<Incoming>,
     store: Arc<MemoryStore>,
+    hold: Arc<AtomicBool>,
     rx: broadcast::Receiver<Hook>,
     log: mpsc::Sender<String>,
 ) -> Response<Empty<Bytes>> {
@@ -173,7 +184,7 @@ fn serve_request(
         Ok((resp, fut)) => {
             tokio::spawn(async move {
                 match fut.await {
-                    Ok(ws) => serve_ws(ws, store, rx, log).await,
+                    Ok(ws) => serve_ws(ws, store, hold, rx, log).await,
                     Err(e) => debug!("mock ws upgrade: {e}"),
                 }
             });
@@ -195,6 +206,7 @@ pub struct MockRelay {
     /// Every raw client frame the mock received (for assertions).
     log_rx: mpsc::Receiver<String>,
     conns: Arc<AtomicUsize>,
+    hold: Arc<AtomicBool>,
     _accept: tokio::task::JoinHandle<()>,
 }
 
@@ -220,6 +232,8 @@ impl MockRelay {
         let store = Arc::new(MemoryStore::new());
         let conns = Arc::new(AtomicUsize::new(0));
         let conns_accept = Arc::clone(&conns);
+        let hold = Arc::new(AtomicBool::new(false));
+        let hold_accept = Arc::clone(&hold);
         let (hook_tx, _) = broadcast::channel::<Hook>(16);
         let (log_tx, log_rx) = mpsc::channel::<String>(256);
         let hook_for_accept = hook_tx.clone();
@@ -231,6 +245,7 @@ impl MockRelay {
                 tokio::spawn(serve_conn(
                     stream,
                     store,
+                    Arc::clone(&hold_accept),
                     rx,
                     log,
                     Arc::clone(&conns_accept),
@@ -242,6 +257,7 @@ impl MockRelay {
             hooks: hook_tx,
             log_rx,
             conns,
+            hold,
             _accept: accept,
         })
     }
@@ -266,6 +282,12 @@ impl MockRelay {
     /// The next raw client frame the mock received.
     pub async fn next_client_frame(&mut self) -> Option<String> {
         self.log_rx.recv().await
+    }
+
+    /// Holds or releases REQs: while held the mock records a REQ but sends
+    /// neither stored events nor `EOSE` — tests answer it via `send_raw`.
+    pub fn set_hold_reqs(&self, hold: bool) {
+        self.hold.store(hold, Ordering::Relaxed);
     }
 
     /// Live connections — `0` after every client socket closes.

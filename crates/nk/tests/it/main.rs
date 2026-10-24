@@ -105,20 +105,49 @@ async fn fetch_ends_on_eose() {
     assert_eq!(out.events.len(), 1);
 }
 
+/// The subscription id inside a `["REQ","<id>",...]` wire frame.
+fn req_id(frame: &str) -> &str {
+    let start = frame.find(r#""REQ",""#).map(|i| i + 7).expect("REQ frame");
+    let rest = &frame[start..];
+    let end = rest.find('"').expect("id end");
+    &rest[..end]
+}
+
 #[tokio::test]
 async fn fetch_ends_on_closed() {
-    let (mock, relay) = mock_and_relay().await;
-    // Drive a CLOSED on an open REQ via the mock's raw-frame hook.
-    let mut fetch = relay
-        .subscribe(vec![Filter::new().limit(0)])
+    let (mut mock, relay) = mock_and_relay().await;
+    mock.set_hold_reqs(true);
+    let relay2 = relay.clone();
+    let fetch = tokio::spawn(async move {
+        relay2
+            .fetch(vec![Filter::new().limit(0)], Duration::from_secs(5))
+            .await
+    });
+    let req = mock
+        .wait_for_frame("REQ", Duration::from_secs(2))
         .await
-        .expect("sub2");
+        .expect("REQ frame");
     mock.send_raw(&format!(
         r#"["CLOSED","{}","closed: by test"]"#,
-        fetch.id().as_str()
+        req_id(&req)
     ));
-    let item = tokio::time::timeout(Duration::from_secs(2), fetch.next()).await;
-    match item {
+    let outcome = fetch.await.expect("join").expect("fetch");
+    match outcome.end {
+        FetchEnd::Closed(reason) => assert!(reason.contains("closed:"), "{reason}"),
+        other => panic!("expected Closed, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn subscribe_closed_by_relay() {
+    let (mock, relay) = mock_and_relay().await;
+    mock.set_hold_reqs(true);
+    let mut sub = relay.subscribe(vec![Filter::new()]).await.expect("sub");
+    mock.send_raw(&format!(
+        r#"["CLOSED","{}","closed: by test"]"#,
+        sub.id().as_str()
+    ));
+    match tokio::time::timeout(Duration::from_secs(2), sub.next()).await {
         Ok(Some(SubscriptionEvent::Closed(CloseReason::Relay(r)))) => {
             assert!(r.contains("closed:"), "{r}");
         }
