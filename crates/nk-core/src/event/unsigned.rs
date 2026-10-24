@@ -91,9 +91,9 @@ impl UnsignedEvent {
     }
 
     /// The canonical NIP-01 serialization `[0,pubkey,created_at,kind,tags,content]`
-    /// — the byte-exact input of the id hash.
+    /// — the byte-exact preimage whose SHA-256 is the event id.
     #[must_use]
-    pub fn canonical_json(&self) -> String {
+    pub fn id_preimage(&self) -> String {
         let mut out = String::new();
         canonical::write_event(&self.parts(), &mut out);
         out

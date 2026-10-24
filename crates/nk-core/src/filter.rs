@@ -285,12 +285,6 @@ impl Filter {
         true
     }
 
-    /// True when `event` matches any of `filters` (NIP-01 OR semantics).
-    #[must_use]
-    pub fn matches_any(filters: &[Self], event: &Event) -> bool {
-        filters.iter().any(|filter| filter.matches(event))
-    }
-
     /// Intrinsic upper bound implied by the filter alone; `None` when
     /// unbounded.
     ///
@@ -381,18 +375,12 @@ impl Filter {
         out.push_str("}");
     }
 
-    /// The canonical serialization as a `String`; used by [`fingerprint`].
-    #[must_use]
-    pub fn canonical_json(&self) -> String {
-        let mut out = String::new();
-        self.write_canonical(&mut out);
-        out
-    }
-
     /// The wire JSON object — the canonical serialization.
     #[must_use]
     pub fn to_json(&self) -> String {
-        self.canonical_json()
+        let mut out = String::new();
+        self.write_canonical(&mut out);
+        out
     }
 
     /// Parses the wire JSON object.
@@ -618,7 +606,7 @@ impl Serialize for StrList<'_> {
 impl Serialize for Filter {
     /// The canonical wire form: keys in UTF-16 sort order with `#`
     /// conditions first — the stored order, identical to
-    /// [`Filter::canonical_json`].
+    /// [`|f| { let mut out = String::new(); f.write_canonical(&mut out); out }`].
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut len = self.tags.len();
         for present in [
@@ -666,7 +654,14 @@ impl Serialize for Filter {
 /// inside `[...]`.
 #[must_use]
 pub fn fingerprint(filters: &[Filter]) -> String {
-    let mut parts: Vec<String> = filters.iter().map(Filter::canonical_json).collect();
+    let mut parts: Vec<String> = filters
+        .iter()
+        .map(|f| {
+            let mut out = String::new();
+            f.write_canonical(&mut out);
+            out
+        })
+        .collect();
     parts.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
     let mut out = String::from("[");
     for (i, part) in parts.iter().enumerate() {
@@ -846,20 +841,6 @@ mod tests {
     }
 
     #[test]
-    fn matches_any_is_or() {
-        let event = event(&[], 1, 1);
-        assert!(Filter::matches_any(
-            &[Filter::new().kinds([Kind::new(2)]), Filter::new()],
-            &event
-        ));
-        assert!(!Filter::matches_any(
-            &[Filter::new().kinds([Kind::new(2)])],
-            &event
-        ));
-        assert!(!Filter::matches_any(&[], &event));
-    }
-
-    #[test]
     fn limit_bound_counts_unique_values() {
         assert_eq!(Filter::new().limit_bound(), None);
         assert_eq!(Filter::new().ids([]).limit_bound(), Some(0));
@@ -928,15 +909,12 @@ mod tests {
             .since(Timestamp::from_secs(4))
             .until(Timestamp::from_secs(5));
         assert_eq!(
-            filter.canonical_json(),
+            filter.to_json(),
             alloc::format!(
                 "{{\"#A\":[\"y\"],\"#a\":[\"x\"],\"authors\":[\"{PK}\"],\"ids\":[\"{ID_A}\"],\"kinds\":[1,3],\"limit\":2,\"search\":\"s\",\"since\":4,\"until\":5}}"
             )
         );
-        assert_eq!(
-            serde_json::to_string(&filter).unwrap(),
-            filter.canonical_json()
-        );
+        assert_eq!(serde_json::to_string(&filter).unwrap(), filter.to_json());
     }
 
     #[test]
@@ -944,20 +922,17 @@ mod tests {
         // UTF-16 order: "z" (0x007A) < "😀" (0xD83D) < "\u{FFFD}" (0xFFFD);
         // UTF-8 order would put "\u{FFFD}" before "😀".
         let filter = Filter::new().tag(letter('t'), ["\u{FFFD}", "😀", "z"]);
-        assert_eq!(
-            filter.canonical_json(),
-            "{\"#t\":[\"z\",\"😀\",\"\u{FFFD}\"]}"
-        );
+        assert_eq!(filter.to_json(), "{\"#t\":[\"z\",\"😀\",\"\u{FFFD}\"]}");
     }
 
     #[test]
     fn canonical_json_omits_none_and_keeps_empty_sets() {
-        assert_eq!(Filter::new().canonical_json(), "{}");
-        assert_eq!(Filter::new().ids([]).canonical_json(), "{\"ids\":[]}");
+        assert_eq!(Filter::new().to_json(), "{}");
+        assert_eq!(Filter::new().ids([]).to_json(), "{\"ids\":[]}");
         assert_eq!(
             Filter::new()
                 .tag(letter('t'), Vec::<String>::new())
-                .canonical_json(),
+                .to_json(),
             "{\"#t\":[]}"
         );
     }

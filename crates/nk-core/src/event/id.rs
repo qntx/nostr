@@ -5,7 +5,6 @@ use core::fmt;
 use core::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sha2::{Digest, Sha256};
 
 use super::{Error, Result};
 use crate::hex;
@@ -43,12 +42,6 @@ impl EventId {
         hex::decode_caller(hex)
             .map(Self)
             .map_err(|_| Error::InvalidHex)
-    }
-
-    /// SHA-256 of `canonical` — the preimage bytes of an event id.
-    #[must_use]
-    pub fn hash(canonical: &[u8]) -> Self {
-        Self(Sha256::digest(canonical).into())
     }
 
     /// The raw digest bytes.

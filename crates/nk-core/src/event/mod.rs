@@ -432,7 +432,7 @@ mod tests {
     fn canonical_json_and_id_are_stable() {
         let event = unsigned();
         assert_eq!(
-            event.canonical_json(),
+            event.id_preimage(),
             alloc::format!("[0,\"{PK}\",1700000000,1,[[\"t\",\"smoke\"]],\"hello\"]")
         );
         assert_eq!(
@@ -444,7 +444,10 @@ mod tests {
     #[test]
     fn id_matches_hash_of_canonical_bytes() {
         let event = unsigned();
-        assert_eq!(event.id(), EventId::hash(event.canonical_json().as_bytes()));
+        assert_eq!(
+            event.id(),
+            EventId::from_bytes(Sha256::digest(event.id_preimage().as_bytes()).into())
+        );
     }
 
     #[test]
@@ -468,10 +471,13 @@ mod tests {
             content,
         );
         assert_eq!(
-            event.canonical_json(),
+            event.id_preimage(),
             alloc::format!("[0,\"{PK}\",0,0,[],\"{escaped}\"]")
         );
-        assert_eq!(event.id(), EventId::hash(event.canonical_json().as_bytes()));
+        assert_eq!(
+            event.id(),
+            EventId::from_bytes(Sha256::digest(event.id_preimage().as_bytes()).into())
+        );
     }
 
     #[test]

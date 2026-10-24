@@ -1,10 +1,5 @@
-//! Synchronous event stores for the nostr protocol.
-//!
-//! [`EventStore`] is the shared trait: [`MemoryStore`] holds `Arc`-shared
-//! events in ordered in-memory buckets, and [`SqliteStore`] (the `sqlite`
-//! feature) persists to SQLite with the same insertion policy. Both backends
-//! share one private `policy` module so put/delete semantics cannot drift.
-
+#![forbid(unsafe_code)]
+#![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod error;
@@ -26,6 +21,19 @@ use criterion as _;
 use serde_json as _;
 #[cfg(feature = "sqlite")]
 pub use sqlite::SqliteStore;
+
+const _: () = {
+    const fn assert_send_sync<T: Send + Sync>() {}
+    const fn assert_object_safe<T: ?Sized>() {}
+    assert_send_sync::<BackendError>();
+    assert_send_sync::<Error>();
+    assert_send_sync::<MemoryStore>();
+    assert_send_sync::<NegentropyItem>();
+    #[cfg(feature = "sqlite")]
+    assert_send_sync::<SqliteStore>();
+    // The trait stays object safe and usable through shared ownership.
+    assert_object_safe::<dyn EventStore>();
+};
 
 use nk_core::{Event, EventId, Filter, Timestamp};
 

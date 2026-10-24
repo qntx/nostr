@@ -1,64 +1,70 @@
-# nk
+# nk-core
 
-The protocol crate of the `nk-*` workspace: the platform-neutral (`no_std` + `alloc`, sans-IO) Rust counterpart of `@qntx/nostr`'s `core` and `nips` layers. It supersedes `nk-core` and `nk-nips`, which are no longer published — `nk_core::X` is now `nk::X` and `nk_nips::nipXX` is now `nk::nips::nipXX`.
-
-> `nk` 0.13.0+ is a from-scratch implementation and is unrelated to the `nk` 0.3.0 previously published on crates.io under the same name.
+The owned Rust implementation of the nostr wire protocol — the protocol
+crate of the `nk-*` workspace, platform-neutral (`no_std` + `alloc`,
+sans-IO) and byte-compatible with `@qntx/nostr`: both run the shared
+vectors in `vectors/` and the differential stream suite with zero
+divergence (Rust's only intentional difference is rejecting non-canonical
+JSON that `JSON.parse` accepts).
 
 ## Core
 
-The crate root carries the core model: per-module error enums (`key::Error`, `event::Error`, `tag::Error`, `url::Error`, `filter::Error`, `message::Error`, `builder::Error`), protocol limits, `Timestamp`, `RelayUrl` (WHATWG relay-URL normalization, byte-identical to the TS `normalizeURL`), `Kind`/`KindClass`, `PublicKey`, `Tag`/`Tags`/`EventAddress`, the `UnsignedEvent`/`Event` model with canonical NIP-01 serialization and SHA-256 event ids, `SecretKey`/`Keys` (BIP-340 Schnorr signing over `secp256k1`), `Signature::verify`/`Event::verify`, `SingleLetterTag`/`Filter`/`fingerprint` (NIP-01 filter matching, limits, and canonical serialization), `EventBuilder` with `ProfileMetadata`/`DeletionTarget` (NIP-09 deletion, NIP-18 reposts, NIP-25 reactions — tag shapes byte-identical to the TS `EventBuilder`), and `SubscriptionId`/`CountHll`/`CountResult`/`ClientMessage`/`RelayMessage` (NIP-01/NIP-42/NIP-45/NIP-77 wire messages with `from_json`/`to_json` plus `serde` support).
+The crate root carries the model: per-module error enums (`key::Error`,
+`event::Error`, `tag::Error`, `url::Error`, `filter::Error`,
+`message::Error`), `Timestamp`, `RelayUrl` (WHATWG relay-URL
+normalization), `Kind`/`KindClass`, `PublicKey`, `Tag`/`Tags`/`Coordinate`,
+the `UnsignedEvent`/`Event` model with canonical NIP-01 serialization and
+SHA-256 event ids, `SecretKey`/`Keys` (BIP-340 Schnorr signing over
+`secp256k1`), `Signature::verify`/`Event::verify`,
+`SingleLetterTag`/`Filter`/`fingerprint` (NIP-01 filter matching, limits,
+canonical serialization), `EventBuilder` with `Metadata`/`DeletionTarget`
+(NIP-09 deletion, NIP-18 reposts, NIP-25 reactions), and
+`SubscriptionId`/`CountResult`/`ClientMessage`/`RelayMessage`
+(NIP-01/NIP-42/NIP-45/NIP-77 wire messages with `from_json`/`to_json`).
 
-```rust,ignore
-use nk::{EventBuilder, Keys, SecretKey};
+```
+use nk_core::{EventBuilder, Keys, Timestamp};
 
-let keys = Keys::new(SecretKey::generate()); // os-rng feature
-let event = keys.sign_event(EventBuilder::text_note("hello nostr").build_at(
-    keys.public_key(),
-    1_700_000_000.into(),
-))?;
-event.verify()?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let keys = Keys::generate()?; // os-rng feature
+    let unsigned = EventBuilder::text_note("hello nostr")
+        .build_at(keys.public_key(), Timestamp::from_secs(1_700_000_000));
+    let event = keys.sign_event(unsigned, &mut nk_core::SysRng)?;
+    event.verify()?;
+    Ok(())
+}
 ```
 
 ## NIPs
 
-`nk::nips` hosts the feature-gated NIP implementations. Most share the NIP-layer `Error`/`ErrorKind` — separate from the per-module core errors — while the encoding NIPs carry their own `Error` enums (`nip19::Error`, `nip21::Error`, `nip46::Error`, `nip49::Error`): `nip19` — the bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) byte-identical to the TS implementation; `nip21` — the `nostr:` URI scheme; `nip04` — the legacy AES-256-CBC encrypted-DM payload; `nip44` — NIP-44 v2 authenticated payload encryption with constant-time MAC verification; `nip49` — `ncryptsec` secret-key encryption; and the remaining NIPs listed in the feature table below.
+`nips` hosts the NIP implementations — every module is always compiled
+except `nip04`, `nip44`, and `nip49`, which carry extra dependencies. Each
+module owns its own `Error` enum: `nip19` — the bech32 entity codec
+(`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`); `nip21` — the `nostr:`
+URI scheme; `nip04` — the legacy AES-256-CBC encrypted-DM payload;
+`nip44` — NIP-44 v2 authenticated payload encryption with constant-time
+MAC verification; `nip49` — `ncryptsec` secret-key encryption; plus the
+always-on NIP modules listed in the feature table below.
 
-```rust,ignore
-use nk::nips::nip19::Entity;
-use nk::SecretKey;
+```
+use nk_core::nips::nip19::Entity;
+use nk_core::SecretKey;
 
-let nsec = SecretKey::generate().to_bech32(); // os-rng feature
-let entity = Entity::from_bech32(&nsec)?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let nsec = SecretKey::from_bytes([7; 32])?.to_bech32();
+    let entity = Entity::from_bech32(&nsec)?;
+    assert!(matches!(entity, Entity::Secret(_)));
+    Ok(())
+}
 ```
 
 ## Features
 
-| feature  | default | effect                                                                                                  | external dependencies                                 |
-| -------- | ------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `std`    | yes     | OS facilities; global secp256k1 context; base for `clock`/`os-rng`                                      | —                                                     |
-| `clock`  | yes     | `Timestamp::now` and wall-clock helpers where a NIP needs them                                          | —                                                     |
-| `os-rng` | yes     | `SecretKey::generate`, `Keys::generate`, `Keys::sign_event` and OS-entropy NIP helpers                  | `getrandom`                                           |
-| `nip04`  | no      | legacy encrypted DMs (`SharedSecret`, `encrypt`/`decrypt`)                                              | `aes`, `base64ct`, `cbc`                              |
-| `nip10`  | no      | thread references (`parse_thread_tags`, `reply_tags`/`reply_to`); needs `nip19`                         | —                                                     |
-| `nip13`  | no      | proof of work (`pow`, `PowMiner`)                                                                       | —                                                     |
-| `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`, kind-10050 lists); needs `nip59`              | —                                                     |
-| `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`)                                  | `bech32`                                              |
-| `nip21`  | no      | `nostr:` URI scheme (`NostrUri`); needs `nip19`                                                         | —                                                     |
-| `nip27`  | no      | content tokenizer (`parse_content`, `ContentBlock`); needs `nip19`                                      | `unicode-properties`                                  |
-| `nip42`  | no      | relay authentication (`auth_event`, `is_auth_required`)                                                 | —                                                     |
-| `nip44`  | no      | NIP-44 v2 payload encryption (`ConversationKey`, `encrypt`/`decrypt`)                                   | `base64ct`, `chacha20`, `hkdf`, `hmac`                |
-| `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Method`, `Request`/`Response`)         | —                                                     |
-| `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptedSecretKey`); needs `nip19`                                 | `chacha20poly1305`, `scrypt`, `unicode-normalization` |
-| `nip51`  | no      | lists (`parse_mute_list`, `mute_list`, `pin_list`, `bookmark_list`, NIP-44 private tags); needs `nip44` | —                                                     |
-| `nip57`  | no      | Lightning zaps (`ZapTarget`, `zap_request`, `parse_bolt11`, `validate_zap_receipt`)                     | `bech32`                                              |
-| `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`                                 | —                                                     |
-| `nip65`  | no      | relay lists (`parse_relay_list`, `relay_list`, `read_relays`/`write_relays`)                            | —                                                     |
-| `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)                                | `base64ct`                                            |
-
-Each NIP is a separate default-off feature and compiles independently. `base16ct`, `rand_core`, `secp256k1`, `serde`, `serde_json`, `sha2`, `url`, and `zeroize` are unconditional core dependencies — the external-dependencies column lists only what a feature adds on top.
-
-Without `os-rng` the caller supplies randomness (`generate_with_rng`, `sign_event_with_rng`, `sign_id_with_aux`); without `std` secp256k1 uses a per-call self-contained context. Secret material is zeroized on drop, raw secret bytes only leave the crate through the scoped `SecretKey::with_secret_bytes` accessor, and `nsec` payloads wipe their decoded scratch buffers before the key is returned.
-
-All public types are `Send + Sync`; no third-party types appear in the public API.
-
-License: MIT OR Apache-2.0.
+| feature  | default | effect                                                                                                  |
+| -------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| `std`    | yes     | OS facilities; global secp256k1 context; base for `clock`/`os-rng`                                      |
+| `clock`  | yes     | `Timestamp::now` and wall-clock helpers where a NIP needs them                                          |
+| `os-rng` | yes     | `SecretKey::generate`, `Keys::generate`, `SubscriptionId::generate`, `SysRng`                           |
+| `nip04`  | no      | legacy encrypted DMs (aes, cbc)                                                                         |
+| `nip44`  | no      | v2 payload encryption (chacha20, hkdf, hmac); also enables `nips::nip17`, `nips::nip59`, nip51 privates |
+| `nip49`  | no      | `ncryptsec` secret-key encryption (scrypt, chacha20poly1305)                                            |

@@ -385,11 +385,7 @@ fn event_serialize() {
             continue;
         }
         let unsigned = parsed.unwrap_or_else(|e| panic!("case {i}: {e}"));
-        assert_eq!(
-            unsigned.canonical_json(),
-            c.serialized,
-            "case {i}: canonical"
-        );
+        assert_eq!(unsigned.id_preimage(), c.serialized, "case {i}: canonical");
         assert_eq!(unsigned.id().to_hex(), c.id, "case {i}: id");
     }
 }
@@ -597,7 +593,7 @@ fn filter_canonicalize() {
         }
         let filter = filter.unwrap_or_else(|e| panic!("case {i}: {e}"));
         assert_eq!(
-            filter.canonical_json(),
+            filter.to_json(),
             c.canonical_json.as_deref().unwrap(),
             "case {i}"
         );

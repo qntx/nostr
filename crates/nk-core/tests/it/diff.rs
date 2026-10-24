@@ -311,7 +311,7 @@ fn diff_event_serialize() {
         str_out(
             UnsignedEvent::from_json(input)
                 .map_err(|_| ())?
-                .canonical_json(),
+                .id_preimage(),
         )
     });
 }
@@ -346,7 +346,7 @@ fn diff_filter_match() {
 fn diff_filter_canonicalize() {
     replay("core.filter.canonicalize", |input| {
         let filter = Filter::from_json(input).map_err(|_| ())?;
-        str_out(filter.canonical_json())
+        str_out(filter.to_json())
     });
 }
 

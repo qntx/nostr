@@ -1,64 +1,39 @@
-# nk
+# nk-store
 
-The protocol crate of the `nk-*` workspace: the platform-neutral (`no_std` + `alloc`, sans-IO) Rust counterpart of `@qntx/nostr`'s `core` and `nips` layers. It supersedes `nk-core` and `nk-nips`, which are no longer published — `nk_core::X` is now `nk::X` and `nk_nips::nipXX` is now `nk::nips::nipXX`.
+The event-storage crate of the `nk-*` workspace: a synchronous,
+object-safe [`EventStore`] trait plus two backends that share one
+insertion/deletion policy so put semantics cannot drift.
 
-> `nk` 0.13.0+ is a from-scratch implementation and is unrelated to the `nk` 0.3.0 previously published on crates.io under the same name.
+- [`MemoryStore`] — `RwLock` + `Arc`-shared events in ordered buckets
+  (all / pubkey / kind / kind+pubkey / single-letter tag `name:value`),
+  with a per-filter planner choosing the smallest usable index.
+- [`SqliteStore`] (feature `sqlite`) — a `Mutex<Connection>` backend
+  whose schema is byte-identical to `@qntx/nostr`'s SQLite store: the
+  files are interchangeable across languages, `put_many` is one
+  transaction, and deletion tombstones persist.
 
-## Core
+Both implement the same NIP-09 deletion semantics (author-scoped `e` and
+`a` targets, pending tombstones for unknown ids, coordinate coverage up
+to the deletion's `created_at`) through the shared `policy` module.
 
-The crate root carries the core model: per-module error enums (`key::Error`, `event::Error`, `tag::Error`, `url::Error`, `filter::Error`, `message::Error`, `builder::Error`), protocol limits, `Timestamp`, `RelayUrl` (WHATWG relay-URL normalization, byte-identical to the TS `normalizeURL`), `Kind`/`KindClass`, `PublicKey`, `Tag`/`Tags`/`EventAddress`, the `UnsignedEvent`/`Event` model with canonical NIP-01 serialization and SHA-256 event ids, `SecretKey`/`Keys` (BIP-340 Schnorr signing over `secp256k1`), `Signature::verify`/`Event::verify`, `SingleLetterTag`/`Filter`/`fingerprint` (NIP-01 filter matching, limits, and canonical serialization), `EventBuilder` with `ProfileMetadata`/`DeletionTarget` (NIP-09 deletion, NIP-18 reposts, NIP-25 reactions — tag shapes byte-identical to the TS `EventBuilder`), and `SubscriptionId`/`CountHll`/`CountResult`/`ClientMessage`/`RelayMessage` (NIP-01/NIP-42/NIP-45/NIP-77 wire messages with `from_json`/`to_json` plus `serde` support).
-
-```rust,ignore
-use nk::{EventBuilder, Keys, SecretKey};
-
-let keys = Keys::new(SecretKey::generate()); // os-rng feature
-let event = keys.sign_event(EventBuilder::text_note("hello nostr").build_at(
-    keys.public_key(),
-    1_700_000_000.into(),
-))?;
-event.verify()?;
 ```
+use nk_core::Event;
+use nk_store::{EventStore, MemoryStore, PutOutcome};
 
-## NIPs
-
-`nk::nips` hosts the feature-gated NIP implementations. Most share the NIP-layer `Error`/`ErrorKind` — separate from the per-module core errors — while the encoding NIPs carry their own `Error` enums (`nip19::Error`, `nip21::Error`, `nip46::Error`, `nip49::Error`): `nip19` — the bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`) byte-identical to the TS implementation; `nip21` — the `nostr:` URI scheme; `nip04` — the legacy AES-256-CBC encrypted-DM payload; `nip44` — NIP-44 v2 authenticated payload encryption with constant-time MAC verification; `nip49` — `ncryptsec` secret-key encryption; and the remaining NIPs listed in the feature table below.
-
-```rust,ignore
-use nk::nips::nip19::Entity;
-use nk::SecretKey;
-
-let nsec = SecretKey::generate().to_bech32(); // os-rng feature
-let entity = Entity::from_bech32(&nsec)?;
+// A signed NIP-01 text note (kind 1), as received on the wire.
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let event = Event::from_json(
+        r#"{"id":"791e76a4715f1514309947f51c1d20a6f80698833ecc97b7b3a9c56cc3063113","pubkey":"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9","created_at":1700000000,"kind":1,"tags":[["t","hi"]],"content":"gm","sig":"35931bdb21989c9049272418de0df733b0ebede3bcb45c54161511d8633cab516d6b25cd808ddb8cbba7600940678e3ba3fe655a830abbe631e640e9fc460ff1"}"#,
+    )?;
+    let store = MemoryStore::new();
+    assert_eq!(store.put(&event)?, PutOutcome::Accepted);
+    assert_eq!(store.put(&event)?, PutOutcome::Duplicate);
+    Ok(())
+}
 ```
 
 ## Features
 
-| feature  | default | effect                                                                                                  | external dependencies                                 |
-| -------- | ------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `std`    | yes     | OS facilities; global secp256k1 context; base for `clock`/`os-rng`                                      | —                                                     |
-| `clock`  | yes     | `Timestamp::now` and wall-clock helpers where a NIP needs them                                          | —                                                     |
-| `os-rng` | yes     | `SecretKey::generate`, `Keys::generate`, `Keys::sign_event` and OS-entropy NIP helpers                  | `getrandom`                                           |
-| `nip04`  | no      | legacy encrypted DMs (`SharedSecret`, `encrypt`/`decrypt`)                                              | `aes`, `base64ct`, `cbc`                              |
-| `nip10`  | no      | thread references (`parse_thread_tags`, `reply_tags`/`reply_to`); needs `nip19`                         | —                                                     |
-| `nip13`  | no      | proof of work (`pow`, `PowMiner`)                                                                       | —                                                     |
-| `nip17`  | no      | private DMs (`chat_message_rumor`, `wrap_direct_message`, kind-10050 lists); needs `nip59`              | —                                                     |
-| `nip19`  | no      | bech32 entity codec (`npub`/`nsec`/`note`/`nprofile`/`nevent`/`naddr`)                                  | `bech32`                                              |
-| `nip21`  | no      | `nostr:` URI scheme (`NostrUri`); needs `nip19`                                                         | —                                                     |
-| `nip27`  | no      | content tokenizer (`parse_content`, `ContentBlock`); needs `nip19`                                      | `unicode-properties`                                  |
-| `nip42`  | no      | relay authentication (`auth_event`, `is_auth_required`)                                                 | —                                                     |
-| `nip44`  | no      | NIP-44 v2 payload encryption (`ConversationKey`, `encrypt`/`decrypt`)                                   | `base64ct`, `chacha20`, `hkdf`, `hmac`                |
-| `nip46`  | no      | Nostr Connect URI + RPC codecs (`BunkerUri`, `NostrConnectUri`, `Method`, `Request`/`Response`)         | —                                                     |
-| `nip49`  | no      | `ncryptsec` secret-key encryption (`EncryptedSecretKey`); needs `nip19`                                 | `chacha20poly1305`, `scrypt`, `unicode-normalization` |
-| `nip51`  | no      | lists (`parse_mute_list`, `mute_list`, `pin_list`, `bookmark_list`, NIP-44 private tags); needs `nip44` | —                                                     |
-| `nip57`  | no      | Lightning zaps (`ZapTarget`, `zap_request`, `parse_bolt11`, `validate_zap_receipt`)                     | `bech32`                                              |
-| `nip59`  | no      | gift wrap (`Rumor`, `wrap`/`unwrap`, `seal`/`gift_wrap`); needs `nip44`                                 | —                                                     |
-| `nip65`  | no      | relay lists (`parse_relay_list`, `relay_list`, `read_relays`/`write_relays`)                            | —                                                     |
-| `nip98`  | no      | HTTP auth (`auth_event`, `token`, `unpack_token`, `validate_auth_event`)                                | `base64ct`                                            |
-
-Each NIP is a separate default-off feature and compiles independently. `base16ct`, `rand_core`, `secp256k1`, `serde`, `serde_json`, `sha2`, `url`, and `zeroize` are unconditional core dependencies — the external-dependencies column lists only what a feature adds on top.
-
-Without `os-rng` the caller supplies randomness (`generate_with_rng`, `sign_event_with_rng`, `sign_id_with_aux`); without `std` secp256k1 uses a per-call self-contained context. Secret material is zeroized on drop, raw secret bytes only leave the crate through the scoped `SecretKey::with_secret_bytes` accessor, and `nsec` payloads wipe their decoded scratch buffers before the key is returned.
-
-All public types are `Send + Sync`; no third-party types appear in the public API.
-
-License: MIT OR Apache-2.0.
+| feature  | default | effect                                         |
+| -------- | ------- | ---------------------------------------------- |
+| `sqlite` | no      | `SqliteStore` over `rusqlite` (bundled SQLite) |

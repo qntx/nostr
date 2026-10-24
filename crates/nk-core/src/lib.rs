@@ -1,34 +1,9 @@
-//! `nk-core` is the leaf protocol crate: a platform-neutral (`no_std` +
-//! `alloc`, sans-IO) implementation of the nostr wire protocol —
-//! [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md)
-//! core types plus every supported NIP module under [`nips`]. Core types
-//! are re-exported flat at the crate root; there is no prelude.
-//!
-//! Every module owns an [`Error`](key::Error) enum describing its own
-//! failure causes; JSON parse failures surface as the shared [`JsonError`].
-//!
-//! # Features
-//!
-//! | feature | default | effect |
-//! |---------|---------|--------|
-//! | `std`   | yes     | OS facilities; global secp256k1 context; base for `clock`/`os-rng` |
-//! | `clock` | yes     | `Timestamp::now` (wall clock; off on platforms without one) |
-//! | `os-rng` | yes    | `SecretKey::generate`, `Keys::generate`, `SubscriptionId::generate`, `SysRng` |
-//! | `nip04` | no      | legacy encrypted DMs (aes, cbc) |
-//! | `nip44` | no      | v2 payload encryption (chacha20, hkdf, hmac); also enables `nips::nip17`, `nips::nip59` and the NIP-51 private-tag helpers |
-//! | `nip49` | no      | `ncryptsec` secret-key encryption (scrypt, chacha20poly1305) |
-//!
-//! Every other NIP module is always compiled.
-//!
-//! ```
-//! use nk_core::{RelayUrl, Timestamp};
-//!
-//! let url = RelayUrl::parse("Relay.EXAMPLE")?;
-//! assert_eq!(url.as_str(), "wss://relay.example/");
-//! let _ = Timestamp::from_secs(1_700_000_000);
-//! # Ok::<(), nk_core::url::Error>(())
-//! ```
-
+#![cfg_attr(feature = "os-rng", doc = include_str!("../README.md"))]
+#![cfg_attr(
+    not(feature = "os-rng"),
+    doc = "`nk-core` is the leaf protocol crate: a platform-neutral (`no_std` + `alloc`, sans-IO) implementation of the nostr wire protocol — NIP-01 core types plus every supported NIP module, verified byte-for-byte against `@qntx/nostr` through shared vectors. Build with the `os-rng` feature for the full crate guide."
+)]
+#![forbid(unsafe_code)]
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

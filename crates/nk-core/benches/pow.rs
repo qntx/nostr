@@ -46,7 +46,7 @@ fn naive_attempts(unsigned: &UnsignedEvent, difficulty: u32, budget: u64) -> Opt
             tags,
             unsigned.content(),
         );
-        let canonical = probe.canonical_json();
+        let canonical = probe.id_preimage();
         let id = EventId::from_bytes(Sha256::digest(canonical.as_bytes()).into());
         if id.difficulty() >= difficulty {
             return Some(id);

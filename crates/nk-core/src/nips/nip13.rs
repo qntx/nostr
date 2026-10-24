@@ -122,7 +122,7 @@ impl PowMiner {
             tags.clone(),
             self.unsigned.content(),
         );
-        let canonical = probe.canonical_json();
+        let canonical = probe.id_preimage();
         let probe_empty = UnsignedEvent::new(
             self.unsigned.pubkey(),
             second,
@@ -131,7 +131,7 @@ impl PowMiner {
             "",
         );
         let head_len = probe_empty
-            .canonical_json()
+            .id_preimage()
             .len()
             .checked_sub(10 + difficulty.len())?;
         let (head, tail) = canonical.as_bytes().split_at_checked(head_len)?;

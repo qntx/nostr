@@ -91,7 +91,7 @@ impl RelayUrl {
     /// Normalizes each entry; empty or invalid entries are skipped and
     /// results are deduplicated in first-seen order.
     #[must_use]
-    pub fn normalize_all<I>(inputs: I) -> Vec<Self>
+    pub(crate) fn normalize_all<I>(inputs: I) -> Vec<Self>
     where
         I: IntoIterator<Item: AsRef<str>>,
     {
