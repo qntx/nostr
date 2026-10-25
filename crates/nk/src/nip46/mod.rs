@@ -87,6 +87,10 @@ pub enum Error {
     /// A NIP-46 codec failure.
     #[error("codec failure")]
     Codec(#[source] nk_core::nips::nip46::Error),
+    /// A response-filter construction invariant failed — unreachable: the
+    /// built filters use a literal kind list and hex-encoded public keys.
+    #[error("invalid filter")]
+    Filter(#[source] nk_core::filter::Error),
     /// No reply inside the deadline.
     #[error("the remote signer did not answer in time")]
     Timeout,
@@ -233,18 +237,23 @@ async fn spawn_listener(
     client: PublicKey,
     conversation: &ConversationKey,
     pending: &Arc<rpc::Pending>,
-) -> JoinHandle<()> {
+) -> Result<JoinHandle<()>> {
     let filter = Filter::new()
         .kinds([Kind::NOSTR_CONNECT])
-        .authors([remote])
-        .tag(P_TAG, [client.to_hex()])
+        .and_then(|f| f.authors([remote]))
+        .and_then(|f| f.tag(P_TAG, [client.to_hex()]))
+        .map_err(Error::Filter)?
         .limit(0);
     let plan = relays
         .iter()
         .map(|u| (u.clone(), vec![filter.clone()]))
         .collect();
     let sub = pool.subscribe_routed(plan).await;
-    tokio::spawn(rpc::listen(sub, conversation.clone(), Arc::clone(pending)))
+    Ok(tokio::spawn(rpc::listen(
+        sub,
+        conversation.clone(),
+        Arc::clone(pending),
+    )))
 }
 
 /// A 16-byte random request id, lowercase hex.
@@ -282,7 +291,7 @@ impl RemoteSigner {
             &conversation,
             &pending,
         )
-        .await;
+        .await?;
         Ok(Self {
             inner: Arc::new(Inner {
                 client,
@@ -403,7 +412,8 @@ impl RemoteSigner {
         // answers with the secret.
         let filter = Filter::new()
             .kinds([Kind::NOSTR_CONNECT])
-            .tag(P_TAG, [client.public_key().to_hex()])
+            .and_then(|f| f.tag(P_TAG, [client.public_key().to_hex()]))
+            .map_err(Error::Filter)?
             .limit(0);
         let plan = relays
             .iter()
@@ -668,7 +678,7 @@ impl RemoteSigner {
             &self.inner.conversation,
             &self.inner.pending,
         )
-        .await;
+        .await?;
         let old = {
             let mut listener = self
                 .inner

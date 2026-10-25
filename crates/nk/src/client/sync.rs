@@ -144,10 +144,17 @@ impl Client {
     async fn upload(&self, relay: &crate::relay::Relay, report: &mut SyncReport) -> Result<()> {
         let store = Arc::clone(self.store());
         let ids = report.have.clone();
-        let events = tokio::task::spawn_blocking(move || store.query(&[Filter::new().ids(ids)]))
-            .await
-            .map_err(|_| Error::Closed)?
-            .map_err(Error::Store)?;
+        // `report.have` can be empty after a reconcile — nothing to look up.
+        let events = if ids.is_empty() {
+            Vec::new()
+        } else {
+            // `ids` is non-empty — `EmptyList` cannot occur.
+            let filter = Filter::new().ids(ids).map_err(|_| Error::InvalidFilters)?;
+            tokio::task::spawn_blocking(move || store.query(&[filter]))
+                .await
+                .map_err(|_| Error::Closed)?
+                .map_err(Error::Store)?
+        };
         let by_id: BTreeMap<EventId, Event> = events.into_iter().map(|e| (e.id(), e)).collect();
         for id in &report.have {
             if !by_id.contains_key(id) {
@@ -182,7 +189,12 @@ impl Client {
         for chunk in report.need.chunks(100) {
             let out = relay
                 .fetch(
-                    vec![Filter::new().ids(chunk.iter().copied())],
+                    vec![
+                        // `chunks` never yields an empty slice.
+                        Filter::new()
+                            .ids(chunk.iter().copied())
+                            .map_err(|_| Error::InvalidFilters)?,
+                    ],
                     self.request_timeout(),
                 )
                 .await

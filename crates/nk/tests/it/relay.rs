@@ -29,7 +29,7 @@ async fn subscribe_stored_then_live() {
     let stored = event("stored", 1);
     relay.publish(&stored).await.expect("seed");
     let mut sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("sub");
     // Stored event arrives first, then EOSE, exactly once.
@@ -59,7 +59,7 @@ async fn fetch_ends_on_eose() {
     relay.publish(&event("a", 1)).await.expect("seed");
     let out = relay
         .fetch(
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
             Duration::from_secs(5),
         )
         .await
@@ -118,7 +118,7 @@ async fn fetch_ends_on_timeout() {
     mock.set_hold(true);
     let out = relay
         .fetch(
-            vec![Filter::new().kinds([Kind::new(42)])],
+            vec![Filter::new().kinds([Kind::new(42)]).expect("filter")],
             Duration::from_millis(50),
         )
         .await
@@ -158,7 +158,7 @@ async fn invalid_signature_dropped() {
 async fn non_matching_event_dropped() {
     let (mock, relay) = mock_and_relay().await;
     let mut sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(7)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(7)]).expect("filter")])
         .await
         .expect("sub");
     mock.send_raw(&format!(
@@ -223,7 +223,7 @@ async fn lagged_consumer_closed() {
 async fn reconnect_replays_req() {
     let (mut mock, relay) = mock_and_relay().await;
     let mut sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("sub");
     let id = sub.id().clone();
@@ -362,7 +362,7 @@ async fn drop_mid_publish_returns_disconnected_then_recovers() {
 async fn subscribe_survives_reconnect() {
     let (mut mock, relay) = mock_and_relay().await;
     let mut sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("sub");
     assert!(
@@ -411,7 +411,7 @@ async fn pong_deadline_reconnects() {
     })
     .await;
     let sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("sub");
     assert!(
@@ -448,7 +448,7 @@ async fn drops_during_backoff_do_not_delay_reconnect() {
     let mut subs = Vec::new();
     for _ in 0..6 {
         let mut sub = relay
-            .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+            .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
             .await
             .expect("sub");
         let eose = tokio::time::timeout(Duration::from_secs(2), sub.next()).await;
@@ -487,7 +487,7 @@ async fn drops_under_load_all_send_close() {
     for _ in 0..50 {
         subs.push(
             relay
-                .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+                .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
                 .await
                 .expect("sub"),
         );
@@ -528,7 +528,7 @@ async fn auth_subscribe_with_signer() {
     .await;
     mock.require_auth(true);
     let mut sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("sub");
     // The AUTH frame goes out; the REQ retry follows.
@@ -563,7 +563,7 @@ async fn auth_concurrent_requests_share_one_auth() {
     mock.require_auth(true);
     // Two concurrent requests on one challenge: exactly one AUTH frame.
     let ev = event("x", 1);
-    let s1 = relay.subscribe(vec![Filter::new().kinds([Kind::new(1)])]);
+    let s1 = relay.subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")]);
     let s2 = relay.publish(&ev);
     let (r1, r2) = tokio::join!(s1, s2);
     drop(r1.expect("sub"));
@@ -587,7 +587,7 @@ async fn auth_required_without_signer_surfaces_reason() {
     let (mock, relay) = mock_and_relay().await;
     mock.require_auth(true);
     let mut sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("sub");
     match tokio::time::timeout(Duration::from_secs(2), sub.next()).await {
@@ -605,7 +605,7 @@ async fn count_returns_stored_matches() {
     relay.publish(&event("b", 1)).await.expect("p2");
     relay.publish(&event("other", 2)).await.expect("p3");
     let r = relay
-        .count(vec![Filter::new().kinds([Kind::new(1)])])
+        .count(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("count");
     assert_eq!(r.count, 2, "{r:?}");
@@ -696,7 +696,10 @@ async fn reconcile_identical_and_empty() {
     assert_eq!(rec, nk::relay::Reconciliation::default());
 
     let empty = relay
-        .reconcile(Filter::new().kinds([Kind::new(404)]), vec![])
+        .reconcile(
+            Filter::new().kinds([Kind::new(404)]).expect("filter"),
+            vec![],
+        )
         .await
         .expect("empty");
     assert_eq!(empty.need.len(), 0);
@@ -835,7 +838,7 @@ async fn auth_challenge_resets_on_reconnect() {
     // which triggers the second sign.
     relay.connect().await.expect("reconnect");
     let sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("sub");
     let second_auth = mock
@@ -864,7 +867,7 @@ async fn fetch_large_burst_is_complete() {
     }
     let out = relay
         .fetch(
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
             Duration::from_secs(5),
         )
         .await
@@ -931,7 +934,7 @@ async fn last_handle_drop_stops_driver() {
     let (mock, relay) = mock_and_relay().await;
     relay.connect().await.expect("connect");
     let mut sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("sub");
     // The live WebSocket — not just the HTTP handshake — is counted.
@@ -994,7 +997,7 @@ async fn panicking_signer_fails_fast() {
     // The sign task panics — the JoinSet reports it, `sign_failed` runs,
     // and the subscribe ends `Closed` with the original refusal reason.
     let mut sub = relay
-        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)]).expect("filter")])
         .await
         .expect("sub");
     let mut seen = None;

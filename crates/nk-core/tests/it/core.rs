@@ -510,7 +510,8 @@ fn filter_match() {
     struct Case {
         filter: serde_json::Value,
         event: serde_json::Value,
-        matches: bool,
+        matches: Option<bool>,
+        error: Option<String>,
         #[serde(rename = "nonCanonicalJson", default)]
         non_canonical: bool,
     }
@@ -522,6 +523,10 @@ fn filter_match() {
     for (i, c) in v.cases.iter().enumerate() {
         let filter = crate::common::caller_filter(&c.filter);
         let event = strict_event(&c.event);
+        if c.error.is_some() {
+            assert!(filter.is_err(), "case {i}: must reject");
+            continue;
+        }
         if c.non_canonical {
             assert!(
                 filter.is_err() || event.is_err(),
@@ -531,7 +536,11 @@ fn filter_match() {
         }
         let filter = filter.unwrap_or_else(|e| panic!("case {i}: filter rejected: {e}"));
         let event = event.unwrap_or_else(|e| panic!("case {i}: event rejected: {e}"));
-        assert_eq!(filter.matches(&event), c.matches, "case {i}");
+        assert_eq!(
+            filter.matches(&event),
+            c.matches.unwrap_or(false),
+            "case {i}"
+        );
     }
 }
 
@@ -601,7 +610,8 @@ fn filter_fingerprint() {
     #[derive(Deserialize)]
     struct Case {
         filters: Vec<serde_json::Value>,
-        fingerprint: String,
+        fingerprint: Option<String>,
+        error: Option<String>,
     }
     #[derive(Deserialize)]
     struct Vec_ {
@@ -609,12 +619,21 @@ fn filter_fingerprint() {
     }
     let v: Vec_ = serde_json::from_str(vector!("filter-fingerprint.json")).unwrap();
     for (i, c) in v.cases.iter().enumerate() {
-        let filters: Vec<Filter> = c
-            .filters
-            .iter()
-            .map(|f| crate::common::caller_filter(f).unwrap_or_else(|e| panic!("case {i}: {e}")))
+        let filters: Vec<Result<Filter, String>> =
+            c.filters.iter().map(crate::common::caller_filter).collect();
+        if c.error.is_some() {
+            assert!(filters.iter().any(|f| f.is_err()), "case {i}: must reject");
+            continue;
+        }
+        let filters: Vec<Filter> = filters
+            .into_iter()
+            .map(|f| f.unwrap_or_else(|e| panic!("case {i}: {e}")))
             .collect();
-        assert_eq!(fingerprint(&filters), c.fingerprint, "case {i}");
+        assert_eq!(
+            fingerprint(&filters),
+            c.fingerprint.as_deref().unwrap(),
+            "case {i}"
+        );
     }
 }
 

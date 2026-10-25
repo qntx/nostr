@@ -129,7 +129,7 @@
       "input": {
         "#t": []
       },
-      "canonicalJson": "{\"#t\":[]}"
+      "error": "FilterError"
     },
     {
       "input": {

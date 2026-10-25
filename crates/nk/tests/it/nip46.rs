@@ -177,7 +177,9 @@ async fn bunker_loop(relays: Vec<RelayUrl>, remote: Keys, user: Keys, cfg: Bunke
     let pool = RelayPool::new(RelayOptions::default());
     let filter = Filter::new()
         .kinds([Kind::NOSTR_CONNECT])
+        .expect("filter")
         .tag(p_tag(), [remote.public_key().to_hex()])
+        .expect("filter")
         .limit(0);
     let plan = relays
         .iter()

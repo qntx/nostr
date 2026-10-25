@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn client_encode_matches_ts() {
         let id = SubscriptionId::new("sub").expect("id");
-        let filter = Filter::new().kinds([Kind::TEXT_NOTE]);
+        let filter = Filter::new().kinds([Kind::TEXT_NOTE]).expect("filter");
         assert_eq!(
             ClientMessage::Req {
                 subscription_id: Cow::Borrowed(&id),
@@ -485,7 +485,7 @@ mod tests {
     #[test]
     fn into_owned_covers_every_variant() {
         let id = SubscriptionId::new("sub").expect("id");
-        let filter = Filter::new().kinds([Kind::TEXT_NOTE]);
+        let filter = Filter::new().kinds([Kind::TEXT_NOTE]).expect("filter");
         let event = signed_event();
         let event_id = event.id();
         let clients: [ClientMessage<'_>; 8] = [

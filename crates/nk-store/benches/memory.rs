@@ -86,7 +86,9 @@ fn query_authors_kinds(c: &mut Criterion) {
     let store = store();
     let filter = Filter::new()
         .kinds([Kind::new(1)])
-        .authors([key(3).public_key(), key(7).public_key()]);
+        .unwrap()
+        .authors([key(3).public_key(), key(7).public_key()])
+        .unwrap();
     c.bench_function("memory/authors+kinds", |b| {
         b.iter(|| {
             store
@@ -99,7 +101,7 @@ fn query_authors_kinds(c: &mut Criterion) {
 fn query_tag(c: &mut Criterion) {
     let store = store();
     let letter = SingleLetterTag::new('t').unwrap();
-    let filter = Filter::new().tag(letter, ["t5"]);
+    let filter = Filter::new().tag(letter, ["t5"]).unwrap();
     c.bench_function("memory/#t", |b| {
         b.iter(|| {
             store

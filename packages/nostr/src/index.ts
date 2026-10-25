@@ -23,6 +23,7 @@ export {
   SUBSCRIPTION_ID_MAX_CHARS,
   CryptoError,
   EventValidationError,
+  FilterError,
   HexError,
   MessageError,
   NostrError,

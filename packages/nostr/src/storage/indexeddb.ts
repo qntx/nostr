@@ -3,7 +3,7 @@
 import type { Event } from "../core/event.ts";
 import { itemCompare, sortEvents, validateSignedEvent } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
-import { matchFilter } from "../core/filter.ts";
+import { canonicalizeFilter, matchFilter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
 import { SerialQueue } from "../core/serial.ts";
 import { eventAddress, parseEventAddress } from "../core/tag.ts";
@@ -342,12 +342,13 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async query(filters: ReadonlyArray<Filter>): Promise<Event[]> {
+    const canonical = filters.map(canonicalizeFilter);
     const db = await this.#ensure();
     const tx = db.transaction([EVENTS, TAG_REFS], "readonly");
     const done = txDone(tx);
     const seen = new Set<string>();
     const events: Event[] = [];
-    for (const filter of filters) {
+    for (const filter of canonical) {
       const matched = await this.#queryOne(tx, filter);
       for (const event of matched) {
         if (seen.has(event.id)) {
@@ -363,11 +364,12 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async count(filters: ReadonlyArray<Filter>): Promise<number> {
+    const canonical = filters.map(canonicalizeFilter);
     const db = await this.#ensure();
     const tx = db.transaction([EVENTS, TAG_REFS], "readonly");
     const done = txDone(tx);
     const seen = new Set<string>();
-    for (const filter of filters) {
+    for (const filter of canonical) {
       const local = new Set<string>();
       await this.#scan(tx, filter, (event) => {
         local.add(event.id);
@@ -382,13 +384,14 @@ export class IndexedDbEventStore implements EventStore {
   }
 
   async negentropyItems(filter: Filter): Promise<NegentropyItem[]> {
+    const canonical = canonicalizeFilter(filter);
     const db = await this.#ensure();
     const tx = db.transaction([EVENTS, TAG_REFS], "readonly");
     const done = txDone(tx);
     const items: NegentropyItem[] = [];
-    await this.#scan(tx, filter, (event) => {
+    await this.#scan(tx, canonical, (event) => {
       items.push({ id: event.id, created_at: event.created_at });
-      return filter.limit !== undefined && items.length >= filter.limit;
+      return canonical.limit !== undefined && items.length >= canonical.limit;
     });
     await done;
     items.sort(itemCompare);

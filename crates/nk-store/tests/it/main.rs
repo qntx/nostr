@@ -45,20 +45,24 @@ use common::{addressable, alice, bob, note, replaceable, sign};
 use nk_core::{DeletionTarget, EventBuilder, Keys};
 
 fn kind_filter(kind: u16) -> Filter {
-    Filter::new().kinds([Kind::new(kind)])
+    Filter::new().kinds([Kind::new(kind)]).expect("filter")
 }
 
 fn authors_filter(keys: &Keys, kind: u16) -> Filter {
     Filter::new()
         .kinds([Kind::new(kind)])
+        .expect("filter")
         .authors([keys.public_key()])
+        .expect("filter")
 }
 
 fn tag_filter(letter: char, values: Vec<String>) -> Filter {
-    Filter::new().tag(
-        SingleLetterTag::new(letter).unwrap_or_else(|| panic!("letter")),
-        values,
-    )
+    Filter::new()
+        .tag(
+            SingleLetterTag::new(letter).unwrap_or_else(|| panic!("letter")),
+            values,
+        )
+        .expect("filter")
 }
 
 fn ids(events: &[Event]) -> Vec<EventId> {
@@ -164,7 +168,7 @@ fn conformance(store: &impl EventStore) {
     assert_eq!(store.get(&mine.id()).ok(), Some(None));
     assert_eq!(
         store
-            .query(&[Filter::new().ids([mine.id()])])
+            .query(&[Filter::new().ids([mine.id()]).expect("filter")])
             .unwrap_or_else(|e| panic!("{e}")),
         vec![]
     );
@@ -241,7 +245,7 @@ fn conformance(store: &impl EventStore) {
     );
     assert_eq!(
         ids(&store
-            .query(&[Filter::new().authors([bob().public_key()])])
+            .query(&[Filter::new().authors([bob().public_key()]).expect("filter")])
             .unwrap_or_else(|e| panic!("{e}"))),
         vec![target.id()],
     );
@@ -270,7 +274,9 @@ fn conformance(store: &impl EventStore) {
         vec![tagged.id(), target.id()],
     );
     let mut got = ids(&store
-        .query(&[Filter::new().ids([target.id(), tagged.id()])])
+        .query(&[Filter::new()
+            .ids([target.id(), tagged.id()])
+            .expect("filter")])
         .unwrap_or_else(|e| panic!("{e}")));
     got.sort();
     let mut want = vec![tagged.id(), target.id()];
@@ -349,9 +355,11 @@ fn conformance(store: &impl EventStore) {
     assert_eq!(
         store
             .count(&[
-                Filter::new().authors([alice().public_key()]),
-                Filter::new().authors([bob().public_key()]),
-                Filter::new().ids([a.id()]),
+                Filter::new()
+                    .authors([alice().public_key()])
+                    .expect("filter"),
+                Filter::new().authors([bob().public_key()]).expect("filter"),
+                Filter::new().ids([a.id()]).expect("filter"),
             ])
             .ok(),
         Some(2),
@@ -584,7 +592,9 @@ fn sqlite_interop() {
     let alice_filter = |k: u16| {
         Filter::new()
             .kinds([Kind::new(k)])
+            .expect("filter")
             .authors([nk_core::PublicKey::from_hex(&alice_pk).unwrap_or_else(|e| panic!("{e}"))])
+            .expect("filter")
     };
 
     // Open the TS-written database and collect the same result set.

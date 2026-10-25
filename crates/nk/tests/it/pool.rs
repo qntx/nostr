@@ -59,7 +59,7 @@ async fn fetch_merges_and_dedups() {
     let out = pool
         .fetch(
             &urls(&mock_a, &mock_b),
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
             Duration::from_secs(5),
         )
         .await
@@ -79,7 +79,7 @@ async fn fetch_isolates_failing_relay() {
     let out = pool
         .fetch(
             &[mock_a.url(), dead.clone()],
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
             Duration::from_secs(5),
         )
         .await
@@ -114,7 +114,7 @@ async fn count_and_reconcile_per_relay() {
     let counts = pool
         .count(
             &urls(&mock_a, &mock_b),
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
         )
         .await
         .expect("count");
@@ -124,7 +124,7 @@ async fn count_and_reconcile_per_relay() {
     let out = pool
         .reconcile(
             &urls(&mock_a, &mock_b),
-            Filter::new().kinds([Kind::new(1)]),
+            Filter::new().kinds([Kind::new(1)]).expect("filter"),
             vec![],
         )
         .await;
@@ -160,7 +160,7 @@ async fn subscribe_dedups_and_aggregates_eose() {
     let mut sub = pool
         .subscribe(
             &urls(&mock_a, &mock_b),
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
         )
         .await
         .expect("sub");
@@ -209,7 +209,7 @@ async fn subscribe_eose_waits_for_every_relay() {
     let mut sub = pool
         .subscribe(
             &urls(&mock_a, &mock_b),
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
         )
         .await
         .expect("sub");
@@ -287,7 +287,7 @@ async fn subscribe_relay_closed_then_stream_ends() {
     let mut sub = pool
         .subscribe(
             &urls(&mock_a, &mock_b),
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
         )
         .await
         .expect("sub");
@@ -339,7 +339,7 @@ async fn subscribe_reports_failed_relay() {
     let mut sub = pool
         .subscribe(
             &[mock_a.url(), dead.clone()],
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
         )
         .await
         .expect("sub");
@@ -375,7 +375,7 @@ async fn drop_pool_subscription_closes_every_relay() {
     let sub = pool
         .subscribe(
             &urls(&mock_a, &mock_b),
-            vec![Filter::new().kinds([Kind::new(1)])],
+            vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
         )
         .await
         .expect("sub");
@@ -418,8 +418,14 @@ async fn fetch_routed_sends_per_relay_filters() {
     mock_b.store().put(&z).expect("seed");
     // Plan: A gets kind 1, B gets kind 7 — each relay sees only its own.
     let mut plan = std::collections::BTreeMap::new();
-    plan.insert(mock_a.url(), vec![Filter::new().kinds([Kind::new(1)])]);
-    plan.insert(mock_b.url(), vec![Filter::new().kinds([Kind::new(7)])]);
+    plan.insert(
+        mock_a.url(),
+        vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
+    );
+    plan.insert(
+        mock_b.url(),
+        vec![Filter::new().kinds([Kind::new(7)]).expect("filter")],
+    );
     let out = pool.fetch_routed(plan, Duration::from_secs(5)).await;
     let req_a = mock_a
         .wait_for_frame("REQ", Duration::from_secs(2))
@@ -444,7 +450,10 @@ async fn subscribe_routed_empty_list_fails_that_relay() {
     let (mock_a, mock_b, pool) = pool(|_| {}).await;
     mock_a.store().put(&event("x", 1)).expect("seed");
     let mut plan = std::collections::BTreeMap::new();
-    plan.insert(mock_a.url(), vec![Filter::new().kinds([Kind::new(1)])]);
+    plan.insert(
+        mock_a.url(),
+        vec![Filter::new().kinds([Kind::new(1)]).expect("filter")],
+    );
     plan.insert(mock_b.url(), vec![]);
     let mut sub = pool.subscribe_routed(plan).await;
     let mut got_failed = false;
@@ -503,7 +512,7 @@ async fn gossip_route_drives_routed_fetch() {
     });
     assert!(g.ingest(&list));
     let y_pub = Keys::new(SecretKey::from_bytes([9; 32]).expect("key")).public_key();
-    let routing = g.route(&[Filter::new().authors([x_pub, y_pub])]);
+    let routing = g.route(&[Filter::new().authors([x_pub, y_pub]).expect("filter")]);
     let plan = routing.with_fallback(&[mock_b.url()]).expect("plan");
     assert!(plan.contains_key(&mock_a.url()), "X routes to A");
     assert!(plan.contains_key(&mock_b.url()), "Y falls back to B");

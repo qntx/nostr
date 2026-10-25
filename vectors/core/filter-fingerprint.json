@@ -45,7 +45,7 @@
           "ids": []
         }
       ],
-      "fingerprint": "[{\"ids\":[]}]"
+      "error": "FilterError"
     },
     {
       "filters": [

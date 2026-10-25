@@ -306,10 +306,10 @@ const HEX64_LOWER_RE = /^[0-9a-f]{64}$/;
 /**
  * Validates a wire filter per NIP-01: `ids`/`authors` are 64-hex arrays (normalized lowercase),
  * `kinds` are integers in 0..=65535, `since`/`until`/`limit` non-negative integers, `search` a
- * string, and `#<single letter>` arrays of strings (`#e`/`#p` lowercased). Multi-letter `#` keys
- * and unknown non-`#` keys are dropped; wrong types throw {@link MessageError}. Duplicate keys and
- * integer spellings (`1e3`, `1.0`, `-0`) need no handling: `JSON.parse` already applied last-wins
- * and normalized the numbers before this runs.
+ * string, and `#<single letter>` arrays of strings (`#e`/`#p` lowercased). No list may be empty.
+ * Multi-letter `#` keys and unknown non-`#` keys are dropped; wrong types throw
+ * {@link MessageError}. Duplicate keys and integer spellings (`1e3`, `1.0`, `-0`) need no handling:
+ * `JSON.parse` already applied last-wins and normalized the numbers before this runs.
  */
 function parseWireFilter(value: unknown, kind: string): Filter {
   if (!isRecord(value)) {
@@ -322,7 +322,11 @@ function parseWireFilter(value: unknown, kind: string): Filter {
       if (!/^#[a-zA-Z]$/.test(key)) {
         continue;
       }
-      if (!Array.isArray(v) || !v.every((x): x is string => typeof x === "string")) {
+      if (
+        !Array.isArray(v) ||
+        v.length === 0 ||
+        !v.every((x): x is string => typeof x === "string")
+      ) {
         throw fail();
       }
       if ((key === "#e" || key === "#p") && !v.every((x): x is string => HEX64_LOWER_RE.test(x))) {
@@ -332,6 +336,7 @@ function parseWireFilter(value: unknown, kind: string): Filter {
     } else if (key === "ids" || key === "authors") {
       if (
         !Array.isArray(v) ||
+        v.length === 0 ||
         !v.every((x): x is string => typeof x === "string" && HEX64_LOWER_RE.test(x))
       ) {
         throw fail();
@@ -340,6 +345,7 @@ function parseWireFilter(value: unknown, kind: string): Filter {
     } else if (key === "kinds") {
       if (
         !Array.isArray(v) ||
+        v.length === 0 ||
         !v.every(
           (x): x is number =>
             typeof x === "number" && Number.isSafeInteger(x) && x >= 0 && x <= 65535,

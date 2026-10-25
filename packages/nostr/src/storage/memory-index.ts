@@ -2,7 +2,7 @@ import { trimOldest } from "../core/collections.ts";
 import type { Event } from "../core/event.ts";
 import { compareEventsDesc, itemCompare, sortEvents } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
-import { filterTagConditions, matchFilter } from "../core/filter.ts";
+import { canonicalizeFilter, filterTagConditions, matchFilter } from "../core/filter.ts";
 import { eventAddress, formatEventAddress, parseEventAddressInput } from "../core/tag.ts";
 import { DeletionState } from "./deletion.ts";
 import { applyPutMemory, decidePut, outboxBoundKey } from "./put.ts";
@@ -144,7 +144,7 @@ export class MemoryIndex {
   query(filters: ReadonlyArray<Filter>): Event[] {
     const seen = new Set<string>();
     const events: Event[] = [];
-    for (const filter of filters) {
+    for (const filter of filters.map(canonicalizeFilter)) {
       for (const event of this.#matchedEvents(filter)) {
         if (seen.has(event.id)) {
           continue;
@@ -159,7 +159,7 @@ export class MemoryIndex {
 
   count(filters: ReadonlyArray<Filter>): number {
     const seen = new Set<string>();
-    for (const filter of filters) {
+    for (const filter of filters.map(canonicalizeFilter)) {
       for (const event of this.#matchedEvents(filter)) {
         seen.add(event.id);
       }
@@ -168,30 +168,31 @@ export class MemoryIndex {
   }
 
   negentropyItems(filter: Filter): NegentropyItem[] {
-    if (filter.limit === 0) {
+    const canonical = canonicalizeFilter(filter);
+    if (canonical.limit === 0) {
       return [];
     }
     const items: NegentropyItem[] = [];
-    const { limit } = filter;
-    if (filter.ids) {
+    const { limit } = canonical;
+    if (canonical.ids) {
       const seen = new Set<string>();
-      for (const raw of filter.ids) {
+      for (const raw of canonical.ids) {
         const event = this.#byId.get(raw.toLowerCase());
         if (!event || seen.has(event.id)) {
           continue;
         }
         seen.add(event.id);
-        if (this.#deletion.covers(event) || !matchFilter(filter, event)) {
+        if (this.#deletion.covers(event) || !matchFilter(canonical, event)) {
           continue;
         }
         items.push({ id: event.id, created_at: event.created_at });
       }
     } else {
-      const cursor = this.#candidates(filter);
+      const cursor = this.#candidates(canonical);
       while (cursor.value !== undefined) {
         const event = cursor.value;
         cursor.next();
-        if (this.#deletion.covers(event) || !matchFilter(filter, event)) {
+        if (this.#deletion.covers(event) || !matchFilter(canonical, event)) {
           continue;
         }
         items.push({ id: event.id, created_at: event.created_at });
@@ -200,13 +201,13 @@ export class MemoryIndex {
         }
       }
     }
-    if (filter.limit !== undefined) {
+    if (canonical.limit !== undefined) {
       // The ids path collected matches in filter order; cursor results are already canonical.
-      if (filter.ids) {
+      if (canonical.ids) {
         items.sort(compareEventsDesc);
       }
-      if (items.length > filter.limit) {
-        items.length = filter.limit;
+      if (items.length > canonical.limit) {
+        items.length = canonical.limit;
       }
     }
     items.sort(itemCompare);

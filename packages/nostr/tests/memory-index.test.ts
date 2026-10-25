@@ -110,7 +110,8 @@ function randomAuthors(): string[] | undefined {
     const pk = pick(PUBKEYS);
     authors.push(rnd() < 0.1 ? pk.toUpperCase() : pk);
   }
-  return authors;
+  // Empty lists are invalid caller input — omit the key instead.
+  return authors.length === 0 ? undefined : authors;
 }
 
 function randomKinds(): number[] | undefined {
@@ -121,7 +122,8 @@ function randomKinds(): number[] | undefined {
   for (let i = 0; i < Math.floor(rnd() * 4); i++) {
     kinds.push(pick([0, 1, 3, 5, 6, 7, 10002, 30023]));
   }
-  return kinds;
+  // Empty lists are invalid caller input — omit the key instead.
+  return kinds.length === 0 ? undefined : kinds;
 }
 
 function randomETags(corpus: Event[]): string[] | undefined {

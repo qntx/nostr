@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
-import { itemCompare, sortedEvents } from "../src/core/index.ts";
+import { FilterError, itemCompare, sortedEvents } from "../src/core/index.ts";
 import {
   EventBuilder,
   Keys,
@@ -490,8 +490,11 @@ describe("MemoryEventStore", () => {
     expect(v15.map((e) => e.id)).toStrictEqual([bMeta.id, aMeta.id]);
     await expect(store.count([metaFilter])).resolves.toBe(2);
 
-    await expect(store.query([{ authors: [], kinds: [Kind.TextNote] }])).resolves.toStrictEqual([]);
-    await expect(store.count([{ authors: [a.publicKey], kinds: [] }])).resolves.toBe(0);
+    // Empty list fields are invalid — the store's caller-filter normalizer rejects.
+    await expect(store.query([{ authors: [], kinds: [Kind.TextNote] }])).rejects.toThrow(
+      FilterError,
+    );
+    await expect(store.count([{ authors: [a.publicKey], kinds: [] }])).rejects.toThrow(FilterError);
     await expect(
       store.query([{ authors: [outsider.publicKey], kinds: [Kind.TextNote, Kind.Metadata] }]),
     ).resolves.toStrictEqual([outNote]);
@@ -573,9 +576,9 @@ describe("MemoryEventStore", () => {
       store.query([{ "#e": [eidOther], "#p": [keys.publicKey] }]),
     ).resolves.toStrictEqual([]);
     await expect(store.query([{ "#e": [eidOther] }])).resolves.toStrictEqual([otherE]);
-    await expect(store.query([{ "#e": [] }])).resolves.toStrictEqual([]);
-    await expect(store.count([{ "#e": [] }])).resolves.toBe(0);
-    await expect(store.query([{ "#p": [] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ "#e": [] }])).rejects.toThrow(FilterError);
+    await expect(store.count([{ "#e": [] }])).rejects.toThrow(FilterError);
+    await expect(store.query([{ "#p": [] }])).rejects.toThrow(FilterError);
     await expect(store.query([{ "#e": [eid], limit: 0 }])).resolves.toStrictEqual([]);
     await expect(store.query([{ "#e": [eid], since: 25, until: 35 }])).resolves.toStrictEqual([
       both,
@@ -709,16 +712,16 @@ describe("MemoryEventStore", () => {
     await expect(store.query([{ "#p": [mentioned.publicKey] }])).resolves.toStrictEqual([]);
   });
 
-  test("valueless e tag is not indexed; empty-string e tag is", async () => {
+  test("valueless e tag is not indexed; a `#e` query needs 64-hex values", async () => {
     const store = new MemoryEventStore();
     const keys = Keys.fromSecretKey(SK);
     const bare = EventBuilder.textNote("bare").tag(["e"]).createdAt(1).signWithKeys(keys);
     const empty = EventBuilder.textNote("empty").tag(["e", ""]).createdAt(2).signWithKeys(keys);
     await expect(store.put(bare)).resolves.toBe("accepted");
     await expect(store.put(empty)).resolves.toBe("accepted");
-    await expect(store.query([{ "#e": ["undefined"] }])).resolves.toStrictEqual([]);
-    const v36 = await store.query([{ "#e": [""] }]);
-    expect(v36.map((e) => e.id)).toStrictEqual([empty.id]);
+    // `#e` caller values must be 64-hex — `""` and arbitrary strings are FilterError.
+    await expect(store.query([{ "#e": ["undefined"] }])).rejects.toThrow(FilterError);
+    await expect(store.query([{ "#e": [""] }])).rejects.toThrow(FilterError);
     const v37 = await store.query([{ kinds: [Kind.TextNote] }]);
     expect(v37.map((e) => e.id)).toStrictEqual([empty.id, bare.id]);
   });
@@ -733,7 +736,7 @@ describe("MemoryEventStore", () => {
     const v38 = await store.query([{ ids: [note.id], "#e": [eid] }]);
     expect(v38.map((e) => e.id)).toStrictEqual([note.id]);
     await expect(store.query([{ ids: [note.id], "#e": [other] }])).resolves.toStrictEqual([]);
-    await expect(store.query([{ ids: [] }])).resolves.toStrictEqual([]);
+    await expect(store.query([{ ids: [] }])).rejects.toThrow(FilterError);
   });
 });
 

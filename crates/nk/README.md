@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let list = keys.sign_event(unsigned, &mut SysRng)?;
     let mut gossip = Gossip::new(GossipOptions::default());
     assert!(gossip.ingest(&list));
-    let routing = gossip.route(&[Filter::new().authors([keys.public_key()])]);
+    let routing = gossip.route(&[Filter::new().authors([keys.public_key()]).expect("filter")]);
     let plan = routing.with_fallback(&[RelayUrl::parse("wss://nos.lol")?])?;
     let pool = RelayPool::new(RelayOptions::default());
     let out = pool

@@ -9,6 +9,7 @@ export {
 export {
   CryptoError,
   EventValidationError,
+  FilterError,
   HexError,
   MessageError,
   NostrError,

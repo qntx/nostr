@@ -79,7 +79,11 @@ async fn publish_then_fetch() {
     publish_ok(&r, &ev).await;
     let out = r
         .fetch(
-            vec![Filter::new().tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])],
+            vec![
+                Filter::new()
+                    .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+                    .expect("filter"),
+            ],
             Duration::from_secs(10),
         )
         .await
@@ -110,7 +114,9 @@ async fn live_subscription() {
     let r = relay(|_| {});
     let mut sub = r
         .subscribe(vec![
-            Filter::new().tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()]),
+            Filter::new()
+                .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+                .expect("filter"),
         ])
         .await
         .expect("sub");
@@ -143,10 +149,11 @@ async fn count_matches() {
         publish_ok(&r, &event(&tag, content, 1, &k)).await;
     }
     let result = r
-        .count(vec![Filter::new().tag(
-            SingleLetterTag::new('t').expect("letter"),
-            [tag.as_str()],
-        )])
+        .count(vec![
+            Filter::new()
+                .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+                .expect("filter"),
+        ])
         .await
         .expect("count");
     assert_eq!(result.count, 3);
@@ -176,7 +183,9 @@ async fn reconcile_have_need() {
     let items = vec![relay_items[0], relay_items[1], (Timestamp::now(), x)];
     let out = r
         .reconcile(
-            Filter::new().tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()]),
+            Filter::new()
+                .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+                .expect("filter"),
             items,
         )
         .await
@@ -223,8 +232,11 @@ async fn restricted_read_needs_auth() {
     publish_ok(&relay(|_| {}), &dm).await;
     let filter = Filter::new()
         .kinds([Kind::new(4)])
+        .expect("filter")
         .authors([author.public_key()])
-        .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()]);
+        .expect("filter")
+        .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+        .expect("filter");
     // Unauthenticated reader — the whole filter group is restricted.
     let anon = relay(|_| {});
     let refused = anon
@@ -273,7 +285,11 @@ async fn pool_isolates_dead_relay() {
     let out = pool
         .fetch(
             &[url(), dead.clone()],
-            vec![Filter::new().tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])],
+            vec![
+                Filter::new()
+                    .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+                    .expect("filter"),
+            ],
             Duration::from_secs(10),
         )
         .await
@@ -307,7 +323,9 @@ async fn gossip_routes_to_outbox() {
     assert!(g.ingest(&list));
     let routing = g.route(&[Filter::new()
         .authors([author.public_key()])
-        .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])]);
+        .expect("filter")
+        .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+        .expect("filter")]);
     assert!(routing.remainder.is_empty(), "author routes to the outbox");
     assert_eq!(routing.per_relay.len(), 1);
     assert!(routing.per_relay.contains_key(&url()));
@@ -375,7 +393,9 @@ async fn client_end_to_end() {
             vec![
                 Filter::new()
                     .authors([author.public_key()])
-                    .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()]),
+                    .expect("filter")
+                    .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+                    .expect("filter"),
             ],
             Duration::from_secs(10),
         )
@@ -392,7 +412,9 @@ async fn client_end_to_end() {
     // → the reader's stream yields it.
     let mut sub = reader
         .subscribe(vec![
-            Filter::new().tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()]),
+            Filter::new()
+                .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+                .expect("filter"),
         ])
         .await
         .expect("subscribe");
@@ -455,7 +477,9 @@ async fn client_sync_both_ways() {
     let report = client
         .sync_with(
             &url(),
-            Filter::new().tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()]),
+            Filter::new()
+                .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])
+                .expect("filter"),
             sync_options,
         )
         .await
@@ -465,7 +489,7 @@ async fn client_sync_both_ways() {
     // The remote picked up the upload.
     let out = Relay::new(&url(), RelayOptions::default())
         .fetch(
-            vec![Filter::new().ids([local.id()])],
+            vec![Filter::new().ids([local.id()]).expect("filter")],
             Duration::from_secs(10),
         )
         .await
@@ -597,10 +621,12 @@ async fn nip46_remote_signer() {
     let bunker_relay = relay(|o| o.signer = Some(Arc::new(remote.clone())));
     let filter = Filter::new()
         .kinds([Kind::NOSTR_CONNECT])
+        .expect("filter")
         .tag(
             SingleLetterTag::new('p').expect("p"),
             [remote.public_key().to_hex()],
         )
+        .expect("filter")
         .limit(0);
     let mut sub = bunker_relay
         .subscribe(vec![filter])

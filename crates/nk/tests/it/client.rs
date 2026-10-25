@@ -121,7 +121,11 @@ async fn fetch_routes_known_author_and_falls_back() {
         .expect("observe");
     let out = client
         .fetch(
-            vec![Filter::new().authors([author_x.public_key(), author_y.public_key()])],
+            vec![
+                Filter::new()
+                    .authors([author_x.public_key(), author_y.public_key()])
+                    .expect("filter"),
+            ],
             Duration::from_secs(5),
         )
         .await
@@ -245,7 +249,11 @@ async fn insecure_gossip_url_falls_back() {
         .expect("observe");
     let out = c
         .fetch(
-            vec![Filter::new().authors([author_x.public_key()])],
+            vec![
+                Filter::new()
+                    .authors([author_x.public_key()])
+                    .expect("filter"),
+            ],
             Duration::from_secs(5),
         )
         .await
@@ -265,7 +273,11 @@ async fn subscribe_routes_and_ingests_live() {
         .await
         .expect("observe");
     let mut sub = client
-        .subscribe(vec![Filter::new().authors([author_x.public_key()])])
+        .subscribe(vec![
+            Filter::new()
+                .authors([author_x.public_key()])
+                .expect("filter"),
+        ])
         .await
         .expect("subscribe");
     // Only A got the REQ (X is routed; the default sees nothing).
@@ -301,7 +313,7 @@ async fn subscribe_ingests_relay_list_into_gossip() {
     let mut sub = client
         .subscribe_to(
             [&mock_d.url()],
-            vec![Filter::new().kinds([Kind::RELAY_LIST])],
+            vec![Filter::new().kinds([Kind::RELAY_LIST]).expect("filter")],
         )
         .await
         .expect("subscribe");

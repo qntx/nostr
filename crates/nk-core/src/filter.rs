@@ -25,6 +25,31 @@ use crate::time::Timestamp;
 /// The result type for this module.
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
+/// A constrained filter field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Field {
+    /// `ids`.
+    Ids,
+    /// `authors`.
+    Authors,
+    /// `kinds`.
+    Kinds,
+    /// A `#<letter>` tag condition.
+    Tag(char),
+}
+
+impl fmt::Display for Field {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ids => f.write_str("ids"),
+            Self::Authors => f.write_str("authors"),
+            Self::Kinds => f.write_str("kinds"),
+            Self::Tag(letter) => write!(f, "#{letter}"),
+        }
+    }
+}
+
 /// Why a filter operation failed.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -33,6 +58,19 @@ pub enum Error {
     #[error("invalid tag letter: {letter:?} is not a single ASCII letter")]
     InvalidTagLetter {
         /// The offending character.
+        letter: char,
+    },
+    /// A list field was given no values — empty lists are invalid both on
+    /// the wire and at construction.
+    #[error("empty filter list: {field}")]
+    EmptyList {
+        /// The constrained field.
+        field: Field,
+    },
+    /// A `#e`/`#p` caller value is not 64-char hex.
+    #[error("invalid #{letter} value: not 64-char hex")]
+    InvalidTagValue {
+        /// The tag-condition letter (`e` or `p`).
         letter: char,
     },
 }
@@ -81,8 +119,9 @@ type TagConditions = Box<[(SingleLetterTag, Box<[Box<str>]>)]>;
 
 /// A NIP-01 filter.
 ///
-/// List fields are sets: `None` leaves the field unconstrained while an
-/// empty set matches nothing.
+/// List fields are non-empty sets: `None` leaves the field unconstrained
+/// and the setters reject empty iterators, so an empty list can never
+/// exist in a filter.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Filter {
     ids: Option<Box<[EventId]>>,
@@ -103,45 +142,74 @@ impl Filter {
     }
 
     /// Restricts to these event ids.
-    #[must_use]
-    pub fn ids<I>(mut self, ids: I) -> Self
+    ///
+    /// # Errors
+    ///
+    /// [`Error::EmptyList`] when `ids` is empty.
+    pub fn ids<I>(mut self, ids: I) -> Result<Self>
     where
         I: IntoIterator<Item = EventId>,
     {
-        self.ids = Some(sorted_dedup(ids));
-        self
+        let ids = sorted_dedup(ids);
+        if ids.is_empty() {
+            return Err(Error::EmptyList { field: Field::Ids });
+        }
+        self.ids = Some(ids);
+        Ok(self)
     }
 
     /// Restricts to these author public keys.
-    #[must_use]
-    pub fn authors<I>(mut self, authors: I) -> Self
+    ///
+    /// # Errors
+    ///
+    /// [`Error::EmptyList`] when `authors` is empty.
+    pub fn authors<I>(mut self, authors: I) -> Result<Self>
     where
         I: IntoIterator<Item = PublicKey>,
     {
-        self.authors = Some(sorted_dedup(authors));
-        self
+        let authors = sorted_dedup(authors);
+        if authors.is_empty() {
+            return Err(Error::EmptyList {
+                field: Field::Authors,
+            });
+        }
+        self.authors = Some(authors);
+        Ok(self)
     }
 
     /// Restricts to these kinds.
-    #[must_use]
-    pub fn kinds<I>(mut self, kinds: I) -> Self
+    ///
+    /// # Errors
+    ///
+    /// [`Error::EmptyList`] when `kinds` is empty.
+    pub fn kinds<I>(mut self, kinds: I) -> Result<Self>
     where
         I: IntoIterator<Item = Kind>,
     {
-        self.kinds = Some(sorted_dedup(kinds));
-        self
+        let kinds = sorted_dedup(kinds);
+        if kinds.is_empty() {
+            return Err(Error::EmptyList {
+                field: Field::Kinds,
+            });
+        }
+        self.kinds = Some(kinds);
+        Ok(self)
     }
 
     /// Adds a single-letter tag condition: an event matches only when one of
     /// its `letter` tags carries a value in `values` (`#e`/`#p` values are
-    /// stored lowercase).
-    #[must_use]
-    pub fn tag<I, S>(mut self, letter: SingleLetterTag, values: I) -> Self
+    /// ASCII-lowercased on store).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::EmptyList`] when `values` is empty;
+    /// [`Error::InvalidTagValue`] when a `#e`/`#p` value is not 64-char hex.
+    pub fn tag<I, S>(mut self, letter: SingleLetterTag, values: I) -> Result<Self>
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        let values = tag_value_list(letter, values);
+        let values = tag_value_list(letter, values)?;
         let mut tags = self.tags.into_vec();
         match tags.binary_search_by_key(&letter, |(name, _)| *name) {
             Ok(index) => {
@@ -152,7 +220,7 @@ impl Filter {
             Err(index) => tags.insert(index, (letter, values)),
         }
         self.tags = tags.into_boxed_slice();
-        self
+        Ok(self)
     }
 
     /// Earliest `created_at`, inclusive.
@@ -205,7 +273,7 @@ impl Filter {
         self.kinds.as_deref()
     }
 
-    /// The sorted value list of a tag condition, if present (possibly
+    /// The sorted value list of a tag condition, if present (never
     /// empty).
     #[must_use]
     pub fn tag_values(&self, letter: SingleLetterTag) -> Option<&[Box<str>]> {
@@ -247,8 +315,9 @@ impl Filter {
 
     /// Local NIP-01 match; `search` is ignored. Allocates nothing.
     ///
-    /// `#e`/`#p` conditions compare the event tag value and the filter
-    /// values case-insensitively; `since`/`until` bounds are inclusive.
+    /// `#e`/`#p` conditions compare the stored (lowercased) filter values
+    /// against the event tag value verbatim; `since`/`until` bounds are
+    /// inclusive.
     #[must_use]
     pub fn matches(&self, event: &Event) -> bool {
         if self
@@ -294,12 +363,6 @@ impl Filter {
     /// already deduplicated.
     #[must_use]
     pub fn limit_bound(&self) -> Option<usize> {
-        if self.ids.as_deref().is_some_and(<[_]>::is_empty)
-            || self.kinds.as_deref().is_some_and(<[_]>::is_empty)
-            || self.authors.as_deref().is_some_and(<[_]>::is_empty)
-        {
-            return Some(0);
-        }
         let mut limit = self.ids.as_deref().map(<[_]>::len);
         if let Some(hint) = self.limit {
             let hint = usize::try_from(hint).unwrap_or(usize::MAX);
@@ -312,7 +375,7 @@ impl Filter {
             if all_replaceable {
                 let per_author = self
                     .tag_values(SingleLetterTag(b'd'))
-                    .map_or(1, |values| values.len().max(1));
+                    .map_or(1, <[_]>::len);
                 let bound = authors
                     .len()
                     .saturating_mul(kinds.len())
@@ -472,28 +535,41 @@ fn tag_value_hit(letter: SingleLetterTag, values: &[Box<str>], event: &Event) ->
     })
 }
 
-/// Lowercases `#e`/`#p` values and sorts them by UTF-16 code units — the
-/// canonical serialization order, which is also the binary-search order.
-fn tag_value_list<I, S>(letter: SingleLetterTag, values: I) -> Box<[Box<str>]>
+/// `#e`/`#p` values are ASCII-lowercased and must be 64-char hex; other
+/// letters stay verbatim. Sorted by UTF-16 code units — the canonical
+/// serialization order, which is also the binary-search order.
+fn tag_value_list<I, S>(letter: SingleLetterTag, values: I) -> Result<Box<[Box<str>]>>
 where
     I: IntoIterator<Item = S>,
     S: Into<String>,
 {
-    let lowercase = matches!(letter.as_char(), 'e' | 'p');
+    let hex = matches!(letter.as_char(), 'e' | 'p');
     let mut values: Vec<Box<str>> = values
         .into_iter()
         .map(|value| {
             let value: String = value.into();
-            if lowercase {
-                value.to_lowercase().into_boxed_str()
+            if hex {
+                value.to_ascii_lowercase().into_boxed_str()
             } else {
                 value.into_boxed_str()
             }
         })
         .collect();
+    if values.is_empty() {
+        return Err(Error::EmptyList {
+            field: Field::Tag(letter.as_char()),
+        });
+    }
+    if hex {
+        for value in &values {
+            hex::decode_wire::<32>(value).map_err(|_| Error::InvalidTagValue {
+                letter: letter.as_char(),
+            })?;
+        }
+    }
     values.sort_by(|a, b| utf16_units(a).cmp(utf16_units(b)));
     values.dedup();
-    values.into_boxed_slice()
+    Ok(values.into_boxed_slice())
 }
 
 /// Parses a `#x` object key into a [`SingleLetterTag`]; `None` for
@@ -511,11 +587,11 @@ fn single_letter_key(key: &str) -> Option<SingleLetterTag> {
 
 impl<'de> Deserialize<'de> for Filter {
     /// Wire-filter rules: keys are unique; `ids`/`authors` are arrays of
-    /// 64-char hex (any case, stored lowercase), `kinds` plain integers in
-    /// `0..=65535`, `since`/`until`/`limit` plain non-negative integers,
-    /// `search` a string, `#<letter>` arrays of strings (`#e`/`#p`
-    /// lowercased). Multi-letter `#` keys and unknown non-`#` keys are
-    /// dropped; wrong types fail.
+    /// 64-char lowercase hex, `kinds` plain integers in `0..=65535`,
+    /// `since`/`until`/`limit` plain non-negative integers, `search` a
+    /// string, `#<letter>` arrays of strings (`#e`/`#p` lowercase 64-hex).
+    /// Every list must be non-empty. Multi-letter `#` keys and unknown
+    /// non-`#` keys are dropped; wrong types fail.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct FilterVisitor;
 
@@ -537,16 +613,31 @@ impl<'de> Deserialize<'de> for Filter {
                     match key.as_ref() {
                         "ids" => {
                             let list = map.next_value::<WireHexList<32, true>>()?.0;
+                            if list.is_empty() {
+                                return Err(serde::de::Error::custom(Error::EmptyList {
+                                    field: Field::Ids,
+                                }));
+                            }
                             filter.ids =
                                 Some(sorted_dedup(list.into_iter().map(EventId::from_bytes)));
                         }
                         "authors" => {
                             let list = map.next_value::<WireHexList<32, true>>()?.0;
+                            if list.is_empty() {
+                                return Err(serde::de::Error::custom(Error::EmptyList {
+                                    field: Field::Authors,
+                                }));
+                            }
                             filter.authors =
                                 Some(sorted_dedup(list.into_iter().map(PublicKey::from_bytes)));
                         }
                         "kinds" => {
                             let list = map.next_value::<WireU16List>()?.0;
+                            if list.is_empty() {
+                                return Err(serde::de::Error::custom(Error::EmptyList {
+                                    field: Field::Kinds,
+                                }));
+                            }
                             filter.kinds = Some(sorted_dedup(list.into_iter().map(Kind::new)));
                         }
                         "since" => {
@@ -576,7 +667,8 @@ impl<'de> Deserialize<'de> for Filter {
                                             .map_err(serde::de::Error::custom)?;
                                     }
                                 }
-                                let values = tag_value_list(letter, raw);
+                                let values = tag_value_list(letter, raw)
+                                    .map_err(serde::de::Error::custom)?;
                                 match filter.tags.binary_search_by_key(&letter, |(l, _)| *l) {
                                     Ok(index) => {
                                         if let Some(slot) = filter.tags.get_mut(index) {
@@ -739,9 +831,13 @@ mod tests {
     fn builders_and_accessors() {
         let filter = Filter::new()
             .ids([EventId::from_hex(ID_A).unwrap()])
+            .unwrap()
             .authors([pubkey()])
+            .unwrap()
             .kinds([Kind::TEXT_NOTE])
+            .unwrap()
             .tag(letter('t'), ["nostr"])
+            .unwrap()
             .since(Timestamp::from_secs(10))
             .until(Timestamp::from_secs(20))
             .limit(5)
@@ -761,7 +857,9 @@ mod tests {
     fn tag_builder_lowercases_e_and_p_values() {
         let filter = Filter::new()
             .tag(letter('e'), [ID_A.to_uppercase()])
-            .tag(letter('t'), ["NoStr"]);
+            .unwrap()
+            .tag(letter('t'), ["NoStr"])
+            .unwrap();
         assert!(
             filter
                 .tag_values(letter('e'))
@@ -781,12 +879,12 @@ mod tests {
         assert!(
             Filter::new()
                 .ids([EventId::from_hex(ID_A).unwrap()])
+                .unwrap()
                 .matches(&event)
         );
-        assert!(!Filter::new().ids([]).matches(&event));
-        assert!(Filter::new().kinds([Kind::new(1)]).matches(&event));
-        assert!(!Filter::new().kinds([Kind::new(2)]).matches(&event));
-        assert!(Filter::new().authors([pubkey()]).matches(&event));
+        assert!(Filter::new().kinds([Kind::new(1)]).unwrap().matches(&event));
+        assert!(!Filter::new().kinds([Kind::new(2)]).unwrap().matches(&event));
+        assert!(Filter::new().authors([pubkey()]).unwrap().matches(&event));
         assert!(
             Filter::new()
                 .since(Timestamp::from_secs(1000))
@@ -810,16 +908,31 @@ mod tests {
     fn matches_tag_conditions() {
         let bare = event(&[&["t"]], 1, 1);
         let event = event(&[&["t", "nostr"], &["d", "post"]], 1, 1);
-        assert!(Filter::new().tag(letter('t'), ["nostr"]).matches(&event));
-        assert!(!Filter::new().tag(letter('t'), ["other"]).matches(&event));
         assert!(
-            !Filter::new()
-                .tag(letter('t'), Vec::<String>::new())
+            Filter::new()
+                .tag(letter('t'), ["nostr"])
+                .unwrap()
                 .matches(&event)
         );
-        assert!(!Filter::new().tag(letter('x'), ["nostr"]).matches(&event));
+        assert!(
+            !Filter::new()
+                .tag(letter('t'), ["other"])
+                .unwrap()
+                .matches(&event)
+        );
+        assert!(
+            !Filter::new()
+                .tag(letter('x'), ["nostr"])
+                .unwrap()
+                .matches(&event)
+        );
         // A valueless tag never satisfies a # condition.
-        assert!(!Filter::new().tag(letter('t'), ["nostr"]).matches(&bare));
+        assert!(
+            !Filter::new()
+                .tag(letter('t'), ["nostr"])
+                .unwrap()
+                .matches(&bare)
+        );
     }
 
     #[test]
@@ -834,39 +947,50 @@ mod tests {
         assert!(
             !Filter::new()
                 .tag(letter('e'), [ID_A.to_uppercase()])
+                .unwrap()
                 .matches(&ev)
         );
-        assert!(!Filter::new().tag(letter('p'), [PK]).matches(&ev));
+        assert!(!Filter::new().tag(letter('p'), [PK]).unwrap().matches(&ev));
         let lower = event(&[&["e", ID_A], &["p", PK]], 1, 1);
         assert!(
             Filter::new()
                 .tag(letter('e'), [ID_A.to_uppercase()])
+                .unwrap()
                 .matches(&lower)
         );
-        assert!(Filter::new().tag(letter('p'), [PK]).matches(&lower));
+        assert!(
+            Filter::new()
+                .tag(letter('p'), [PK])
+                .unwrap()
+                .matches(&lower)
+        );
         // Non-hex letters stay case sensitive.
         let ev_t = event(&[&["t", "Nostr"]], 1, 1);
-        assert!(!Filter::new().tag(letter('t'), ["nostr"]).matches(&ev_t));
+        assert!(
+            !Filter::new()
+                .tag(letter('t'), ["nostr"])
+                .unwrap()
+                .matches(&ev_t)
+        );
     }
 
     #[test]
     fn limit_bound_counts_unique_values() {
         assert_eq!(Filter::new().limit_bound(), None);
-        assert_eq!(Filter::new().ids([]).limit_bound(), Some(0));
-        assert_eq!(Filter::new().kinds([]).limit_bound(), Some(0));
-        assert_eq!(Filter::new().authors([]).limit_bound(), Some(0));
         assert_eq!(
             Filter::new()
                 .ids([
                     EventId::from_hex(ID_A).unwrap(),
                     EventId::from_hex(ID_A).unwrap()
                 ])
+                .unwrap()
                 .limit_bound(),
             Some(1)
         );
         assert_eq!(
             Filter::new()
                 .ids([EventId::from_hex(ID_A).unwrap()])
+                .unwrap()
                 .limit(10)
                 .limit_bound(),
             Some(1)
@@ -875,15 +999,20 @@ mod tests {
         assert_eq!(
             Filter::new()
                 .kinds([Kind::new(0), Kind::new(3)])
+                .unwrap()
                 .authors([pubkey()])
+                .unwrap()
                 .limit_bound(),
             Some(2)
         );
         assert_eq!(
             Filter::new()
                 .kinds([Kind::new(30023)])
+                .unwrap()
                 .authors([pubkey()])
+                .unwrap()
                 .tag(letter('d'), ["a", "b"])
+                .unwrap()
                 .limit_bound(),
             Some(2)
         );
@@ -891,7 +1020,9 @@ mod tests {
         assert_eq!(
             Filter::new()
                 .kinds([Kind::new(1)])
+                .unwrap()
                 .authors([pubkey()])
+                .unwrap()
                 .limit_bound(),
             None
         );
@@ -899,7 +1030,9 @@ mod tests {
             Filter::new()
                 .limit(5)
                 .kinds([Kind::new(0), Kind::new(3)])
+                .unwrap()
                 .authors([pubkey()])
+                .unwrap()
                 .limit_bound(),
             Some(2)
         );
@@ -909,10 +1042,15 @@ mod tests {
     fn canonical_json_matches_ts_key_and_value_order() {
         let filter = Filter::new()
             .tag(letter('a'), ["x"])
+            .unwrap()
             .tag(letter('A'), ["y"])
+            .unwrap()
             .authors([pubkey()])
+            .unwrap()
             .ids([EventId::from_hex(ID_A).unwrap()])
+            .unwrap()
             .kinds([Kind::new(3), Kind::new(1)])
+            .unwrap()
             .limit(2)
             .search("s")
             .since(Timestamp::from_secs(4))
@@ -930,20 +1068,43 @@ mod tests {
     fn canonical_json_sorts_tag_values_by_utf16() {
         // UTF-16 order: "z" (0x007A) < "😀" (0xD83D) < "\u{FFFD}" (0xFFFD);
         // UTF-8 order would put "\u{FFFD}" before "😀".
-        let filter = Filter::new().tag(letter('t'), ["\u{FFFD}", "😀", "z"]);
+        let filter = Filter::new()
+            .tag(letter('t'), ["\u{FFFD}", "😀", "z"])
+            .unwrap();
         assert_eq!(filter.to_json(), "{\"#t\":[\"z\",\"😀\",\"\u{FFFD}\"]}");
     }
 
     #[test]
-    fn canonical_json_omits_none_and_keeps_empty_sets() {
+    fn empty_lists_are_rejected_at_construction() {
         assert_eq!(Filter::new().to_json(), "{}");
-        assert_eq!(Filter::new().ids([]).to_json(), "{\"ids\":[]}");
-        assert_eq!(
-            Filter::new()
-                .tag(letter('t'), Vec::<String>::new())
-                .to_json(),
-            "{\"#t\":[]}"
-        );
+        assert!(matches!(
+            Filter::new().ids([]),
+            Err(Error::EmptyList { field: Field::Ids })
+        ));
+        assert!(matches!(
+            Filter::new().authors([]),
+            Err(Error::EmptyList {
+                field: Field::Authors
+            })
+        ));
+        assert!(matches!(
+            Filter::new().kinds([]),
+            Err(Error::EmptyList {
+                field: Field::Kinds
+            })
+        ));
+        assert!(matches!(
+            Filter::new().tag(letter('t'), Vec::<String>::new()),
+            Err(Error::EmptyList {
+                field: Field::Tag(_)
+            })
+        ));
+        assert!(matches!(
+            Filter::new().tag(letter('e'), ["nothex"]),
+            Err(Error::InvalidTagValue { .. })
+        ));
+        assert!(Filter::new().tag(letter('e'), [&ID_A.to_uppercase()]).is_ok());
+        assert!(Filter::new().tag(letter('t'), ["nothex"]).is_ok());
     }
 
     #[test]
@@ -1004,6 +1165,11 @@ mod tests {
             json!({"search": 1}),
             json!({"#e": "x"}),
             json!({"#t": [1]}),
+            json!({"ids": []}),
+            json!({"authors": []}),
+            json!({"kinds": []}),
+            json!({"#t": []}),
+            json!({"#e": []}),
         ] {
             assert!(
                 serde_json::from_value::<Filter>(raw.clone()).is_err(),
@@ -1016,8 +1182,8 @@ mod tests {
     fn fingerprint_sorts_serialized_filters_by_utf16() {
         // "😀" sorts before "\u{FFFD}" under UTF-16 code units.
         let filters = [
-            Filter::new().tag(letter('t'), ["\u{FFFD}"]),
-            Filter::new().tag(letter('t'), ["😀"]),
+            Filter::new().tag(letter('t'), ["\u{FFFD}"]).unwrap(),
+            Filter::new().tag(letter('t'), ["😀"]).unwrap(),
         ];
         assert_eq!(
             fingerprint(&filters),
@@ -1031,7 +1197,9 @@ mod tests {
 
     #[test]
     fn fingerprint_of_parsed_filter_is_canonical() {
-        let filter = Filter::new().ids([EventId::from_hex(ID_A).unwrap()]);
+        let filter = Filter::new()
+            .ids([EventId::from_hex(ID_A).unwrap()])
+            .unwrap();
         assert_eq!(
             fingerprint(&[filter]),
             "[{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]"
@@ -1056,7 +1224,9 @@ mod tests {
         }
         let filter = Filter::new()
             .kinds([Kind::TEXT_NOTE])
+            .unwrap()
             .tag(letter('t'), ["gm"])
+            .unwrap()
             .search("gm");
         let mut a = Len(0);
         filter.hash(&mut a);

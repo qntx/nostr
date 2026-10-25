@@ -419,53 +419,57 @@ const evD = canonEvent({
   sig: "c".repeat(128),
 });
 
-const matchFilterCases: Array<{ filter: Filter; event: Event; matches: boolean }> = [
-  { filter: { ids: ["a".repeat(64)] }, event: evA, matches: true },
-  { filter: { ids: ["A".repeat(64)] }, event: evA, matches: true },
-  { filter: { ids: ["b".repeat(64)] }, event: evA, matches: false },
-  { filter: { ids: [] }, event: evA, matches: false },
-  { filter: { authors: [PK.toUpperCase()] }, event: evA, matches: true },
-  { filter: { authors: ["f".repeat(64)] }, event: evA, matches: false },
-  { filter: { authors: [] }, event: evA, matches: false },
-  { filter: { kinds: [1, 7] }, event: evA, matches: true },
-  { filter: { kinds: [6] }, event: evA, matches: false },
-  { filter: { since: 1000 }, event: evA, matches: true },
-  { filter: { since: 1001 }, event: evA, matches: false },
-  { filter: { until: 1000 }, event: evA, matches: true },
-  { filter: { until: 999 }, event: evA, matches: false },
-  { filter: { "#e": ["b".repeat(64)] }, event: evA, matches: true },
-  { filter: { "#e": ["B".repeat(64)] }, event: evA, matches: true },
-  { filter: { "#e": ["c".repeat(64)] }, event: evA, matches: false },
-  { filter: { "#p": [PK] }, event: evA, matches: true },
-  { filter: { "#p": [PK.toUpperCase()] }, event: evA, matches: true },
-  { filter: { "#t": ["nostr"] }, event: evA, matches: true },
-  { filter: { "#t": ["NOSTR"] }, event: evA, matches: false },
-  // Multi-letter # keys are outside NIP-01 and ignored entirely.
-  { filter: { "#custom": ["v1"] }, event: evB, matches: true },
-  { filter: { "#custom": ["v2"] }, event: evB, matches: true },
-  { filter: { "#d": ["post"] }, event: evB, matches: true },
-  { filter: { "#a": [`30023:${PK}:post`] }, event: evB, matches: true },
-  { filter: { "#missing": ["x"] }, event: evA, matches: true },
-  { filter: { "#1": ["x"] }, event: evA, matches: true },
-  { filter: { "#e": ["b".repeat(64)] }, event: evC, matches: true },
-  { filter: { "#p": [PK] }, event: evC, matches: true },
-  { filter: { "#A": ["x"] }, event: evD, matches: true },
-  { filter: { "#a": ["x"] }, event: evD, matches: false },
-  { filter: { "#a": ["y"] }, event: evD, matches: true },
-  { filter: { since: 2000, until: 2000 }, event: evB, matches: true },
-  { filter: { ids: ["a".repeat(64), "A".repeat(64)] }, event: evA, matches: true },
-  { filter: {}, event: evA, matches: true },
-  {
-    filter: { kinds: [1], authors: [PK], since: 500, until: 1500, "#e": ["b".repeat(64)] },
-    event: evA,
-    matches: true,
-  },
-  {
-    filter: { kinds: [1], "#e": ["b".repeat(64)], "#t": ["other"] },
-    event: evA,
-    matches: false,
-  },
-];
+const matchFilterCases: Array<{ filter: Filter; event: Event; matches?: boolean; error?: string }> =
+  [
+    { filter: { ids: ["a".repeat(64)] }, event: evA, matches: true },
+    { filter: { ids: ["A".repeat(64)] }, event: evA, matches: true },
+    { filter: { ids: ["b".repeat(64)] }, event: evA, matches: false },
+    { filter: { ids: [] }, event: evA, error: "FilterError" },
+    { filter: { authors: [PK.toUpperCase()] }, event: evA, matches: true },
+    { filter: { authors: ["f".repeat(64)] }, event: evA, matches: false },
+    { filter: { authors: [] }, event: evA, error: "FilterError" },
+    { filter: { kinds: [] }, event: evA, error: "FilterError" },
+    { filter: { "#t": [] }, event: evA, error: "FilterError" },
+    { filter: { "#e": ["zz"] }, event: evA, error: "FilterError" },
+    { filter: { kinds: [1, 7] }, event: evA, matches: true },
+    { filter: { kinds: [6] }, event: evA, matches: false },
+    { filter: { since: 1000 }, event: evA, matches: true },
+    { filter: { since: 1001 }, event: evA, matches: false },
+    { filter: { until: 1000 }, event: evA, matches: true },
+    { filter: { until: 999 }, event: evA, matches: false },
+    { filter: { "#e": ["b".repeat(64)] }, event: evA, matches: true },
+    { filter: { "#e": ["B".repeat(64)] }, event: evA, matches: true },
+    { filter: { "#e": ["c".repeat(64)] }, event: evA, matches: false },
+    { filter: { "#p": [PK] }, event: evA, matches: true },
+    { filter: { "#p": [PK.toUpperCase()] }, event: evA, matches: true },
+    { filter: { "#t": ["nostr"] }, event: evA, matches: true },
+    { filter: { "#t": ["NOSTR"] }, event: evA, matches: false },
+    // Multi-letter # keys are outside NIP-01 and ignored entirely.
+    { filter: { "#custom": ["v1"] }, event: evB, matches: true },
+    { filter: { "#custom": ["v2"] }, event: evB, matches: true },
+    { filter: { "#d": ["post"] }, event: evB, matches: true },
+    { filter: { "#a": [`30023:${PK}:post`] }, event: evB, matches: true },
+    { filter: { "#missing": ["x"] }, event: evA, matches: true },
+    { filter: { "#1": ["x"] }, event: evA, matches: true },
+    { filter: { "#e": ["b".repeat(64)] }, event: evC, matches: true },
+    { filter: { "#p": [PK] }, event: evC, matches: true },
+    { filter: { "#A": ["x"] }, event: evD, matches: true },
+    { filter: { "#a": ["x"] }, event: evD, matches: false },
+    { filter: { "#a": ["y"] }, event: evD, matches: true },
+    { filter: { since: 2000, until: 2000 }, event: evB, matches: true },
+    { filter: { ids: ["a".repeat(64), "A".repeat(64)] }, event: evA, matches: true },
+    { filter: {}, event: evA, matches: true },
+    {
+      filter: { kinds: [1], authors: [PK], since: 500, until: 1500, "#e": ["b".repeat(64)] },
+      event: evA,
+      matches: true,
+    },
+    {
+      filter: { kinds: [1], "#e": ["b".repeat(64)], "#t": ["other"] },
+      event: evA,
+      matches: false,
+    },
+  ];
 
 const filterLimitInputs: Filter[] = [
   {},
@@ -487,10 +491,13 @@ const filterLimitInputs: Filter[] = [
   { kinds: [30023], authors: [PK], "#d": ["a", "a"] },
   { ids: ["a".repeat(64), "a".repeat(64)], limit: 10 },
 ];
-const filterLimitCases = filterLimitInputs.map((filter) => ({
-  filter,
-  limit: getFilterLimit(filter),
-}));
+const filterLimitCases = filterLimitInputs.map((filter) => {
+  try {
+    return { filter, limit: getFilterLimit(filter) };
+  } catch (error) {
+    return { filter, error: error instanceof Error ? error.constructor.name : "Error" };
+  }
+});
 
 // Unknown non-# keys and multi-letter # keys are dropped on canonicalization
 // in both languages, so vector inputs may carry them.
@@ -510,10 +517,13 @@ const canonicalizeInputs = [
   { limit: 0, search: "s", since: 2, until: 9 },
   { kinds: [1], zzz: 1, custom: ["b", "a"] },
 ];
-const canonicalizeCases = canonicalizeInputs.map((input) => ({
-  input,
-  canonicalJson: JSON.stringify(canonicalizeFilter(input as Filter)),
-}));
+const canonicalizeCases = canonicalizeInputs.map((input) => {
+  try {
+    return { input, canonicalJson: JSON.stringify(canonicalizeFilter(input)) };
+  } catch (error) {
+    return { input, error: error instanceof Error ? error.constructor.name : "Error" };
+  }
+});
 
 const fingerprintInputs: Filter[][] = [
   [{ kinds: [1] }],
@@ -528,10 +538,13 @@ const fingerprintInputs: Filter[][] = [
   [{ kinds: [1], "#custom": ["x"] }],
   [{ ids: ["A".repeat(64), "a".repeat(64)] }],
 ];
-const fingerprintCases = fingerprintInputs.map((filters) => ({
-  filters,
-  fingerprint: filterFingerprint(filters),
-}));
+const fingerprintCases = fingerprintInputs.map((filters) => {
+  try {
+    return { filters, fingerprint: filterFingerprint(filters) };
+  } catch (error) {
+    return { filters, error: error instanceof Error ? error.constructor.name : "Error" };
+  }
+});
 
 // Canonical wire messages: encode(parse(raw)) === raw unless `encoded` differs.
 const evMsg = encodeClientMessage(["EVENT", baseEvent]);
@@ -548,8 +561,8 @@ const clientMessages = [
   },
   {
     // encodeClientMessage canonicalizes; parse drops the unknown non-# key.
-    raw: '["REQ","sub",{"foo":1,"ids":[]}]',
-    encoded: '["REQ","sub",{"ids":[]}]',
+    raw: `["REQ","sub",{"foo":1,"ids":["${"a".repeat(64)}"]}]`,
+    encoded: `["REQ","sub",{"ids":["${"a".repeat(64)}"]}]`,
   },
   {
     raw: encodeClientMessage([
@@ -660,6 +673,14 @@ const invalidClientMessages = [
   '["REQ",1,{"kinds":[1]}]',
   '["REQ","sub",42]',
   '["REQ","sub",null]',
+  '["REQ","s",{"ids":[]}]',
+  '["REQ","s",{"authors":[]}]',
+  '["REQ","s",{"kinds":[]}]',
+  '["REQ","s",{"#t":[]}]',
+  '["REQ","s",{"#e":[]}]',
+  '["REQ","sub",{"foo":1,"ids":[]}]',
+  '["COUNT","s",{"kinds":[]}]',
+  '["NEG-OPEN","sub",{"kinds":[]},"aabb"]',
   `["REQ","s",{"ids":["${"z".repeat(64)}"]}]`,
   '["REQ","s",{"ids":[123]}]',
   `["REQ","s",{"ids":"${"a".repeat(64)}"}]`,
@@ -899,11 +920,12 @@ emit("core.event.validate", "event-validate.json", [
 emit(
   "core.filter.match",
   "filter-match.json",
-  matchFilterCases.map((c) => ({
-    filter: c.filter,
-    event: c.event,
-    matches: matchFilter(c.filter, c.event),
-  })),
+  matchFilterCases.map((c) => {
+    if (c.error !== undefined) {
+      return { filter: c.filter, event: c.event, error: c.error };
+    }
+    return { filter: c.filter, event: c.event, matches: matchFilter(c.filter, c.event) };
+  }),
 );
 emit("core.filter.limit", "filter-limit.json", filterLimitCases);
 emit("core.filter.canonicalize", "filter-canonicalize.json", canonicalizeCases);

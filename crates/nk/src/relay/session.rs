@@ -911,7 +911,10 @@ mod tests {
     fn non_matching_event_dropped() {
         let mut s = Session::new(false);
         let id = sub_id();
-        s.open_sub(&id, vec![Filter::new().kinds([Kind::new(7)])]);
+        s.open_sub(
+            &id,
+            vec![Filter::new().kinds([Kind::new(7)]).expect("filter")],
+        );
         drop(drain(&mut s));
         let ev = event("x", 1);
         s.handle(msg(&format!(

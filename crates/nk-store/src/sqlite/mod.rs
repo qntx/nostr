@@ -120,10 +120,10 @@ struct Plan {
     params: Vec<Value>,
 }
 
-/// Compiles `filter` like the reference `compileFilter`: `None` means the
-/// filter can match nothing (an empty list field), otherwise the cartesian
-/// product of each field's IN-chunk arms.
-fn compile_filter(filter: &Filter) -> Option<Vec<Plan>> {
+/// Compiles `filter` like the reference `compileFilter`: the cartesian
+/// product of each field's IN-chunk arms. List fields are never empty —
+/// `Filter` rejects them at construction and on the wire.
+fn compile_filter(filter: &Filter) -> Vec<Plan> {
     let mut variants: Vec<Vec<Plan>> = Vec::new();
     let mut push_in = |clause: &str, values: Vec<Value>| {
         variants.push(
@@ -137,27 +137,18 @@ fn compile_filter(filter: &Filter) -> Option<Vec<Plan>> {
         );
     };
     if let Some(ids) = filter.get_ids() {
-        if ids.is_empty() {
-            return None;
-        }
         push_in(
             "id",
             ids.iter().map(|id| Value::from(id.to_hex())).collect(),
         );
     }
     if let Some(authors) = filter.get_authors() {
-        if authors.is_empty() {
-            return None;
-        }
         push_in(
             "pubkey",
             authors.iter().map(|pk| Value::from(pk.to_hex())).collect(),
         );
     }
     if let Some(kinds) = filter.get_kinds() {
-        if kinds.is_empty() {
-            return None;
-        }
         push_in(
             "kind",
             kinds
@@ -182,9 +173,6 @@ fn compile_filter(filter: &Filter) -> Option<Vec<Plan>> {
         let Some(values) = filter.tag_values(letter) else {
             continue;
         };
-        if values.is_empty() {
-            return None;
-        }
         let name = letter.as_char().to_string();
         variants.push(
             chunk(values)
@@ -221,7 +209,7 @@ fn compile_filter(filter: &Filter) -> Option<Vec<Plan>> {
         }
         plans = next;
     }
-    Some(plans)
+    plans
 }
 
 /// The put-decision lookup over transaction state.
@@ -618,9 +606,7 @@ impl SqliteStore {
         if filter.get_limit() == Some(0) {
             return Ok(Vec::new());
         }
-        let Some(plans) = compile_filter(filter) else {
-            return Ok(Vec::new());
-        };
+        let plans = compile_filter(filter);
         let limit = filter.get_limit();
         let tail = " ORDER BY created_at DESC, id ASC";
         let mut seen: HashSet<EventId> = HashSet::new();
@@ -678,9 +664,7 @@ impl SqliteStore {
         if filter.get_limit() == Some(0) {
             return Ok(Vec::new());
         }
-        let Some(plans) = compile_filter(filter) else {
-            return Ok(Vec::new());
-        };
+        let plans = compile_filter(filter);
         let limit = filter.get_limit();
         let mut seen: HashSet<EventId> = HashSet::new();
         let mut items: Vec<NegentropyItem> = Vec::new();

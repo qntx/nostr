@@ -1,6 +1,7 @@
 // oxlint-disable eslint/no-await-in-loop -- SqlDriver statements are issued sequentially; drivers are not required to support overlapping statements on one connection
 import { compareEventsDesc, itemCompare, sortEvents } from "../core/event.ts";
 import type { Event } from "../core/event.ts";
+import { canonicalizeFilter, filterTagConditions } from "../core/filter.ts";
 import type { Filter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
 import { SerialQueue } from "../core/serial.ts";
@@ -179,9 +180,10 @@ type FilterPlan = {
  * Compile one NIP-01 filter into query variants. `IN` lists are chunked so a variant never binds
  * more than {@link IN_CHUNK} values per list; variants are the cartesian product of chunks across
  * constrained fields. Multi-letter `#` keys are not NIP-01 tag conditions and are skipped, exactly
- * like `matchFilter`. Returns `undefined` when an empty list field makes the filter match nothing.
+ * like `matchFilter`. List fields are never empty — the normalizer rejects them first.
  */
-function compileFilter(filter: Filter): FilterPlan[] | undefined {
+function compileFilter(filter: Filter): FilterPlan[] {
+  const f = canonicalizeFilter(filter);
   const variants: FilterPlan[][] = [];
   const pushIn = (values: ReadonlyArray<SqlValue>, clause: (n: number) => string) => {
     variants.push(
@@ -192,56 +194,25 @@ function compileFilter(filter: Filter): FilterPlan[] | undefined {
     );
   };
 
-  if (filter.ids) {
-    if (filter.ids.length === 0) {
-      return undefined;
-    }
-    pushIn(
-      filter.ids.map((id) => id.toLowerCase()),
-      (n) => inClause("id", n),
-    );
+  if (f.ids) {
+    pushIn(f.ids, (n) => inClause("id", n));
   }
-  if (filter.authors) {
-    if (filter.authors.length === 0) {
-      return undefined;
-    }
-    pushIn(
-      filter.authors.map((pk) => pk.toLowerCase()),
-      (n) => inClause("pubkey", n),
-    );
+  if (f.authors) {
+    pushIn(f.authors, (n) => inClause("pubkey", n));
   }
-  if (filter.kinds) {
-    if (filter.kinds.length === 0) {
-      return undefined;
-    }
-    pushIn(filter.kinds, (n) => inClause("kind", n));
+  if (f.kinds) {
+    pushIn(f.kinds, (n) => inClause("kind", n));
   }
-  if (filter.since !== undefined) {
-    variants.push([{ wheres: ["created_at >= ?"], params: [filter.since] }]);
+  if (f.since !== undefined) {
+    variants.push([{ wheres: ["created_at >= ?"], params: [f.since] }]);
   }
-  if (filter.until !== undefined) {
-    variants.push([{ wheres: ["created_at <= ?"], params: [filter.until] }]);
+  if (f.until !== undefined) {
+    variants.push([{ wheres: ["created_at <= ?"], params: [f.until] }]);
   }
 
-  for (const key of Object.keys(filter)) {
-    if (!key.startsWith("#")) {
-      continue;
-    }
-    const name = key.slice(1);
-    if (name.length !== 1) {
-      continue;
-    }
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- startsWith("#") above guarantees the template key
-    const values = filter[key as `#${string}`];
-    if (!values) {
-      continue;
-    }
-    if (values.length === 0) {
-      return undefined;
-    }
-    const normalized = name === "e" || name === "p" ? values.map((v) => v.toLowerCase()) : values;
+  for (const { name, values } of filterTagConditions(f)) {
     variants.push(
-      chunkValues(normalized).map((chunk) => ({
+      chunkValues(values).map((chunk) => ({
         wheres: [
           `EXISTS (SELECT 1 FROM tags t WHERE t.event_id = events.id ` +
             `AND t.name = ? AND ${inClause("t.value", chunk.length)})`,
@@ -614,9 +585,6 @@ export class SqliteEventStore implements EventStore {
       return [];
     }
     const plans = compileFilter(filter);
-    if (plans === undefined) {
-      return [];
-    }
 
     if (select === "*") {
       const merged = await this.#planRows<EventRow>(plans, "*", filter.limit);

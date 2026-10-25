@@ -366,7 +366,9 @@ impl Client {
         }
         let lists = Filter::new()
             .kinds([Kind::RELAY_LIST, Kind::DIRECT_MESSAGE_RELAYS_LIST])
-            .authors(pubkeys.iter().copied());
+            // `pubkeys` was checked non-empty above.
+            .and_then(|f| f.authors(pubkeys.iter().copied()))
+            .map_err(|_| Error::InvalidFilters)?;
         let plan = explicit_plan(&self.inner.relays, &[lists])?;
         let out = self.inner.pool.fetch_routed(plan, timeout).await;
         self.ingest(&out.events).await;

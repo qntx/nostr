@@ -253,14 +253,14 @@ pub(crate) fn caller_filter(v: &serde_json::Value) -> Result<Filter, String> {
                 for hex in str_list(value)? {
                     list.push(EventId::from_hex(&hex).map_err(|e| e.to_string())?);
                 }
-                filter = filter.ids(list);
+                filter = filter.ids(list).map_err(|e| e.to_string())?;
             }
             "authors" => {
                 let mut list = Vec::new();
                 for hex in str_list(value)? {
                     list.push(PublicKey::from_hex(&hex).map_err(|e| e.to_string())?);
                 }
-                filter = filter.authors(list);
+                filter = filter.authors(list).map_err(|e| e.to_string())?;
             }
             "kinds" => {
                 let mut list = Vec::new();
@@ -271,7 +271,7 @@ pub(crate) fn caller_filter(v: &serde_json::Value) -> Result<Filter, String> {
                             .and_then(|v| u16::try_from(v).map_err(|_| err("kind range")))?,
                     ));
                 }
-                filter = filter.kinds(list);
+                filter = filter.kinds(list).map_err(|e| e.to_string())?;
             }
             "since" => {
                 filter = filter.since(Timestamp::from_secs(
@@ -295,7 +295,9 @@ pub(crate) fn caller_filter(v: &serde_json::Value) -> Result<Filter, String> {
                     .and_then(|c| SingleLetterTag::new(c.chars().next()?))
                     .filter(|_| key.chars().count() == 2)
                 {
-                    filter = filter.tag(letter, str_list(value)?);
+                    filter = filter
+                        .tag(letter, str_list(value)?)
+                        .map_err(|e| e.to_string())?;
                 }
             }
         }

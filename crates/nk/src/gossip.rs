@@ -272,20 +272,15 @@ impl Gossip {
 
     /// One filter → per-relay plans + remainder.
     fn route_one(&mut self, filter: Filter, routing: &mut Routing) {
-        let authors: Vec<PublicKey> = filter.get_authors().unwrap_or(&[]).to_vec();
-        let p_hex: Vec<String> = filter
+        let authors: Option<Vec<PublicKey>> = filter.get_authors().map(<[_]>::to_vec);
+        let p_hex: Option<Vec<String>> = filter
             .tag_values(P_TAG)
-            .unwrap_or(&[])
-            .iter()
-            .map(|s| (**s).to_owned())
-            .collect();
-        let has_authors = !authors.is_empty();
-        let has_p = !p_hex.is_empty();
-        match (has_authors, has_p) {
-            (true, false) => self.narrow_authors(filter, &authors, routing),
-            (false, true) => self.narrow_p(filter, &p_hex, routing),
-            (true, true) => self.broad(filter, &authors, &p_hex, routing),
-            (false, false) => routing.remainder.push(filter),
+            .map(|v| v.iter().map(|s| (**s).to_owned()).collect());
+        match (authors, p_hex) {
+            (Some(authors), None) => self.narrow_authors(filter, &authors, routing),
+            (None, Some(values)) => self.narrow_p(filter, &values, routing),
+            (Some(authors), Some(values)) => self.broad(filter, &authors, &values, routing),
+            (None, None) => routing.remainder.push(filter),
         }
     }
 
@@ -308,15 +303,19 @@ impl Gossip {
         }
         let any_routed = !per_relay.is_empty();
         for (relay, group) in per_relay {
-            routing
-                .per_relay
-                .entry(relay)
-                .or_default()
-                .push(filter.clone().authors(group));
+            match filter.clone().authors(group) {
+                Ok(narrowed) => routing.per_relay.entry(relay).or_default().push(narrowed),
+                // `group` holds only routed keys — never empty, so
+                // `EmptyList` cannot occur; the original filter is the
+                // conservative remainder.
+                Err(_) => routing.remainder.push(filter.clone()),
+            }
         }
         if !unrouted.is_empty() {
             routing.remainder.push(if any_routed {
-                filter.authors(unrouted)
+                // `unrouted` is non-empty — `EmptyList` cannot occur.
+                let original = filter.clone();
+                filter.authors(unrouted).unwrap_or(original)
             } else {
                 filter
             });
@@ -324,8 +323,8 @@ impl Gossip {
     }
 
     /// `#p` values narrowed to their read relays — one filter per relay
-    /// carrying every routed value. Unrouted values (unparseable or
-    /// without routes) land in a narrowed remainder.
+    /// carrying every routed value. Values without routes land in a
+    /// narrowed remainder.
     fn narrow_p(&mut self, filter: Filter, values: &[String], routing: &mut Routing) {
         let mut unrouted: Vec<String> = Vec::new();
         let mut per_relay: BTreeMap<RelayUrl, Vec<String>> = BTreeMap::new();
@@ -347,15 +346,21 @@ impl Gossip {
         }
         let any_routed = !per_relay.is_empty();
         for (relay, group) in per_relay {
-            routing
-                .per_relay
-                .entry(relay)
-                .or_default()
-                .push(filter.clone().tag(P_TAG, group));
+            match filter.clone().tag(P_TAG, group) {
+                Ok(narrowed) => routing.per_relay.entry(relay).or_default().push(narrowed),
+                // `group` holds only routed values — never empty, and its
+                // values came from a validated `#p` list, so
+                // `InvalidTagValue` cannot occur either.
+                Err(_) => routing.remainder.push(filter.clone()),
+            }
         }
         if !unrouted.is_empty() {
             routing.remainder.push(if any_routed {
-                filter.tag(P_TAG, unrouted)
+                // `unrouted` is non-empty and its values are validated
+                // `#p` hex — neither `EmptyList` nor `InvalidTagValue`
+                // can occur.
+                let original = filter.clone();
+                filter.tag(P_TAG, unrouted).unwrap_or(original)
             } else {
                 filter
             });
@@ -649,7 +654,9 @@ mod tests {
         let k2 = keys(7);
         let mut g = Gossip::new(GossipOptions::default());
         g.ingest(&list_10002(&k1, T1, &["wss://a", "wss://b"], &[]));
-        let r = g.route(&[Filter::new().authors([k1.public_key(), k2.public_key()])]);
+        let r = g.route(&[Filter::new()
+            .authors([k1.public_key(), k2.public_key()])
+            .expect("filter")]);
         // k1 narrows into both write relays; k2 is unrouted.
         let got = r.per_relay[&url("wss://a")][0]
             .get_authors()
@@ -665,10 +672,12 @@ mod tests {
         let k = keys(8);
         let mut g = Gossip::new(GossipOptions::default());
         g.ingest(&list_10002(&k, T1, &[], &["wss://r1"]));
-        let filter = Filter::new().tag(
-            SingleLetterTag::new('p').expect("p"),
-            [k.public_key().to_hex()],
-        );
+        let filter = Filter::new()
+            .tag(
+                SingleLetterTag::new('p').expect("p"),
+                [k.public_key().to_hex()],
+            )
+            .expect("filter");
         let r = g.route(&[filter]);
         let got = r.per_relay[&url("wss://r1")][0]
             .tag_values(SingleLetterTag::new('p').expect("p"))
@@ -685,10 +694,14 @@ mod tests {
         let mut g = Gossip::new(GossipOptions::default());
         g.ingest(&list_10002(&k, T1, &["wss://w1"], &[]));
         g.ingest(&list_10002(&other, T1, &[], &["wss://r1"]));
-        let filter = Filter::new().authors([k.public_key()]).tag(
-            SingleLetterTag::new('p').expect("p"),
-            [other.public_key().to_hex()],
-        );
+        let filter = Filter::new()
+            .authors([k.public_key()])
+            .expect("filter")
+            .tag(
+                SingleLetterTag::new('p').expect("p"),
+                [other.public_key().to_hex()],
+            )
+            .expect("filter");
         let r = g.route(&[filter]);
         assert!(r.per_relay.contains_key(&url("wss://w1")));
         assert!(r.per_relay.contains_key(&url("wss://r1")));
@@ -701,10 +714,14 @@ mod tests {
         let other = keys(12);
         let mut g = Gossip::new(GossipOptions::default());
         g.ingest(&list_10002(&k, T1, &["wss://w1"], &[]));
-        let filter = Filter::new().authors([k.public_key()]).tag(
-            SingleLetterTag::new('p').expect("p"),
-            [other.public_key().to_hex()],
-        );
+        let filter = Filter::new()
+            .authors([k.public_key()])
+            .expect("filter")
+            .tag(
+                SingleLetterTag::new('p').expect("p"),
+                [other.public_key().to_hex()],
+            )
+            .expect("filter");
         let r = g.route(&[filter]);
         assert!(r.per_relay.contains_key(&url("wss://w1")));
         assert_eq!(r.remainder.len(), 1, "unrouted p key -> whole filter");
@@ -713,7 +730,7 @@ mod tests {
     #[test]
     fn route_neither_is_remainder() {
         let mut g = Gossip::new(GossipOptions::default());
-        let filter = Filter::new().kinds([Kind::new(1)]);
+        let filter = Filter::new().kinds([Kind::new(1)]).expect("filter");
         let r = g.route(std::slice::from_ref(&filter));
         assert!(r.per_relay.is_empty());
         assert_eq!(r.remainder, vec![filter]);
@@ -726,7 +743,9 @@ mod tests {
         let mut g = Gossip::new(GossipOptions::default());
         g.ingest(&list_10002(&k1, T1, &["wss://a"], &[]));
         g.ingest(&list_10002(&k2, T1, &["wss://a"], &[]));
-        let r = g.route(&[Filter::new().authors([k1.public_key(), k2.public_key()])]);
+        let r = g.route(&[Filter::new()
+            .authors([k1.public_key(), k2.public_key()])
+            .expect("filter")]);
         let filters = &r.per_relay[&url("wss://a")];
         assert_eq!(filters.len(), 1, "one REQ per relay");
         let mut want = [k1.public_key(), k2.public_key()];
@@ -735,20 +754,13 @@ mod tests {
     }
 
     #[test]
-    fn route_invalid_p_is_unrouted() {
-        let mut g = Gossip::new(GossipOptions::default());
-        let filter = Filter::new().tag(SingleLetterTag::new('p').expect("p"), ["nothex"]);
-        let r = g.route(&[filter]);
-        assert!(r.per_relay.is_empty());
-        assert_eq!(r.remainder.len(), 1);
-    }
-
-    #[test]
     fn with_fallback_merges_dedupes() {
         let mut routing = Routing::default();
         let a = url("wss://a");
         routing.per_relay.insert(a.clone(), vec![Filter::new()]);
-        routing.remainder.push(Filter::new().kinds([Kind::new(7)]));
+        routing
+            .remainder
+            .push(Filter::new().kinds([Kind::new(7)]).expect("filter"));
         let out = routing
             .with_fallback(&[url("wss://b"), url("wss://b")])
             .expect("fallback");
@@ -809,7 +821,7 @@ mod tests {
         assert!(g.ingest(&list_10002(&k, T1, &["ws://127.0.0.1:7777"], &[])));
         let r = g.routes(&k.public_key()).expect("routes");
         assert!(r.write().is_empty(), "ws:// dropped -> empty routes");
-        let routing = g.route(&[Filter::new().authors([k.public_key()])]);
+        let routing = g.route(&[Filter::new().authors([k.public_key()]).expect("filter")]);
         assert!(routing.per_relay.is_empty());
         assert_eq!(routing.remainder.len(), 1, "unrouted key -> remainder");
     }
@@ -883,8 +895,9 @@ mod tests {
         for k in [&k1, &k2, &k3] {
             g.ingest(&list_10002(k, T1, &["wss://shared"], &[]));
         }
-        let r =
-            g.route(&[Filter::new().authors([k1.public_key(), k2.public_key(), k3.public_key()])]);
+        let r = g.route(&[Filter::new()
+            .authors([k1.public_key(), k2.public_key(), k3.public_key()])
+            .expect("filter")]);
         let filters = &r.per_relay[&url("wss://shared")];
         assert_eq!(filters.len(), 1, "one REQ per relay");
         let mut want = [k1.public_key(), k2.public_key(), k3.public_key()];

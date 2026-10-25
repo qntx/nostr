@@ -15,8 +15,8 @@
       "raw": "[\"REQ\",\"sub1\",{\"kinds\":[1]},{\"#e\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"authors\":[\"90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23\"]}]"
     },
     {
-      "raw": "[\"REQ\",\"sub\",{\"foo\":1,\"ids\":[]}]",
-      "encoded": "[\"REQ\",\"sub\",{\"ids\":[]}]"
+      "raw": "[\"REQ\",\"sub\",{\"foo\":1,\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]",
+      "encoded": "[\"REQ\",\"sub\",{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]"
     },
     {
       "raw": "[\"REQ\",\"sub2\",{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]}]"
@@ -117,6 +117,38 @@
     },
     {
       "raw": "[\"REQ\",\"sub\",null]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"ids\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"authors\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"kinds\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"#t\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"#e\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"sub\",{\"foo\":1,\"ids\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"kinds\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[]},\"aabb\"]",
       "error": "MessageError"
     },
     {

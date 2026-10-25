@@ -222,7 +222,10 @@ impl Client {
         let relays = self.dm_relays(&[self_pk]).await?;
         let mut filter = Filter::new()
             .kinds([Kind::GIFT_WRAP])
-            .tag(P_TAG, [self_pk.to_hex()]);
+            .and_then(|f| f.tag(P_TAG, [self_pk.to_hex()]))
+            // The kind list is a literal and `self_pk` is a hex public key —
+            // neither `EmptyList` nor `InvalidTagValue` can occur.
+            .map_err(|_| Error::InvalidFilters)?;
         if let Some(s) = since {
             filter = filter.since(s);
         }
@@ -281,7 +284,10 @@ impl Client {
         let relays = self.dm_relays(&[self_pk]).await?;
         let mut filter = Filter::new()
             .kinds([Kind::GIFT_WRAP, Kind::GIFT_WRAP_EPHEMERAL])
-            .tag(P_TAG, [self_pk.to_hex()]);
+            .and_then(|f| f.tag(P_TAG, [self_pk.to_hex()]))
+            // The kind list is a literal and `self_pk` is a hex public key —
+            // neither `EmptyList` nor `InvalidTagValue` can occur.
+            .map_err(|_| Error::InvalidFilters)?;
         if let Some(s) = since {
             filter = filter.since(s);
         }
