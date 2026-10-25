@@ -415,3 +415,61 @@ async fn client_end_to_end() {
     writer.close().await;
     reader.close().await;
 }
+
+/// `sync_with` both ways against nosfry: remote-only comes down,
+/// local-only goes up.
+#[tokio::test]
+#[ignore = "needs NK_E2E_RELAY"]
+async fn client_sync_both_ways() {
+    let tag = unique_tag();
+    let k = keys();
+    let remote = k
+        .sign_event(
+            EventBuilder::new(Kind::new(1), "sync remote")
+                .tags([Tag::custom("t", [tag.as_str()])])
+                .build_at(k.public_key(), Timestamp::now()),
+            &mut UnwrapErr(SysRng),
+        )
+        .expect("sign remote");
+    let local = k
+        .sign_event(
+            EventBuilder::new(Kind::new(1), "sync local")
+                .tags([Tag::custom("t", [tag.as_str()])])
+                .build_at(k.public_key(), Timestamp::now()),
+            &mut UnwrapErr(SysRng),
+        )
+        .expect("sign local");
+    Relay::new(&url(), RelayOptions::default())
+        .publish(&remote)
+        .await
+        .expect("seed remote");
+
+    let mut options = nk::client::ClientOptions::default();
+    options.relays = vec![url()];
+    options.gossip.allow_insecure = true;
+    let client = nk::client::Client::new(options);
+    client.store().put(&local).expect("put");
+
+    let mut sync_options = nk::client::SyncOptions::default();
+    sync_options.direction = nk::client::SyncDirection::Both;
+    let report = client
+        .sync_with(
+            &url(),
+            Filter::new().tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()]),
+            sync_options,
+        )
+        .await
+        .expect("sync");
+    assert!(report.received.contains(&remote.id()), "{report:?}");
+    assert!(report.sent.contains(&local.id()), "{report:?}");
+    // The remote picked up the upload.
+    let out = Relay::new(&url(), RelayOptions::default())
+        .fetch(
+            vec![Filter::new().ids([local.id()])],
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("fetch");
+    assert!(out.events.iter().any(|e| e.id() == local.id()));
+    client.close().await;
+}

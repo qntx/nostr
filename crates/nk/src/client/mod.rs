@@ -6,6 +6,7 @@
 
 mod persist;
 mod subscription;
+mod sync;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,6 +17,7 @@ use nk_core::{Event, EventBuilder, Filter, Kind, NostrSigner, PublicKey, RelayUr
 use nk_store::EventStore;
 use persist::Persister;
 pub use subscription::ClientSubscription;
+pub use sync::{SyncDirection, SyncOptions, SyncReport};
 
 use crate::gossip::{Gossip, GossipOptions, Routes};
 use crate::pool::{PoolFetch, RelayPool};
@@ -44,6 +46,9 @@ pub enum Error {
     /// The event store failed.
     #[error("{0}")]
     Store(#[source] nk_store::Error),
+    /// A relay call failed mid-sync.
+    #[error("{0}")]
+    Relay(#[source] relay::Error),
     /// The client is closed, or the runtime is shutting down mid-call.
     #[error("client closed")]
     Closed,
@@ -114,6 +119,7 @@ struct Inner {
     persister: Option<Persister>,
     relays: Vec<RelayUrl>,
     signer: Option<Arc<dyn NostrSigner>>,
+    request_timeout: Duration,
     closed: AtomicBool,
 }
 
@@ -137,6 +143,7 @@ impl Client {
     #[must_use]
     pub fn new(options: ClientOptions) -> Self {
         let relays = dedup(options.relays);
+        let request_timeout = options.relay.request_timeout;
         let mut relay = options.relay;
         relay.signer.clone_from(&options.signer);
         let persister = options
@@ -150,6 +157,7 @@ impl Client {
                 persister,
                 relays,
                 signer: options.signer,
+                request_timeout,
                 closed: AtomicBool::new(false),
             }),
         }
@@ -449,12 +457,7 @@ impl Client {
     /// persister queues the events (the store mutex never crosses an
     /// `.await`).
     async fn ingest(&self, events: &[Event]) {
-        {
-            let mut gossip = self.gossip();
-            for event in events {
-                gossip.ingest(event);
-            }
-        }
+        self.ingest_gossip(events);
         if let Some(p) = &self.inner.persister {
             p.push(events.to_vec()).await;
         }
@@ -464,13 +467,28 @@ impl Client {
     /// non-blocking `try_push` (a full channel warns and skips caching;
     /// `poll_next` must never block).
     fn ingest_live(&self, event: &Event) {
-        {
-            let mut gossip = self.gossip();
-            gossip.ingest(event);
-        }
+        self.ingest_gossip(std::slice::from_ref(event));
         if let Some(p) = &self.inner.persister {
             p.try_push(vec![event.clone()]);
         }
+    }
+
+    /// Gossip-only ingest — the lock never crosses an `.await`.
+    fn ingest_gossip(&self, events: &[Event]) {
+        let mut gossip = self.gossip();
+        for event in events {
+            gossip.ingest(event);
+        }
+    }
+
+    /// The pool's per-request timeout, kept for sync downloads.
+    pub(crate) fn request_timeout(&self) -> Duration {
+        self.inner.request_timeout
+    }
+
+    /// Whether `persist` was on at construction.
+    pub(crate) fn persist_on(&self) -> bool {
+        self.inner.persister.is_some()
     }
 }
 

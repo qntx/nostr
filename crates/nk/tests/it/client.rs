@@ -8,7 +8,7 @@ use nk::client::{Client, ClientOptions, Error as ClientError};
 use nk::store::EventStore;
 use nk::testing::MockRelay;
 use nk_core::{
-    Event, EventBuilder, Filter, Keys, Kind, RelayUrl, SecretKey, SysRng, Tag, Timestamp,
+    Event, EventBuilder, EventId, Filter, Keys, Kind, RelayUrl, SecretKey, SysRng, Tag, Timestamp,
     rand_core::UnwrapErr,
 };
 
@@ -358,6 +358,174 @@ async fn subscribe_closed_and_empty_errors() {
     client.close().await;
     assert!(matches!(
         client.subscribe(vec![Filter::new()]).await,
+        Err(ClientError::Closed)
+    ));
+}
+
+fn ids(events: &[Event]) -> Vec<EventId> {
+    let mut v: Vec<_> = events.iter().map(Event::id).collect();
+    v.sort();
+    v
+}
+
+#[tokio::test]
+async fn sync_down_downloads_missing() {
+    let mock = MockRelay::start().await.expect("mock");
+    let ev_a = sign(&keys(), EventBuilder::new(Kind::new(1), "a"), T);
+    let ev_b = sign(&keys(), EventBuilder::new(Kind::new(1), "b"), T);
+    mock.store().put(&ev_a).expect("a");
+    mock.store().put(&ev_b).expect("b");
+    let client = client(vec![mock.url()], |_| {});
+    let report = client
+        .sync_with(
+            &mock.url(),
+            Filter::new(),
+            nk::client::SyncOptions::default(),
+        )
+        .await
+        .expect("sync");
+    let want = ids(&[ev_a.clone(), ev_b.clone()]);
+    assert_eq!(ids(&[]), ids(&[]));
+    let mut got_need = report.need.clone();
+    got_need.sort();
+    let mut got_recv = report.received.clone();
+    got_recv.sort();
+    assert_eq!(got_need, want);
+    assert_eq!(got_recv, want);
+    assert_eq!(report.have, Vec::<EventId>::new());
+    let stored = client.query(vec![Filter::new()]).await.expect("query");
+    assert_eq!(ids(&stored), want);
+}
+
+#[tokio::test]
+async fn sync_up_uploads_local_only() {
+    let mock = MockRelay::start().await.expect("mock");
+    let ev_c = sign(&keys(), EventBuilder::new(Kind::new(1), "c"), T);
+    let client = client(vec![mock.url()], |_| {});
+    client.store().put(&ev_c).expect("put");
+    let mut options = nk::client::SyncOptions::default();
+    options.direction = nk::client::SyncDirection::Up;
+    let report = client
+        .sync_with(&mock.url(), Filter::new(), options)
+        .await
+        .expect("sync");
+    assert_eq!(report.sent, vec![ev_c.id()]);
+    assert_eq!(report.received, Vec::<EventId>::new());
+    assert_eq!(
+        mock.store().query(&[Filter::new()]).expect("q").len(),
+        1,
+        "mock has C"
+    );
+}
+
+#[tokio::test]
+async fn sync_both_exchanges() {
+    let mock = MockRelay::start().await.expect("mock");
+    let ev_a = sign(&keys(), EventBuilder::new(Kind::new(1), "a"), T);
+    let ev_c = sign(&keys(), EventBuilder::new(Kind::new(1), "c"), T);
+    mock.store().put(&ev_a).expect("a");
+    let client = client(vec![mock.url()], |_| {});
+    client.store().put(&ev_c).expect("put");
+    let mut options = nk::client::SyncOptions::default();
+    options.direction = nk::client::SyncDirection::Both;
+    let report = client
+        .sync_with(&mock.url(), Filter::new(), options)
+        .await
+        .expect("sync");
+    assert_eq!(report.sent, vec![ev_c.id()]);
+    assert_eq!(report.received, vec![ev_a.id()]);
+    let stored = client.query(vec![Filter::new()]).await.expect("query");
+    assert!(stored.iter().any(|e| e.id() == ev_a.id()));
+    assert!(
+        mock.store()
+            .query(&[Filter::new()])
+            .expect("q")
+            .iter()
+            .any(|e| e.id() == ev_c.id())
+    );
+}
+
+#[tokio::test]
+async fn sync_dry_run_transfers_nothing() {
+    let mock = MockRelay::start().await.expect("mock");
+    let ev_a = sign(&keys(), EventBuilder::new(Kind::new(1), "a"), T);
+    let ev_c = sign(&keys(), EventBuilder::new(Kind::new(1), "c"), T);
+    mock.store().put(&ev_a).expect("a");
+    let client = client(vec![mock.url()], |_| {});
+    client.store().put(&ev_c).expect("put");
+    let mut options = nk::client::SyncOptions::default();
+    options.dry_run = true;
+    options.direction = nk::client::SyncDirection::Both;
+    let report = client
+        .sync_with(&mock.url(), Filter::new(), options)
+        .await
+        .expect("sync");
+    assert_eq!(report.have, vec![ev_c.id()]);
+    assert_eq!(report.need, vec![ev_a.id()]);
+    assert!(report.sent.is_empty() && report.received.is_empty());
+    assert!(
+        client
+            .query(vec![Filter::new()])
+            .await
+            .expect("query")
+            .iter()
+            .all(|e| e.id() != ev_a.id())
+    );
+}
+
+#[tokio::test]
+async fn sync_persist_false_reports_but_does_not_store() {
+    let mock = MockRelay::start().await.expect("mock");
+    let ev_a = sign(&keys(), EventBuilder::new(Kind::new(1), "a"), T);
+    mock.store().put(&ev_a).expect("a");
+    let client = client(vec![mock.url()], |o| o.persist = false);
+    let report = client
+        .sync_with(
+            &mock.url(),
+            Filter::new(),
+            nk::client::SyncOptions::default(),
+        )
+        .await
+        .expect("sync");
+    assert_eq!(report.received, vec![ev_a.id()]);
+    assert_eq!(
+        client.query(vec![Filter::new()]).await.expect("query"),
+        Vec::<Event>::new()
+    );
+}
+
+#[tokio::test]
+async fn sync_over_default_relays_reports_each() {
+    let m1 = MockRelay::start().await.expect("m1");
+    let m2 = MockRelay::start().await.expect("m2");
+    let client = client(vec![m1.url(), m2.url()], |_| {});
+    let out = client
+        .sync(Filter::new(), nk::client::SyncOptions::default())
+        .await
+        .expect("sync");
+    assert_eq!(out.len(), 2);
+    assert!(out[&m1.url()].is_ok() && out[&m2.url()].is_ok());
+}
+
+#[tokio::test]
+async fn sync_closed_and_no_relays() {
+    let no_relays = client(vec![], |_| {});
+    assert!(matches!(
+        no_relays
+            .sync(Filter::new(), nk::client::SyncOptions::default())
+            .await,
+        Err(ClientError::NoRelays)
+    ));
+    let closed = client(vec![], |_| {});
+    closed.close().await;
+    assert!(matches!(
+        closed
+            .sync_with(
+                &RelayUrl::parse("ws://127.0.0.1:1").expect("url"),
+                Filter::new(),
+                nk::client::SyncOptions::default()
+            )
+            .await,
         Err(ClientError::Closed)
     ));
 }
