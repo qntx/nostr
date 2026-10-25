@@ -13,6 +13,7 @@
 mod ecdh;
 mod util;
 
+pub mod blossom;
 #[cfg(feature = "nip04")]
 pub mod nip04;
 pub mod nip05;

@@ -1,0 +1,576 @@
+{
+  "schema": 1,
+  "capability": "blossom.codec",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.14.0"
+  },
+  "hash_from_url": [
+    {
+      "name": "hash in path",
+      "input": "https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "out": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+    },
+    {
+      "name": "uppercase folds",
+      "input": "https://cdn.example.com/3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D",
+      "out": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+    },
+    {
+      "name": "hash with extension",
+      "input": "https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d.png",
+      "out": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+    },
+    {
+      "name": "several hashes: last wins",
+      "input": "https://x.example/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d/2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc",
+      "out": "2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc"
+    },
+    {
+      "name": "hash only in query is null",
+      "input": "https://x.example/img.png?sha=3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "out": null
+    },
+    {
+      "name": "no hash",
+      "input": "https://x.example/blobs/view",
+      "out": null
+    },
+    {
+      "name": "invalid url",
+      "input": "not a url",
+      "out": null
+    }
+  ],
+  "server": [
+    {
+      "name": "trailing slash stripped",
+      "input": "https://cdn.example.com/",
+      "out": "https://cdn.example.com"
+    },
+    {
+      "name": "many trailing slashes",
+      "input": "http://localhost:8080///",
+      "out": "http://localhost:8080"
+    },
+    {
+      "name": "path prefix kept",
+      "input": "https://x.example/api/",
+      "out": "https://x.example/api"
+    },
+    {
+      "name": "nested path prefix kept",
+      "input": "https://x.example/api/v2//",
+      "out": "https://x.example/api/v2"
+    },
+    {
+      "name": "non-http scheme rejected",
+      "input": "wss://x.example",
+      "out": null
+    },
+    {
+      "name": "ftp rejected",
+      "input": "ftp://x.example",
+      "out": null
+    },
+    {
+      "name": "invalid url",
+      "input": "not a url",
+      "out": null
+    },
+    {
+      "name": "port kept",
+      "input": "https://x.example:8443/",
+      "out": "https://x.example:8443"
+    }
+  ],
+  "endpoint": [
+    {
+      "name": "root server",
+      "base": "https://cdn.example.com/",
+      "path": "/upload",
+      "out": "https://cdn.example.com/upload"
+    },
+    {
+      "name": "path prefix",
+      "base": "https://x.example/api/",
+      "path": "/upload",
+      "out": "https://x.example/api/upload"
+    },
+    {
+      "name": "mirror",
+      "base": "https://x.example/api/v2//",
+      "path": "/mirror",
+      "out": "https://x.example/api/v2/mirror"
+    },
+    {
+      "name": "list",
+      "base": "https://cdn.example.com",
+      "path": "/list/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "out": "https://cdn.example.com/list/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+    }
+  ],
+  "auth": [
+    {
+      "name": "upload bare",
+      "verb": "upload",
+      "out": {
+        "tags": [
+          [
+            "t",
+            "upload"
+          ],
+          [
+            "expiration",
+            "1700003600"
+          ]
+        ],
+        "content": "Upload Blob"
+      },
+      "expiration": 1700003600
+    },
+    {
+      "name": "delete with sha256",
+      "verb": "delete",
+      "out": {
+        "tags": [
+          [
+            "t",
+            "delete"
+          ],
+          [
+            "expiration",
+            "1700000060"
+          ],
+          [
+            "x",
+            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+          ]
+        ],
+        "content": "Delete Blob"
+      },
+      "expiration": 1700000060,
+      "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+    },
+    {
+      "name": "uppercase sha256 folds",
+      "verb": "delete",
+      "out": {
+        "tags": [
+          [
+            "t",
+            "delete"
+          ],
+          [
+            "expiration",
+            "1700000060"
+          ],
+          [
+            "x",
+            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+          ]
+        ],
+        "content": "Delete Blob"
+      },
+      "expiration": 1700000060,
+      "sha256": "3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D"
+    },
+    {
+      "name": "list custom expiration",
+      "verb": "list",
+      "out": {
+        "tags": [
+          [
+            "t",
+            "list"
+          ],
+          [
+            "expiration",
+            "1700000005"
+          ]
+        ],
+        "content": "List Blobs"
+      },
+      "expiration": 1700000005
+    },
+    {
+      "name": "media message",
+      "verb": "media",
+      "out": {
+        "tags": [
+          [
+            "t",
+            "media"
+          ],
+          [
+            "expiration",
+            "1700000010"
+          ]
+        ],
+        "content": "photos!"
+      },
+      "expiration": 1700000010,
+      "message": "photos!"
+    },
+    {
+      "name": "get with servers",
+      "verb": "get",
+      "out": {
+        "tags": [
+          [
+            "t",
+            "get"
+          ],
+          [
+            "expiration",
+            "1700000030"
+          ],
+          [
+            "x",
+            "2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc"
+          ],
+          [
+            "server",
+            "a.example.com"
+          ],
+          [
+            "server",
+            "cdn.example.net"
+          ]
+        ],
+        "content": "Get Blob"
+      },
+      "expiration": 1700000030,
+      "sha256": "2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc",
+      "servers": [
+        "https://a.example.com",
+        "A.EXAMPLE.COM",
+        "ftp://b.com",
+        "cdn.example.net"
+      ]
+    },
+    {
+      "name": "empty message",
+      "verb": "upload",
+      "out": {
+        "err": true
+      },
+      "expiration": 1700000000,
+      "message": ""
+    },
+    {
+      "name": "whitespace message",
+      "verb": "upload",
+      "out": {
+        "err": true
+      },
+      "expiration": 1700000000,
+      "message": "   "
+    },
+    {
+      "name": "invalid sha256",
+      "verb": "delete",
+      "out": {
+        "err": true
+      },
+      "expiration": 1700000000,
+      "sha256": "not-hex"
+    },
+    {
+      "name": "unknown verb",
+      "verb": "mirror",
+      "out": {
+        "err": true
+      },
+      "expiration": 1700000000,
+      "rust": false
+    }
+  ],
+  "header": [
+    {
+      "name": "upload auth",
+      "event": {
+        "id": "b3a97613a41c2de46c3ec6482a4b8b81f974401bdbe18bf86aeb75461d3c7859",
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "created_at": 1700000000,
+        "kind": 24242,
+        "tags": [
+          [
+            "t",
+            "upload"
+          ],
+          [
+            "expiration",
+            "1700003600"
+          ]
+        ],
+        "content": "Upload Blob",
+        "sig": "5d14e171a74958483926dd2d3fd511197f7841101f367b59b4ea2c347c03c4980ddfa252a12c6cbe48e7aec686bbe600458dc510b7e20f4a05cb912de113fd5f"
+      },
+      "out": "Nostr eyJpZCI6ImIzYTk3NjEzYTQxYzJkZTQ2YzNlYzY0ODJhNGI4YjgxZjk3NDQwMWJkYmUxOGJmODZhZWI3NTQ2MWQzYzc4NTkiLCJwdWJrZXkiOiIxNjZiZjM3NjVlYmQxZmM1NWRlY2ZlMzk1YmVmZjJlYTNiMmE0ZTBhODk0NmU3ZWI1Nzg1MTJiNTU1NzM3Yzk5IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjQyNDIsInRhZ3MiOltbInQiLCJ1cGxvYWQiXSxbImV4cGlyYXRpb24iLCIxNzAwMDAzNjAwIl1dLCJjb250ZW50IjoiVXBsb2FkIEJsb2IiLCJzaWciOiI1ZDE0ZTE3MWE3NDk1ODQ4MzkyNmRkMmQzZmQ1MTExOTdmNzg0MTEwMWYzNjdiNTliNGVhMmMzNDdjMDNjNDk4MGRkZmEyNTJhMTJjNmNiZTQ4ZTdhZWM2ODZiYmU2MDA0NThkYzUxMGI3ZTIwZjRhMDVjYjkxMmRlMTEzZmQ1ZiJ9"
+    },
+    {
+      "name": "delete auth",
+      "event": {
+        "id": "bc79af82c09ada6374b07117eb1573093692acc07f743aa700789646d6528991",
+        "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
+        "created_at": 1700000000,
+        "kind": 24242,
+        "tags": [
+          [
+            "t",
+            "delete"
+          ],
+          [
+            "expiration",
+            "1700000000"
+          ],
+          [
+            "x",
+            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+          ]
+        ],
+        "content": "bye",
+        "sig": "8ab6d1e058af2054b85ed7c9743d43b4d0bf0c29ea65ae2c1d737c3345166c7a278ea331ce182c051e5fed735cc31e761f196c7d7f620ae26549cda6a1af969f"
+      },
+      "out": "Nostr eyJpZCI6ImJjNzlhZjgyYzA5YWRhNjM3NGIwNzExN2ViMTU3MzA5MzY5MmFjYzA3Zjc0M2FhNzAwNzg5NjQ2ZDY1Mjg5OTEiLCJwdWJrZXkiOiIxNjZiZjM3NjVlYmQxZmM1NWRlY2ZlMzk1YmVmZjJlYTNiMmE0ZTBhODk0NmU3ZWI1Nzg1MTJiNTU1NzM3Yzk5IiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjQyNDIsInRhZ3MiOltbInQiLCJkZWxldGUiXSxbImV4cGlyYXRpb24iLCIxNzAwMDAwMDAwIl0sWyJ4IiwiM2JmMGM2M2ZjYjkzNDYzNDA3YWY5N2E1ZTVlZTY0ZmE4ODNkMTA3ZWY5ZTU1ODQ3MmM0ZWI5YWFhZWZhNDU5ZCJdXSwiY29udGVudCI6ImJ5ZSIsInNpZyI6IjhhYjZkMWUwNThhZjIwNTRiODVlZDdjOTc0M2Q0M2I0ZDBiZjBjMjllYTY1YWUyYzFkNzM3YzMzNDUxNjZjN2EyNzhlYTMzMWNlMTgyYzA1MWU1ZmVkNzM1Y2MzMWU3NjFmMTk2YzdkN2Y2MjBhZTI2NTQ5Y2RhNmExYWY5NjlmIn0"
+    }
+  ],
+  "server_list_build": [
+    {
+      "name": "dedupe and normalize",
+      "servers": [
+        "https://a.example.com/",
+        "HTTPS://A.EXAMPLE.COM/",
+        "wss://b.example.com",
+        "http://b.example.com/api/",
+        "not a url"
+      ],
+      "out": {
+        "tags": [
+          [
+            "server",
+            "https://a.example.com"
+          ],
+          [
+            "server",
+            "http://b.example.com/api"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "single server",
+      "servers": [
+        "https://cdn.example.com/"
+      ],
+      "out": {
+        "tags": [
+          [
+            "server",
+            "https://cdn.example.com"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "all invalid",
+      "servers": [
+        "wss://a.example.com",
+        "not a url",
+        ""
+      ],
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "empty list",
+      "servers": [],
+      "out": {
+        "err": true
+      }
+    }
+  ],
+  "server_list_parse": [
+    {
+      "name": "round trip",
+      "kind": 10063,
+      "tags": [
+        [
+          "server",
+          "https://a.example.com/"
+        ],
+        [
+          "server",
+          "https://a.example.com"
+        ],
+        [
+          "relay",
+          "wss://ignored.example.com"
+        ],
+        [
+          "server",
+          "not a url"
+        ]
+      ],
+      "out": [
+        "https://a.example.com"
+      ]
+    },
+    {
+      "name": "empty ok",
+      "kind": 10063,
+      "tags": [],
+      "out": []
+    },
+    {
+      "name": "wrong kind",
+      "kind": 1,
+      "tags": [
+        [
+          "server",
+          "https://a.example.com"
+        ]
+      ],
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "missing value skipped",
+      "kind": 10063,
+      "tags": [
+        [
+          "server"
+        ],
+        [
+          "server",
+          ""
+        ],
+        [
+          "server",
+          "https://a.example.com"
+        ]
+      ],
+      "out": [
+        "https://a.example.com"
+      ]
+    }
+  ],
+  "descriptor": [
+    {
+      "name": "full",
+      "json": "{\"url\":\"https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":42,\"type\":\"image/png\",\"uploaded\":1700000000}",
+      "out": {
+        "url": "https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 42,
+        "type": "image/png",
+        "uploaded": 1700000000
+      }
+    },
+    {
+      "name": "minimal",
+      "json": "{\"url\":\"https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":0}",
+      "out": {
+        "url": "https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 0
+      }
+    },
+    {
+      "name": "uppercase sha256 folds",
+      "json": "{\"url\":\"https://x.example/b\",\"sha256\":\"3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D\",\"size\":7}",
+      "out": {
+        "url": "https://x.example/b",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 7
+      }
+    },
+    {
+      "name": "missing url",
+      "json": "{\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1}",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "empty url",
+      "json": "{\"url\":\"\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1}",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "bad sha256",
+      "json": "{\"url\":\"https://x.example/b\",\"sha256\":\"nope\",\"size\":1}",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "missing sha256",
+      "json": "{\"url\":\"https://x.example/b\",\"size\":1}",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "negative size",
+      "json": "{\"url\":\"https://x.example/b\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":-1}",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "fractional size",
+      "json": "{\"url\":\"https://x.example/b\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1.5}",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "missing size",
+      "json": "{\"url\":\"https://x.example/b\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\"}",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "wrong-typed type dropped",
+      "json": "{\"url\":\"https://x.example/b\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1,\"type\":42}",
+      "out": {
+        "url": "https://x.example/b",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 1
+      }
+    },
+    {
+      "name": "wrong-typed uploaded dropped",
+      "json": "{\"url\":\"https://x.example/b\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1,\"uploaded\":\"later\"}",
+      "out": {
+        "url": "https://x.example/b",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 1
+      }
+    },
+    {
+      "name": "negative uploaded dropped",
+      "json": "{\"url\":\"https://x.example/b\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1,\"uploaded\":-5}",
+      "out": {
+        "url": "https://x.example/b",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 1
+      }
+    },
+    {
+      "name": "non-object",
+      "json": "[1,2]",
+      "out": {
+        "err": true
+      }
+    }
+  ]
+}

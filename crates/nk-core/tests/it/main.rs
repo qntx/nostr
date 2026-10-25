@@ -28,6 +28,7 @@
 )]
 
 mod bip340;
+mod blossom;
 mod common;
 mod core;
 mod diff;

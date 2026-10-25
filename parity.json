@@ -472,6 +472,20 @@
     }
   },
   {
+    "id": "blossom.codec",
+    "ts": {
+      "module": "packages/nostr/src/nips/blossom.ts",
+      "tests": [
+        "packages/nostr/tests/blossom.test.ts",
+        "packages/nostr/tests/vectors/blossom.test.ts"
+      ]
+    },
+    "vectors": ["vectors/blossom/codec.json"],
+    "rust": {
+      "tests": ["crates/nk-core/tests/it/blossom.rs"]
+    }
+  },
+  {
     "id": "wasm.backend",
     "ts": {
       "module": "packages/nostr-wasm/src/load.ts",

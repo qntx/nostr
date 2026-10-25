@@ -560,7 +560,7 @@ async function readJson(res: ManualResponse): Promise<unknown> {
   }
 }
 
-function parseBlobDescriptor(json: unknown): BlobDescriptor {
+export function parseBlobDescriptor(json: unknown): BlobDescriptor {
   if (!isRecord(json)) {
     throw new BlossomError("invalid blob descriptor");
   }
