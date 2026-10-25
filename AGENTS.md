@@ -51,6 +51,9 @@ CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" \
     cargo check -p nk-core --target wasm32-unknown-unknown --no-default-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 cargo deny check
+crates/nk/tests/e2e/run.sh      # nk E2E against a pinned nosfry
+                                # release; NOSFRY_BIN overrides
+                                # the binary under test
 cd packages/nostr-wasm
 CC_wasm32_unknown_unknown="$(brew --prefix llvm)/bin/clang" bun run build:wasm
 bun run test:wasm
