@@ -450,6 +450,28 @@
     }
   },
   {
+    "id": "nip05.codec",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip05.ts",
+      "tests": ["packages/nostr/tests/nip05.test.ts", "packages/nostr/tests/vectors/nip05.test.ts"]
+    },
+    "vectors": ["vectors/nip05/codec.json"],
+    "rust": {
+      "tests": ["crates/nk-core/tests/it/nip05.rs"]
+    }
+  },
+  {
+    "id": "nip11.codec",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip11.ts",
+      "tests": ["packages/nostr/tests/nip11.test.ts", "packages/nostr/tests/vectors/nip11.test.ts"]
+    },
+    "vectors": ["vectors/nip11/codec.json"],
+    "rust": {
+      "tests": ["crates/nk-core/tests/it/nip11.rs"]
+    }
+  },
+  {
     "id": "wasm.backend",
     "ts": {
       "module": "packages/nostr-wasm/src/load.ts",

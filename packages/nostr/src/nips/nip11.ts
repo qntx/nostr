@@ -5,7 +5,7 @@
  */
 import { NostrError } from "../core/error.ts";
 import type { Mutable } from "../core/util.ts";
-import { isRecord } from "../core/util.ts";
+import { isHex32, isRecord } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 
@@ -16,8 +16,6 @@ const STRING_FIELDS = [
   "description",
   "banner",
   "icon",
-  "pubkey",
-  "self",
   "contact",
   "software",
   "version",
@@ -104,7 +102,7 @@ function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
-function parseRelayInformation(json: unknown): RelayInformation {
+export function parseRelayInformation(json: unknown): RelayInformation {
   if (!isRecord(json)) {
     throw new Nip11Error("relay information document must be a JSON object");
   }
@@ -115,6 +113,15 @@ function parseRelayInformation(json: unknown): RelayInformation {
     const value = raw[key];
     if (typeof value === "string") {
       info[key] = value;
+    }
+  }
+
+  // Public keys are kept only as canonical 64-hex (lowercased); anything
+  // else is dropped like a wrong-typed field.
+  for (const key of ["pubkey", "self"] as const) {
+    const value = raw[key];
+    if (typeof value === "string" && isHex32(value.toLowerCase())) {
+      info[key] = value.toLowerCase();
     }
   }
 

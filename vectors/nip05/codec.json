@@ -1,0 +1,289 @@
+{
+  "schema": 1,
+  "capability": "nip05.codec",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.14.0"
+  },
+  "parse": [
+    {
+      "name": "whitespace trims",
+      "input": "  bob@Example.COM  ",
+      "out": {
+        "local": "bob",
+        "domain": "example.com"
+      }
+    },
+    {
+      "name": "uppercase folds",
+      "input": "Bob.Smith-99@EXAMPLE.com",
+      "out": {
+        "local": "bob.smith-99",
+        "domain": "example.com"
+      }
+    },
+    {
+      "name": "bare domain becomes root",
+      "input": "example.com",
+      "out": {
+        "local": "_",
+        "domain": "example.com"
+      }
+    },
+    {
+      "name": "explicit root local",
+      "input": "_@example.com",
+      "out": {
+        "local": "_",
+        "domain": "example.com"
+      }
+    },
+    {
+      "name": "no dot is invalid",
+      "input": "alice@localhost",
+      "out": null
+    },
+    {
+      "name": "empty is invalid",
+      "input": "",
+      "out": null
+    },
+    {
+      "name": "inner space is invalid",
+      "input": "a b@x.com",
+      "out": null
+    },
+    {
+      "name": "bare at-sign is invalid",
+      "input": "@",
+      "out": null
+    },
+    {
+      "name": "kelvin sign is not ASCII",
+      "input": "K@x.com",
+      "out": null
+    },
+    {
+      "name": "trailing dot is invalid",
+      "input": "a@x.com.",
+      "out": null
+    },
+    {
+      "name": "empty local is invalid",
+      "input": "@x.com",
+      "out": null
+    },
+    {
+      "name": "local dots and dashes",
+      "input": "a.b-c_d@x-y.example.com",
+      "out": {
+        "local": "a.b-c_d",
+        "domain": "x-y.example.com"
+      }
+    }
+  ],
+  "well_known": [
+    {
+      "name": "named address",
+      "local": "bob",
+      "domain": "example.com",
+      "out": "https://example.com/.well-known/nostr.json?name=bob"
+    },
+    {
+      "name": "root address",
+      "local": "_",
+      "domain": "sub.example.com",
+      "out": "https://sub.example.com/.well-known/nostr.json?name=_"
+    }
+  ],
+  "document": [
+    {
+      "name": "non-object",
+      "json": "42",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "array is not an object",
+      "json": "[]",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "missing names",
+      "json": "{}",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "names not an object",
+      "json": "{\"names\":[]}",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "empty names is fine",
+      "json": "{\"names\":{}}",
+      "out": {
+        "names": {}
+      }
+    },
+    {
+      "name": "names: non-hex and non-string skipped",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"bob\":42,\"carol\":\"not-hex\",\"dave\":null,\"eve\":{}}}",
+      "out": {
+        "names": {
+          "alice": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+        }
+      }
+    },
+    {
+      "name": "keys and values lowercase",
+      "json": "{\"names\":{\"Alice\":\"3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D\",\"BOB\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"}}",
+      "out": {
+        "names": {
+          "alice": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+          "bob": "2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc"
+        }
+      }
+    },
+    {
+      "name": "case-folding collision: document order wins",
+      "json": "{\"names\":{\"Alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"alice\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"}}",
+      "out": {
+        "names": {
+          "alice": "2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc"
+        }
+      }
+    },
+    {
+      "name": "relays: full filtering",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\"},\"relays\":{\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\":[\"wss://a.example\",\"wss://b.example\",42,\"\"],\"not-a-key\":[\"wss://x.example\"],\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\":\"not-an-array\",\"82341f883b6eabd2f7c4e5ad0a4e0d0b0c0d0e0f1234567890abcdef12345678\":[]}}",
+      "out": {
+        "names": {
+          "alice": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+        },
+        "relays": {
+          "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d": [
+            "wss://a.example",
+            "wss://b.example"
+          ]
+        }
+      }
+    },
+    {
+      "name": "relays not an object is ignored",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\"},\"relays\":[]}",
+      "out": {
+        "names": {
+          "alice": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+        }
+      }
+    },
+    {
+      "name": "nip46 full",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\"},\"nip46\":{\"relays\":[\"wss://a.example\",42,\"\"],\"nostrconnect_url\":\"nostrconnect://abc?relay=wss://a\"}}",
+      "out": {
+        "names": {
+          "alice": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+        },
+        "nip46": {
+          "relays": [
+            "wss://a.example"
+          ],
+          "nostrconnectUrl": "nostrconnect://abc?relay=wss://a"
+        }
+      }
+    },
+    {
+      "name": "nip46 empty relays array kept",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\"},\"nip46\":{\"relays\":[]}}",
+      "out": {
+        "names": {
+          "alice": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+        },
+        "nip46": {
+          "relays": []
+        }
+      }
+    },
+    {
+      "name": "nip46 nothing valid is absent",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\"},\"nip46\":{\"relays\":\"not-array\",\"nostrconnect_url\":5}}",
+      "out": {
+        "names": {
+          "alice": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+        }
+      }
+    },
+    {
+      "name": "nip46 non-object is absent",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\"},\"nip46\":\"x\"}",
+      "out": {
+        "names": {
+          "alice": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+        }
+      }
+    },
+    {
+      "name": "nip46 empty url dropped",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\"},\"nip46\":{\"nostrconnect_url\":\"\"}}",
+      "out": {
+        "names": {
+          "alice": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+        }
+      }
+    }
+  ],
+  "lookup": [
+    {
+      "name": "match with relays",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"bob\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"},\"relays\":{\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\":[\"wss://a.example\"]}}",
+      "identifier": "alice@example.com",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://a.example"
+        ]
+      }
+    },
+    {
+      "name": "match without relays",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"bob\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"},\"relays\":{\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\":[\"wss://a.example\"]}}",
+      "identifier": "bob@example.com",
+      "out": {
+        "pubkey": "2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc"
+      }
+    },
+    {
+      "name": "no match",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"bob\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"},\"relays\":{\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\":[\"wss://a.example\"]}}",
+      "identifier": "carol@example.com",
+      "out": null
+    },
+    {
+      "name": "root lookup",
+      "json": "{\"names\":{\"_\":\"82341f883b6eabd2f7c4e5ad0a4e0d0b0c0d0e0f1234567890abcdef12345678\"}}",
+      "identifier": "example.com",
+      "out": {
+        "pubkey": "82341f883b6eabd2f7c4e5ad0a4e0d0b0c0d0e0f1234567890abcdef12345678"
+      }
+    },
+    {
+      "name": "case-folded identifier",
+      "json": "{\"names\":{\"alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"bob\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"},\"relays\":{\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\":[\"wss://a.example\"]}}",
+      "identifier": "ALICE@EXAMPLE.COM",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [
+          "wss://a.example"
+        ]
+      }
+    }
+  ]
+}
