@@ -43,6 +43,12 @@ negentropy            = "=0.5.2"
 tokio-util            = { version = "0.7", features = ["time"] }
 tracing               = "0.1"
 yawc                  = { version = "0.5.0", features = ["tls", "rustls-ring"] }
+hyper                 = { version = "1", default-features = false }
+hyper-util            = { version = "0.1.21", default-features = false }
+http-body-util        = { version = "0.1", default-features = false }
+hyper-rustls          = { version = "0.27.10", default-features = false, features = ["http1", "tls12", "ring"] }
+rustls                = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
+webpki-roots          = "1"
 unicode-normalization = { version = "0.1", default-features = false }
 unicode-properties    = { version = "0.1.4", default-features = false }
 url                   = { version = "2.5.8", default-features = false }

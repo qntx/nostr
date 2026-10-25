@@ -79,4 +79,4 @@ if ! curl -fsS -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
     exit 1
 fi
 
-cargo test -p nk --test e2e --manifest-path "$root/Cargo.toml" -- --ignored "$@"
+cargo test -p nk --test e2e --features http --manifest-path "$root/Cargo.toml" -- --ignored "$@"

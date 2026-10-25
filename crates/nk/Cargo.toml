@@ -23,7 +23,8 @@ required-features = ["test-util"]
 
 [features]
 sqlite    = ["nk-store/sqlite"]
-test-util = ["dep:hyper", "dep:hyper-util", "dep:http-body-util", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread"]
+test-util = ["hyper/server", "hyper/http1", "hyper-util/server", "hyper-util/tokio", "dep:http-body-util", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread"]
+http      = ["hyper/client", "hyper/http1", "hyper-util/client-legacy", "hyper-util/http1", "hyper-util/tokio", "dep:http-body-util", "dep:hyper-rustls", "dep:rustls", "dep:webpki-roots"]
 
 [dependencies]
 hashlink     = { workspace = true }
@@ -41,9 +42,12 @@ url          = { workspace = true }
 nk-store = { workspace = true }
 
 # test-util only
-hyper          = { version = "1", optional = true }
-hyper-util     = { version = "0.1.21", optional = true, features = ["server", "tokio"] }
-http-body-util = { version = "0.1", optional = true }
+hyper          = { workspace = true, optional = true }
+hyper-util     = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
+hyper-rustls   = { workspace = true, optional = true }
+rustls         = { workspace = true, optional = true }
+webpki-roots   = { workspace = true, optional = true }
 
 [dev-dependencies]
 nk           = { path = ".", features = ["test-util"] }

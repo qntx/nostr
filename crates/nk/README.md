@@ -158,3 +158,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+The `http` feature adds `http::HttpClient`: plain-HTTP APIs over
+hyper-util + rustls — NIP-11 relay information and NIP-05 lookup.
+Redirects are never followed; NIP-05 requires an exact 200:
+
+```rust,no_run
+#[cfg(feature = "http")]
+async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    use std::str::FromStr;
+
+    use nk::http::{HttpClient, HttpOptions};
+    use nk_core::RelayUrl;
+    use nk_core::nips::nip05::Nip05Address;
+
+    let http = HttpClient::new(HttpOptions::default())?;
+    let info = http.relay_information(&RelayUrl::parse("wss://relay.damus.io")?).await?;
+    println!("supported_nips: {:?}", info.supported_nips);
+    let address = Nip05Address::from_str("somebody@example.com")?;
+    if let Some(profile) = http.nip05_profile(&address).await? {
+        println!("{} -> {} at {:?}", address, profile.pubkey.to_hex(), profile.relays);
+    }
+    Ok(())
+}
+```

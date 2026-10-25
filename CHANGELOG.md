@@ -24,6 +24,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Changed
 
+- `@qntx/nostr`: NIP-11 `pubkey` and `self` are kept only as 64-hex public keys (lowercased); other values are dropped like wrong-typed fields. `parseRelayInformation` is exported.
 - Vector cases whose input is non-canonical JSON (duplicate keys, non-integral number spellings, `-0`) now carry `"nonCanonicalJson": true`; Rust rejects those inputs while `JSON.parse` accepts them — the single permitted platform difference.
 
 ## [0.14.0] - 2026-10-15

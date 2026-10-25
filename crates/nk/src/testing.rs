@@ -1,14 +1,16 @@
 //! `test-util`: an in-process mock relay for integration tests.
 
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use http_body_util::Empty;
+use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
-use hyper::{Request, Response, service::service_fn};
+use hyper::{Request, Response, StatusCode, service::service_fn};
 use hyper_util::rt::TokioIo;
 use nk_core::{ClientMessage, Event, RelayUrl, SubscriptionId};
 use nk_store::{EventStore, MemoryStore, PutOutcome};
@@ -47,6 +49,8 @@ struct Shared {
     /// Stored events, broadcast to every connection so each forwards to
     /// its own matching subscriptions.
     events: broadcast::Sender<Event>,
+    /// The NIP-11 document, when `set_information` has run.
+    information: Arc<Mutex<Option<String>>>,
 }
 
 /// The live connection: frames go out through `hook_rx`.
@@ -216,7 +220,7 @@ async fn on_client_frame(
     ws: &mut yawc::HttpWebSocket,
     shared: &Shared,
     open: &mut Vec<(SubscriptionId, Vec<nk_core::Filter>)>,
-    negs: &mut std::collections::HashMap<
+    negs: &mut HashMap<
         SubscriptionId,
         negentropy::Negentropy<'static, negentropy::NegentropyStorageVector>,
     >,
@@ -346,10 +350,10 @@ async fn serve_ws(
     // Open subscriptions on this connection for live EVENT delivery.
     let mut open: Vec<(SubscriptionId, Vec<nk_core::Filter>)> = Vec::new();
     // Live server-side negentropy sessions keyed by NEG-OPEN id.
-    let mut negs: std::collections::HashMap<
+    let mut negs: HashMap<
         SubscriptionId,
         negentropy::Negentropy<'static, negentropy::NegentropyStorageVector>,
-    > = std::collections::HashMap::new();
+    > = HashMap::new();
     let mut events_rx = shared.events.subscribe();
     let authed = AtomicBool::new(!shared.require_auth.load(Ordering::Relaxed));
     let challenge = format!("auth-challenge-{}", ulid_like());
@@ -429,7 +433,7 @@ fn serve_request(
     mut req: Request<Incoming>,
     shared: Shared,
     rx: broadcast::Receiver<Hook>,
-) -> Response<Empty<Bytes>> {
+) -> Response<Full<Bytes>> {
     match WebSocket::upgrade(&mut req) {
         Ok((resp, fut)) => {
             tokio::spawn(async move {
@@ -440,10 +444,37 @@ fn serve_request(
                     Err(e) => debug!("mock ws upgrade: {e}"),
                 }
             });
-            resp
+            resp.map(|_| Full::new(Bytes::new()))
         }
-        Err(_) => Response::new(Empty::new()),
+        Err(_) => serve_http_fallback(&req, &shared),
     }
+}
+
+/// A non-upgrade request: the NIP-11 document when it carries
+/// `Accept: application/nostr+json` and `set_information` ran,
+/// otherwise 404.
+fn serve_http_fallback(req: &Request<Incoming>, shared: &Shared) -> Response<Full<Bytes>> {
+    let accepts = req
+        .headers()
+        .get(hyper::header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.contains("application/nostr+json"));
+    let information = shared
+        .information
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    if let (true, Some(json)) = (accepts, information) {
+        let mut response = Response::new(Full::new(Bytes::from(json)));
+        response.headers_mut().insert(
+            hyper::header::CONTENT_TYPE,
+            hyper::header::HeaderValue::from_static("application/nostr+json"),
+        );
+        return response;
+    }
+    let mut response = Response::new(Full::new(Bytes::new()));
+    *response.status_mut() = StatusCode::NOT_FOUND;
+    response
 }
 
 /// An in-process nostr relay bound to `127.0.0.1:0`, backed by
@@ -462,6 +493,8 @@ pub struct MockRelay {
     require_auth: Arc<AtomicBool>,
     /// The shared event store — seeds `REQ` replies and `COUNT`.
     store: Arc<MemoryStore>,
+    /// The NIP-11 document — `set_information`.
+    information: Arc<Mutex<Option<String>>>,
     _accept: tokio::task::JoinHandle<()>,
 }
 
@@ -496,6 +529,7 @@ impl MockRelay {
             conns: Arc::new(AtomicUsize::new(0)),
             log: log_tx,
             events: broadcast::channel(1024).0,
+            information: Arc::new(Mutex::new(None)),
         };
         let accept_shared = shared.clone();
         let accept = tokio::spawn(async move {
@@ -512,6 +546,7 @@ impl MockRelay {
             hold: shared.hold,
             require_auth: shared.require_auth,
             store,
+            information: shared.information,
             _accept: accept,
         })
     }
@@ -556,6 +591,17 @@ impl MockRelay {
         self.log_rx.recv().await
     }
 
+    /// Serves a NIP-11 document on the relay's own port: a non-upgrade
+    /// GET carrying `Accept: application/nostr+json` gets
+    /// 200 `application/nostr+json` with `json`; other non-upgrade
+    /// requests get 404.
+    pub fn set_information(&self, json: &str) {
+        *self
+            .information
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(String::from(json));
+    }
+
     /// Holds or releases REQs: while held the mock records a REQ but sends
     /// neither stored events nor `EOSE` — tests answer it via `send_raw`.
     pub fn set_hold(&self, hold: bool) {
@@ -569,11 +615,7 @@ impl MockRelay {
     }
 
     /// Waits for a client frame whose text contains `needle`.
-    pub async fn wait_for_frame(
-        &mut self,
-        needle: &str,
-        timeout: std::time::Duration,
-    ) -> Option<String> {
+    pub async fn wait_for_frame(&mut self, needle: &str, timeout: Duration) -> Option<String> {
         let deadline = tokio::time::Instant::now() + timeout;
         while let Ok(Some(text)) = tokio::time::timeout_at(deadline, self.log_rx.recv()).await {
             if text.contains(needle) {
@@ -582,4 +624,211 @@ impl MockRelay {
         }
         None
     }
+}
+
+/// A programmable plain-HTTP response for [`MockHttp`] routes.
+#[derive(Clone, Debug)]
+pub struct MockResponse {
+    status: u16,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+    delay: Option<Duration>,
+}
+
+impl MockResponse {
+    /// A response carrying just a status.
+    #[must_use]
+    pub const fn new(status: u16) -> Self {
+        Self {
+            status,
+            headers: Vec::new(),
+            body: Vec::new(),
+            delay: None,
+        }
+    }
+
+    /// Adds a response header.
+    #[must_use]
+    pub fn header(mut self, name: &str, value: &str) -> Self {
+        self.headers.push((String::from(name), String::from(value)));
+        self
+    }
+
+    /// Sets the response body.
+    #[must_use]
+    pub fn body(mut self, body: impl Into<Vec<u8>>) -> Self {
+        self.body = body.into();
+        self
+    }
+
+    /// Delays the response — timeout testing.
+    #[must_use]
+    pub const fn delay(mut self, delay: Duration) -> Self {
+        self.delay = Some(delay);
+        self
+    }
+}
+
+/// A request [`MockHttp`] received, logged for assertions.
+#[derive(Clone, Debug)]
+pub struct MockRequest {
+    /// The method.
+    pub method: String,
+    /// The path plus query.
+    pub path: String,
+    /// The request headers.
+    pub headers: Vec<(String, String)>,
+    /// The request body.
+    pub body: Vec<u8>,
+}
+
+/// An in-process HTTP/1 server for `http`-feature tests. Programmable
+/// routes on `(method, path_and_query)`; unrouted requests get 404.
+pub struct MockHttp {
+    url: String,
+    routes: Arc<Mutex<HashMap<(String, String), MockResponse>>>,
+    requests: mpsc::Receiver<MockRequest>,
+    _accept: tokio::task::JoinHandle<()>,
+}
+
+impl std::fmt::Debug for MockHttp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MockHttp")
+            .field("url", &self.url)
+            .finish_non_exhaustive()
+    }
+}
+
+impl MockHttp {
+    /// Binds a listener and starts serving.
+    ///
+    /// # Errors
+    ///
+    /// `std::io::Error` when the port bind fails.
+    pub async fn start() -> Result<Self, std::io::Error> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        let routes: Arc<Mutex<HashMap<(String, String), MockResponse>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let (tx, requests) = mpsc::channel(256);
+        let accept = tokio::spawn(accept_loop(listener, Arc::clone(&routes), tx));
+        Ok(Self {
+            url: format!("http://{addr}"),
+            routes,
+            requests,
+            _accept: accept,
+        })
+    }
+
+    /// `http://127.0.0.1:PORT`.
+    #[must_use]
+    pub fn url(&self) -> String {
+        self.url.clone()
+    }
+
+    /// Programs `method` + `path_and_query` to answer `response`.
+    pub fn route(&self, method: &str, path_and_query: &str, response: MockResponse) {
+        self.routes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(
+                (String::from(method), String::from(path_and_query)),
+                response,
+            );
+    }
+
+    /// The next request the mock logged.
+    pub async fn next_request(&mut self) -> Option<MockRequest> {
+        self.requests.recv().await
+    }
+}
+
+/// The accept loop: every connection gets its own `serve_http` task.
+async fn accept_loop(
+    listener: TcpListener,
+    routes: Arc<Mutex<HashMap<(String, String), MockResponse>>>,
+    tx: mpsc::Sender<MockRequest>,
+) {
+    loop {
+        let Ok((stream, _)) = listener.accept().await else {
+            break;
+        };
+        tokio::spawn(serve_http(stream, Arc::clone(&routes), tx.clone()));
+    }
+}
+
+/// One HTTP request on the mock: log it, then answer the route.
+async fn serve_http(
+    stream: tokio::net::TcpStream,
+    routes: Arc<Mutex<HashMap<(String, String), MockResponse>>>,
+    tx: mpsc::Sender<MockRequest>,
+) {
+    let io = TokioIo::new(stream);
+    let svc = service_fn(|req: Request<Incoming>| {
+        let routes = Arc::clone(&routes);
+        let tx = tx.clone();
+        async move {
+            let method = req.method().to_string();
+            let path = req
+                .uri()
+                .path_and_query()
+                .map_or_else(|| String::from("/"), ToString::to_string);
+            let headers = req
+                .headers()
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.to_string(),
+                        v.to_str().map_or_else(|_| String::new(), String::from),
+                    )
+                })
+                .collect();
+            let body = req
+                .into_body()
+                .collect()
+                .await
+                .map(|c| c.to_bytes().to_vec())
+                .unwrap_or_default();
+            drop(tx.try_send(MockRequest {
+                method: method.clone(),
+                path: path.clone(),
+                headers,
+                body,
+            }));
+            let hit = routes
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(&(method, path))
+                .cloned();
+            Ok::<_, Infallible>(answer_hit(hit).await)
+        }
+    });
+    drop(
+        hyper::server::conn::http1::Builder::new()
+            .serve_connection(io, svc)
+            .await,
+    );
+}
+
+/// Answers a routed (or unrouted) request; `delay` applies first.
+async fn answer_hit(hit: Option<MockResponse>) -> Response<Full<Bytes>> {
+    let Some(mock) = hit else {
+        let mut response = Response::new(Full::new(Bytes::new()));
+        *response.status_mut() = StatusCode::NOT_FOUND;
+        return response;
+    };
+    if let Some(delay) = mock.delay {
+        tokio::time::sleep(delay).await;
+    }
+    let mut response = Response::new(Full::new(Bytes::from(mock.body)));
+    *response.status_mut() = StatusCode::from_u16(mock.status).unwrap_or(StatusCode::OK);
+    for (name, value) in &mock.headers {
+        if let (Ok(name), Ok(value)) = (
+            hyper::header::HeaderName::from_bytes(name.as_bytes()),
+            hyper::header::HeaderValue::from_str(value),
+        ) {
+            response.headers_mut().insert(name, value);
+        }
+    }
+    response
 }

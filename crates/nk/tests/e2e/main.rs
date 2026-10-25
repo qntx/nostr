@@ -632,3 +632,31 @@ async fn nip46_remote_signer() {
     signer.logout().await.expect("logout");
     task.abort();
 }
+
+#[tokio::test]
+#[cfg(feature = "http")]
+#[ignore = "needs NK_E2E_RELAY"]
+async fn relay_information() {
+    let client = nk::http::HttpClient::new(nk::http::HttpOptions::default()).expect("client");
+    let info = client
+        .relay_information(&url())
+        .await
+        .expect("relay information");
+    // nosfry 0.3.0 serves exactly: name/software/version,
+    // supported_nips and a full limitation block — nothing else.
+    assert_eq!(info.name.as_deref(), Some("nosfry"));
+    assert_eq!(
+        info.software.as_deref(),
+        Some("https://github.com/qntx/nosfry")
+    );
+    assert_eq!(info.version.as_deref(), Some("0.3.0"));
+    let nips = info.supported_nips.as_deref().expect("supported_nips");
+    assert!(
+        nips.contains(&1) && nips.contains(&11) && nips.contains(&77),
+        "{nips:?}"
+    );
+    let limitation = info.limitation.expect("limitation");
+    assert_eq!(limitation.max_subscriptions, Some(200));
+    assert_eq!(limitation.auth_required, Some(false));
+    assert!(info.description.is_none() && info.pubkey.is_none());
+}

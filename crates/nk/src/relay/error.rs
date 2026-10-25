@@ -1,7 +1,5 @@
 //! The relay module's failure type.
 
-use std::fmt;
-
 /// Why a relay operation failed.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -31,34 +29,6 @@ pub enum Error {
     /// The relay URL is not a `ws://`/`wss://` endpoint.
     #[error("invalid relay URL")]
     InvalidUrl,
-}
-
-/// A type-erased failure newtype: boxed source, `Display` passthrough.
-macro_rules! erased_error {
-    ($name:ident, $doc:literal, $new_doc:literal) => {
-        #[doc = $doc]
-        #[derive(Debug)]
-        pub struct $name(Box<dyn std::error::Error + Send + Sync>);
-
-        impl $name {
-            #[doc = $new_doc]
-            pub(crate) fn new(error: impl std::error::Error + Send + Sync + 'static) -> Self {
-                Self(Box::new(error))
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.0.fmt(f)
-            }
-        }
-
-        impl std::error::Error for $name {
-            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-                self.0.source()
-            }
-        }
-    };
 }
 
 erased_error!(
