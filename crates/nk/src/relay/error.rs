@@ -6,7 +6,7 @@ use std::fmt;
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
-    /// `subscribe`/`fetch` got an empty filter list.
+    /// `subscribe`/`fetch`/`count` got an empty filter list.
     #[error("filters must not be empty")]
     InvalidFilters,
     /// The operation did not finish inside its deadline.
@@ -33,51 +33,44 @@ pub enum Error {
     InvalidUrl,
 }
 
-/// A type-erased transport failure.
-#[derive(Debug)]
-pub struct TransportError(Box<dyn std::error::Error + Send + Sync>);
+/// A type-erased failure newtype: boxed source, `Display` passthrough.
+macro_rules! erased_error {
+    ($name:ident, $doc:literal, $new_doc:literal) => {
+        #[doc = $doc]
+        #[derive(Debug)]
+        pub struct $name(Box<dyn std::error::Error + Send + Sync>);
 
-impl TransportError {
-    /// Wraps any backend error.
-    pub(crate) fn new(error: impl std::error::Error + Send + Sync + 'static) -> Self {
-        Self(Box::new(error))
-    }
+        impl $name {
+            #[doc = $new_doc]
+            pub(crate) fn new(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+                Self(Box::new(error))
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+
+        impl std::error::Error for $name {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                self.0.source()
+            }
+        }
+    };
 }
 
-impl fmt::Display for TransportError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl std::error::Error for TransportError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.source()
-    }
-}
-
-/// A type-erased NIP-77 sync failure.
-#[derive(Debug)]
-pub struct NegentropyError(Box<dyn std::error::Error + Send + Sync>);
-
-impl NegentropyError {
-    /// Wraps any negentropy error.
-    pub(crate) fn new(error: impl std::error::Error + Send + Sync + 'static) -> Self {
-        Self(Box::new(error))
-    }
-}
-
-impl fmt::Display for NegentropyError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl std::error::Error for NegentropyError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.source()
-    }
-}
+erased_error!(
+    TransportError,
+    "A type-erased transport failure.",
+    "Wraps any backend error."
+);
+erased_error!(
+    NegentropyError,
+    "A type-erased NIP-77 sync failure.",
+    "Wraps any negentropy error."
+);
 
 /// The result type for this module.
 pub type Result<T, E = Error> = core::result::Result<T, E>;

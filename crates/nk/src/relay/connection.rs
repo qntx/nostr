@@ -12,6 +12,18 @@ use super::options::RelayOptions;
 use super::transport::{Endpoint, Inbound, Transport};
 use super::{Error, Result};
 
+/// The single timer [`Connection`] can have armed — what its deadline
+/// is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Timer {
+    /// Backoff elapsed — reconnect.
+    Reconnect,
+    /// Idle for `ping_interval` — send a WebSocket ping.
+    Ping,
+    /// A ping went unanswered for `pong_deadline` — the socket is dead.
+    Pong,
+}
+
 /// One relay's connection state.
 pub(crate) struct Connection {
     /// The live socket; `None` while disconnected or backing off.
@@ -21,12 +33,12 @@ pub(crate) struct Connection {
     endpoint: Option<Endpoint>,
     /// Current backoff — doubles on each [`Self::disconnect`], capped.
     backoff: Duration,
-    /// When set, a reconnect attempt fires at this instant.
-    reconnect_at: Option<Instant>,
-    /// Set after a ping until any inbound frame arrives.
-    pong_deadline: Option<Instant>,
+    /// The one armed timer: the reconnect while down, the idle ping
+    /// while up, the pong deadline after a ping.
+    timer: Option<(Instant, Timer)>,
     /// The options slice this type owns.
     connect_timeout: Duration,
+    ping_interval: Duration,
     pong_deadline_dur: Duration,
     reconnect: bool,
     reconnect_min: Duration,
@@ -43,9 +55,9 @@ impl Connection {
             transport: None,
             endpoint,
             backoff: options.reconnect_min,
-            reconnect_at: None,
-            pong_deadline: None,
+            timer: None,
             connect_timeout: options.connect_timeout,
+            ping_interval: options.ping_interval,
             pong_deadline_dur: options.pong_deadline,
             reconnect: options.reconnect,
             reconnect_min: options.reconnect_min,
@@ -59,8 +71,13 @@ impl Connection {
         self.transport.is_some()
     }
 
+    /// The armed timer and its deadline — the driver's single sleep.
+    pub(crate) const fn deadline(&self) -> Option<(Instant, Timer)> {
+        self.timer
+    }
+
     /// Handshakes with the endpoint inside `connect_timeout`; on success
-    /// the backoff resets and any armed reconnect is cleared.
+    /// the backoff resets and the idle-ping timer arms.
     ///
     /// # Errors
     ///
@@ -76,8 +93,7 @@ impl Connection {
             Transport::connect(endpoint, self.connect_timeout, self.max_message_size).await?;
         self.transport = Some(transport);
         self.backoff = self.reconnect_min;
-        self.reconnect_at = None;
-        self.pong_deadline = None;
+        self.timer = Some((Instant::now() + self.ping_interval, Timer::Ping));
         Ok(())
     }
 
@@ -86,16 +102,12 @@ impl Connection {
     /// a failure doubles the backoff exactly once.
     pub(crate) fn disconnect(&mut self) {
         self.transport = None;
-        self.pong_deadline = None;
         if self.reconnect {
-            self.reconnect_at = Some(Instant::now() + jittered(self.backoff));
+            self.timer = Some((Instant::now() + jittered(self.backoff), Timer::Reconnect));
             self.backoff = (self.backoff * 2).min(self.reconnect_max);
+        } else {
+            self.timer = None;
         }
-    }
-
-    /// The armed reconnect instant, if any.
-    pub(crate) const fn reconnect_at(&self) -> Option<Instant> {
-        self.reconnect_at
     }
 
     /// Sends one client message; a write failure returns the error —
@@ -124,7 +136,7 @@ impl Connection {
         }
     }
 
-    /// Sends a ping; the first unanswered ping arms `pong_deadline`.
+    /// Sends a ping and arms the pong deadline.
     ///
     /// # Errors
     ///
@@ -135,22 +147,16 @@ impl Connection {
             return Ok(());
         };
         transport.ping().await?;
-        // Arm once per unanswered ping — re-arming every tick keeps the
-        // deadline just out of reach.
-        if self.pong_deadline.is_none() {
-            self.pong_deadline = Some(Instant::now() + self.pong_deadline_dur);
-        }
+        self.timer = Some((Instant::now() + self.pong_deadline_dur, Timer::Pong));
         Ok(())
     }
 
-    /// Any inbound frame counts toward the pong deadline.
-    pub(crate) const fn saw_inbound(&mut self) {
-        self.pong_deadline = None;
-    }
-
-    /// The armed pong deadline, if a ping is unanswered.
-    pub(crate) const fn pong_deadline(&self) -> Option<Instant> {
-        self.pong_deadline
+    /// Any inbound frame is liveness evidence: it restarts the idle
+    /// ping timer and clears an armed pong deadline.
+    pub(crate) fn saw_inbound(&mut self) {
+        if self.is_open() {
+            self.timer = Some((Instant::now() + self.ping_interval, Timer::Ping));
+        }
     }
 
     /// Best-effort close frame; the socket drops either way.
@@ -212,11 +218,29 @@ mod tests {
     }
 
     #[test]
+    fn disconnect_with_reconnect_arms_reconnect_timer() {
+        let mut conn = Connection::new(Endpoint::parse("ws://127.0.0.1:1").ok(), &opts());
+        conn.disconnect();
+        assert!(matches!(conn.deadline(), Some((_, Timer::Reconnect))));
+    }
+
+    #[test]
+    fn disconnect_without_reconnect_arms_nothing() {
+        let options = RelayOptions {
+            reconnect: false,
+            ..opts()
+        };
+        let mut conn = Connection::new(Endpoint::parse("ws://127.0.0.1:1").ok(), &options);
+        conn.disconnect();
+        assert!(conn.deadline().is_none());
+    }
+
+    #[test]
     fn invalid_url_is_permanent() {
         let conn = Connection::new(None, &opts());
-        assert!(conn.reconnect_at().is_none());
+        assert!(conn.deadline().is_none());
         // The driver can't call connect() — it returns InvalidUrl
         // without arming a retry.
-        assert!(conn.reconnect_at().is_none());
+        assert!(conn.deadline().is_none());
     }
 }

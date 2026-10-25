@@ -12,8 +12,7 @@ use futures_util::future::join_all;
 use nk_core::{CountResult, Event, EventId, Filter, RelayUrl, Timestamp};
 
 use crate::relay::{
-    Error, FetchEnd, FetchOutcome, PublishOutcome, Reconciliation, Relay, RelayOptions,
-    RelayStatus, Result,
+    Error, FetchEnd, PublishOutcome, Reconciliation, Relay, RelayOptions, RelayStatus, Result,
 };
 
 pub(crate) use subscription::RecentIds;
@@ -134,9 +133,23 @@ impl RelayPool {
             .collect()
     }
 
-    /// The shared relay for each deduplicated URL.
-    fn relays_for(&self, urls: &[RelayUrl]) -> Vec<(RelayUrl, Relay)> {
-        urls.iter().map(|u| (u.clone(), self.relay(u))).collect()
+    /// Runs `op` on every plan entry's relay concurrently and collects
+    /// the per-relay outputs.
+    async fn fan_out<A, T, Fut>(
+        &self,
+        plan: impl IntoIterator<Item = (RelayUrl, A)>,
+        op: impl Fn(Relay, A) -> Fut,
+    ) -> BTreeMap<RelayUrl, T>
+    where
+        Fut: Future<Output = T>,
+    {
+        join_all(plan.into_iter().map(|(url, arg)| {
+            let fut = op(self.relay(&url), arg);
+            async move { (url, fut.await) }
+        }))
+        .await
+        .into_iter()
+        .collect()
     }
 
     /// Opens a `REQ` on every listed relay; the returned stream merges
@@ -211,15 +224,23 @@ impl RelayPool {
         plan: BTreeMap<RelayUrl, Vec<Filter>>,
         timeout: Duration,
     ) -> PoolFetch {
-        let results = join_all(plan.into_iter().map(|(u, f)| {
-            let r = self.relay(&u);
-            async move { (u.clone(), r.fetch(f, timeout).await) }
-        }))
-        .await;
+        let results = self
+            .fan_out(plan, |relay, filters| async move {
+                relay.fetch(filters, timeout).await
+            })
+            .await;
         let mut by_id = HashMap::new();
         let mut ends = BTreeMap::new();
         for (url, outcome) in results {
-            Self::merge_fetch(url, outcome, &mut by_id, &mut ends);
+            match outcome {
+                Ok(outcome) => {
+                    ends.insert(url, Ok(outcome.end));
+                    by_id.extend(outcome.events.into_iter().map(|e| (e.id(), e)));
+                }
+                Err(error) => {
+                    ends.insert(url, Err(error));
+                }
+            }
         }
         let mut events: Vec<Event> = by_id.into_values().collect();
         events.sort_by(Event::cmp_newest_first);
@@ -229,40 +250,15 @@ impl RelayPool {
         }
     }
 
-    /// One relay's fetch result merged into the by-id map and ends.
-    fn merge_fetch(
-        url: RelayUrl,
-        outcome: Result<FetchOutcome>,
-        by_id: &mut HashMap<EventId, Event>,
-        ends: &mut BTreeMap<RelayUrl, Result<FetchEnd>>,
-    ) {
-        match outcome {
-            Ok(outcome) => {
-                ends.insert(url, Ok(outcome.end));
-                for event in outcome.events {
-                    by_id.entry(event.id()).or_insert(event);
-                }
-            }
-            Err(error) => {
-                ends.insert(url, Err(error));
-            }
-        }
-    }
-
     /// Publishes `event` on every listed relay concurrently.
     pub async fn publish<'a>(
         &self,
         urls: impl IntoIterator<Item = &'a RelayUrl>,
         event: &Event,
     ) -> BTreeMap<RelayUrl, Result<PublishOutcome>> {
-        let relays = self.relays_for(&Self::urls(urls));
-        let results = join_all(
-            relays
-                .iter()
-                .map(|(u, r)| async move { (u.clone(), r.publish(event).await) }),
-        )
-        .await;
-        results.into_iter().collect()
+        let plan = Self::urls(urls).into_iter().map(|u| (u, ()));
+        self.fan_out(plan, |relay, ()| async move { relay.publish(event).await })
+            .await
     }
 
     /// `COUNT` on every listed relay concurrently.
@@ -278,13 +274,10 @@ impl RelayPool {
         if filters.is_empty() {
             return Err(Error::InvalidFilters);
         }
-        let relays = self.relays_for(&Self::urls(urls));
-        let results = join_all(relays.iter().map(|(u, r)| {
-            let filters = filters.clone();
-            async move { (u.clone(), r.count(filters).await) }
-        }))
-        .await;
-        Ok(results.into_iter().collect())
+        let plan = Self::urls(urls).into_iter().map(|u| (u, filters.clone()));
+        Ok(self
+            .fan_out(plan, |relay, f| async move { relay.count(f).await })
+            .await)
     }
 
     /// NIP-77 reconcile on every listed relay concurrently.
@@ -294,14 +287,13 @@ impl RelayPool {
         filter: Filter,
         items: Vec<(Timestamp, EventId)>,
     ) -> BTreeMap<RelayUrl, Result<Reconciliation>> {
-        let relays = self.relays_for(&Self::urls(urls));
-        let results = join_all(relays.iter().map(|(u, r)| {
-            let filter = filter.clone();
-            let items = items.clone();
-            async move { (u.clone(), r.reconcile(filter, items).await) }
-        }))
-        .await;
-        results.into_iter().collect()
+        let plan = Self::urls(urls)
+            .into_iter()
+            .map(|u| (u, (filter.clone(), items.clone())));
+        self.fan_out(plan, |relay, (f, its)| async move {
+            relay.reconcile(f, its).await
+        })
+        .await
     }
 }
 

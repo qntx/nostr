@@ -435,6 +435,50 @@ async fn pong_deadline_reconnects() {
 }
 
 #[tokio::test]
+async fn drops_during_backoff_do_not_delay_reconnect() {
+    // R1: a dropped Subscription sends CLOSE through the driver; on a
+    // down socket that write must be a no-op — otherwise every drop
+    // re-runs disconnect(), doubling the backoff and pushing the
+    // reconnect out toward the cap.
+    let (mock, relay) = mock_and_relay_with(|o| {
+        o.reconnect_min = Duration::from_secs(1);
+        o.reconnect_max = Duration::from_secs(60);
+    })
+    .await;
+    let mut subs = Vec::new();
+    for _ in 0..6 {
+        let mut sub = relay
+            .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+            .await
+            .expect("sub");
+        let eose = tokio::time::timeout(Duration::from_secs(2), sub.next()).await;
+        assert!(
+            matches!(eose, Ok(Some(SubscriptionEvent::Eose))),
+            "no EOSE: {eose:?}"
+        );
+        subs.push(sub);
+    }
+    mock.drop_connection();
+    // Wait for the driver to observe the drop.
+    let down = std::time::Instant::now() + Duration::from_secs(2);
+    while relay.status() != RelayStatus::Disconnected {
+        assert!(std::time::Instant::now() < down, "never disconnected");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    // Six drops on the down socket: with the bug each re-arms the
+    // backoff — the sixth pushes reconnect out >=24s.
+    drop(subs);
+    let up = std::time::Instant::now() + Duration::from_secs(3);
+    while relay.status() != RelayStatus::Connected {
+        assert!(
+            std::time::Instant::now() < up,
+            "drop-side CLOSEs doubled the backoff"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
+
+#[tokio::test]
 async fn drops_under_load_all_send_close() {
     // Many subscriptions dropped while the driver is busy: every CLOSE
     // must still reach the mock.

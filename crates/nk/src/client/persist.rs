@@ -45,13 +45,10 @@ impl Persister {
     }
 
     /// Queues `events` without blocking — a full channel warns and
-    /// returns `false` (the store is a cache; memory stays bounded).
-    pub(crate) fn try_push(&self, events: Vec<Event>) -> bool {
-        if self.tx.try_send(Msg::Events(events)).is_ok() {
-            true
-        } else {
+    /// drops the batch (the store is a cache; memory stays bounded).
+    pub(crate) fn try_push(&self, events: Vec<Event>) {
+        if self.tx.try_send(Msg::Events(events)).is_err() {
             warn!("persister channel full — events not cached");
-            false
         }
     }
 

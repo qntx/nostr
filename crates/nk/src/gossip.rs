@@ -11,7 +11,7 @@ use nk_core::nips::nip65::RelayList;
 use nk_core::{Event, EventId, Filter, Kind, PublicKey, RelayUrl, SingleLetterTag, Timestamp};
 
 /// The `p` tag letter, const-evaluated (`'p'` is always a valid letter).
-const P_TAG: SingleLetterTag = match SingleLetterTag::new('p') {
+pub(crate) const P_TAG: SingleLetterTag = match SingleLetterTag::new('p') {
     Some(t) => t,
     None => unreachable!(),
 };
@@ -158,8 +158,8 @@ impl Routing {
     }
 }
 
-/// A `route`/`publish_relays` outcome per target — the LRU over
-/// `PublicKey -> Routes`.
+/// The routing table: an LRU over `PublicKey -> Routes`, sized by
+/// [`GossipOptions`].
 pub struct Gossip {
     routes: LruCache<PublicKey, Routes>,
     max_relays: usize,
@@ -193,6 +193,8 @@ impl Gossip {
             id: event.id(),
         };
         let pubkey = event.pubkey();
+        let allow = self.allow_insecure;
+        let keep = move |u: &&RelayUrl| allow || secure(u);
         // Version check and parse come before any write: inserting into a
         // full LRU evicts, so only a winning, parseable list may touch it.
         let stored = self.routes.peek(&pubkey);
@@ -205,18 +207,8 @@ impl Gossip {
                     return false;
                 };
                 let routes = self.routes.entry(pubkey).or_insert_with(Routes::default);
-                routes.write = take(
-                    list.write()
-                        .filter(|u| self.allow_insecure || secure(u))
-                        .cloned(),
-                    self.max_relays,
-                );
-                routes.read = take(
-                    list.read()
-                        .filter(|u| self.allow_insecure || secure(u))
-                        .cloned(),
-                    self.max_relays,
-                );
+                routes.write = take(list.write().filter(keep).cloned(), self.max_relays);
+                routes.read = take(list.read().filter(keep).cloned(), self.max_relays);
                 routes.relay_list = Some(version);
                 true
             }
@@ -228,13 +220,7 @@ impl Gossip {
                     return false;
                 };
                 let routes = self.routes.entry(pubkey).or_insert_with(Routes::default);
-                routes.dm = take(
-                    list.relays()
-                        .iter()
-                        .filter(|u| self.allow_insecure || secure(u))
-                        .cloned(),
-                    self.max_relays,
-                );
+                routes.dm = take(list.relays().iter().filter(keep).cloned(), self.max_relays);
                 routes.dm_list = Some(version);
                 true
             }

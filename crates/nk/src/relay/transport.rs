@@ -28,10 +28,8 @@ impl Endpoint {
 pub(crate) enum Inbound {
     /// A text frame carrying a JSON relay message.
     Text(String),
-    /// A pong — liveness evidence.
-    Pong,
-    /// Any other inbound frame.
-    Other,
+    /// Any other inbound frame — liveness evidence only.
+    Control,
 }
 
 /// One live WebSocket connection.
@@ -86,12 +84,12 @@ impl Transport {
             .await
             .map_err(|e| Error::Transport(TransportError::new(e)))?;
         let inbound = match frame.opcode() {
-            yawc::OpCode::Text => std::str::from_utf8(frame.payload())
-                .ok()
-                .map(|t| Inbound::Text(t.to_owned())),
-            yawc::OpCode::Pong => Some(Inbound::Pong),
+            yawc::OpCode::Text => Some(
+                std::str::from_utf8(frame.payload())
+                    .map_or(Inbound::Control, |t| Inbound::Text(t.to_owned())),
+            ),
             yawc::OpCode::Close => None,
-            _ => Some(Inbound::Other),
+            _ => Some(Inbound::Control),
         };
         Ok(inbound)
     }

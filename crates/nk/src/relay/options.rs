@@ -20,7 +20,7 @@ pub struct RelayOptions {
     /// Deadline for one-shot replies: a publish's `OK`, a `COUNT`, a
     /// `NEG` sync.
     pub request_timeout: Duration,
-    /// Idle interval between WebSocket pings.
+    /// Idle time before a WebSocket ping; any inbound frame restarts it.
     pub ping_interval: Duration,
     /// Maximum time to wait for a pong before reconnecting.
     pub pong_deadline: Duration,

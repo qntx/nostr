@@ -1,14 +1,15 @@
 //! The sans-IO state machine behind [`Relay`](crate::relay::Relay): one
 //! request table, pending publishes, and NIP-42 state. No I/O, clock, or
 //! channels — the driver owns those; this owns the protocol decisions.
-//! Protocol-driven writes come out as [`Out::Send`].
+//! Protocol-driven writes and waiter resolutions are queued as [`Out`]s
+//! and drained through [`Session::poll_out`].
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use nk_core::{ClientMessage, CountResult, Event, EventId, Filter, RelayMessage, SubscriptionId};
 
-use super::neg::{NegSession, Reconciliation};
+use super::neg::{NegSession, Reconciliation, Round};
 use super::{Error, Result};
 
 /// What the session wants the driver to do.
@@ -26,7 +27,7 @@ pub(crate) enum Out {
         event: Event,
     },
     /// `EOSE` for `id` — first one only for subscriptions, terminal for
-    /// fetches (a `Send(CLOSE)` precedes it in the batch).
+    /// fetches (a `Send(CLOSE)` precedes it in the queue).
     Eose(SubscriptionId),
     /// `id` ended; `reason` is the relay's `CLOSED`/`NEG-ERR` message.
     Closed {
@@ -133,8 +134,25 @@ struct NegState {
     items: Vec<(nk_core::Timestamp, EventId)>,
     /// The live sync.
     neg: NegSession,
-    /// The accumulated have/need across rounds.
-    out: Reconciliation,
+}
+
+impl NegState {
+    /// Rebuilds the sync from `items` for an AUTH retry; returns the
+    /// `NEG-OPEN` wire message.
+    fn restart(&mut self, id: &SubscriptionId) -> Result<ClientMessage<'static>> {
+        let (neg, message) = NegSession::start(&self.items)?;
+        self.neg = neg;
+        Ok(neg_open(id, &self.filter, message))
+    }
+}
+
+/// The `NEG-OPEN` wire message for `id`.
+fn neg_open(id: &SubscriptionId, filter: &Filter, message: String) -> ClientMessage<'static> {
+    ClientMessage::NegOpen {
+        subscription_id: Cow::Owned(id.clone()),
+        filter: Cow::Owned(filter.clone()),
+        message: Cow::Owned(message),
+    }
 }
 
 /// One open request.
@@ -183,6 +201,8 @@ pub(crate) struct Session {
     /// `options.signer.is_some()` — without a signer, `auth-required:`
     /// refusals are terminal.
     can_auth: bool,
+    /// Driver-bound outputs, in order — drained by `poll_out`.
+    outs: VecDeque<Out>,
 }
 
 impl Session {
@@ -193,7 +213,13 @@ impl Session {
             publishes: HashMap::new(),
             auth: Auth::default(),
             can_auth,
+            outs: VecDeque::new(),
         }
+    }
+
+    /// The next driver-bound output, in order.
+    pub(crate) fn poll_out(&mut self) -> Option<Out> {
+        self.outs.pop_front()
     }
 
     /// The wire message that (re)opens `id` — `REQ` for Sub/Fetch,
@@ -212,9 +238,11 @@ impl Session {
         }
     }
 
-    /// Registers `kind` under `id` and returns its open message.
-    fn open(&mut self, id: &SubscriptionId, kind: Kind) -> ClientMessage<'static> {
-        let msg = Self::wire_msg(id, &kind);
+    /// Registers `kind` under `id` and queues its open message.
+    fn open(&mut self, id: &SubscriptionId, kind: Kind) {
+        if let Some(msg) = Self::wire_msg(id, &kind) {
+            self.outs.push_back(Out::Send(msg));
+        }
         self.requests.insert(
             id.clone(),
             Request {
@@ -222,79 +250,59 @@ impl Session {
                 auth: AuthMark::Fresh,
             },
         );
-        // Only `open_neg` registers a kind without a `wire_msg`.
-        msg.unwrap_or_else(|| ClientMessage::Close(Cow::Owned(id.clone())))
     }
 
-    /// Registers a `REQ` subscription; returns the wire message.
-    pub(crate) fn open_sub(
-        &mut self,
-        id: &SubscriptionId,
-        filters: Vec<Filter>,
-    ) -> ClientMessage<'static> {
+    /// Registers a `REQ` subscription and queues the `REQ`.
+    pub(crate) fn open_sub(&mut self, id: &SubscriptionId, filters: Vec<Filter>) {
         self.open(
             id,
             Kind::Sub {
                 filters,
                 eose: false,
             },
-        )
+        );
     }
 
-    /// Registers a bounded `REQ`; returns the wire message.
-    pub(crate) fn open_fetch(
-        &mut self,
-        id: &SubscriptionId,
-        filters: Vec<Filter>,
-    ) -> ClientMessage<'static> {
-        self.open(id, Kind::Fetch { filters })
+    /// Registers a bounded `REQ` and queues it.
+    pub(crate) fn open_fetch(&mut self, id: &SubscriptionId, filters: Vec<Filter>) {
+        self.open(id, Kind::Fetch { filters });
     }
 
-    /// Registers a NIP-45 `COUNT`; returns the wire message.
-    pub(crate) fn open_count(
-        &mut self,
-        id: &SubscriptionId,
-        filters: Vec<Filter>,
-    ) -> ClientMessage<'static> {
-        self.open(id, Kind::Count { filters })
+    /// Registers a NIP-45 `COUNT` and queues it.
+    pub(crate) fn open_count(&mut self, id: &SubscriptionId, filters: Vec<Filter>) {
+        self.open(id, Kind::Count { filters });
     }
 
-    /// Registers a NIP-77 sync; returns the `NEG-OPEN` wire message.
+    /// Registers a NIP-77 sync and queues the `NEG-OPEN`.
     ///
     /// # Errors
     ///
-    /// [`Error::Negentropy`] when the item set cannot be sealed.
+    /// [`Error::Negentropy`] when the item set cannot be sealed — nothing
+    /// is registered or queued.
     pub(crate) fn open_neg(
         &mut self,
         id: SubscriptionId,
         filter: Filter,
         items: Vec<(nk_core::Timestamp, EventId)>,
-    ) -> Result<ClientMessage<'static>> {
-        let mut neg = NegSession::new(&items)?;
-        let message = neg.initiate()?;
+    ) -> Result<()> {
+        let (neg, message) = NegSession::start(&items)?;
+        let msg = neg_open(&id, &filter, message);
         self.requests.insert(
-            id.clone(),
+            id,
             Request {
-                kind: Kind::Neg(Box::new(NegState {
-                    filter: filter.clone(),
-                    items,
-                    neg,
-                    out: Reconciliation::default(),
-                })),
+                kind: Kind::Neg(Box::new(NegState { filter, items, neg })),
                 auth: AuthMark::Fresh,
             },
         );
-        Ok(ClientMessage::NegOpen {
-            subscription_id: Cow::Owned(id),
-            filter: Cow::Owned(filter),
-            message: Cow::Owned(message),
-        })
+        self.outs.push_back(Out::Send(msg));
+        Ok(())
     }
 
-    /// Registers `event` for its `OK`; `None` joins the in-flight publish.
-    pub(crate) fn publish(&mut self, event: Event) -> Option<ClientMessage<'static>> {
+    /// Registers `event` for its `OK` and queues the `EVENT`; `false`
+    /// joins the in-flight publish instead.
+    pub(crate) fn publish(&mut self, event: Event) -> bool {
         if self.publishes.contains_key(&event.id()) {
-            return None;
+            return false;
         }
         self.publishes.insert(
             event.id(),
@@ -303,20 +311,28 @@ impl Session {
                 auth: AuthMark::Fresh,
             },
         );
-        Some(ClientMessage::Event(Cow::Owned(event)))
+        self.outs
+            .push_back(Out::Send(ClientMessage::Event(Cow::Owned(event))));
+        true
     }
 
-    /// Removes request `id`; returns the local-close wire message —
-    /// `CLOSE` for subs and fetches, `NEG-CLOSE` for syncs, `None` for
+    /// Removes request `id` and queues its local-close wire message —
+    /// `CLOSE` for subs and fetches, `NEG-CLOSE` for syncs, nothing for
     /// counts and unknown ids.
-    pub(crate) fn close(&mut self, id: &SubscriptionId) -> Option<ClientMessage<'static>> {
-        let req = self.requests.remove(id)?;
+    pub(crate) fn close(&mut self, id: &SubscriptionId) {
+        let Some(req) = self.requests.remove(id) else {
+            return;
+        };
         match req.kind {
             Kind::Sub { .. } | Kind::Fetch { .. } => {
-                Some(ClientMessage::Close(Cow::Owned(id.clone())))
+                self.outs
+                    .push_back(Out::Send(ClientMessage::Close(Cow::Owned(id.clone()))));
             }
-            Kind::Neg { .. } => Some(ClientMessage::NegClose(Cow::Owned(id.clone()))),
-            Kind::Count { .. } => None,
+            Kind::Neg { .. } => {
+                self.outs
+                    .push_back(Out::Send(ClientMessage::NegClose(Cow::Owned(id.clone()))));
+            }
+            Kind::Count { .. } => {}
         }
     }
 
@@ -356,15 +372,17 @@ impl Session {
         lost
     }
 
-    /// A fresh challenge arms `signed`; `false` when a sign request is
-    /// already outstanding or an AUTH event is awaiting its `OK`.
-    fn want_sign(&mut self) -> Option<Out> {
-        let challenge = self.auth.challenge.clone()?;
+    /// A fresh challenge queues a `Sign`; a sign request already
+    /// outstanding or an AUTH event awaiting its `OK` queues nothing.
+    fn want_sign(&mut self) {
+        let Some(challenge) = self.auth.challenge.clone() else {
+            return;
+        };
         if self.auth.signing || self.auth.inflight.is_some() {
-            return None;
+            return;
         }
         self.auth.signing = true;
-        Some(Out::Sign(challenge))
+        self.outs.push_back(Out::Sign(challenge));
     }
 
     /// An `auth-required:` refusal may retry once when a signer is
@@ -376,27 +394,28 @@ impl Session {
     /// A terminal refusal (`CLOSED`, `NEG-ERR`) on `id`. `kind_ok`
     /// restricts which request kinds the message applies to — a mismatch
     /// is ignored. `auth-required:` takes the NIP-42 path; anything else
-    /// removes the entry and surfaces `Out::Closed`.
+    /// removes the entry and queues `Out::Closed`.
     fn refused_or_closed(
         &mut self,
         id: SubscriptionId,
         reason: String,
         kind_ok: impl Fn(&Kind) -> bool,
-    ) -> Vec<Out> {
+    ) {
         let Some(req) = self.requests.get(&id) else {
-            return Vec::new();
+            return;
         };
         if !kind_ok(&req.kind) {
-            return Vec::new();
+            return;
         }
         if reason.starts_with("auth-required:") && self.may_retry(&req.auth) {
             if let Some(entry) = self.requests.get_mut(&id) {
                 entry.auth = AuthMark::Waiting(reason);
             }
-            return self.want_sign().into_iter().collect();
+            self.want_sign();
+            return;
         }
         self.requests.remove(&id);
-        vec![Out::Closed { id, reason }]
+        self.outs.push_back(Out::Closed { id, reason });
     }
 
     /// Every `Waiting` entry on both tables — `(request ids, publish ids)`.
@@ -418,217 +437,214 @@ impl Session {
 
     /// An `OK` on the in-flight AUTH event: retry every `Waiting` entry
     /// (once) or surface its stored reason when refused.
-    fn on_auth_ok(&mut self, accepted: bool) -> Vec<Out> {
+    fn on_auth_ok(&mut self, accepted: bool) {
         self.auth.inflight = None;
-        let mut outs = Vec::new();
         if accepted {
             let (requests, publishes) = self.waiting();
             for id in requests {
-                outs.extend(self.retry_request(&id));
+                self.retry_request(&id);
             }
             for id in publishes {
-                outs.extend(self.retry_publish(&id));
+                self.retry_publish(&id);
             }
         } else {
-            outs.extend(self.fallbacks());
+            self.fallbacks();
         }
-        outs
     }
 
     /// Resends one `Waiting` publish; `Retried` marks it terminal next.
-    fn retry_publish(&mut self, id: &EventId) -> Vec<Out> {
+    fn retry_publish(&mut self, id: &EventId) {
         let Some(p) = self.publishes.get_mut(id) else {
-            return Vec::new();
+            return;
         };
         p.auth = AuthMark::Retried;
-        vec![Out::Send(ClientMessage::Event(Cow::Owned(p.event.clone())))]
+        let event = p.event.clone();
+        self.outs
+            .push_back(Out::Send(ClientMessage::Event(Cow::Owned(event))));
     }
 
     /// Resends one `Waiting` request; `Retried` marks it so a second
     /// `auth-required:` is terminal.
-    fn retry_request(&mut self, id: &SubscriptionId) -> Vec<Out> {
-        let Some(req) = self.requests.get_mut(id) else {
-            return Vec::new();
-        };
-        req.auth = AuthMark::Retried;
-        match &mut req.kind {
-            Kind::Sub { .. } | Kind::Fetch { .. } | Kind::Count { .. } => {
-                Self::wire_msg(id, &req.kind).map_or_else(Vec::new, |m| vec![Out::Send(m)])
-            }
-            Kind::Neg(state) => {
-                let NegState {
-                    filter,
-                    items,
-                    neg,
-                    out,
-                } = &mut **state;
-                match NegSession::new(items).and_then(|mut n| n.initiate().map(|m| (n, m))) {
-                    Ok((n, message)) => {
-                        *neg = n;
-                        *out = Reconciliation::default();
-                        vec![Out::Send(ClientMessage::NegOpen {
-                            subscription_id: Cow::Owned(id.clone()),
-                            filter: Cow::Owned(filter.clone()),
-                            message: Cow::Owned(message),
-                        })]
+    fn retry_request(&mut self, id: &SubscriptionId) {
+        /// What the retry produced — applied once the request borrow ends.
+        enum Retry {
+            /// Queue the (re)open message.
+            Send(ClientMessage<'static>),
+            /// The NEG session failed to rebuild — terminal.
+            Fail(Error),
+        }
+        let retry = match self.requests.get_mut(id) {
+            Some(req) => {
+                req.auth = AuthMark::Retried;
+                match &mut req.kind {
+                    Kind::Sub { .. } | Kind::Fetch { .. } | Kind::Count { .. } => {
+                        Self::wire_msg(id, &req.kind).map(Retry::Send)
                     }
-                    Err(error) => {
-                        self.requests.remove(id);
-                        vec![Out::Failed {
-                            id: id.clone(),
-                            error,
-                        }]
-                    }
+                    Kind::Neg(state) => match state.restart(id) {
+                        Ok(msg) => Some(Retry::Send(msg)),
+                        Err(error) => Some(Retry::Fail(error)),
+                    },
                 }
             }
+            None => None,
+        };
+        match retry {
+            Some(Retry::Send(msg)) => self.outs.push_back(Out::Send(msg)),
+            Some(Retry::Fail(error)) => {
+                self.requests.remove(id);
+                self.outs.push_back(Out::Failed {
+                    id: id.clone(),
+                    error,
+                });
+            }
+            None => {}
         }
     }
 
     /// Every `Waiting` entry's normal terminal output — the stored reason.
-    fn fallbacks(&mut self) -> Vec<Out> {
-        let mut outs = Vec::new();
+    fn fallbacks(&mut self) {
         let (requests, publishes) = self.waiting();
         for id in requests {
             if let Some(req) = self.requests.remove(&id)
                 && let AuthMark::Waiting(reason) = req.auth
             {
-                outs.push(Out::Closed { id, reason });
+                self.outs.push_back(Out::Closed { id, reason });
             }
         }
         for id in publishes {
             if let Some(p) = self.publishes.remove(&id)
                 && let AuthMark::Waiting(reason) = p.auth
             {
-                outs.push(Out::Published {
+                self.outs.push_back(Out::Published {
                     id,
                     accepted: false,
                     message: reason,
                 });
             }
         }
-        outs
     }
 
     /// The off-loop signer produced `event` for `challenge`.
     ///
     /// A stale signature (a newer challenge arrived meanwhile) re-signs;
     /// with nothing `Waiting` the event is dropped unused.
-    pub(crate) fn signed(&mut self, challenge: &str, event: Event) -> Vec<Out> {
+    pub(crate) fn signed(&mut self, challenge: &str, event: Event) {
         self.auth.signing = false;
         let (requests, publishes) = self.waiting();
         if requests.is_empty() && publishes.is_empty() {
-            return Vec::new();
+            return;
         }
         if self.auth.challenge.as_deref() != Some(challenge) {
             // The signed event answers a superseded challenge — sign the
             // current one instead, or fail the waiters when there is none.
-            return match &self.auth.challenge {
+            match self.auth.challenge.clone() {
                 Some(current) => {
                     self.auth.signing = true;
-                    vec![Out::Sign(current.clone())]
+                    self.outs.push_back(Out::Sign(current));
                 }
                 None => self.fallbacks(),
-            };
+            }
+            return;
         }
         self.auth.inflight = Some(event.id());
-        vec![Out::Send(ClientMessage::Auth(Cow::Owned(event)))]
+        self.outs
+            .push_back(Out::Send(ClientMessage::Auth(Cow::Owned(event))));
     }
 
     /// Signing failed or was impossible — every `Waiting` entry falls
     /// back to its stored reason.
-    pub(crate) fn sign_failed(&mut self) -> Vec<Out> {
+    pub(crate) fn sign_failed(&mut self) {
         self.auth.signing = false;
-        self.fallbacks()
+        self.fallbacks();
     }
 
     /// An inbound `EVENT` for a subscription or fetch.
-    fn on_event(&self, id: SubscriptionId, event: Cow<'_, Event>) -> Vec<Out> {
+    fn on_event(&mut self, id: SubscriptionId, event: Cow<'_, Event>) {
         let Some(req) = self.requests.get(&id) else {
-            return Vec::new();
+            return;
         };
         let (Kind::Sub { filters, .. } | Kind::Fetch { filters }) = &req.kind else {
-            return Vec::new();
+            return;
         };
         // NIP-01: only verified events matching a filter are delivered.
         if event.verify().is_err() {
-            return vec![Out::Rejected {
+            self.outs.push_back(Out::Rejected {
                 id,
                 reason: RejectReason::InvalidSignature,
-            }];
+            });
+            return;
         }
         if !filters.iter().any(|f| f.matches(&event)) {
-            return vec![Out::Rejected {
+            self.outs.push_back(Out::Rejected {
                 id,
                 reason: RejectReason::FilterMismatch,
-            }];
+            });
+            return;
         }
-        vec![Out::Event {
+        self.outs.push_back(Out::Event {
             id,
             event: event.into_owned(),
-        }]
+        });
     }
 
     /// One `NEG-MSG` round on a `Kind::Neg` entry — other kinds ignore
     /// it; the entry is removed only on the terminal round.
-    fn on_neg_msg(&mut self, id: SubscriptionId, message: &str) -> Vec<Out> {
-        let Some(req) = self.requests.get_mut(&id) else {
-            return Vec::new();
+    fn on_neg_msg(&mut self, id: SubscriptionId, message: &str) {
+        let round = match self.requests.get_mut(&id) {
+            Some(req) => match &mut req.kind {
+                Kind::Neg(state) => Some(state.neg.on_msg(message)),
+                _ => None,
+            },
+            None => None,
         };
-        let Kind::Neg(state) = &mut req.kind else {
-            return Vec::new();
+        let Some(round) = round else {
+            return;
         };
-        let round = state.neg.on_msg(message, &mut state.out);
-        let Ok(next) = &round else {
-            // Codec error — terminal, entry comes out below.
-            let close = Out::Send(ClientMessage::NegClose(Cow::Owned(id.clone())));
-            self.requests.remove(&id);
-            return match round {
-                Err(error) => vec![close, Out::Failed { id, error }],
-                Ok(_) => Vec::new(),
-            };
-        };
-        let Some(next) = next else {
-            // Sync finished — terminal round.
-            let close = Out::Send(ClientMessage::NegClose(Cow::Owned(id.clone())));
-            let Some(taken) = self.requests.remove(&id) else {
-                return Vec::new();
-            };
-            let Kind::Neg(done) = taken.kind else {
-                return Vec::new();
-            };
-            return vec![
-                close,
-                Out::Reconciled {
-                    id,
-                    result: done.out,
-                },
-            ];
-        };
-        vec![Out::Send(ClientMessage::NegMsg {
-            subscription_id: Cow::Owned(id),
-            message: Cow::Owned(next.clone()),
-        })]
+        match round {
+            Ok(Round::Next(next)) => {
+                self.outs.push_back(Out::Send(ClientMessage::NegMsg {
+                    subscription_id: Cow::Owned(id),
+                    message: Cow::Owned(next),
+                }));
+            }
+            Ok(Round::Done(result)) => {
+                // Sync finished — `NEG-CLOSE`, then resolve the waiter.
+                self.requests.remove(&id);
+                self.outs
+                    .push_back(Out::Send(ClientMessage::NegClose(Cow::Owned(id.clone()))));
+                self.outs.push_back(Out::Reconciled { id, result });
+            }
+            Err(error) => {
+                // Codec error — terminal, entry comes out.
+                self.requests.remove(&id);
+                self.outs
+                    .push_back(Out::Send(ClientMessage::NegClose(Cow::Owned(id.clone()))));
+                self.outs.push_back(Out::Failed { id, error });
+            }
+        }
     }
 
     /// A `NEG-ERR` applies only to `Kind::Neg`.
-    fn on_neg_err(&mut self, id: SubscriptionId, reason: String) -> Vec<Out> {
-        self.refused_or_closed(id, reason, |k| matches!(k, Kind::Neg(_)))
+    fn on_neg_err(&mut self, id: SubscriptionId, reason: String) {
+        self.refused_or_closed(id, reason, |k| matches!(k, Kind::Neg(_)));
     }
 
     /// An `OK` for a pending publish or the in-flight AUTH.
-    fn on_ok(&mut self, id: EventId, accepted: bool, message: String) -> Vec<Out> {
+    fn on_ok(&mut self, id: EventId, accepted: bool, message: String) {
         if self.auth.inflight == Some(id) {
-            return self.on_auth_ok(accepted);
+            self.on_auth_ok(accepted);
+            return;
         }
         let Some(pending) = self.publishes.get(&id) else {
-            return Vec::new();
+            return;
         };
         if !accepted && message.starts_with("auth-required:") && self.may_retry(&pending.auth) {
             let Some(p) = self.publishes.get_mut(&id) else {
-                return Vec::new();
+                return;
             };
             p.auth = AuthMark::Waiting(message);
-            return self.want_sign().into_iter().collect();
+            self.want_sign();
+            return;
         }
         // Terminal — accepted, refused, or a second auth-required.
         if let Some(done) = self.publishes.remove(&id) {
@@ -636,40 +652,40 @@ impl Session {
                 AuthMark::Waiting(reason) => reason,
                 _ => message,
             };
-            vec![Out::Published {
+            self.outs.push_back(Out::Published {
                 id,
                 accepted,
                 message,
-            }]
-        } else {
-            Vec::new()
+            });
         }
     }
 
-    /// `EOSE` on a sub fires once; on a fetch it also sends `CLOSE`.
-    fn on_eose(&mut self, id: SubscriptionId) -> Vec<Out> {
+    /// `EOSE` on a sub fires once; on a fetch it also queues `CLOSE`.
+    fn on_eose(&mut self, id: SubscriptionId) {
+        if matches!(
+            self.requests.get(&id).map(|r| &r.kind),
+            Some(Kind::Fetch { .. })
+        ) {
+            self.requests.remove(&id);
+            self.outs
+                .push_back(Out::Send(ClientMessage::Close(Cow::Owned(id.clone()))));
+            self.outs.push_back(Out::Eose(id));
+            return;
+        }
         let Some(req) = self.requests.get_mut(&id) else {
-            return Vec::new();
+            return;
         };
-        match &mut req.kind {
-            Kind::Sub { eose: true, .. } => Vec::new(),
-            Kind::Sub { eose, .. } => {
-                *eose = true;
-                vec![Out::Eose(id)]
-            }
-            Kind::Fetch { .. } => {
-                self.requests.remove(&id);
-                vec![
-                    Out::Send(ClientMessage::Close(Cow::Owned(id.clone()))),
-                    Out::Eose(id),
-                ]
-            }
-            _ => Vec::new(),
+        if let Kind::Sub { eose, .. } = &mut req.kind
+            && !*eose
+        {
+            *eose = true;
+            self.outs.push_back(Out::Eose(id));
         }
     }
 
-    /// The single entry point for inbound relay traffic.
-    pub(crate) fn handle(&mut self, message: RelayMessage<'_>) -> Vec<Out> {
+    /// The single entry point for inbound relay traffic; every output
+    /// lands in the `poll_out` queue.
+    pub(crate) fn handle(&mut self, message: RelayMessage<'_>) {
         match message {
             RelayMessage::Event {
                 subscription_id,
@@ -685,11 +701,12 @@ impl Session {
                 subscription_id,
                 message,
             } => {
-                self.refused_or_closed(subscription_id.into_owned(), message.into_owned(), |_| true)
+                self.refused_or_closed(subscription_id.into_owned(), message.into_owned(), |_| {
+                    true
+                });
             }
             RelayMessage::Auth { challenge } => {
                 self.auth.challenge = Some(challenge.into_owned());
-                Vec::new()
             }
             RelayMessage::Count {
                 subscription_id,
@@ -703,9 +720,7 @@ impl Session {
                     Some(Kind::Count { .. })
                 ) {
                     self.requests.remove(&id);
-                    vec![Out::Counted { id, result }]
-                } else {
-                    Vec::new()
+                    self.outs.push_back(Out::Counted { id, result });
                 }
             }
             RelayMessage::NegMsg {
@@ -716,8 +731,10 @@ impl Session {
                 subscription_id,
                 message,
             } => self.on_neg_err(subscription_id.into_owned(), message.into_owned()),
-            RelayMessage::Notice(message) => vec![Out::Notice(message.into_owned())],
-            _ => Vec::new(),
+            RelayMessage::Notice(message) => {
+                self.outs.push_back(Out::Notice(message.into_owned()));
+            }
+            _ => {}
         }
     }
 }
@@ -769,8 +786,19 @@ mod tests {
         RelayMessage::from_json(json).unwrap().into_owned()
     }
 
+    /// Every output queued so far.
+    fn drain(s: &mut Session) -> Vec<Out> {
+        let mut outs = Vec::new();
+        while let Some(out) = s.poll_out() {
+            outs.push(out);
+        }
+        outs
+    }
+
+    /// A `REQ` sub whose open message is consumed at once.
     fn open(s: &mut Session, id: &SubscriptionId) {
-        drop(s.open_sub(id, vec![Filter::new()]));
+        s.open_sub(id, vec![Filter::new()]);
+        drop(drain(s));
     }
 
     #[test]
@@ -779,25 +807,27 @@ mod tests {
         let id = sub_id();
         open(&mut s, &id);
         let eose = format!(r#"["EOSE","{}"]"#, id.as_str());
-        assert!(matches!(s.handle(msg(&eose)).as_slice(), [Out::Eose(_)]));
-        assert!(s.handle(msg(&eose)).is_empty());
+        s.handle(msg(&eose));
+        assert!(matches!(drain(&mut s).as_slice(), [Out::Eose(_)]));
+        s.handle(msg(&eose));
+        assert!(drain(&mut s).is_empty());
     }
 
     #[test]
     fn fetch_eose_sends_close_and_removes() {
         let mut s = Session::new(false);
         let id = sub_id();
-        drop(s.open_fetch(&id, vec![Filter::new()]));
-        let out = s.handle(msg(&format!(r#"["EOSE","{}"]"#, id.as_str())));
+        s.open_fetch(&id, vec![Filter::new()]);
+        drop(drain(&mut s));
+        s.handle(msg(&format!(r#"["EOSE","{}"]"#, id.as_str())));
+        let out = drain(&mut s);
         assert!(matches!(
             out.as_slice(),
             [Out::Send(ClientMessage::Close(_)), Out::Eose(_)]
         ));
         // Gone — a second EOSE is unknown.
-        assert!(
-            s.handle(msg(&format!(r#"["EOSE","{}"]"#, id.as_str())))
-                .is_empty()
-        );
+        s.handle(msg(&format!(r#"["EOSE","{}"]"#, id.as_str())));
+        assert!(drain(&mut s).is_empty());
     }
 
     #[test]
@@ -805,45 +835,46 @@ mod tests {
         let mut s = Session::new(false);
         let id = sub_id();
         open(&mut s, &id);
-        let out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: nope"]"#,
             id.as_str()
         )));
+        let out = drain(&mut s);
         assert!(matches!(
             out.as_slice(),
             [Out::Closed { reason, .. }] if reason == "auth-required: nope"
         ));
         let ev = event("hi", 1);
-        let out2 = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["EVENT","{}",{}]"#,
             id.as_str(),
             ev.to_json()
         )));
-        assert!(out2.is_empty());
+        assert!(drain(&mut s).is_empty());
     }
 
     #[test]
     fn ok_routes_to_pending() {
         let mut s = Session::new(false);
         let ev = event("x", 1);
-        assert!(s.publish(ev.clone()).is_some());
-        let out = s.handle(msg(&format!(r#"["OK","{}",true,""]"#, ev.id().to_hex())));
+        assert!(s.publish(ev.clone()));
+        drop(drain(&mut s));
+        s.handle(msg(&format!(r#"["OK","{}",true,""]"#, ev.id().to_hex())));
+        let out = drain(&mut s);
         assert!(matches!(
             out.as_slice(),
             [Out::Published { accepted: true, .. }]
         ));
-        assert!(
-            s.handle(msg(&format!(r#"["OK","{}",true,""]"#, ev.id().to_hex())))
-                .is_empty()
-        );
+        s.handle(msg(&format!(r#"["OK","{}",true,""]"#, ev.id().to_hex())));
+        assert!(drain(&mut s).is_empty());
     }
 
     #[test]
     fn joining_publish_reuses_pending_entry() {
         let mut s = Session::new(false);
         let ev = event("x", 1);
-        assert!(s.publish(ev.clone()).is_some());
-        assert!(s.publish(ev).is_none());
+        assert!(s.publish(ev.clone()));
+        assert!(!s.publish(ev));
     }
 
     #[test]
@@ -861,11 +892,12 @@ mod tests {
             "forged".to_owned(),
             ev.sig(),
         );
-        let out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["EVENT","{}",{}]"#,
             id.as_str(),
             bad.to_json()
         )));
+        let out = drain(&mut s);
         assert!(matches!(
             out.as_slice(),
             [Out::Rejected {
@@ -879,13 +911,15 @@ mod tests {
     fn non_matching_event_dropped() {
         let mut s = Session::new(false);
         let id = sub_id();
-        drop(s.open_sub(&id, vec![Filter::new().kinds([Kind::new(7)])]));
+        s.open_sub(&id, vec![Filter::new().kinds([Kind::new(7)])]);
+        drop(drain(&mut s));
         let ev = event("x", 1);
-        let out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["EVENT","{}",{}]"#,
             id.as_str(),
             ev.to_json()
         )));
+        let out = drain(&mut s);
         assert!(matches!(
             out.as_slice(),
             [Out::Rejected {
@@ -900,12 +934,12 @@ mod tests {
         let mut s = Session::new(false);
         let id = sub_id();
         let ev = event("x", 1);
-        let out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["EVENT","{}",{}]"#,
             id.as_str(),
             ev.to_json()
         )));
-        assert!(out.is_empty());
+        assert!(drain(&mut s).is_empty());
     }
 
     #[test]
@@ -914,7 +948,8 @@ mod tests {
         let a = sub_id();
         let b = sub_id();
         open(&mut s, &a);
-        drop(s.open_fetch(&b, vec![Filter::new()]));
+        s.open_fetch(&b, vec![Filter::new()]);
+        drop(drain(&mut s));
         let replay = s.replay();
         assert_eq!(replay.len(), 1);
         assert!(matches!(replay.first(), Some(ClientMessage::Req { .. })));
@@ -925,13 +960,14 @@ mod tests {
         let mut s = Session::new(true);
         let sub = sub_id();
         open(&mut s, &sub);
-        drop(s.open_fetch(&sub_id(), vec![Filter::new()]));
-        drop(s.open_count(&sub_id(), vec![Filter::new()]));
-        drop(s.open_neg(sub_id(), Filter::new(), Vec::new()).unwrap());
+        s.open_fetch(&sub_id(), vec![Filter::new()]);
+        s.open_count(&sub_id(), vec![Filter::new()]);
+        s.open_neg(sub_id(), Filter::new(), Vec::new()).unwrap();
         let ev = event("x", 1);
-        drop(s.publish(ev.clone()));
+        assert!(s.publish(ev.clone()));
+        drop(drain(&mut s));
         // Arm a challenge so we can check it clears.
-        drop(s.handle(msg(r#"["AUTH","chal-1"]"#)));
+        s.handle(msg(r#"["AUTH","chal-1"]"#));
         let lost = s.disconnected();
         assert_eq!(lost.publishes, vec![ev.id()]);
         let mut lost_ids = lost.requests;
@@ -941,17 +977,18 @@ mod tests {
         assert_eq!(s.replay().len(), 1);
         let c = sub_id();
         open(&mut s, &c);
-        let out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: stale"]"#,
             c.as_str()
         )));
+        let out = drain(&mut s);
         assert!(matches!(out.as_slice(), [Out::Closed { .. }]));
     }
 
     #[test]
     fn disconnect_clears_inflight_auth() {
         let mut s = Session::new(true);
-        drop(s.handle(msg(r#"["AUTH","chal-1"]"#)));
+        s.handle(msg(r#"["AUTH","chal-1"]"#));
         let a = sub_id();
         open(&mut s, &a);
         let refuse = |id: &SubscriptionId| {
@@ -960,33 +997,39 @@ mod tests {
                 id.as_str()
             ))
         };
-        assert!(matches!(s.handle(refuse(&a)).as_slice(), [Out::Sign(_)]));
+        s.handle(refuse(&a));
+        assert!(matches!(drain(&mut s).as_slice(), [Out::Sign(_)]));
         // The AUTH goes out; the socket drops before its OK.
-        let sent = s.signed("chal-1", event("auth", 22242));
+        s.signed("chal-1", event("auth", 22242));
+        let sent = drain(&mut s);
         assert!(matches!(sent.as_slice(), [Out::Send(_)]));
         drop(s.disconnected());
         // The new connection's challenge must be signable at once.
-        drop(s.handle(msg(r#"["AUTH","chal-2"]"#)));
-        let out = s.handle(refuse(&a));
+        s.handle(msg(r#"["AUTH","chal-2"]"#));
+        s.handle(refuse(&a));
+        let out = drain(&mut s);
         assert!(matches!(out.as_slice(), [Out::Sign(c)] if c == "chal-2"));
     }
 
     #[test]
     fn auth_required_shares_one_sign() {
         let mut s = Session::new(true);
-        drop(s.handle(msg(r#"["AUTH","chal"]"#)));
+        s.handle(msg(r#"["AUTH","chal"]"#));
         let a = sub_id();
         let b = sub_id();
         open(&mut s, &a);
-        drop(s.open_count(&b, vec![Filter::new()]));
-        let o1 = s.handle(msg(&format!(
+        s.open_count(&b, vec![Filter::new()]);
+        drop(drain(&mut s));
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: x"]"#,
             a.as_str()
         )));
-        let o2 = s.handle(msg(&format!(
+        let o1 = drain(&mut s);
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: x"]"#,
             b.as_str()
         )));
+        let o2 = drain(&mut s);
         assert!(matches!(o1.as_slice(), [Out::Sign(c)] if c == "chal"));
         // Second refusal joins the in-flight sign — no second Sign.
         assert!(o2.is_empty());
@@ -995,61 +1038,70 @@ mod tests {
     #[test]
     fn signed_then_ok_retries_once() {
         let mut s = Session::new(true);
-        drop(s.handle(msg(r#"["AUTH","chal"]"#)));
+        s.handle(msg(r#"["AUTH","chal"]"#));
         let a = sub_id();
         open(&mut s, &a);
-        drop(s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: x"]"#,
             a.as_str()
-        ))));
+        )));
+        drop(drain(&mut s));
         let signed_ev = auth_event("chal");
-        let sent = s.signed("chal", signed_ev);
+        s.signed("chal", signed_ev);
+        let sent = drain(&mut s);
         assert!(matches!(
             sent.as_slice(),
             [Out::Send(ClientMessage::Auth(_))]
         ));
         // OK accepted → the REQ is resent once.
-        let ok_out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["OK","{}",true,""]"#,
             auth_event("chal").id().to_hex()
         )));
+        let ok_out = drain(&mut s);
         assert!(
             matches!(ok_out.as_slice(), [Out::Send(ClientMessage::Req { .. })]),
             "{ok_out:?}"
         );
         // A second auth-required is terminal now.
-        let out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: again"]"#,
             a.as_str()
         )));
+        let out = drain(&mut s);
         assert!(matches!(out.as_slice(), [Out::Closed { .. }]));
     }
 
     #[test]
     fn signed_ok_refused_surfaces_original_reason() {
         let mut s = Session::new(true);
-        drop(s.handle(msg(r#"["AUTH","chal"]"#)));
+        s.handle(msg(r#"["AUTH","chal"]"#));
         let a = sub_id();
         let b = sub_id();
         open(&mut s, &a);
-        drop(s.open_count(&b, vec![Filter::new()]));
-        drop(s.handle(msg(&format!(
+        s.open_count(&b, vec![Filter::new()]);
+        drop(drain(&mut s));
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: first"]"#,
             a.as_str()
-        ))));
-        drop(s.handle(msg(&format!(
+        )));
+        drop(drain(&mut s));
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: second"]"#,
             b.as_str()
-        ))));
-        let out = s.signed("chal", auth_event("chal"));
+        )));
+        drop(drain(&mut s));
+        s.signed("chal", auth_event("chal"));
+        let out = drain(&mut s);
         assert!(matches!(
             out.as_slice(),
             [Out::Send(ClientMessage::Auth(_))]
         ));
-        let ok = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["OK","{}",false,"invalid: no"]"#,
             auth_event("chal").id().to_hex()
         )));
+        let ok = drain(&mut s);
         // Both fall back with their ORIGINAL reasons.
         let mut reasons: Vec<&str> = ok
             .iter()
@@ -1066,16 +1118,18 @@ mod tests {
     #[test]
     fn stale_challenge_resigns_current() {
         let mut s = Session::new(true);
-        drop(s.handle(msg(r#"["AUTH","old"]"#)));
+        s.handle(msg(r#"["AUTH","old"]"#));
         let a = sub_id();
         open(&mut s, &a);
-        drop(s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: x"]"#,
             a.as_str()
-        ))));
+        )));
+        drop(drain(&mut s));
         // A new challenge arrives before signing finished.
-        drop(s.handle(msg(r#"["AUTH","new"]"#)));
-        let out = s.signed("old", auth_event("old"));
+        s.handle(msg(r#"["AUTH","new"]"#));
+        s.signed("old", auth_event("old"));
+        let out = drain(&mut s);
         assert!(matches!(out.as_slice(), [Out::Sign(c)] if c == "new"));
     }
 
@@ -1085,18 +1139,19 @@ mod tests {
         let mut s = Session::new(false);
         let id = sub_id();
         open(&mut s, &id);
-        let out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["COUNT","{}",{{"count":7}}]"#,
             id.as_str()
         )));
-        assert!(out.is_empty());
+        assert!(drain(&mut s).is_empty());
         // The sub is still open — an EVENT for it is delivered.
         let ev = event("hi", 1);
-        let delivered = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["EVENT","{}",{}]"#,
             id.as_str(),
             ev.to_json()
         )));
+        let delivered = drain(&mut s);
         assert!(matches!(delivered.as_slice(), [Out::Event { .. }]));
     }
 
@@ -1106,32 +1161,34 @@ mod tests {
         let mut s = Session::new(false);
         let id = sub_id();
         open(&mut s, &id);
-        let err_out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["NEG-ERR","{}","error: whatever"]"#,
             id.as_str()
         )));
-        assert!(err_out.is_empty());
-        let msg_out = s.handle(msg(&format!(r#"["NEG-MSG","{}","deadbeef"]"#, id.as_str())));
-        assert!(msg_out.is_empty());
+        assert!(drain(&mut s).is_empty());
+        s.handle(msg(&format!(r#"["NEG-MSG","{}","deadbeef"]"#, id.as_str())));
+        assert!(drain(&mut s).is_empty());
         let ev = event("hi", 1);
-        let delivered = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["EVENT","{}",{}]"#,
             id.as_str(),
             ev.to_json()
         )));
+        let delivered = drain(&mut s);
         assert!(matches!(delivered.as_slice(), [Out::Event { .. }]));
     }
 
     #[test]
     fn no_signer_auth_required_is_terminal() {
         let mut s = Session::new(false);
-        drop(s.handle(msg(r#"["AUTH","chal"]"#)));
+        s.handle(msg(r#"["AUTH","chal"]"#));
         let a = sub_id();
         open(&mut s, &a);
-        let out = s.handle(msg(&format!(
+        s.handle(msg(&format!(
             r#"["CLOSED","{}","auth-required: x"]"#,
             a.as_str()
         )));
+        let out = drain(&mut s);
         assert!(matches!(out.as_slice(), [Out::Closed { .. }]));
     }
 }

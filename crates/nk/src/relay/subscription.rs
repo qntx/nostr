@@ -1,12 +1,11 @@
 //! The per-subscription event stream returned by [`Relay::subscribe`].
 
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures_util::Stream;
 use nk_core::{Event, SubscriptionId};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 /// Why a subscription ended.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -38,9 +37,9 @@ pub struct Subscription {
     rx: mpsc::Receiver<SubscriptionEvent>,
     /// Drop-side `CLOSE` requests — unbounded, never lost under load.
     drops: mpsc::UnboundedSender<SubscriptionId>,
-    /// Set by the driver when the sub is ended while the channel is full
-    /// (lagged) or the relay is closing.
-    terminal: Arc<std::sync::Mutex<Option<CloseReason>>>,
+    /// The driver's close reason — sent before `tx` drops, so it is
+    /// always waiting when the channel ends.
+    terminal: oneshot::Receiver<CloseReason>,
     done: bool,
 }
 
@@ -64,14 +63,7 @@ impl Stream for Subscription {
             Poll::Ready(Some(item)) => Poll::Ready(Some(item)),
             Poll::Ready(None) => {
                 this.done = true;
-                let reason = this
-                    .terminal
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .take();
-                reason.map_or(Poll::Ready(None), |r| {
-                    Poll::Ready(Some(SubscriptionEvent::Closed(r)))
-                })
+                Poll::Ready(this.terminal.try_recv().ok().map(SubscriptionEvent::Closed))
             }
             Poll::Pending => Poll::Pending,
         }
@@ -94,26 +86,42 @@ impl std::fmt::Debug for Subscription {
     }
 }
 
+/// The driver's half of a subscription channel: the event sender plus
+/// the one-shot terminal reason.
+pub(crate) struct SubHandles {
+    /// Event channel — dropped after `terminal` on `end`.
+    pub(crate) tx: mpsc::Sender<SubscriptionEvent>,
+    /// The reason the stream ended, read once `rx` closes.
+    terminal: oneshot::Sender<CloseReason>,
+}
+
+impl SubHandles {
+    /// Ends the stream: the reason is sent first, then the channel
+    /// closes — the `Closed` item is never lost behind a full `rx`.
+    pub(crate) fn end(self, reason: CloseReason) {
+        drop(self.terminal.send(reason));
+        drop(self.tx);
+    }
+}
+
 pub(crate) fn channel_pair(
     id: SubscriptionId,
     drops: mpsc::UnboundedSender<SubscriptionId>,
     capacity: usize,
-) -> (
-    Subscription,
-    mpsc::Sender<SubscriptionEvent>,
-    Arc<std::sync::Mutex<Option<CloseReason>>>,
-) {
+) -> (Subscription, SubHandles) {
     let (tx, rx) = mpsc::channel(capacity);
-    let terminal = Arc::new(std::sync::Mutex::new(None));
+    let (terminal_tx, terminal_rx) = oneshot::channel();
     (
         Subscription {
             id,
             rx,
             drops,
-            terminal: Arc::clone(&terminal),
+            terminal: terminal_rx,
             done: false,
         },
-        tx,
-        terminal,
+        SubHandles {
+            tx,
+            terminal: terminal_tx,
+        },
     )
 }

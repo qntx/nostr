@@ -12,11 +12,11 @@ use nk_core::nips::nip17::{
 };
 use nk_core::nips::nip59::{RandomScope, Rumor, Timestamps, WrapOptions};
 use nk_core::{
-    Event, EventBuilder, Filter, Kind, NostrSigner, PublicKey, RelayUrl, SingleLetterTag, SysRng,
-    Timestamp,
+    Event, EventBuilder, Filter, Kind, NostrSigner, PublicKey, RelayUrl, SysRng, Timestamp,
 };
 
 use super::{Client, Error, Result};
+use crate::gossip::P_TAG;
 use crate::pool::{PoolEvent, PoolSubscription, RecentIds};
 use crate::relay::{self, PublishOutcome};
 
@@ -106,11 +106,6 @@ impl std::fmt::Debug for PrivateMessages {
         f.debug_struct("PrivateMessages").finish_non_exhaustive()
     }
 }
-
-const P_TAG: SingleLetterTag = match SingleLetterTag::new('p') {
-    Some(t) => t,
-    None => unreachable!(),
-};
 
 impl Client {
     /// Publishes a kind `10050` DM relay list — signs `relays` and
