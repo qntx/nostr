@@ -79,6 +79,17 @@ pub(crate) enum Cmd {
     CloseSub {
         id: SubscriptionId,
     },
+    /// The off-loop signer finished (or failed to produce) an `AUTH`
+    /// event for `challenge`.
+    AuthDone {
+        event: Result<Event>,
+        challenge: String,
+    },
+    /// `Relay::count` — send `["COUNT", id, filters...]`.
+    Count {
+        filters: Vec<Filter>,
+        reply: oneshot::Sender<Result<nk_core::CountResult>>,
+    },
     Close(oneshot::Sender<()>),
 }
 
@@ -194,6 +205,27 @@ impl Relay {
     }
 
     /// Terminates the driver — every subscription ends `Closed(RelayClosed)`.
+    /// NIP-45 `COUNT`: returns the number of stored events matching
+    /// `filters`. Times out at `publish_timeout`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidFilters`] on an empty filter list;
+    /// [`Error::Timeout`] when the relay does not answer in time.
+    pub async fn count(&self, filters: Vec<Filter>) -> Result<nk_core::CountResult> {
+        if filters.is_empty() {
+            return Err(Error::InvalidFilters);
+        }
+        let (tx, rx) = oneshot::channel();
+        self.cmd
+            .send(Cmd::Count { filters, reply: tx })
+            .await
+            .map_err(|_| Error::Disconnected)?;
+        rx.await.map_err(|_| Error::Disconnected)?
+    }
+
+    /// Terminal close: subscriptions end `Closed(RelayClosed)` and the
+    /// socket shuts; idempotent.
     pub async fn close(&self) {
         let (tx, rx) = oneshot::channel();
         if self.cmd.send(Cmd::Close(tx)).await.is_ok() {

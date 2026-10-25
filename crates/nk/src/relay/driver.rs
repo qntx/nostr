@@ -5,15 +5,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use nk_core::{ClientMessage, Event, EventId, Filter, RelayMessage, SubscriptionId};
+use nk_core::{ClientMessage, Event, EventBuilder, EventId, Filter, RelayMessage, SubscriptionId};
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::debug;
 
-use super::session::{Out, Session};
+use super::session::{Out, Retry, Session};
 use super::subscription::{CloseReason, Subscription, SubscriptionEvent, channel_pair};
 use super::transport::{Endpoint, Inbound, Transport};
 use super::{
     Cmd, Error, FetchEnd, FetchOutcome, PublishOutcome, RelayOptions, RelayStatus, Result,
+    TransportError,
 };
 
 type PublishWaiters = Vec<oneshot::Sender<Result<PublishOutcome>>>;
@@ -27,8 +28,13 @@ struct SubHandles {
 }
 
 /// Fails every pending publish with `Disconnected` after a socket drop.
-fn fail_pending(session: &mut Session, publishes: &mut HashMap<EventId, PublishWaiters>) {
+fn fail_pending(
+    session: &mut Session,
+    publishes: &mut HashMap<EventId, PublishWaiters>,
+    pending_events: &mut HashMap<EventId, Event>,
+) {
     for id in session.take_pending() {
+        pending_events.remove(&id);
         if let Some(waiters) = publishes.remove(&id) {
             for w in waiters {
                 drop(w.send(Err(Error::Disconnected)));
@@ -121,11 +127,24 @@ struct Driver {
     drop_tx: mpsc::UnboundedSender<SubscriptionId>,
     subs: HashMap<SubscriptionId, SubHandles>,
     publishes: HashMap<EventId, PublishWaiters>,
+    /// The `EVENT` payload per pending publish — needed to resend after
+    /// an `auth-required:` + `AUTH` retry.
+    pending_events: HashMap<EventId, Event>,
     ws: Option<Transport>,
     cmd: mpsc::Sender<Cmd>,
     url: Option<Endpoint>,
+    /// The relay url text for `EventBuilder::auth`.
+    url_string: String,
     options: RelayOptions,
     status: watch::Sender<RelayStatus>,
+    /// Latest AUTH challenge and whether it has been answered.
+    challenge: Option<(String, bool)>,
+    /// The AUTH event id awaiting its `OK`.
+    auth_ok_id: Option<EventId>,
+    /// COUNT id → waiter for `Out::Counted` (or its `CLOSED` reason).
+    counts: HashMap<SubscriptionId, oneshot::Sender<Result<nk_core::CountResult>>>,
+    /// `(retry, fallback)` requests queued behind the in-flight AUTH.
+    auth_pending: Option<Vec<(Retry, Out)>>,
     backoff: Duration,
     reconnect_at: Option<tokio::time::Instant>,
     /// Deadline after the last ping with no inbound frame.
@@ -140,7 +159,11 @@ impl Driver {
         self.ws = None;
         self.pong_deadline = None;
         self.status.send_replace(RelayStatus::Disconnected);
-        fail_pending(&mut self.session, &mut self.publishes);
+        fail_pending(
+            &mut self.session,
+            &mut self.publishes,
+            &mut self.pending_events,
+        );
         if self.options.reconnect {
             self.reconnect_at = Some(tokio::time::Instant::now() + jittered(self.backoff));
             self.backoff = (self.backoff * 2).min(self.options.reconnect_max);
@@ -206,6 +229,18 @@ impl Driver {
         .await
     }
 
+    /// Sends a `COUNT` (no-op while disconnected).
+    async fn count(&mut self, id: &SubscriptionId, filters: &[Filter]) -> Result<()> {
+        if self.ws.is_none() {
+            return Ok(());
+        }
+        self.write(ClientMessage::Count {
+            subscription_id: Cow::Borrowed(id),
+            filters: Cow::Borrowed(filters),
+        })
+        .await
+    }
+
     /// Sends a `CLOSE` (no-op while disconnected).
     async fn close(&mut self, id: &SubscriptionId) -> Result<()> {
         if self.ws.is_none() {
@@ -251,6 +286,29 @@ impl Driver {
         drop(reply.send(Ok(sub)));
     }
 
+    /// NIP-45 count: one `COUNT`, one waiter, `publish_timeout` deadline.
+    async fn on_count(
+        &mut self,
+        filters: Vec<Filter>,
+        reply: oneshot::Sender<Result<nk_core::CountResult>>,
+    ) {
+        let id = self.alloc_sub_id();
+        self.session.add_count(id.clone(), filters.clone());
+        drop(self.ensure_connected().await);
+        let (tx, rx) = oneshot::channel();
+        self.counts.insert(id.clone(), tx);
+        drop(self.count(&id, &filters).await);
+        let timeout = self.options.publish_timeout;
+        tokio::spawn(async move {
+            let out = match tokio::time::timeout(timeout, rx).await {
+                Ok(Ok(r)) => r,
+                Ok(Err(_)) => Err(Error::Disconnected),
+                Err(_) => Err(Error::Timeout),
+            };
+            drop(reply.send(out));
+        });
+    }
+
     /// Sends `EVENT`; fails fast with `Disconnected` on a dead socket.
     async fn on_publish(&mut self, event: Event, reply: oneshot::Sender<Result<PublishOutcome>>) {
         drop(self.ensure_connected().await);
@@ -263,6 +321,7 @@ impl Driver {
             return;
         }
         self.publishes.insert(event.id(), vec![reply]);
+        self.pending_events.insert(event.id(), event.clone());
         let r = self
             .write(ClientMessage::Event(Cow::Borrowed(&event)))
             .await;
@@ -355,6 +414,7 @@ impl Driver {
 
     /// Fans one `OK` out to every waiter that joined the publish.
     fn resolve_publish(&mut self, id: EventId, accepted: bool, message: &str) {
+        self.pending_events.remove(&id);
         let Some(waiters) = self.publishes.remove(&id) else {
             return;
         };
@@ -391,15 +451,23 @@ impl Driver {
             match out {
                 Out::Deliver { id, event } => self.deliver(&id, event, &mut to_close),
                 Out::Eose(id) => self.send_eose(&id),
-                Out::Closed { id, reason } => self.end_sub(&id, CloseReason::Relay(reason)),
+                Out::Closed { id, reason } => {
+                    self.on_count_closed(&id, &reason);
+                    self.end_sub(&id, CloseReason::Relay(reason));
+                }
                 Out::PublishDone {
                     id,
                     accepted,
                     message,
-                } => self.resolve_publish(id, accepted, &message),
+                } => self.on_publish_done(id, accepted, &message).await,
                 Out::Rejected { id, reason } => {
                     debug!("rejected event for {id}: {reason:?}");
                 }
+                Out::AuthChallenge(c) => self.challenge = Some((c, false)),
+                Out::AuthRequired { retry, fallback } => {
+                    self.on_auth_required(retry, *fallback);
+                }
+                Out::Counted { id, result } => self.on_counted(&id, result),
                 Out::Notice(m) => debug!("relay notice: {m}"),
                 Out::SendClose(id) => to_close.push(id),
             }
@@ -442,6 +510,14 @@ impl Driver {
                 self.on_close_sub(id).await;
                 true
             }
+            Some(Cmd::Count { filters, reply }) => {
+                self.on_count(filters, reply).await;
+                true
+            }
+            Some(Cmd::AuthDone { event, challenge }) => {
+                self.on_auth_done(event, challenge).await;
+                true
+            }
             Some(Cmd::Close(reply)) => {
                 self.on_close(reply).await;
                 false
@@ -462,6 +538,152 @@ impl Driver {
                 debug!("ws error: {e}");
                 self.disconnect();
             }
+        }
+    }
+
+    /// An `auth-required:` refusal: queue `retry` behind the in-flight
+    /// AUTH or kick one off through `Cmd::AuthNeeded` (signing happens
+    /// off the select loop).
+    fn on_auth_required(&mut self, retry: Retry, fallback: Out) {
+        let Some(signer) = self.options.signer.clone() else {
+            self.route_fallback(fallback);
+            return;
+        };
+        let Some((challenge, answered)) = self.challenge.clone() else {
+            self.route_fallback(fallback);
+            return;
+        };
+        let _ = answered;
+        if let Some(waiting) = self.auth_pending.as_mut() {
+            waiting.push((retry, fallback));
+            return;
+        }
+        self.auth_pending = Some(vec![(retry, fallback)]);
+        // Sign the AUTH event off the select loop; it reports via Cmd::AuthDone.
+        let tx = self.cmd.clone();
+        let url = self.url_string.clone();
+        tokio::spawn(async move {
+            let event = async {
+                let pk = signer
+                    .public_key()
+                    .await
+                    .map_err(|e| Error::Transport(TransportError::new(e)))?;
+                let unsigned = EventBuilder::auth(
+                    &nk_core::RelayUrl::parse(&url).map_err(|_| Error::InvalidUrl)?,
+                    &challenge,
+                )
+                .build(pk);
+                signer
+                    .sign_event(unsigned)
+                    .await
+                    .map_err(|e| Error::Transport(TransportError::new(e)))
+            }
+            .await;
+            drop(tx.send(Cmd::AuthDone { event, challenge }).await);
+        });
+    }
+
+    /// Resends the pending `EVENT` after a good `AUTH`.
+    async fn retry_publish(&mut self, id: EventId) {
+        let Some(event) = self.pending_events.get(&id).cloned() else {
+            return;
+        };
+        self.session.readd_pending(id);
+        drop(
+            self.write(ClientMessage::Event(Cow::Borrowed(&event)))
+                .await,
+        );
+    }
+
+    /// `Cmd::AuthDone` — send the signed `AUTH` and wait for its `OK`, or
+    /// route the original reasons when signing failed.
+    async fn on_auth_done(&mut self, event: Result<Event>, challenge: String) {
+        // Mark this challenge answered only when we have an event to send.
+        if let Some((c, answered)) = self.challenge.as_mut()
+            && *c == challenge
+        {
+            *answered = true;
+        }
+        let Ok(event) = event else {
+            self.fail_auth_queue();
+            return;
+        };
+        self.auth_ok_id = Some(event.id());
+        let _ = self.session.add_pending(event.id());
+        drop(self.write(ClientMessage::Auth(Cow::Borrowed(&event))).await);
+    }
+
+    /// Routes every queued `(retry, fallback)` to the fallback path.
+    fn fail_auth_queue(&mut self) {
+        self.auth_ok_id = None;
+        let Some(waiting) = self.auth_pending.take() else {
+            return;
+        };
+        for (_, fallback) in waiting {
+            self.route_fallback(fallback);
+        }
+    }
+
+    /// An `OK` for the in-flight `AUTH` event: retry or surface.
+    async fn on_auth_ok(&mut self, accepted: bool) {
+        self.auth_ok_id = None;
+        let Some(waiting) = self.auth_pending.take() else {
+            return;
+        };
+        if !accepted {
+            for (_, fallback) in waiting {
+                self.route_fallback(fallback);
+            }
+            return;
+        }
+        for (retry, _) in waiting {
+            match retry {
+                Retry::Req { id, filters } => {
+                    self.session.add_sub(id.clone(), filters.clone());
+                    drop(self.req(&id, &filters).await);
+                }
+                Retry::Publish(id) => self.retry_publish(id).await,
+                Retry::Count { id, filters } => {
+                    let _ = self.session.add_count(id.clone(), filters.clone());
+                    drop(self.count(&id, &filters).await);
+                }
+            }
+        }
+    }
+
+    /// Surfaces the original refusal output when AUTH can't run.
+    fn route_fallback(&mut self, fallback: Out) {
+        match fallback {
+            Out::Closed { id, reason } => self.end_sub(&id, CloseReason::Relay(reason)),
+            Out::PublishDone {
+                id,
+                accepted,
+                message,
+            } => self.resolve_publish(id, accepted, &message),
+            other => debug!("unhandled auth fallback: {other:?}"),
+        }
+    }
+
+    /// One `OK`: the in-flight `AUTH` verdict, else a publish reply.
+    async fn on_publish_done(&mut self, id: EventId, accepted: bool, message: &str) {
+        if self.auth_ok_id == Some(id) {
+            self.on_auth_ok(accepted).await;
+        } else {
+            self.resolve_publish(id, accepted, message);
+        }
+    }
+
+    /// A NIP-45 reply → its waiter.
+    fn on_counted(&mut self, id: &SubscriptionId, result: nk_core::CountResult) {
+        if let Some(tx) = self.counts.remove(id) {
+            drop(tx.send(Ok(result)));
+        }
+    }
+
+    /// A `CLOSED` on a count id → its waiter with the relay's reason.
+    fn on_count_closed(&mut self, id: &SubscriptionId, reason: &str) {
+        if let Some(tx) = self.counts.remove(id) {
+            drop(tx.send(Err(Error::Refused(reason.to_owned()))));
         }
     }
 
@@ -502,17 +724,23 @@ pub(crate) async fn driver_loop(
         drop_tx,
         subs: HashMap::new(),
         publishes: HashMap::new(),
+        pending_events: HashMap::new(),
         ws: None,
         cmd: cmd_tx,
         url: Endpoint::parse(&url).ok(),
-        options,
+        url_string: url,
+        options: options.clone(),
         status,
         backoff: options.reconnect_min,
+        challenge: None,
+        auth_ok_id: None,
+        counts: HashMap::new(),
+        auth_pending: None,
         reconnect_at: None,
         pong_deadline: None,
         next_sub: 0,
     };
-    let mut ping = tokio::time::interval(options.ping_interval);
+    let mut ping = tokio::time::interval(d.options.ping_interval);
     loop {
         tokio::select! {
             cmd = rx.recv() => {

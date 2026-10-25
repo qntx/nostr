@@ -15,6 +15,8 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use nk::relay::{CloseReason, FetchEnd, Relay, RelayOptions, RelayStatus, SubscriptionEvent};
+use std::sync::Arc;
+
 use nk::testing::MockRelay;
 use nk_core::{Event, EventBuilder, Filter, Keys, Kind, SecretKey, Timestamp};
 
@@ -113,9 +115,9 @@ async fn fetch_ends_on_eose() {
     assert_eq!(out.events.len(), 1);
 }
 
-/// The subscription id inside a `["REQ","<id>",...]` wire frame.
+/// The second string element of a `["<verb>","<id>",...]` wire frame.
 fn req_id(frame: &str) -> &str {
-    let start = frame.find(r#""REQ",""#).map(|i| i + 7).expect("REQ frame");
+    let start = frame.find(r#"",""#).map(|i| i + 3).expect("frame id");
     let rest = &frame[start..];
     let end = rest.find('"').expect("id end");
     &rest[..end]
@@ -524,6 +526,142 @@ async fn drops_under_load_all_send_close() {
                 .is_some(),
             "CLOSE for {id} not received"
         );
+    }
+}
+
+#[tokio::test]
+async fn auth_subscribe_with_signer() {
+    // AUTH-requiring mock + a signer: the REQ is refused once, the driver
+    // answers the challenge with one kind-22242 AUTH, then retries.
+    let (mut mock, relay) = mock_and_relay_with(|o| {
+        o.signer = Some(Arc::new(Keys::generate().expect("keys")));
+    })
+    .await;
+    mock.require_auth(true);
+    let mut sub = relay
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .await
+        .expect("sub");
+    // The AUTH frame goes out; the REQ retry follows.
+    assert!(
+        mock.wait_for_frame("AUTH", Duration::from_secs(3))
+            .await
+            .is_some(),
+        "no AUTH frame"
+    );
+    let event = event("authed", 1);
+    relay.publish(&event).await.expect("publish after auth");
+    let mut saw = false;
+    for _ in 0..4 {
+        match tokio::time::timeout(Duration::from_secs(2), sub.next()).await {
+            Ok(Some(SubscriptionEvent::Event(_))) => {
+                saw = true;
+                break;
+            }
+            Ok(Some(_)) => {}
+            other => panic!("stream ended: {other:?}"),
+        }
+    }
+    assert!(saw, "no event after auth retry");
+}
+
+#[tokio::test]
+async fn auth_concurrent_requests_share_one_auth() {
+    let (mut mock, relay) = mock_and_relay_with(|o| {
+        o.signer = Some(Arc::new(Keys::generate().expect("keys")));
+    })
+    .await;
+    mock.require_auth(true);
+    // Two concurrent requests on one challenge: exactly one AUTH frame.
+    let ev = event("x", 1);
+    let s1 = relay.subscribe(vec![Filter::new().kinds([Kind::new(1)])]);
+    let s2 = relay.publish(&ev);
+    let (r1, r2) = tokio::join!(s1, s2);
+    drop(r1.expect("sub"));
+    r2.expect("publish");
+    // Exactly one AUTH frame total: the first must appear and no second
+    // may follow within the retry window.
+    assert!(
+        mock.wait_for_frame(r#""AUTH""#, Duration::from_secs(3))
+            .await
+            .is_some(),
+        "no AUTH frame"
+    );
+    let second = mock
+        .wait_for_frame(r#""AUTH""#, Duration::from_millis(300))
+        .await;
+    assert!(second.is_none(), "a second AUTH frame went out");
+}
+
+#[tokio::test]
+async fn auth_required_without_signer_surfaces_reason() {
+    let (mock, relay) = mock_and_relay().await;
+    mock.require_auth(true);
+    let mut sub = relay
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .await
+        .expect("sub");
+    match tokio::time::timeout(Duration::from_secs(2), sub.next()).await {
+        Ok(Some(SubscriptionEvent::Closed(CloseReason::Relay(r)))) => {
+            assert!(r.starts_with("auth-required:"), "{r}");
+        }
+        other => panic!("expected auth-required close, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn count_returns_stored_matches() {
+    let (_mock, relay) = mock_and_relay().await;
+    relay.publish(&event("a", 1)).await.expect("p1");
+    relay.publish(&event("b", 1)).await.expect("p2");
+    relay.publish(&event("other", 2)).await.expect("p3");
+    let r = relay
+        .count(vec![Filter::new().kinds([Kind::new(1)])])
+        .await
+        .expect("count");
+    assert_eq!(r.count, 2, "{r:?}");
+}
+
+#[tokio::test]
+async fn count_closed_surfaces_reason() {
+    let (mut mock, relay) = mock_and_relay().await;
+    mock.set_hold_reqs(true);
+    let relay2 = relay.clone();
+    let fetch = tokio::spawn(async move { relay2.count(vec![Filter::new()]).await });
+    let req = mock
+        .wait_for_frame("COUNT", Duration::from_secs(2))
+        .await
+        .expect("COUNT frame");
+    mock.send_raw(&format!(
+        r#"["CLOSED","{}","blocked: no counts"]"#,
+        req_id(&req)
+    ));
+    match fetch.await.expect("join") {
+        Err(nk::relay::Error::Refused(reason)) => {
+            assert!(reason.contains("blocked"), "{reason}");
+        }
+        other => panic!("expected refused, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn count_timeout() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("addr");
+    drop(listener);
+    let relay = Relay::new(
+        &nk_core::RelayUrl::parse(&format!("ws://{addr}")).expect("url"),
+        RelayOptions {
+            reconnect: false,
+            publish_timeout: Duration::from_millis(50),
+            ..RelayOptions::default()
+        },
+    );
+    match relay.count(vec![Filter::new()]).await {
+        Err(nk::relay::Error::Timeout | nk::relay::Error::Disconnected) => {}
+        other => panic!("expected timeout, got {other:?}"),
     }
 }
 

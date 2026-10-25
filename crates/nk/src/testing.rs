@@ -79,23 +79,130 @@ async fn on_req(
     open.push((id.clone(), filters.to_vec()));
 }
 
+/// A per-connection challenge id.
+fn ulid_like() -> String {
+    use std::sync::atomic::AtomicU64;
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    format!("{n:016x}")
+}
+
+/// The AUTH event's verdict: kind, tags, signature, and freshness.
+fn verify_auth_event(event: &Event, relay_url: &str, challenge: &str) -> Result<(), &'static str> {
+    if event.kind().as_u16() != 22242 {
+        return Err("kind");
+    }
+    let relay_ok = event
+        .tags()
+        .iter()
+        .any(|t| t.name() == "relay" && t.value() == Some(relay_url));
+    if !relay_ok {
+        return Err("relay tag");
+    }
+    let chal_ok = event
+        .tags()
+        .iter()
+        .any(|t| t.name() == "challenge" && t.value() == Some(challenge));
+    if !chal_ok {
+        return Err("challenge tag");
+    }
+    if event.verify().is_err() {
+        return Err("signature");
+    }
+    let now = nk_core::Timestamp::now().as_secs();
+    if event.created_at().as_secs().abs_diff(now) > 600 {
+        return Err("timestamp");
+    }
+    Ok(())
+}
+
+/// Per-connection NIP-42 state.
+struct AuthState<'a> {
+    /// The mock-wide `require_auth` flag.
+    required: &'a AtomicBool,
+    /// This connection's authed flag.
+    authed: &'a AtomicBool,
+    /// The mock's relay url (checked in the `relay` tag).
+    url: &'a str,
+    /// The challenge this connection issued.
+    challenge: &'a str,
+}
+
+/// The reply when `require_auth` and this conn hasn't authed.
+async fn auth_reject(ws: &mut yawc::HttpWebSocket, id: &str) {
+    let frame = format!(
+        r#"["CLOSED","{id}","auth-required: we only allow publishing to authenticated clients"]"#
+    );
+    drop(ws.send(Frame::text(frame)).await);
+}
+
 /// Routes one client text frame; `false` closes the connection.
+#[allow(clippy::too_many_arguments, reason = "per-connection state")]
 async fn on_client_frame(
     ws: &mut yawc::HttpWebSocket,
     store: &MemoryStore,
     open: &mut Vec<(SubscriptionId, Vec<nk_core::Filter>)>,
     hold: &AtomicBool,
+    auth: &AuthState<'_>,
     text: &str,
 ) -> bool {
     let Ok(msg) = ClientMessage::from_json(text) else {
         return true;
     };
     match msg {
-        ClientMessage::Event(event) => on_event(ws, store, open, &event).await,
+        ClientMessage::Event(event) => {
+            if auth.required.load(Ordering::Relaxed) && !auth.authed.load(Ordering::Relaxed) {
+                let frame = format!(
+                    r#"["OK","{}",false,"auth-required: we only allow publishing to authenticated clients"]"#,
+                    event.id().to_hex()
+                );
+                drop(ws.send(Frame::text(frame)).await);
+                return true;
+            }
+            on_event(ws, store, open, &event).await;
+        }
         ClientMessage::Req {
             subscription_id,
             filters,
-        } => on_req(ws, store, open, hold, &subscription_id, &filters).await,
+        } => {
+            if auth.required.load(Ordering::Relaxed) && !auth.authed.load(Ordering::Relaxed) {
+                auth_reject(ws, subscription_id.as_str()).await;
+                return true;
+            }
+            on_req(ws, store, open, hold, &subscription_id, &filters).await;
+        }
+        ClientMessage::Count {
+            subscription_id,
+            filters,
+        } => {
+            if auth.required.load(Ordering::Relaxed) && !auth.authed.load(Ordering::Relaxed) {
+                auth_reject(ws, subscription_id.as_str()).await;
+                return true;
+            }
+            if hold.load(Ordering::Relaxed) {
+                return true;
+            }
+            let n = store.count(&filters).unwrap_or(0);
+            let frame = format!(
+                r#"["COUNT","{}",{{"count":{n}}}]"#,
+                subscription_id.as_str()
+            );
+            drop(ws.send(Frame::text(frame)).await);
+        }
+        ClientMessage::Auth(event) => match verify_auth_event(&event, auth.url, auth.challenge) {
+            Ok(()) => {
+                auth.authed.store(true, Ordering::Relaxed);
+                let frame = format!(r#"["OK","{}",true,""]"#, event.id().to_hex());
+                drop(ws.send(Frame::text(frame)).await);
+            }
+            Err(why) => {
+                let frame = format!(
+                    r#"["OK","{}",false,"invalid: auth {why}"]"#,
+                    event.id().to_hex()
+                );
+                drop(ws.send(Frame::text(frame)).await);
+            }
+        },
         ClientMessage::Close(id) => {
             open.retain(|(s, _)| s != id.as_ref());
             let closed = format!(
@@ -113,11 +220,25 @@ async fn serve_ws(
     mut ws: yawc::HttpWebSocket,
     store: Arc<MemoryStore>,
     hold: Arc<AtomicBool>,
+    require_auth: Arc<AtomicBool>,
+    relay_url: Arc<str>,
     mut hook_rx: broadcast::Receiver<Hook>,
     log: mpsc::Sender<String>,
 ) {
     // Open subscriptions on this connection for live EVENT delivery.
     let mut open: Vec<(SubscriptionId, Vec<nk_core::Filter>)> = Vec::new();
+    let authed = AtomicBool::new(!require_auth.load(Ordering::Relaxed));
+    let challenge = format!("auth-challenge-{}", ulid_like());
+    if require_auth.load(Ordering::Relaxed) {
+        let frame = format!(r#"["AUTH","{challenge}"]"#);
+        drop(ws.send(Frame::text(frame)).await);
+    }
+    let auth = AuthState {
+        required: &require_auth,
+        authed: &authed,
+        url: &relay_url,
+        challenge: &challenge,
+    };
     loop {
         tokio::select! {
             frame = ws.next() => {
@@ -131,7 +252,7 @@ async fn serve_ws(
                     continue;
                 };
                 drop(log.send(text.to_owned()).await);
-                if !on_client_frame(&mut ws, &store, &mut open, &hold, text).await {
+                if !on_client_frame(&mut ws, &store, &mut open, &hold, &auth, text).await {
                     return;
                 }
             }
@@ -157,10 +278,13 @@ async fn serve_ws(
 }
 
 /// One accepted TCP connection: HTTP/1 + upgrades.
+#[allow(clippy::too_many_arguments, reason = "per-connection state plumbing")]
 async fn serve_conn(
     stream: tokio::net::TcpStream,
     store: Arc<MemoryStore>,
     hold: Arc<AtomicBool>,
+    require_auth: Arc<AtomicBool>,
+    relay_url: Arc<str>,
     rx: broadcast::Receiver<Hook>,
     log: mpsc::Sender<String>,
     conns: Arc<AtomicUsize>,
@@ -172,6 +296,8 @@ async fn serve_conn(
             req,
             Arc::clone(&store),
             Arc::clone(&hold),
+            Arc::clone(&require_auth),
+            Arc::clone(&relay_url),
             rx.resubscribe(),
             log.clone(),
         )))
@@ -190,6 +316,8 @@ fn serve_request(
     mut req: Request<Incoming>,
     store: Arc<MemoryStore>,
     hold: Arc<AtomicBool>,
+    require_auth: Arc<AtomicBool>,
+    relay_url: Arc<str>,
     rx: broadcast::Receiver<Hook>,
     log: mpsc::Sender<String>,
 ) -> Response<Empty<Bytes>> {
@@ -197,7 +325,7 @@ fn serve_request(
         Ok((resp, fut)) => {
             tokio::spawn(async move {
                 match fut.await {
-                    Ok(ws) => serve_ws(ws, store, hold, rx, log).await,
+                    Ok(ws) => serve_ws(ws, store, hold, require_auth, relay_url, rx, log).await,
                     Err(e) => debug!("mock ws upgrade: {e}"),
                 }
             });
@@ -220,6 +348,7 @@ pub struct MockRelay {
     log_rx: mpsc::Receiver<String>,
     conns: Arc<AtomicUsize>,
     hold: Arc<AtomicBool>,
+    require_auth: Arc<AtomicBool>,
     _accept: tokio::task::JoinHandle<()>,
 }
 
@@ -247,6 +376,10 @@ impl MockRelay {
         let conns_accept = Arc::clone(&conns);
         let hold = Arc::new(AtomicBool::new(false));
         let hold_accept = Arc::clone(&hold);
+        let require_auth = Arc::new(AtomicBool::new(false));
+        let auth_accept = Arc::clone(&require_auth);
+        let relay_url: Arc<str> = Arc::from(url.as_str().to_owned());
+        let url_accept = Arc::clone(&relay_url);
         let (hook_tx, _) = broadcast::channel::<Hook>(16);
         let (log_tx, log_rx) = mpsc::channel::<String>(256);
         let hook_for_accept = hook_tx.clone();
@@ -259,6 +392,8 @@ impl MockRelay {
                     stream,
                     store,
                     Arc::clone(&hold_accept),
+                    Arc::clone(&auth_accept),
+                    Arc::clone(&url_accept),
                     rx,
                     log,
                     Arc::clone(&conns_accept),
@@ -271,6 +406,7 @@ impl MockRelay {
             log_rx,
             conns,
             hold,
+            require_auth,
             _accept: accept,
         })
     }
@@ -284,6 +420,12 @@ impl MockRelay {
     /// Sends a raw text frame verbatim (malformed/NOTICE/CLOSED probes).
     pub fn send_raw(&self, text: &str) {
         drop(self.hooks.send(Hook::Raw(text.to_owned())));
+    }
+
+    /// Toggles NIP-42: new connections get an `AUTH` challenge and all
+    /// commands are refused with `auth-required:` until a good AUTH event.
+    pub fn require_auth(&self, require: bool) {
+        self.require_auth.store(require, Ordering::Relaxed);
     }
 
     /// Freezes the connection: the server stops reading the socket, so

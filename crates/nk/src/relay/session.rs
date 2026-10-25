@@ -36,6 +36,24 @@ pub(crate) enum Out {
     },
     /// A `NOTICE` for tracing.
     Notice(String),
+    /// The relay issued a new NIP-42 challenge.
+    AuthChallenge(String),
+    /// An `auth-required:` refusal — `retry` replays the request after a
+    /// successful `AUTH`; `fallback` is surfaced when AUTH fails or the
+    /// relay never challenged.
+    AuthRequired {
+        /// What to resend once `AUTH` is `OK`-accepted.
+        retry: Retry,
+        /// The output to deliver if AUTH fails.
+        fallback: Box<Self>,
+    },
+    /// A NIP-45 `COUNT` reply.
+    Counted {
+        /// The count's id.
+        id: SubscriptionId,
+        /// The relay's result.
+        result: nk_core::CountResult,
+    },
     /// Send `CLOSE` for `id` (the subscription is being ended locally).
     SendClose(SubscriptionId),
     /// An inbound `EVENT` failed acceptance on a live subscription.
@@ -44,6 +62,27 @@ pub(crate) enum Out {
         id: SubscriptionId,
         /// Why it was dropped.
         reason: RejectReason,
+    },
+}
+
+/// The request an `auth-required:` refused; resent after a good `AUTH`.
+#[derive(Debug)]
+pub(crate) enum Retry {
+    /// Resend `["REQ", id, filters...]`.
+    Req {
+        /// The subscription id.
+        id: SubscriptionId,
+        /// Its filters.
+        filters: Vec<Filter>,
+    },
+    /// Resend the pending `["EVENT", …]` for this id.
+    Publish(EventId),
+    /// Resend `["COUNT", id, filters...]`.
+    Count {
+        /// The count id.
+        id: SubscriptionId,
+        /// Its filters.
+        filters: Vec<Filter>,
     },
 }
 
@@ -71,6 +110,10 @@ pub(crate) struct Session {
     subs: HashMap<SubscriptionId, SubState>,
     /// Events waiting on `OK`; joining concurrent publishes share the entry.
     pending: HashSet<EventId>,
+    /// The latest NIP-42 challenge.
+    challenge: Option<String>,
+    /// Open NIP-45 counts — never replayed after reconnect.
+    counts: HashMap<SubscriptionId, Vec<Filter>>,
 }
 
 impl Session {
@@ -90,9 +133,19 @@ impl Session {
         self.subs.remove(id).map(|_| Out::SendClose(id.clone()))
     }
 
+    /// Re-adds `id` for the retried publish's `OK`.
+    pub(crate) fn readd_pending(&mut self, id: EventId) {
+        self.pending.insert(id);
+    }
+
     /// Registers `id` for an `OK`; `false` joins the in-flight publish.
     pub(crate) fn add_pending(&mut self, id: EventId) -> bool {
         self.pending.insert(id)
+    }
+
+    /// Registers a NIP-45 `COUNT`; `false` when `id` is already taken.
+    pub(crate) fn add_count(&mut self, id: SubscriptionId, filters: Vec<Filter>) -> bool {
+        self.counts.insert(id, filters).is_none()
     }
 
     /// Open `REQ`s to replay after a reconnect.
@@ -106,6 +159,32 @@ impl Session {
     /// Pending publish ids to fail on disconnect.
     pub(crate) fn take_pending(&mut self) -> Vec<EventId> {
         self.pending.drain().collect()
+    }
+
+    /// A `CLOSED`: auth-required retries when challenged, else ends the
+    /// sub/count with the reason.
+    fn on_closed(&mut self, id: SubscriptionId, reason: String) -> Vec<Out> {
+        let was_count = self.counts.remove(&id);
+        let sub = self.subs.remove(&id);
+        let auth = reason.starts_with("auth-required:") && self.challenge.is_some();
+        match (sub, was_count) {
+            (None, None) => Vec::new(),
+            (None, Some(filters)) if auth => vec![Out::AuthRequired {
+                retry: Retry::Count {
+                    id: id.clone(),
+                    filters,
+                },
+                fallback: Box::new(Out::Closed { id, reason }),
+            }],
+            (Some(sub), _) if auth => vec![Out::AuthRequired {
+                retry: Retry::Req {
+                    id: id.clone(),
+                    filters: sub.filters,
+                },
+                fallback: Box::new(Out::Closed { id, reason }),
+            }],
+            _ => vec![Out::Closed { id, reason }],
+        }
     }
 
     /// The single entry point for inbound relay traffic.
@@ -142,6 +221,22 @@ impl Session {
                 accepted,
                 message,
             } => {
+                // An `auth-required:` refusal stays pending — the AUTH
+                // retry's `OK` resolves it.
+                if !accepted
+                    && message.starts_with("auth-required:")
+                    && self.challenge.is_some()
+                    && self.pending.contains(&event_id)
+                {
+                    return vec![Out::AuthRequired {
+                        retry: Retry::Publish(event_id),
+                        fallback: Box::new(Out::PublishDone {
+                            id: event_id,
+                            accepted: false,
+                            message: message.into_owned(),
+                        }),
+                    }];
+                }
                 // One `OK` releases every joining publish.
                 if !self.pending.remove(&event_id) {
                     return Vec::new();
@@ -165,13 +260,22 @@ impl Session {
             RelayMessage::Closed {
                 subscription_id,
                 message,
+            } => self.on_closed(subscription_id.into_owned(), message.into_owned()),
+            RelayMessage::Auth { challenge } => {
+                // A fresh challenge resets the answered state.
+                self.challenge = Some(challenge.clone().into_owned());
+                vec![Out::AuthChallenge(challenge.into_owned())]
+            }
+            RelayMessage::Count {
+                subscription_id,
+                result,
             } => {
-                if self.subs.remove(subscription_id.as_ref()).is_none() {
+                if self.counts.remove(subscription_id.as_ref()).is_none() {
                     return Vec::new();
                 }
-                vec![Out::Closed {
+                vec![Out::Counted {
                     id: subscription_id.into_owned(),
-                    reason: message.into_owned(),
+                    result,
                 }]
             }
             RelayMessage::Notice(message) => vec![Out::Notice(message.into_owned())],

@@ -2,10 +2,11 @@
 //! `std`'s `OpenOptions`: every knob is inspectable, and
 //! `RelayOptions::default()` is the sensible profile.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Relay driver configuration.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct RelayOptions {
     /// Deadline for the WebSocket handshake.
     pub connect_timeout: Duration,
@@ -25,6 +26,9 @@ pub struct RelayOptions {
     pub max_message_size: usize,
     /// Per-subscription channel capacity — a fuller consumer is lagged.
     pub subscription_capacity: usize,
+    /// NIP-42 signer: `auth-required:` replies are answered with a kind
+    /// 22242 `AUTH` event and the request retried once.
+    pub signer: Option<Arc<dyn nk_core::NostrSigner>>,
 }
 
 impl Default for RelayOptions {
@@ -39,6 +43,7 @@ impl Default for RelayOptions {
             reconnect_max: Duration::from_secs(60),
             max_message_size: 1024 * 1024,
             subscription_capacity: 1024,
+            signer: None,
         }
     }
 }

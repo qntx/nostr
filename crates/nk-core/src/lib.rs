@@ -29,6 +29,7 @@ pub mod time;
 pub mod url;
 
 pub mod nips;
+pub mod signer;
 
 #[cfg(test)]
 pub(crate) mod testutil;
@@ -41,6 +42,7 @@ pub use filter::{Filter, SingleLetterTag, fingerprint};
 pub use json::JsonError;
 pub use key::{Keys, PublicKey, SecretKey, Signature};
 pub use message::{ClientMessage, CountResult, Hll, RelayMessage, SubscriptionId};
+pub use signer::{BoxFuture, NostrSigner, SignerBackendError, SignerError};
 pub use time::Timestamp;
 pub use url::RelayUrl;
 

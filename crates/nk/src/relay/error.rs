@@ -18,6 +18,10 @@ pub enum Error {
     /// `Relay::close` has run; the relay is terminal.
     #[error("the relay is closed")]
     Closed,
+    /// The relay `CLOSED` a request with a reason (NIP-45 `COUNT`, and
+    /// any `auth-required:` that could not be answered).
+    #[error("the relay refused with reason: {0}")]
+    Refused(String),
     /// The WebSocket transport failed.
     #[error("transport failure")]
     Transport(#[source] TransportError),
