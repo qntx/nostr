@@ -9,7 +9,7 @@ import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import { formatEventAddress, parseEventAddress, parseEventAddressInput, Tag } from "../core/tag.ts";
 import type { Mutable } from "../core/util.ts";
-import { isHex32 } from "../core/util.ts";
+import { isHex32, lowerAscii } from "../core/util.ts";
 import type { AddressPointer, EventPointer, ProfilePointer } from "./nip19.ts";
 
 /** Parsed NIP-10 thread references from an event's `e`/`q`/`p` tags. */
@@ -86,8 +86,8 @@ type BuiltQuote = { tag: Tag; author?: string | undefined; relay?: string | unde
 
 function quoteToTag(quote: QuoteInput): BuiltQuote | undefined {
   if (typeof quote === "string") {
-    if (isHex32(quote.toLowerCase())) {
-      return { tag: ["q", quote.toLowerCase()] };
+    if (isHex32(lowerAscii(quote))) {
+      return { tag: ["q", lowerAscii(quote)] };
     }
     const addr = parseEventAddressInput(quote);
     if (!addr) {
@@ -96,11 +96,11 @@ function quoteToTag(quote: QuoteInput): BuiltQuote | undefined {
     return { tag: ["q", formatEventAddress(addr.kind, addr.pubkey, addr.identifier)] };
   }
   if ("id" in quote) {
-    const id = quote.id.toLowerCase();
+    const id = lowerAscii(quote.id);
     const relay = quote.relays?.[0];
     const author =
-      quote.author !== undefined && isHex32(quote.author.toLowerCase())
-        ? quote.author.toLowerCase()
+      quote.author !== undefined && isHex32(lowerAscii(quote.author))
+        ? lowerAscii(quote.author)
         : undefined;
     let tag: Tag;
     if (author === undefined) {
@@ -242,7 +242,7 @@ export function buildReplyTags(opts: ReplyTagsOptions): Tag[] {
   assertKind1Parent(opts.parent);
   const thread = parseThreadTags(opts.parent);
   const root = thread.root ?? { id: opts.parent.id, relays: [], author: opts.parent.pubkey };
-  const parentIsRoot = root.id.toLowerCase() === opts.parent.id.toLowerCase();
+  const parentIsRoot = lowerAscii(root.id) === lowerAscii(opts.parent.id);
 
   const tags: Tag[] = [];
   const rootRelay = root.relays?.[0] ?? opts.relayHint ?? "";
@@ -255,7 +255,7 @@ export function buildReplyTags(opts: ReplyTagsOptions): Tag[] {
   // Ensure root + parent authors are p-tagged.
   const pSeen = new Set<string>();
   const addP = (pk: string, relay?: string) => {
-    const key = pk.toLowerCase();
+    const key = lowerAscii(pk);
     if (pSeen.has(key)) {
       return;
     }

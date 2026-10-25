@@ -26,6 +26,8 @@ export {
   normalizeRelayUrls,
   normalizeURL,
   randomBytes,
+  trimAscii,
+  lowerAscii,
 } from "./util.ts";
 
 export {

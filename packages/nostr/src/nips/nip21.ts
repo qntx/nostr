@@ -4,6 +4,7 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/21.md
  */
 import { NostrError } from "../core/error.ts";
+import { lowerAscii } from "../core/util.ts";
 import { decode } from "./nip19.ts";
 import type { DecodedResult } from "./nip19.ts";
 
@@ -35,7 +36,7 @@ export function isNostrURI(value: unknown): value is `nostr:${string}` {
   if (!/^[Nn][Oo][Ss][Tt][Rr]:[A-Za-z0-9]+1[02-9AC-HJ-NP-Zac-hj-np-z]+$/.test(value)) {
     return false;
   }
-  return !value.toLowerCase().startsWith("nostr:nsec1");
+  return !lowerAscii(value).startsWith("nostr:nsec1");
 }
 
 /** Parse and decode a full `nostr:…` URI. NIP-21 excludes `nsec`. */
@@ -45,7 +46,7 @@ export function parseNostrURI(uri: string): NostrURI {
   if (entity === undefined) {
     throw new Nip21Error(`invalid Nostr URI: ${uri}`);
   }
-  if (entity.toLowerCase().startsWith("nsec1")) {
+  if (lowerAscii(entity).startsWith("nsec1")) {
     throw new Nip21Error("NIP-21 identifiers exclude nsec");
   }
   let decoded: DecodedResult;

@@ -14,7 +14,7 @@ import { Keys, SecretKey, signEvent } from "../core/key.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
-import { assertHex32, isRecord, nowSeconds } from "../core/util.ts";
+import { assertHex32, isRecord, nowSeconds, lowerAscii } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
 import { encrypt, getConversationKey } from "./nip44.ts";
 
@@ -316,10 +316,10 @@ function parseRumor(value: unknown): Rumor {
     tags: value.tags,
     content: value.content,
     created_at: value.created_at,
-    pubkey: value.pubkey.toLowerCase(),
+    pubkey: lowerAscii(value.pubkey),
   };
   const expected = getEventHash(unsigned);
-  if (typeof givenId === "string" && givenId.toLowerCase() !== expected) {
+  if (typeof givenId === "string" && givenId !== expected) {
     throw new Nip59Error("invalid rumor");
   }
   return { ...unsigned, id: expected };

@@ -68,6 +68,25 @@
       }
     },
     {
+      "name": "tab-padded input",
+      "uri": "\tbunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\n",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "relays": [],
+        "secret": null
+      }
+    },
+    {
+      "name": "NBSP does not trim",
+      "uri": " bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "out": null
+    },
+    {
+      "name": "U+FEFF does not trim",
+      "uri": "﻿bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+      "out": null
+    },
+    {
       "name": "opaque-path fallback",
       "uri": "bunker:3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
       "out": {

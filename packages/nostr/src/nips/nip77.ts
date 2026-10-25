@@ -302,7 +302,7 @@ export function storageFromItems(
   const storage = new NegentropyStorageVector();
   const seen = new Set<string>();
   for (const item of items) {
-    const id = item.id.toLowerCase();
+    const { id } = item;
     if (seen.has(id)) {
       continue;
     }

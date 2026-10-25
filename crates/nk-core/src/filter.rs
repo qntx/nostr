@@ -373,9 +373,7 @@ impl Filter {
                 .iter()
                 .all(|kind| kind.is_replaceable() || kind.is_addressable());
             if all_replaceable {
-                let per_author = self
-                    .tag_values(SingleLetterTag(b'd'))
-                    .map_or(1, <[_]>::len);
+                let per_author = self.tag_values(SingleLetterTag(b'd')).map_or(1, <[_]>::len);
                 let bound = authors
                     .len()
                     .saturating_mul(kinds.len())
@@ -1103,7 +1101,11 @@ mod tests {
             Filter::new().tag(letter('e'), ["nothex"]),
             Err(Error::InvalidTagValue { .. })
         ));
-        assert!(Filter::new().tag(letter('e'), [&ID_A.to_uppercase()]).is_ok());
+        assert!(
+            Filter::new()
+                .tag(letter('e'), [&ID_A.to_uppercase()])
+                .is_ok()
+        );
         assert!(Filter::new().tag(letter('t'), ["nothex"]).is_ok());
     }
 

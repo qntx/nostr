@@ -56,7 +56,6 @@ pub enum Error {
 
 /// Result type for NIP-98 operations.
 pub type Result<T, E = Error> = core::result::Result<T, E>;
-use crate::nips::util::is_js_whitespace;
 
 /// Default `|now − created_at|` window for [`validate`] (TS
 /// `DEFAULT_MAX_SKEW_SEC`).
@@ -80,8 +79,8 @@ fn strip_scheme(token: &str) -> &str {
         return token;
     }
     let rest = &token[5..];
-    if rest.starts_with(is_js_whitespace) {
-        rest.trim_start_matches(is_js_whitespace)
+    if rest.starts_with(|c: char| c.is_ascii_whitespace()) {
+        rest.trim_start_matches(|c: char| c.is_ascii_whitespace())
     } else {
         token
     }
@@ -228,7 +227,8 @@ pub fn validate(
     if us.first() != Some(&url) {
         return Err(Error::Url);
     }
-    if methods.first().map(|m| m.to_lowercase()).as_deref() != Some(method.to_lowercase().as_str())
+    if methods.first().map(|m| m.to_ascii_lowercase()).as_deref()
+        != Some(method.to_ascii_lowercase().as_str())
     {
         return Err(Error::Method);
     }
@@ -307,13 +307,22 @@ mod tests {
     fn unpack_token_scheme_variants() {
         let event = signed_auth("https://a/", "GET", None, 1_700_000_000);
         let token = token(&event);
-        for prefix in ["Nostr ", "nostr\t", "NOSTR  ", "nOsTr\n", "nostr\u{feff}"] {
+        for prefix in ["Nostr ", "nostr\t", "NOSTR  ", "nOsTr\n"] {
             let mut t = String::from(prefix);
             t.push_str(&token);
             assert_eq!(unpack_token(&t).unwrap(), event, "prefix {prefix:?}");
         }
-        // U+0085 is Unicode White_Space but NOT JS `\s` — no strip; the
+        // U+FEFF and U+0085 are not ASCII whitespace — no strip; the
         // non-base64 byte fails the encoding step.
+        for prefix in ["nostr\u{feff}", "nostr\u{85}"] {
+            let mut t = String::from(prefix);
+            t.push_str(&token);
+            assert_eq!(
+                unpack_token(&t).unwrap_err().to_string(),
+                "invalid token encoding",
+                "prefix {prefix:?}"
+            );
+        }
         let mut t = String::from("nostr\u{85}");
         t.push_str(&token);
         let err = unpack_token(&t).unwrap_err();

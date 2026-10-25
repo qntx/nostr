@@ -88,6 +88,9 @@ function lookupCase(name: string, doc: unknown, identifier: string): void {
 }
 
 parseCase("whitespace trims", "  bob@Example.COM  ");
+parseCase("tab and newline trim", "\tbob@example.com\n");
+parseCase("NBSP does not trim", "\u00A0bob@example.com\u00A0");
+parseCase("U+FEFF does not trim", "\uFEFFbob@example.com");
 parseCase("uppercase folds", "Bob.Smith-99@EXAMPLE.com");
 parseCase("bare domain becomes root", "example.com");
 parseCase("explicit root local", "_@example.com");
@@ -117,11 +120,14 @@ documentCase("names: non-hex and non-string skipped", {
     eve: {},
   },
 });
-documentCase("keys and values lowercase", {
-  names: { Alice: PK.toUpperCase(), BOB: PK2 },
+documentCase("non-grammar names keys skipped", {
+  names: { Alice: PK, BOB: PK2 },
+});
+documentCase("empty names key skipped", {
+  names: { "": PK, bob: PK2 },
 });
 documentCaseRaw(
-  "case-folding collision: document order wins",
+  "names: uppercase key skipped, grammar key survives",
   `{"names":{"Alice":"${PK}","alice":"${PK2}"}}`,
 );
 documentCase("relays: full filtering", {

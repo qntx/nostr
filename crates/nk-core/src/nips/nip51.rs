@@ -230,6 +230,8 @@ pub fn mute_items(tags: &Tags) -> Vec<MuteItem> {
                 }
             }
             "t" => items.push(MuteItem::Hashtag(String::from(value))),
+            // Natural-language text keeps Unicode lowercase (NIP-51
+            // mute words — shared SpecialCasing, not a JS accident).
             "word" => items.push(MuteItem::Word(value.to_lowercase())),
             _ => {}
         }

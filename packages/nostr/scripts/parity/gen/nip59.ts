@@ -641,12 +641,8 @@ async function main(): Promise<void> {
       [],
       new Stream(entropy(0xa5)),
     );
-    unwrap.push({
-      name: "rumor-uppercase-id",
-      gift_wrap: wrapSeal(seal, 0xa7),
-      recipient_secret_key: RECIPIENT,
-      rumor: { ...rumorBase, id: rumorOf(rumorBase).id },
-    });
+    // The rumor id is protocol text — uppercase does not match.
+    unwrap.push(err("rumor-uppercase-id", wrapSeal(seal, 0xa7), "invalid rumor"));
   }
 
   mkdirSync(vectors, { recursive: true });

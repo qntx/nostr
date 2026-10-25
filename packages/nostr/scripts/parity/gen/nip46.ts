@@ -220,6 +220,9 @@ bunkerParseCase(
 );
 bunkerParseCase("empty secret pair", `bunker://${PK}?secret=`);
 bunkerParseCase("whitespace-padded input", `  bunker://${PK}  `);
+bunkerParseCase("tab-padded input", `\tbunker://${PK}\n`);
+bunkerParseCase("NBSP does not trim", `\u00A0bunker://${PK}`);
+bunkerParseCase("U+FEFF does not trim", `\uFEFFbunker://${PK}`);
 bunkerParseCase("opaque-path fallback", `bunker:${PK}`);
 bunkerParseCase("nip-05 identifier", "alice@example.com");
 bunkerParseCase("non-bunker scheme", "https://bunker.example");

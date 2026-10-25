@@ -35,6 +35,26 @@ export function hexToBytes(hex: string): Uint8Array {
 }
 
 /** True when value is canonical NIP-01 lowercase hex of 32 bytes (64 chars). */
+/**
+ * ASCII whitespace — TAB, LF, FF, CR, SPACE (the WHATWG class; Rust `str::trim_ascii`). Protocol
+ * and caller tokens trim under this class; Unicode whitespace is never trimmed.
+ */
+export const ASCII_WHITESPACE = "\t\n\f\r ";
+
+/** `String.prototype.trim()` restricted to ASCII whitespace. */
+export function trimAscii(value: string): string {
+  return value.replaceAll(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, "");
+}
+
+/**
+ * ASCII-only lowercase — protocol tokens and identifiers fold A-Z→a-z byte-wise, matching Rust
+ * `to_ascii_lowercase`. Unicode case folding is reserved for natural-language text (NIP-51 mute
+ * words).
+ */
+export function lowerAscii(value: string): string {
+  return value.replaceAll(/[A-Z]/g, (c) => c.toLowerCase());
+}
+
 export function isHex32(value: string): boolean {
   return HEX32_RE.test(value);
 }

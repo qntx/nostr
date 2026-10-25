@@ -300,24 +300,7 @@
     },
     {
       "token": "nostr﻿eyJpZCI6ImNmNjhjYTI0MjEyNTRmNzUyZTM3ZjVjZTllMDE2MzQzZTNkY2E4MDVjOGQyY2VlY2M0OTVjMDk3YTk2ODM1YjYiLCJwdWJrZXkiOiI2YWYwZjlkZTU4OGYyYzUzY2VkY2JhMjZjNWUyNDAyZTBkMGFhNjRlYzdiNDdjOWY4ZDk3YjViYzU2MmJhYjVmIiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjcyMzUsInRhZ3MiOltbInUiLCJodHRwczovL2FwaS5leGFtcGxlLmNvbS91cGxvYWQ/eD0xIl0sWyJtZXRob2QiLCJQT1NUIl1dLCJjb250ZW50IjoiIiwic2lnIjoiZDI3NTBjNDc0NjY2NGVhMDIwZTdlYWFjOTI5MGFiM2Q2MDcxYzlmYTNmOGExOGYwMDZhZTMzYjJmODM0ZWNkZDZkZDMzM2JjYTFiMGNmZDM3NzE3NWQ2M2Q0OTlmMzA0MTNmMWQzNDI0ZjI0OGJkOWE5OGQ5ODkyMTc0ZjliOWYifQ==",
-      "event": {
-        "kind": 27235,
-        "tags": [
-          [
-            "u",
-            "https://api.example.com/upload?x=1"
-          ],
-          [
-            "method",
-            "POST"
-          ]
-        ],
-        "content": "",
-        "created_at": 1700000000,
-        "pubkey": "6af0f9de588f2c53cedcba26c5e2402e0d0aa64ec7b47c9f8d97b5bc562bab5f",
-        "id": "cf68ca2421254f752e37f5ce9e016343e3dca805c8d2ceecc495c097a96835b6",
-        "sig": "d2750c4746664ea020e7eaac9290ab3d6071c9fa3f8a18f006ae33b2f834ecdd6dd333bca1b0cfd377175d63d499f30413f1d3424f248bd9a98d9892174f9b9f"
-      }
+      "error": "invalid token encoding"
     },
     {
       "token": "eyJpZCI6Ijg5ZTY1YmI3NTkyYmRmOGEwYmFmODRiZjA0ZmY2MWU2Zjk0ZTNiZjdmOWVlOTgyYTZlODUzYTA0ZTgwMTRlM2IiLCJwdWJrZXkiOiI2YWYwZjlkZTU4OGYyYzUzY2VkY2JhMjZjNWUyNDAyZTBkMGFhNjRlYzdiNDdjOWY4ZDk3YjViYzU2MmJhYjVmIiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwia2luZCI6MjcyMzUsInRhZ3MiOltbInUiLCJodHRwczovL2FwaS5leGFtcGxlLmNvbS8iXSxbIm1ldGhvZCIsIkdFVCJdXSwiY29udGVudCI6IiIsInNpZyI6ImMxMWUyNWRiMDJjNWI1NWZjZjNiNmVhMTc3Y2MwMWY1ZTQ3ZTYwNGU4NmNmNDcwZjI1ZDMyZmVmMjE1Zjg5ODU5NzY3YWExOTZlY2Q0MGZjMWNhMTc1YmVjZDI3ZWYyMWJkOWYzMDEzMGM2OWVlNTA2NDNjMWZlMjhlYTU2MzI5In0",

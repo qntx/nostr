@@ -19,7 +19,6 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::str::FromStr;
 
-use crate::nips::util::trim_js;
 use crate::{Kind, PublicKey, Tags, Timestamp, UnsignedEvent};
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -111,7 +110,7 @@ impl FromStr for BunkerUri {
     /// identifiers), and [`Error::InvalidPublicKey`] when the authority is
     /// not a 64-hex public key.
     fn from_str(input: &str) -> Result<Self, Error> {
-        let url = Url::parse(trim_js(input)).map_err(|e| Error::InvalidUri { source: e })?;
+        let url = Url::parse(input.trim_ascii()).map_err(|e| Error::InvalidUri { source: e })?;
         if url.scheme() != "bunker" {
             return Err(Error::UnexpectedScheme { expected: "bunker" });
         }

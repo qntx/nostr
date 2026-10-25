@@ -932,19 +932,7 @@
         "sig": "b47d3085bec05f7da84143ae28a629a650ded4ace625e087248f93b67fcdb8576e33a16871b50c10693808b743d87d9c395234f359476051e6db6a93aa71a31a"
       },
       "recipient_secret_key": "e108399bd8424357a710b606ae0c13166d853d327e47a6e5e038197346bdbf45",
-      "rumor": {
-        "pubkey": "6af0f9de588f2c53cedcba26c5e2402e0d0aa64ec7b47c9f8d97b5bc562bab5f",
-        "created_at": 1700000000,
-        "kind": 1,
-        "tags": [
-          [
-            "t",
-            "nostr"
-          ]
-        ],
-        "content": "hello nostr",
-        "id": "fadba4c1c622424ff73b1d11d71f1feca871089affde261bbf32a99f6e45dd90"
-      }
+      "error": "invalid rumor"
     }
   ]
 }

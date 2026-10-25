@@ -182,7 +182,7 @@ impl Rumor {
         let unsigned = serde_json::from_value::<UnsignedEvent>(value.clone())
             .map_err(|_| Error::InvalidRumor)?;
         let rumor = Self::new(unsigned);
-        if given_id.is_some_and(|id| !id.eq_ignore_ascii_case(&rumor.id().to_hex())) {
+        if given_id.is_some_and(|id| *id != rumor.id().to_hex()) {
             return Err(Error::InvalidRumor);
         }
         Ok(rumor)
@@ -842,10 +842,7 @@ mod vectors {
                     assert_eq!(r.unsigned().to_json(), want.to_json(), "{name}");
                 }
                 Err(_) => {
-                    assert!(
-                        case["rumor"].is_null() || case.get("error").is_some(),
-                        "{name}"
-                    );
+                    assert!(case.get("error").is_some(), "{name}");
                 }
             }
         }

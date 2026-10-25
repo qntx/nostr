@@ -44,7 +44,7 @@ fn collect_deletion_refs(event: &Event, id_list: &mut Vec<String>, address_list:
             continue;
         }
         if tag.name() == "e" {
-            id_list.push(value.to_lowercase());
+            id_list.push(value.to_owned());
         } else if tag.name() == "a"
             && value.splitn(3, ':').count() == 3
             && !address_list.iter().any(|a| a == value)
@@ -95,16 +95,6 @@ fn backend(error: rusqlite::Error) -> Error {
 /// Splits `values` into `IN_CHUNK`-sized chunks.
 fn chunk<T>(values: &[T]) -> Vec<&[T]> {
     values.chunks(IN_CHUNK).collect()
-}
-
-/// The `#x` filter parameter — `e`/`p` values lowercase filter-side like
-/// `matches`; other letters match verbatim.
-fn tag_param(name: &str, value: &str) -> String {
-    if matches!(name, "e" | "p") {
-        value.to_lowercase()
-    } else {
-        value.to_owned()
-    }
 }
 
 /// `column IN (?, …)` for `count` placeholders.
@@ -179,7 +169,9 @@ fn compile_filter(filter: &Filter) -> Vec<Plan> {
                 .into_iter()
                 .map(|c| {
                     let mut params = vec![Value::from(name.clone())];
-                    params.extend(c.iter().map(|v| Value::from(tag_param(&name, v))));
+                    // `#x` values verbatim — `e`/`p` are already
+                    // lowercase by construction.
+                    params.extend(c.iter().map(|v| Value::from(v.to_string())));
                     Plan {
                         wheres: vec![format!(
                             "EXISTS (SELECT 1 FROM tags t WHERE t.event_id = events.id \

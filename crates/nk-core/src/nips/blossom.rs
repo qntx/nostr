@@ -19,7 +19,7 @@ use sha2::Digest;
 
 use crate::event::{Event, EventBuilder, Kind, Tag, Tags};
 use crate::hex;
-use crate::nips::util::trim_js;
+
 use crate::{JsonError, Timestamp};
 
 /// Errors produced by the Blossom codecs.
@@ -258,7 +258,7 @@ fn server_hostname(raw: &str) -> Option<String> {
     if !matches!(url.scheme(), "http" | "https") {
         return None;
     }
-    let hostname = url.host_str()?.to_lowercase();
+    let hostname = String::from(url.host_str()?);
     if hostname.is_empty() {
         None
     } else {
@@ -293,7 +293,7 @@ impl Authorization {
     /// [`Error::EmptyMessage`] when `message` is empty or whitespace.
     pub fn message(mut self, message: impl Into<String>) -> Result<Self, Error> {
         let message = message.into();
-        if trim_js(&message).is_empty() {
+        if message.trim_ascii().is_empty() {
             return Err(Error::EmptyMessage);
         }
         self.message = Some(message);

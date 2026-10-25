@@ -21,6 +21,7 @@ import {
   isRecord,
   nowSeconds,
   utf8Encoder,
+  trimAscii,
 } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch, sendManual } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
@@ -117,7 +118,7 @@ function serverHostname(raw: string): string | undefined {
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return undefined;
     }
-    const hostname = url.hostname.toLowerCase();
+    const { hostname } = url;
     return hostname === "" ? undefined : hostname;
   } catch {
     return undefined;
@@ -136,7 +137,7 @@ export function createAuthTemplate(
   if (!AUTH_VERBS.has(verb)) {
     throw new BlossomError(`invalid blossom auth verb: ${verb}`);
   }
-  if (opts?.message !== undefined && opts.message.trim() === "") {
+  if (opts?.message !== undefined && trimAscii(opts.message) === "") {
     throw new BlossomError("blossom auth message must not be empty");
   }
   const expiration = opts?.expiration ?? nowSeconds() + AUTH_EXPIRATION_SECS;
@@ -489,7 +490,7 @@ function blossomHttpError(method: string, url: string, res: ManualResponse): Blo
   } catch {
     reason = undefined;
   }
-  const detail = reason?.trim();
+  const detail = reason === undefined ? undefined : trimAscii(reason);
   return new BlossomError(
     detail === undefined || detail === ""
       ? `blossom ${method} ${url} failed (${res.status})`

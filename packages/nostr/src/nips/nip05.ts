@@ -5,7 +5,7 @@
  */
 import { NostrError } from "../core/error.ts";
 import type { Mutable } from "../core/util.ts";
-import { isHex32, isRecord } from "../core/util.ts";
+import { isHex32, isRecord, lowerAscii, trimAscii } from "../core/util.ts";
 import { fetchManual, requireGlobalFetch } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 import type { ProfilePointer } from "./nip19.ts";
@@ -73,13 +73,13 @@ export function isNip05(value: unknown): value is string {
  * (local becomes `_`).
  */
 export function parseNip05(input: string): Nip05Address {
-  const match = NIP05_REGEX.exec(input.trim());
+  const match = NIP05_REGEX.exec(trimAscii(input));
   const domain = match?.at(2);
   if (match === null || domain === undefined || domain === "") {
     throw new Nip05Error(`invalid NIP-05 identifier: ${input}`);
   }
   const localRaw = match.at(1) ?? NIP05_ROOT_LOCAL;
-  return { local: localRaw.toLowerCase(), domain: domain.toLowerCase() };
+  return { local: lowerAscii(localRaw), domain: lowerAscii(domain) };
 }
 
 /** Build the well-known HTTPS URL for an address. */
@@ -136,7 +136,9 @@ export function parseNip05Document(json: unknown): Nip05Document {
     if (typeof v !== "string" || !isHex32(v)) {
       continue;
     }
-    names[k.toLowerCase()] = v;
+    if (/^[a-z0-9._-]+$/.test(k)) {
+      names[k] = v;
+    }
   }
 
   const rawRelays = raw["relays"];

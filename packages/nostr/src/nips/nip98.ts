@@ -12,7 +12,7 @@ import { validateSignedEvent } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import { firstTagValue } from "../core/tag.ts";
 import type { Tag } from "../core/tag.ts";
-import { bytesToHex, nowSeconds, utf8Decoder, utf8Encoder } from "../core/util.ts";
+import { bytesToHex, nowSeconds, utf8Decoder, utf8Encoder, lowerAscii } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
 
 const AUTHORIZATION_SCHEME = "Nostr ";
@@ -41,7 +41,7 @@ function decodeStandardBase64(encoded: string): Uint8Array {
 }
 
 function stripAuthorizationScheme(token: string): string {
-  const prefix = /^nostr\s+/i.exec(token);
+  const prefix = /^nostr[\t\n\f\r ]+/i.exec(token);
   return prefix ? token.slice(prefix[0].length) : token;
 }
 
@@ -161,7 +161,7 @@ export function validateAuthEvent(
   }
 
   const m = methods[0]?.[1];
-  if (m === undefined || m.toLowerCase() !== method.toLowerCase()) {
+  if (m === undefined || lowerAscii(m) !== lowerAscii(method)) {
     return false;
   }
 

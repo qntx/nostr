@@ -221,7 +221,7 @@ impl FromStr for Bolt11 {
 /// malformed string or an invoice without a `p` field — the whole string is
 /// lowercased first (`bech32` requires single case).
 fn parse_bolt11(pr: &str) -> Option<Bolt11> {
-    let lowered = pr.to_lowercase();
+    let lowered = pr.to_ascii_lowercase();
     let checked = CheckedHrpstring::new::<Bolt11Bech32>(&lowered).ok()?;
     let hrp = checked.hrp();
     if !hrp.as_str().starts_with("ln") {
@@ -514,7 +514,7 @@ pub fn validate_zap_receipt(
         return Err(ZapRejection::DescriptionHashMismatch);
     }
     if let (Some(request_lnurl), Some(lnurl)) = (request.tags().first_value("lnurl"), lnurl)
-        && request_lnurl.to_lowercase() != lnurl.to_lowercase()
+        && !request_lnurl.eq_ignore_ascii_case(lnurl)
     {
         return Err(ZapRejection::LnurlMismatch);
     }

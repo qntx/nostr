@@ -1,5 +1,5 @@
 import { isAddressableKind, isReplaceableKind } from "./kind.ts";
-import { isHex32 } from "./util.ts";
+import { isHex32, lowerAscii } from "./util.ts";
 
 /** A NIP-01 tag: first element is the name, rest are values. */
 export type Tag = ReadonlyArray<string>;
@@ -47,7 +47,7 @@ function pushPositions(t: string[], positions: Array<string | undefined>): void 
 /** Construct common tags. */
 export const Tag = {
   e(id: string, relay?: string, marker?: string, pubkey?: string): Tag {
-    const t: string[] = ["e", id.toLowerCase()];
+    const t: string[] = ["e", lowerAscii(id)];
     pushPositions(t, [relay, marker, pubkey?.toLowerCase()]);
     return t;
   },

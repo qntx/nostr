@@ -194,8 +194,9 @@ unpackCases.push(
   { token: `nostr\t${goodToken}`, event: goodEvent },
   { token: `NOSTR  ${goodToken}`, event: goodEvent },
   { token: `nOsTr\n${goodToken}`, event: goodEvent },
-  // U+FEFF is JS regex `\s` → the scheme still strips.
-  { token: `nostr\u{FEFF}${goodToken}`, event: goodEvent },
+  // U+FEFF is not ASCII whitespace → the scheme does not strip, and the
+  // stray char makes the base64 invalid.
+  { token: `nostr\u{FEFF}${goodToken}`, error: "invalid token encoding" },
   // Missing `=` padding is accepted (the spec example is unpadded).
   { token: padToken.replace(/=+$/, ""), event: padded.event },
   { token: "", error: "missing token" },

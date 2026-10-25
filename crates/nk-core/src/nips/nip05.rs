@@ -3,9 +3,9 @@
 //! document parser, and lookup. Transport lives in `nk`'s `http`
 //! module.
 //!
-//! `names`/`relays` entries are applied in document order (a serde
-//! visitor, not a sorted map) so case-folding collisions resolve the
-//! way `Object.entries` does.
+//! `names` keys must already match the lowercase local-part grammar
+//! `[a-z0-9._-]+`; any other key is skipped — no folding, so no
+//! collision or order dependence.
 //!
 //! @see <https://github.com/nostr-protocol/nips/blob/master/05.md>
 
@@ -15,15 +15,12 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::str::FromStr;
 
-use serde::Deserialize;
-use serde::de::{IgnoredAny, MapAccess, Visitor};
 use serde_json::Value;
 use url::form_urlencoded::Serializer;
 
 use crate::JsonError;
 use crate::PublicKey;
 use crate::nips::nip19::ProfilePointer;
-use crate::nips::util::trim_js;
 
 /// The root local part — `domain` alone resolves to `_`.
 pub const ROOT_LOCAL: &str = "_";
@@ -79,7 +76,7 @@ impl FromStr for Nip05Address {
     ///
     /// [`Error::InvalidAddress`] on any deviation from the grammar.
     fn from_str(input: &str) -> Result<Self, Error> {
-        let input = trim_js(input);
+        let input = input.trim_ascii();
         let (local, domain) = match input.split_once('@') {
             Some((local, domain)) => {
                 if local.is_empty() || !local.bytes().all(is_local_char) {
@@ -153,159 +150,6 @@ pub struct Nip46Discovery {
     pub nostrconnect_url: Option<String>,
 }
 
-/// Ordered JSON-object entries; a non-object value decodes as `None`.
-struct OrderedEntries(Option<Vec<(String, Value)>>);
-
-impl<'de> Deserialize<'de> for OrderedEntries {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(EntriesVisitor)
-    }
-}
-
-struct EntriesVisitor;
-
-impl<'de> Visitor<'de> for EntriesVisitor {
-    type Value = OrderedEntries;
-
-    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a JSON object")
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut entries = Vec::with_capacity(map.size_hint().unwrap_or(0));
-        while let Some((k, v)) = map.next_entry::<String, Value>()? {
-            entries.push((k, v));
-        }
-        Ok(OrderedEntries(Some(entries)))
-    }
-
-    /// Every non-object value — scalar or array — decodes as `None`,
-    /// matching TS `isRecord` failing.
-    fn visit_bool<E: serde::de::Error>(self, _v: bool) -> Result<Self::Value, E> {
-        Ok(OrderedEntries(None))
-    }
-
-    fn visit_i64<E: serde::de::Error>(self, _v: i64) -> Result<Self::Value, E> {
-        Ok(OrderedEntries(None))
-    }
-
-    fn visit_u64<E: serde::de::Error>(self, _v: u64) -> Result<Self::Value, E> {
-        Ok(OrderedEntries(None))
-    }
-
-    fn visit_f64<E: serde::de::Error>(self, _v: f64) -> Result<Self::Value, E> {
-        Ok(OrderedEntries(None))
-    }
-
-    fn visit_str<E: serde::de::Error>(self, _v: &str) -> Result<Self::Value, E> {
-        Ok(OrderedEntries(None))
-    }
-
-    fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-        Ok(OrderedEntries(None))
-    }
-
-    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        while seq.next_element::<IgnoredAny>()?.is_some() {}
-        Ok(OrderedEntries(None))
-    }
-}
-
-/// The raw wire shape: entries stay in document order.
-struct RawDocument {
-    is_object: bool,
-    names: Option<Vec<(String, Value)>>,
-    relays: Option<Vec<(String, Value)>>,
-    nip46: Option<Value>,
-}
-
-impl RawDocument {
-    const NOT_OBJECT: Self = Self {
-        is_object: false,
-        names: None,
-        relays: None,
-        nip46: None,
-    };
-}
-
-impl<'de> Deserialize<'de> for RawDocument {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(DocumentVisitor)
-    }
-}
-
-struct DocumentVisitor;
-
-impl<'de> Visitor<'de> for DocumentVisitor {
-    type Value = RawDocument;
-
-    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a NIP-05 document object")
-    }
-
-    /// Every scalar/array input means "not a NIP-05 document".
-    fn visit_bool<E: serde::de::Error>(self, _v: bool) -> Result<Self::Value, E> {
-        Ok(RawDocument::NOT_OBJECT)
-    }
-
-    fn visit_i64<E: serde::de::Error>(self, _v: i64) -> Result<Self::Value, E> {
-        Ok(RawDocument::NOT_OBJECT)
-    }
-
-    fn visit_u64<E: serde::de::Error>(self, _v: u64) -> Result<Self::Value, E> {
-        Ok(RawDocument::NOT_OBJECT)
-    }
-
-    fn visit_f64<E: serde::de::Error>(self, _v: f64) -> Result<Self::Value, E> {
-        Ok(RawDocument::NOT_OBJECT)
-    }
-
-    fn visit_str<E: serde::de::Error>(self, _v: &str) -> Result<Self::Value, E> {
-        Ok(RawDocument::NOT_OBJECT)
-    }
-
-    fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-        Ok(RawDocument::NOT_OBJECT)
-    }
-
-    fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-        Ok(RawDocument::NOT_OBJECT)
-    }
-
-    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        while seq.next_element::<IgnoredAny>()?.is_some() {}
-        Ok(RawDocument::NOT_OBJECT)
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut names = None;
-        let mut relays = None;
-        let mut nip46 = None;
-        while let Some(key) = map.next_key::<String>()? {
-            match key.as_str() {
-                "names" => {
-                    names = map.next_value::<OrderedEntries>()?.0;
-                }
-                "relays" => {
-                    relays = map.next_value::<OrderedEntries>()?.0;
-                }
-                "nip46" => {
-                    nip46 = Some(map.next_value::<Value>()?);
-                }
-                _ => {
-                    map.next_value::<IgnoredAny>()?;
-                }
-            }
-        }
-        Ok(RawDocument {
-            is_object: true,
-            names,
-            relays,
-            nip46,
-        })
-    }
-}
-
 /// A parsed `/.well-known/nostr.json` document.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Nip05Document {
@@ -364,12 +208,11 @@ fn nip46_discovery(v: &Value) -> Option<Nip46Discovery> {
 }
 
 impl Nip05Document {
-    /// Parses a `nostr.json` body with the TS rules: `names` keys and
-    /// values lowercase, non-hex and non-string entries skipped,
-    /// `relays` keeps only hex keys with non-empty string lists,
-    /// `nip46` survives only when it carries a usable field. Entries
-    /// apply in document order — a `names` case-fold collision resolves
-    /// to the later entry.
+    /// Parses a `nostr.json` body with the TS rules: `names` keys must
+    /// match `[a-z0-9._-]+` (anything else is skipped — no folding),
+    /// values lowercase 64-hex, `relays` keeps only hex keys with
+    /// non-empty string lists, `nip46` survives only when it carries a
+    /// usable field.
     ///
     /// # Errors
     ///
@@ -377,12 +220,13 @@ impl Nip05Document {
     /// [`Error::NotAnObject`] on a non-object document;
     /// [`Error::MissingNames`] when `names` is absent or not an object.
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        let raw: RawDocument =
+        let doc_value: Value =
             serde_json::from_str(json).map_err(|e| Error::InvalidJson { source: e.into() })?;
-        if !raw.is_object {
-            return Err(Error::NotAnObject);
-        }
-        let names = raw.names.ok_or(Error::MissingNames)?;
+        let object = doc_value.as_object().ok_or(Error::NotAnObject)?;
+        let names = object
+            .get("names")
+            .and_then(Value::as_object)
+            .ok_or(Error::MissingNames)?;
         let mut doc = Self::default();
         for (key, value) in names {
             let Some(hex) = value.as_str() else {
@@ -391,17 +235,23 @@ impl Nip05Document {
             let Ok(pk) = PublicKey::from_wire_hex(hex) else {
                 continue;
             };
-            doc.names.insert(key.to_lowercase(), pk);
+            if !key.is_empty()
+                && key.bytes().all(|c| {
+                    c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'.' | b'_' | b'-')
+                })
+            {
+                doc.names.insert(key.clone(), pk);
+            }
         }
-        if let Some(entries) = raw.relays {
+        if let Some(entries) = object.get("relays").and_then(Value::as_object) {
             doc.relays = Some(
                 entries
-                    .into_iter()
-                    .filter_map(|(k, v)| relay_entry(&k, &v))
+                    .iter()
+                    .filter_map(|(k, v)| relay_entry(k, v))
                     .collect(),
             );
         }
-        doc.nip46 = raw.nip46.as_ref().and_then(nip46_discovery);
+        doc.nip46 = object.get("nip46").and_then(nip46_discovery);
         Ok(doc)
     }
 

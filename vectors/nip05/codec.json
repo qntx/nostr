@@ -16,6 +16,24 @@
       }
     },
     {
+      "name": "tab and newline trim",
+      "input": "\tbob@example.com\n",
+      "out": {
+        "local": "bob",
+        "domain": "example.com"
+      }
+    },
+    {
+      "name": "NBSP does not trim",
+      "input": " bob@example.com ",
+      "out": null
+    },
+    {
+      "name": "U+FEFF does not trim",
+      "input": "﻿bob@example.com",
+      "out": null
+    },
+    {
       "name": "uppercase folds",
       "input": "Bob.Smith-99@EXAMPLE.com",
       "out": {
@@ -143,8 +161,15 @@
       }
     },
     {
-      "name": "keys and values lowercase",
-      "json": "{\"names\":{\"Alice\":\"3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D\",\"BOB\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"}}",
+      "name": "non-grammar names keys skipped",
+      "json": "{\"names\":{\"Alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"BOB\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"}}",
+      "out": {
+        "names": {}
+      }
+    },
+    {
+      "name": "empty names key skipped",
+      "json": "{\"names\":{\"\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"bob\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"}}",
       "out": {
         "names": {
           "bob": "2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc"
@@ -152,7 +177,7 @@
       }
     },
     {
-      "name": "case-folding collision: document order wins",
+      "name": "names: uppercase key skipped, grammar key survives",
       "json": "{\"names\":{\"Alice\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"alice\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"}}",
       "out": {
         "names": {

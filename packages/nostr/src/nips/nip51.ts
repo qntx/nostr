@@ -10,7 +10,13 @@ import { EventValidationError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import { firstTagValue, getDTag, isTag, Tag } from "../core/tag.ts";
-import { assertHex32, containsLoneSurrogate, isHex32, normalizeRelayUrls } from "../core/util.ts";
+import {
+  assertHex32,
+  containsLoneSurrogate,
+  isHex32,
+  normalizeRelayUrls,
+  lowerAscii,
+} from "../core/util.ts";
 
 /**
  * Structural crypto used by NIP-51 private tags. Satisfied by NostrSigner when
@@ -108,6 +114,8 @@ export function parseMuteList(event: Pick<Event, "kind" | "tags">): MuteItem[] {
         items.push({ type: "hashtag", value });
         break;
       case "word":
+        // Natural-language text keeps Unicode lowercase — shared
+        // SpecialCasing, not a JS accident.
         items.push({ type: "word", value: value.toLowerCase() });
         break;
       default:
@@ -162,7 +170,7 @@ export async function decryptPrivateTags(
     return [];
   }
   const self = await crypto.getPublicKey();
-  if (self.toLowerCase() !== event.pubkey) {
+  if (lowerAscii(self) !== event.pubkey) {
     throw new EventValidationError("NIP-51 private content is only for the author");
   }
   const plaintext = await crypto.nip44Decrypt(self, event.content);
