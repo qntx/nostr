@@ -7,6 +7,7 @@
 
 pub mod client;
 pub mod gossip;
+pub mod nip46;
 pub mod pool;
 pub mod relay;
 

@@ -21,7 +21,7 @@ use nk::pool::RelayPool;
 use nk::relay::{FetchEnd, Relay, RelayOptions, SubscriptionEvent};
 use nk_core::{
     Event, EventBuilder, Filter, Keys, Kind, NostrSigner, RelayUrl, SingleLetterTag, SysRng, Tag,
-    Timestamp, rand_core::UnwrapErr,
+    Timestamp, UnsignedEvent, rand_core::UnwrapErr,
 };
 
 fn url() -> RelayUrl {
@@ -522,4 +522,113 @@ async fn private_message_round_trip() {
     );
     alice_client.close().await;
     bob_client.close().await;
+}
+
+/// A minimal in-process bunker on the live relay: answers `connect`,
+/// `get_public_key`, `sign_event`, `ping` and `switch_relays` arriving on
+/// `sub` (already past its `EOSE`).
+async fn bunker_loop(r: Relay, mut sub: nk::relay::Subscription, remote: Keys, user: Keys) {
+    use nk_core::nips::nip44::ConversationKey;
+    use nk_core::nips::nip46::{Method, Request, Response};
+    while let Some(item) = sub.next().await {
+        let SubscriptionEvent::Event(event) = item else {
+            continue;
+        };
+        let Ok(ck) = ConversationKey::derive(remote.secret_key(), &event.pubkey()) else {
+            continue;
+        };
+        let Ok(payload) = ck.decrypt(event.content()) else {
+            continue;
+        };
+        let Ok(req) = Request::from_json(&payload) else {
+            continue;
+        };
+        let result = match req.method {
+            Method::Connect => String::from("ack"),
+            Method::GetPublicKey => user.public_key().to_hex(),
+            Method::Ping => String::from("pong"),
+            Method::Logout => String::from("ack"),
+            Method::SwitchRelays => String::from("null"),
+            Method::SignEvent => {
+                // The template has no pubkey — inject the user's and sign.
+                let wrapped = req.params[0].replacen(
+                    '{',
+                    &format!("{{\"pubkey\":\"{}\",", user.public_key().to_hex()),
+                    1,
+                );
+                let unsigned = UnsignedEvent::from_json(&wrapped).expect("template");
+                user.sign_event(unsigned, &mut UnwrapErr(SysRng))
+                    .expect("bunker sign")
+                    .to_json()
+            }
+            _ => String::from("unsupported"),
+        };
+        let content = ck
+            .encrypt(
+                &Response {
+                    id: req.id,
+                    result: Some(result),
+                    error: None,
+                }
+                .to_json(),
+                &mut UnwrapErr(SysRng),
+            )
+            .expect("encrypt");
+        let response = remote
+            .sign_event(
+                EventBuilder::new(Kind::NOSTR_CONNECT, content)
+                    .tags([Tag::public_key(event.pubkey(), None, None)])
+                    .build(remote.public_key()),
+                &mut UnwrapErr(SysRng),
+            )
+            .expect("sign response");
+        drop(r.publish(&response).await);
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs NK_E2E_RELAY"]
+async fn nip46_remote_signer() {
+    let remote = keys();
+    let user = keys();
+    let client = keys();
+    // The bunker's Relay carries its own AUTH-capable signer; the
+    // RemoteSigner's private pool already uses the client keys.
+    let bunker_relay = relay(|o| o.signer = Some(Arc::new(remote.clone())));
+    let filter = Filter::new()
+        .kinds([Kind::NOSTR_CONNECT])
+        .tag(
+            SingleLetterTag::new('p').expect("p"),
+            [remote.public_key().to_hex()],
+        )
+        .limit(0);
+    let mut sub = bunker_relay
+        .subscribe(vec![filter])
+        .await
+        .expect("bunker sub");
+    // The bunker's REQ is live on nosfry once its EOSE arrives.
+    let eose = tokio::time::timeout(Duration::from_secs(5), sub.next()).await;
+    assert!(
+        matches!(eose, Ok(Some(SubscriptionEvent::Eose))),
+        "bunker sub: {eose:?}"
+    );
+    let task = tokio::spawn(bunker_loop(bunker_relay, sub, remote.clone(), user.clone()));
+    let uri = nk_core::nips::nip46::BunkerUri {
+        remote_signer: remote.public_key(),
+        relays: vec![url().to_string()],
+        secret: None,
+    };
+    let signer =
+        nk::nip46::RemoteSigner::connect(&uri, client, nk::nip46::RemoteSignerOptions::default())
+            .await
+            .expect("connect");
+    assert_eq!(signer.public_key().await.expect("pk"), user.public_key());
+    let unsigned =
+        EventBuilder::new(Kind::new(1), "nip46 e2e").build_at(user.public_key(), Timestamp::now());
+    let signed = signer.sign_event(unsigned.clone()).await.expect("sign");
+    signed.verify().expect("verify");
+    assert!(signed.matches_unsigned(&unsigned));
+    signer.ping().await.expect("ping");
+    signer.logout().await.expect("logout");
+    task.abort();
 }

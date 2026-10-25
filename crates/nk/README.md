@@ -125,3 +125,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+`nip46::RemoteSigner` is a `NostrSigner` that delegates to a remote
+signer (NIP-46 bunker): the client key is local and disposable, the
+user key never leaves the bunker:
+
+```rust,no_run
+use std::str::FromStr;
+use std::sync::Arc;
+
+use nk::client::{Client, ClientOptions};
+use nk::nip46::{RemoteSigner, RemoteSignerOptions};
+use nk_core::nips::nip46::BunkerUri;
+use nk_core::Keys;
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let bunker =
+        BunkerUri::from_str("bunker://<remote-pubkey>?relay=wss://relay.damus.io")?;
+    let signer = RemoteSigner::connect(
+        &bunker,
+        Keys::generate()?,
+        RemoteSignerOptions::default(),
+    )
+    .await?;
+    // Persist `signer.bunker_uri()` and the client keys to `attach` later.
+    let mut options = ClientOptions::default();
+    options.signer = Some(Arc::new(signer.clone()));
+    let client = Client::new(options);
+    client.close().await;
+    signer.logout().await?;
+    Ok(())
+}
+```
