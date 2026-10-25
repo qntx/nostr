@@ -60,10 +60,6 @@
       },
       "out": [
         {
-          "type": "pubkey",
-          "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        },
-        {
           "type": "event",
           "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         },
@@ -145,8 +141,7 @@
         "sig": "737b9b7c63c53918a6e95718034f7fdcee244b0b3d19e7a09e718130c90380e925776942aaa9eb72defd168cee2d4719f9307c44877cd71b3ea0b07feb5a29f7"
       },
       "out": [
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
       ]
     },
     {
@@ -470,8 +465,7 @@
         ],
         "sets": [
           "30002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:home",
-          "30002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:home:extra",
-          "30002:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC:upper"
+          "30002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:home:extra"
         ]
       }
     },
@@ -629,7 +623,6 @@
       "out": {
         "d": "dev",
         "pubkeys": [
-          "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ]
       }

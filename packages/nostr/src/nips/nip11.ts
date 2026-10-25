@@ -120,8 +120,8 @@ export function parseRelayInformation(json: unknown): RelayInformation {
   // else is dropped like a wrong-typed field.
   for (const key of ["pubkey", "self"] as const) {
     const value = raw[key];
-    if (typeof value === "string" && isHex32(value.toLowerCase())) {
-      info[key] = value.toLowerCase();
+    if (typeof value === "string" && isHex32(value)) {
+      info[key] = value;
     }
   }
 

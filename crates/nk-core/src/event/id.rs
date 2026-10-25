@@ -35,11 +35,27 @@ impl EventId {
 
     /// Parses 64-character hex of any case.
     ///
+    /// Caller input: any hex case is accepted and normalized.
+    ///
     /// # Errors
     ///
     /// [`Error::InvalidHex`] when the input is not 64 hex characters.
     pub fn from_hex(hex: &str) -> Result<Self> {
         hex::decode_caller(hex)
+            .map(Self)
+            .map_err(|_| Error::InvalidHex)
+    }
+
+    /// Protocol text — wire and document payloads (tag values, filters,
+    /// relay messages). Lowercase only; anything else is an invalid
+    /// value, never repaired.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidHex`] when the input is not 64 lowercase hex
+    /// characters.
+    pub fn from_wire_hex(hex: &str) -> Result<Self> {
+        hex::decode_wire(hex)
             .map(Self)
             .map_err(|_| Error::InvalidHex)
     }

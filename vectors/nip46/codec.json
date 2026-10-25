@@ -42,11 +42,7 @@
     {
       "name": "uppercase authority",
       "uri": "bunker://3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D",
-      "out": {
-        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
-        "relays": [],
-        "secret": null
-      }
+      "out": null
     },
     {
       "name": "percent-encoded authority",
@@ -196,17 +192,7 @@
     {
       "name": "uppercase authority lowercased",
       "uri": "nostrconnect://3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D?relay=r&secret=s",
-      "out": {
-        "clientPubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
-        "relays": [
-          "r"
-        ],
-        "secret": "s",
-        "perms": [],
-        "name": null,
-        "url": null,
-        "image": null
-      }
+      "err": "Nip46Error"
     },
     {
       "name": "empty perms list",

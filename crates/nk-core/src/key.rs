@@ -88,11 +88,29 @@ impl PublicKey {
     /// Parses 64-character hex of any case; the key stores bytes only, so the
     /// canonical output is always lowercase.
     ///
+    /// Caller input: any hex case is accepted and normalized.
+    ///
+    /// Caller input: any hex case is accepted and normalized.
+    ///
     /// # Errors
     ///
     /// [`Error::InvalidHex`] when the input is not 64 hex characters.
     pub fn from_hex(hex: &str) -> Result<Self> {
         hex::decode_caller(hex)
+            .map(Self)
+            .map_err(|_| Error::InvalidHex)
+    }
+
+    /// Protocol text — wire and document payloads (tag values, filters,
+    /// relay messages, NIP-05/11 fields). Lowercase only; anything else
+    /// is an invalid value, never repaired.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidHex`] when the input is not 64 lowercase hex
+    /// characters.
+    pub fn from_wire_hex(hex: &str) -> Result<Self> {
+        hex::decode_wire(hex)
             .map(Self)
             .map_err(|_| Error::InvalidHex)
     }
@@ -171,6 +189,8 @@ impl Signature {
     }
 
     /// Parses 128-character hex of any case.
+    ///
+    /// Caller input: any hex case is accepted and normalized.
     ///
     /// # Errors
     ///

@@ -206,7 +206,7 @@ fn is_relay_set_address(value: &str) -> bool {
     };
     let pubkey = &value[kind_sep + 1..pk_sep];
     let d = &value[pk_sep + 1..];
-    PublicKey::from_hex(pubkey).is_ok() && !d.is_empty()
+    PublicKey::from_wire_hex(pubkey).is_ok() && !d.is_empty()
 }
 
 /// Mute items from a tag list without a kind check — what TS applies to
@@ -220,12 +220,12 @@ pub fn mute_items(tags: &Tags) -> Vec<MuteItem> {
         };
         match tag.name() {
             "p" => {
-                if let Ok(pubkey) = PublicKey::from_hex(value) {
+                if let Ok(pubkey) = PublicKey::from_wire_hex(value) {
                     items.push(MuteItem::PublicKey(pubkey));
                 }
             }
             "e" => {
-                if let Ok(id) = EventId::from_hex(value) {
+                if let Ok(id) = EventId::from_wire_hex(value) {
                     items.push(MuteItem::Event(id));
                 }
             }
@@ -340,7 +340,7 @@ impl TryFrom<&Event> for PinList {
                 .iter()
                 .filter(|tag| tag.name() == "e")
                 .filter_map(|tag| tag.value())
-                .filter_map(|value| EventId::from_hex(value).ok())
+                .filter_map(|value| EventId::from_wire_hex(value).ok())
                 .collect(),
         })
     }
@@ -371,7 +371,7 @@ impl TryFrom<&Event> for BookmarkList {
                 continue;
             };
             match tag.name() {
-                "e" => list.events.extend(EventId::from_hex(value).ok()),
+                "e" => list.events.extend(EventId::from_wire_hex(value).ok()),
                 "a" => list.addresses.push(String::from(value)),
                 _ => {}
             }
@@ -509,7 +509,7 @@ impl TryFrom<&Event> for FollowPack {
                 .iter()
                 .filter(|tag| tag.name() == "p")
                 .filter_map(|tag| tag.value())
-                .filter_map(|value| PublicKey::from_hex(value).ok())
+                .filter_map(|value| PublicKey::from_wire_hex(value).ok())
                 .collect(),
         })
     }
@@ -643,10 +643,10 @@ mod tests {
             10000,
         );
         let items = MuteList::try_from(&event).unwrap().items().to_vec();
+        // The uppercase p tag is invalid protocol text — skipped, not folded.
         assert_eq!(
             items,
             vec![
-                MuteItem::PublicKey(pk(PK1)),
                 MuteItem::Event(id(ID1)),
                 MuteItem::Hashtag("Spam".to_owned()),
                 MuteItem::Word("scam".to_owned()),

@@ -99,15 +99,21 @@ impl BlobHash {
     pub fn from_url(url: &str) -> Option<Self> {
         let parsed = url::Url::parse(url).ok()?;
         let mut last = None;
-        // Regex `[0-9a-f]{64}` semantics: non-overlapping matches from
-        // each run's start — a run contributes its last complete
-        // 64-char block.
-        for run in parsed.path().split(|b: char| !b.is_ascii_hexdigit()) {
+        // Regex `[0-9a-f]{64}` semantics: uppercase letters are
+        // separators; non-overlapping matches from each run's start —
+        // a run contributes its last complete 64-char block.
+        for run in parsed
+            .path()
+            .split(|b: char| !matches!(b, '0'..='9' | 'a'..='f'))
+        {
             let Some(last_block) = (run.len() / 64).checked_sub(1).map(|n| n * 64) else {
                 continue;
             };
-            if let Some(block) = run.get(last_block..last_block + 64) {
-                last = Self::from_str(block).ok();
+            if let Some(hash) = run
+                .get(last_block..last_block + 64)
+                .and_then(|block| hex::decode_wire(block).ok())
+            {
+                last = Some(Self(hash));
             }
         }
         last
@@ -407,7 +413,7 @@ impl BlobDescriptor {
         let sha256 = object
             .get("sha256")
             .and_then(Value::as_str)
-            .and_then(|s| BlobHash::from_str(s).ok())
+            .and_then(|s| hex::decode_wire(s).ok().map(BlobHash))
             .ok_or(Error::MissingHash)?;
         let size = object
             .get("size")

@@ -116,7 +116,10 @@ function requireClientSigner(opts: Nip46SignerOptions): ClientSigner {
 
 async function clientPublicKeyOf(signer: ClientSigner): Promise<string> {
   const reported = await signer.getPublicKey();
-  const pubkey = reported.toLowerCase();
+  if (!isHex32(reported)) {
+    throw new Nip46Error("remote signer returned an invalid public key");
+  }
+  const pubkey = reported;
   if (!isHex32(pubkey)) {
     throw new Nip46Error("clientSigner returned an invalid public key");
   }
@@ -551,10 +554,10 @@ export class Nip46Signer implements NostrSigner {
   async getPublicKey(): Promise<string> {
     if (this.#cachedRemotePubkey === undefined) {
       const pk = await this.#sendRequest("get_public_key", []);
-      if (!isHex32(pk.toLowerCase())) {
+      if (!isHex32(pk)) {
         throw new Nip46Error("bunker returned invalid pubkey");
       }
-      this.#cachedRemotePubkey = pk.toLowerCase();
+      this.#cachedRemotePubkey = pk;
     }
     return this.#cachedRemotePubkey;
   }

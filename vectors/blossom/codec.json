@@ -15,7 +15,7 @@
     {
       "name": "uppercase folds",
       "input": "https://cdn.example.com/3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D",
-      "out": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+      "out": null
     },
     {
       "name": "hash with extension",
@@ -484,9 +484,7 @@
       "name": "uppercase sha256 folds",
       "json": "{\"url\":\"https://x.example/b\",\"sha256\":\"3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D\",\"size\":7}",
       "out": {
-        "url": "https://x.example/b",
-        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
-        "size": 7
+        "err": true
       }
     },
     {

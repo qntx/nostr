@@ -57,10 +57,6 @@ fn strict_unsigned(v: &serde_json::Value) -> Result<UnsignedEvent, nk_core::Json
     UnsignedEvent::from_json(&v.to_string())
 }
 
-fn strict_filter(v: &serde_json::Value) -> Result<Filter, nk_core::JsonError> {
-    Filter::from_json(&v.to_string())
-}
-
 #[derive(Deserialize)]
 struct HexCase {
     op: String,
@@ -305,7 +301,7 @@ fn tag_address() {
     for (i, c) in v.cases.iter().enumerate() {
         match c {
             TagAddressCase::Parse { input, parsed } => {
-                let got = input.parse::<Coordinate>().ok();
+                let got = Coordinate::from_wire_str(input).ok();
                 match (parsed, got) {
                     (Some(exp), Some(a)) => {
                         assert_eq!(a.kind().as_u16(), exp.kind, "case {i}");
@@ -524,7 +520,7 @@ fn filter_match() {
     }
     let v: Vec_ = serde_json::from_str(vector!("filter-match.json")).unwrap();
     for (i, c) in v.cases.iter().enumerate() {
-        let filter = strict_filter(&c.filter);
+        let filter = crate::common::caller_filter(&c.filter);
         let event = strict_event(&c.event);
         if c.non_canonical {
             assert!(
@@ -555,7 +551,7 @@ fn filter_limit() {
     }
     let v: Vec_ = serde_json::from_str(vector!("filter-limit.json")).unwrap();
     for (i, c) in v.cases.iter().enumerate() {
-        let filter = strict_filter(&c.filter);
+        let filter = crate::common::caller_filter(&c.filter);
         if c.non_canonical || c.error.is_some() {
             assert!(filter.is_err(), "case {i}: must reject");
             continue;
@@ -586,7 +582,7 @@ fn filter_canonicalize() {
     }
     let v: Vec_ = serde_json::from_str(vector!("filter-canonicalize.json")).unwrap();
     for (i, c) in v.cases.iter().enumerate() {
-        let filter = strict_filter(&c.input);
+        let filter = crate::common::caller_filter(&c.input);
         if c.non_canonical || c.error.is_some() {
             assert!(filter.is_err(), "case {i}: must reject");
             continue;
@@ -616,7 +612,7 @@ fn filter_fingerprint() {
         let filters: Vec<Filter> = c
             .filters
             .iter()
-            .map(|f| strict_filter(f).unwrap_or_else(|e| panic!("case {i}: {e}")))
+            .map(|f| crate::common::caller_filter(f).unwrap_or_else(|e| panic!("case {i}: {e}")))
             .collect();
         assert_eq!(fingerprint(&filters), c.fingerprint, "case {i}");
     }

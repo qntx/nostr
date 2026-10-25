@@ -133,10 +133,10 @@ export function parseNip05Document(json: unknown): Nip05Document {
 
   const names: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw["names"])) {
-    if (typeof v !== "string" || !isHex32(v.toLowerCase())) {
+    if (typeof v !== "string" || !isHex32(v)) {
       continue;
     }
-    names[k.toLowerCase()] = v.toLowerCase();
+    names[k.toLowerCase()] = v;
   }
 
   const rawRelays = raw["relays"];
@@ -144,12 +144,12 @@ export function parseNip05Document(json: unknown): Nip05Document {
   if (isRecord(rawRelays)) {
     relays = {};
     for (const [pk, list] of Object.entries(rawRelays)) {
-      if (!isHex32(pk.toLowerCase())) {
+      if (!isHex32(pk)) {
         continue;
       }
       const urls = stringUrls(list);
       if (urls !== undefined && urls.length > 0) {
-        relays[pk.toLowerCase()] = urls;
+        relays[pk] = urls;
       }
     }
   }

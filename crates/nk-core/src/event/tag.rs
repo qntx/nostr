@@ -240,7 +240,7 @@ impl Tags {
             .iter()
             .filter(|tag| tag.name() == "p")
             .filter_map(Tag::value)
-            .filter_map(|value| PublicKey::from_hex(value).ok())
+            .filter_map(|value| PublicKey::from_wire_hex(value).ok())
     }
 
     /// Values of `e` tags that are valid event ids, in order; malformed
@@ -250,7 +250,7 @@ impl Tags {
             .iter()
             .filter(|tag| tag.name() == "e")
             .filter_map(Tag::value)
-            .filter_map(|value| EventId::from_hex(value).ok())
+            .filter_map(|value| EventId::from_wire_hex(value).ok())
     }
 
     /// Values of `t` tags, in order.
@@ -355,17 +355,39 @@ impl FromStr for Coordinate {
     /// [`Error::InvalidCoordinate`] on any other shape.
     fn from_str(value: &str) -> Result<Self> {
         let invalid = || Error::InvalidCoordinate;
-        let (kind_text, rest) = value.split_once(':').ok_or_else(invalid)?;
+        let (kind, pubkey_text, identifier) = Self::split(value).ok_or_else(invalid)?;
+        let pubkey = PublicKey::from_hex(pubkey_text).map_err(|_| invalid())?;
+        Ok(Self::new(kind, pubkey, identifier))
+    }
+}
+
+impl Coordinate {
+    /// `kind` digits, the pubkey hex text, and the verbatim identifier.
+    fn split(value: &str) -> Option<(Kind, &str, &str)> {
+        let (kind_text, rest) = value.split_once(':')?;
         if kind_text.is_empty()
             || kind_text.len() > 5
             || !kind_text.bytes().all(|b| b.is_ascii_digit())
         {
-            return Err(invalid());
+            return None;
         }
-        let kind = kind_text.parse::<u16>().map_err(|_| invalid())?;
-        let (pubkey_text, identifier) = rest.split_once(':').ok_or_else(invalid)?;
-        let pubkey = PublicKey::from_hex(pubkey_text).map_err(|_| invalid())?;
-        Ok(Self::new(Kind::new(kind), pubkey, identifier))
+        let kind = kind_text.parse::<u16>().ok()?;
+        let (pubkey_text, identifier) = rest.split_once(':')?;
+        Some((Kind::new(kind), pubkey_text, identifier))
+    }
+
+    /// Protocol-text form of [`Self::from_str`]: `a`-tag values and other
+    /// wire data. The `pubkey` segment must be lowercase hex; the
+    /// case-sensitive `d` identifier stays verbatim.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidCoordinate`] on any other shape.
+    pub fn from_wire_str(value: &str) -> Result<Self> {
+        let invalid = || Error::InvalidCoordinate;
+        let (kind, pubkey_text, identifier) = Self::split(value).ok_or_else(invalid)?;
+        let pubkey = PublicKey::from_wire_hex(pubkey_text).map_err(|_| invalid())?;
+        Ok(Self::new(kind, pubkey, identifier))
     }
 }
 

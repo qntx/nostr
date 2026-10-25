@@ -861,10 +861,8 @@ function nip10TagsText(): string {
         tag.push(nip10Pubkey());
       }
       if (chance(0.05)) {
-        // Only index 1 throws in TS (`42.toLowerCase()`); a number at the
-        // relay slot would land verbatim in `relays` on the TS side while
-        // `Vec<String>` rejects the whole tag on the Rust side.
-        tag.splice(1, 0, int(100));
+        // A non-hex string at the id slot: the tag is inert on both sides.
+        tag.splice(1, 0, pick(["", "garbage", randString(8)]));
       }
       tags.push(tag);
     } else if (which < 8) {
@@ -899,7 +897,9 @@ function nip10TagsText(): string {
       }
       tags.push(tag);
     } else {
-      // Foreign tags and the holes TS tolerates but `Tags` cannot carry.
+      // Foreign tags and the holes a `Tags` can carry — every member is a
+      // string, so bad hex, missing members, and wrong markers stay valid
+      // protocol inputs while non-string accidents cannot appear.
       tags.push(
         pick([
           ["t", "nostr"],
@@ -908,7 +908,6 @@ function nip10TagsText(): string {
           ["e"],
           ["E", randHex(64)],
           [],
-          null,
         ]),
       );
     }

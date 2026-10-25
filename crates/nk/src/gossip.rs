@@ -330,7 +330,7 @@ impl Gossip {
         let mut unrouted: Vec<String> = Vec::new();
         let mut per_relay: BTreeMap<RelayUrl, Vec<String>> = BTreeMap::new();
         for value in values {
-            let relays = PublicKey::from_hex(value)
+            let relays = PublicKey::from_wire_hex(value)
                 .ok()
                 .and_then(|key| self.routes.get(&key).map(Routes::read))
                 .unwrap_or_default();
@@ -381,7 +381,7 @@ impl Gossip {
             relays.extend(hit);
         }
         for value in p_hex {
-            let hit = PublicKey::from_hex(value)
+            let hit = PublicKey::from_wire_hex(value)
                 .ok()
                 .map_or_else(Vec::new, |key| self.union_relays(&key));
             if hit.is_empty() {
@@ -435,7 +435,7 @@ impl Gossip {
             let Some(hex) = tag.value() else {
                 continue;
             };
-            let Ok(pubkey) = PublicKey::from_hex(hex) else {
+            let Ok(pubkey) = PublicKey::from_wire_hex(hex) else {
                 continue;
             };
             let Some(r) = self.routes.get(&pubkey) else {

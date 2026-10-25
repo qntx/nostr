@@ -559,9 +559,9 @@ const clientMessages = [
     ]),
   },
   {
-    // Wire parse lowercases ids/#e and drops multi-letter # keys and unknowns.
-    raw: `["REQ","s",{"ids":["${"A".repeat(64)}"],"#e":["${"B".repeat(64)}"],"#custom":["x"],"junk":1}]`,
-    encoded: `["REQ","s",{"#e":["${"b".repeat(64)}"],"ids":["${"a".repeat(64)}"]}]`,
+    // Multi-letter # keys and unknown non-# keys are dropped on the wire.
+    raw: `["REQ","s",{"#custom":["x"],"junk":1,"#e":["${"b".repeat(64)}"]}]`,
+    encoded: `["REQ","s",{"#e":["${"b".repeat(64)}"]}]`,
   },
   {
     // Duplicate keys: last wins; integer spellings serialize as plain integers.
@@ -601,12 +601,7 @@ const clientMessages = [
   {
     raw: encodeClientMessage(["NEG-OPEN", "sub", { kinds: [2, 1], "#custom": ["x"] }, "aabb"]),
   },
-  {
-    raw: '["NEG-OPEN","sub",{"kinds":[1]},"AABB"]',
-    encoded: '["NEG-OPEN","sub",{"kinds":[1]},"aabb"]',
-  },
   { raw: encodeClientMessage(["NEG-MSG", "sub", "deadbeef"]) },
-  { raw: '["NEG-MSG","sub","FF00"]', encoded: '["NEG-MSG","sub","ff00"]' },
   { raw: encodeClientMessage(["NEG-CLOSE", "sub"]) },
   // Subscription id boundary: 64 scalar values accepted (incl. astral), 65 rejected.
   { raw: encodeClientMessage(["CLOSE", "a".repeat(64)]) },
@@ -629,13 +624,12 @@ const relayMessages = [
       { count: 7, approximate: true, hll: "ab".repeat(256) },
     ]),
   },
-  // COUNT with uppercase hll normalizes to lowercase on parse.
+  // COUNT with an uppercase hll drops the field — invalid protocol text.
   {
     raw: `["COUNT","s",{"count":3,"hll":"${"AB".repeat(256)}"}]`,
-    encoded: encodeRelayMessage(["COUNT", "s", { count: 3, hll: "ab".repeat(256) }]),
+    encoded: encodeRelayMessage(["COUNT", "s", { count: 3 }]),
   },
   { raw: encodeRelayMessage(["NEG-MSG", "sub", "deadbeef"]) },
-  { raw: '["NEG-MSG","sub","AABB"]', encoded: '["NEG-MSG","sub","aabb"]' },
   { raw: encodeRelayMessage(["NEG-ERR", "sub", "error: something"]) },
   // COUNT accepts the max safe integer; non-bool approximate and invalid hll are ignored.
   { raw: encodeRelayMessage(["COUNT", "s", { count: 9007199254740991 }]) },
@@ -703,6 +697,12 @@ const invalidClientMessages = [
   '["REQ","s",{"kinds":[7],"kinds":"x"}]',
   '["COUNT","s",{"authors":[1]}]',
   '["NEG-OPEN","s",{"limit":"x"},"aabb"]',
+  // Uppercase hex is invalid protocol text.
+  `["REQ","s",{"ids":["${"A".repeat(64)}"]}]`,
+  `["REQ","s",{"#e":["${"B".repeat(64)}"]}]`,
+  `["REQ","s",{"authors":["${"C".repeat(64)}"]}]`,
+  '["NEG-OPEN","sub",{"kinds":[1]},"AABB"]',
+  '["NEG-MSG","sub","FF00"]',
   '["EVENT"]',
   '["EVENT",{}]',
   `["EVENT",${JSON.stringify(baseEvent)},{}]`,

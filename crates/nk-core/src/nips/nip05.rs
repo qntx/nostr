@@ -331,7 +331,7 @@ fn string_urls(list: &[Value]) -> Vec<String> {
 
 /// One `relays` entry: a 64-hex key and a non-empty string list.
 fn relay_entry(key: &str, value: &Value) -> Option<(PublicKey, Vec<String>)> {
-    let pk = PublicKey::from_hex(key).ok()?;
+    let pk = PublicKey::from_wire_hex(key).ok()?;
     let urls = string_urls(value.as_array()?);
     if urls.is_empty() {
         None
@@ -388,7 +388,7 @@ impl Nip05Document {
             let Some(hex) = value.as_str() else {
                 continue;
             };
-            let Ok(pk) = PublicKey::from_hex(hex) else {
+            let Ok(pk) = PublicKey::from_wire_hex(hex) else {
                 continue;
             };
             doc.names.insert(key.to_lowercase(), pk);

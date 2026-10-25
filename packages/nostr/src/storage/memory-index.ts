@@ -3,7 +3,7 @@ import type { Event } from "../core/event.ts";
 import { compareEventsDesc, itemCompare, sortEvents } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
 import { filterTagConditions, matchFilter } from "../core/filter.ts";
-import { eventAddress, formatEventAddress, parseEventAddress } from "../core/tag.ts";
+import { eventAddress, formatEventAddress, parseEventAddressInput } from "../core/tag.ts";
 import { DeletionState } from "./deletion.ts";
 import { applyPutMemory, decidePut, outboxBoundKey } from "./put.ts";
 import type { PutLookup } from "./put.ts";
@@ -125,7 +125,7 @@ export class MemoryIndex {
 
   /** Current event at a `kind:pubkey:d` coordinate (replaceable or addressable). */
   getByAddress(address: string): Event | undefined {
-    const coord = parseEventAddress(address);
+    const coord = parseEventAddressInput(address);
     if (!coord) {
       return undefined;
     }
@@ -263,7 +263,7 @@ export class MemoryIndex {
     if (this.#deletion.ids.has(idOrAddress.toLowerCase())) {
       return true;
     }
-    const coord = parseEventAddress(idOrAddress);
+    const coord = parseEventAddressInput(idOrAddress);
     if (!coord) {
       return false;
     }

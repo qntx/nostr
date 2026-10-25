@@ -161,7 +161,7 @@ impl RelayInformation {
             if let Some(pk) = object
                 .get(key)
                 .and_then(serde_json::Value::as_str)
-                .and_then(|s| PublicKey::from_hex(s).ok())
+                .and_then(|s| PublicKey::from_wire_hex(s).ok())
             {
                 *field(&mut info) = Some(pk);
             }

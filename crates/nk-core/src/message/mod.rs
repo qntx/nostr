@@ -100,13 +100,17 @@ pub(crate) fn read_type<'de, A: SeqAccess<'de>>(
         .ok_or_else(|| DeError::custom(Error::UnknownType { ty: label.clone() }))
 }
 
-/// A non-empty, even-length hex string, lowercased.
+/// A non-empty, even-length lowercase hex string.
 pub(crate) fn parse_neg_hex(raw: &str) -> Result<String, Error> {
-    if raw.is_empty() || !raw.len().is_multiple_of(2) || !raw.bytes().all(|b| b.is_ascii_hexdigit())
+    if raw.is_empty()
+        || !raw.len().is_multiple_of(2)
+        || !raw
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
     {
         return Err(Error::InvalidNegMessage);
     }
-    Ok(raw.to_lowercase())
+    Ok(String::from(raw))
 }
 
 /// Reads a subscription id element; the element must be a string.
@@ -237,10 +241,14 @@ mod tests {
     fn count_hll_zero_merge_and_hex() {
         let mut a = Hll::zero();
         assert_eq!(a.to_string(), "00".repeat(256));
-        let upper = "AB".repeat(256);
-        let b = Hll::from_str(&upper).expect("any case parses");
+        let b = Hll::from_str(&"ab".repeat(256)).expect("lowercase parses");
         a.merge(&b);
-        assert_eq!(a.to_string(), upper.to_lowercase());
+        assert_eq!(a.to_string(), "ab".repeat(256));
+        // `from_str` is caller input — uppercase normalizes to lowercase.
+        assert_eq!(
+            Hll::from_str(&"AB".repeat(256)).unwrap().to_string(),
+            "ab".repeat(256)
+        );
         assert!(Hll::from_str("ab").is_err());
         assert!(Hll::from_str(&"zz".repeat(256)).is_err());
         assert!(matches!(
@@ -326,9 +334,10 @@ mod tests {
         ] {
             assert!(ClientMessage::from_json(bad).is_err(), "{bad}");
         }
-        // Uppercase NEG hex is lowercased on parse.
+        // Uppercase NEG hex is invalid protocol text.
+        assert!(ClientMessage::from_json("[\"NEG-MSG\",\"s\",\"FF00\"]").is_err());
         let ClientMessage::NegMsg { message, .. } =
-            ClientMessage::from_json("[\"NEG-MSG\",\"s\",\"FF00\"]").expect("neg-msg")
+            ClientMessage::from_json("[\"NEG-MSG\",\"s\",\"ff00\"]").expect("neg-msg")
         else {
             panic!("expected NegMsg");
         };
@@ -368,7 +377,8 @@ mod tests {
 
     #[test]
     fn relay_count_result_parsing() {
-        // approximate/hll wrong types are ignored, not errors.
+        // approximate/hll wrong types are ignored, not errors; an
+        // uppercase hll is invalid protocol text — the field drops.
         let RelayMessage::Count { result, .. } = RelayMessage::from_json(
             "[\"COUNT\",\"s\",{\"count\":7,\"approximate\":\"yes\",\"hll\":\"zz\"}]",
         )
@@ -388,7 +398,7 @@ mod tests {
         } = RelayMessage::from_json(&alloc::format!(
             "[\"COUNT\",\"s\",{{\"count\":{},\"approximate\":true,\"hll\":\"{}\"}}]",
             9_007_199_254_740_991u64,
-            "ab".repeat(256).to_uppercase()
+            "ab".repeat(256)
         ))
         .expect("max safe")
         else {
@@ -465,10 +475,8 @@ mod tests {
         assert_eq!(json, alloc::format!("\"{}\"", "ab".repeat(256)));
         let back: Hll = serde_json::from_str(&json).expect("de");
         assert_eq!(back, hll);
-        // Any case parses; wrong lengths, non-hex, and non-strings fail.
-        let upper: Hll =
-            serde_json::from_str(&alloc::format!("\"{}\"", "AB".repeat(256))).expect("uppercase");
-        assert_eq!(upper, hll);
+        // Lowercase only; wrong lengths, case, non-hex, non-strings fail.
+        assert!(serde_json::from_str::<Hll>(&alloc::format!("\"{}\"", "AB".repeat(256))).is_err());
         assert!(serde_json::from_str::<Hll>("\"ab\"").is_err());
         assert!(serde_json::from_str::<Hll>(&alloc::format!("\"{}\"", "zz".repeat(256))).is_err());
         assert!(serde_json::from_str::<Hll>("5").is_err());

@@ -547,7 +547,7 @@ impl RemoteSigner {
             .user
             .get_or_try_init(|| async {
                 let result = self.rpc(call(Method::GetPublicKey, Vec::new())).await?;
-                PublicKey::from_hex(&result)
+                PublicKey::from_wire_hex(&result)
                     .map_err(|_| Error::UnexpectedResult(Method::GetPublicKey))
             })
             .await

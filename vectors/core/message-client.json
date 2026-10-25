@@ -22,8 +22,8 @@
       "raw": "[\"REQ\",\"sub2\",{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]}]"
     },
     {
-      "raw": "[\"REQ\",\"s\",{\"ids\":[\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"],\"#e\":[\"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"],\"#custom\":[\"x\"],\"junk\":1}]",
-      "encoded": "[\"REQ\",\"s\",{\"#e\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]"
+      "raw": "[\"REQ\",\"s\",{\"#custom\":[\"x\"],\"junk\":1,\"#e\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]}]",
+      "encoded": "[\"REQ\",\"s\",{\"#e\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]}]"
     },
     {
       "raw": "[\"REQ\",\"s\",{\"kinds\":[9],\"kinds\":[1],\"limit\":1e2}]",
@@ -76,15 +76,7 @@
       "raw": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[1,2]},\"aabb\"]"
     },
     {
-      "raw": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[1]},\"AABB\"]",
-      "encoded": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[1]},\"aabb\"]"
-    },
-    {
       "raw": "[\"NEG-MSG\",\"sub\",\"deadbeef\"]"
-    },
-    {
-      "raw": "[\"NEG-MSG\",\"sub\",\"FF00\"]",
-      "encoded": "[\"NEG-MSG\",\"sub\",\"ff00\"]"
     },
     {
       "raw": "[\"NEG-CLOSE\",\"sub\"]"
@@ -268,6 +260,26 @@
     },
     {
       "raw": "[\"NEG-OPEN\",\"s\",{\"limit\":\"x\"},\"aabb\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"ids\":[\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"#e\":[\"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"authors\":[\"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\"]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[1]},\"AABB\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-MSG\",\"sub\",\"FF00\"]",
       "error": "MessageError"
     },
     {

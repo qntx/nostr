@@ -617,16 +617,15 @@ describe("messages", () => {
     ]);
   });
 
-  test("parseClientMessage validates and normalizes wire filters", () => {
+  test("parseClientMessage validates wire filters", () => {
     const id = "ab".repeat(32);
     const parsed = parseClientMessage(
-      JSON.stringify([
-        "REQ",
-        "s",
-        { ids: [id.toUpperCase()], "#e": [id.toUpperCase()], "#custom": ["x"], junk: 1 },
-      ]),
+      JSON.stringify(["REQ", "s", { ids: [id], "#e": [id], "#custom": ["x"], junk: 1 }]),
     );
     expect(parsed).toStrictEqual(["REQ", "s", { "#e": [id], ids: [id] }]);
+    expect(() =>
+      parseClientMessage(JSON.stringify(["REQ", "s", { ids: [id.toUpperCase()] }])),
+    ).toThrow(MessageError);
     expect(() => parseClientMessage(JSON.stringify(["REQ", "s", { kinds: [65536] }]))).toThrow(
       MessageError,
     );

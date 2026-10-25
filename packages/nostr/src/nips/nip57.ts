@@ -341,7 +341,7 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
     if (receipt.kind !== Kind.Zap || !verifyEvent(receipt)) {
       return fail("invalid receipt");
     }
-    if (receipt.pubkey.toLowerCase() !== ctx.nostrPubkey.toLowerCase()) {
+    if (receipt.pubkey !== ctx.nostrPubkey.toLowerCase()) {
       return fail("pubkey mismatch");
     }
 
@@ -381,7 +381,7 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
     }
     if (requestPCount === 1) {
       const requestP = firstTagValue(request.tags, "P");
-      if (requestP === undefined || requestP.toLowerCase() !== receipt.pubkey.toLowerCase()) {
+      if (requestP === undefined || requestP !== receipt.pubkey) {
         return fail("request P mismatch");
       }
     }
@@ -453,7 +453,7 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
       if (tag[0] !== "P") {
         continue;
       }
-      if (tag[1] === undefined || tag[1].toLowerCase() !== request.pubkey.toLowerCase()) {
+      if (tag[1] === undefined || tag[1] !== request.pubkey.toLowerCase()) {
         return fail("receipt P mismatch");
       }
     }

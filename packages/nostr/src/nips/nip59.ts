@@ -366,7 +366,7 @@ export async function unwrap(crypto: Nip44Decryptor, giftWrap: Event): Promise<R
 
   const rumorJson = await decryptLayer(decryptor, sealRaw.pubkey, sealRaw.content);
   const rumor = parseRumor(parseJson(rumorJson));
-  if (sealRaw.pubkey.toLowerCase() !== rumor.pubkey.toLowerCase()) {
+  if (sealRaw.pubkey !== rumor.pubkey) {
     throw new Nip59Error("seal pubkey does not match rumor pubkey");
   }
   return rumor;

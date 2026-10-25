@@ -71,11 +71,11 @@ export function parseBunkerURL(input: string): BunkerPointer | undefined {
     return undefined;
   }
   const pubkey = url.hostname || url.pathname.replace(/^\/*/, "");
-  if (!isHex32(pubkey.toLowerCase())) {
+  if (!isHex32(pubkey)) {
     return undefined;
   }
   return {
-    pubkey: pubkey.toLowerCase(),
+    pubkey,
     relays: url.searchParams.getAll("relay"),
     secret: url.searchParams.get("secret") ?? undefined,
   };
@@ -128,7 +128,7 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
     throw new Nip46Error(`expected nostrconnect: scheme, got ${url.protocol}`);
   }
   const clientPubkey = url.hostname || url.pathname.replace(/^\/*/, "");
-  if (!isHex32(clientPubkey.toLowerCase())) {
+  if (!isHex32(clientPubkey)) {
     throw new Nip46Error("invalid client pubkey in nostrconnect URI");
   }
   const secret = url.searchParams.get("secret");
@@ -140,7 +140,7 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
     throw new Nip46Error("missing relays in nostrconnect URI");
   }
   const params: Mutable<NostrConnectParams> = {
-    clientPubkey: clientPubkey.toLowerCase(),
+    clientPubkey,
     relays,
     secret,
   };

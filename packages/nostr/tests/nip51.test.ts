@@ -86,8 +86,8 @@ describe("nip51 mute list", () => {
         ["e", ""],
       ],
     });
+    // The uppercase p tag is invalid protocol text — skipped.
     expect(items).toStrictEqual<MuteItem[]>([
-      { type: "pubkey", value: PK },
       { type: "event", value: ID },
       { type: "hashtag", value: "spam" },
       { type: "word", value: "scam" },
@@ -323,7 +323,7 @@ describe("nip51 follow pack", () => {
           ["e", ID],
         ],
       }),
-    ).toStrictEqual({ d: "dev", pubkeys: [PK2, PK] });
+    ).toStrictEqual({ d: "dev", pubkeys: [PK] });
   });
 });
 
@@ -387,15 +387,13 @@ describe("nip51 private tags", () => {
       ] as const,
       content,
     };
+    // The private uppercase e tag is skipped as invalid protocol text.
     const parsed = await parseMuteListPrivate(signer, event);
     expect(parsed.public).toStrictEqual<MuteItem[]>([
       { type: "pubkey", value: PK },
       { type: "hashtag", value: "spam" },
     ]);
-    expect(parsed.private).toStrictEqual<MuteItem[]>([
-      { type: "event", value: ID },
-      { type: "word", value: "secret" },
-    ]);
+    expect(parsed.private).toStrictEqual<MuteItem[]>([{ type: "word", value: "secret" }]);
     expect(parseMuteList(event)).toStrictEqual(parsed.public);
     expect(event.content).toBe(content);
     expect(event.content.length).toBeGreaterThan(0);
@@ -429,17 +427,14 @@ describe("nip51 private tags", () => {
     expect(crypto.decryptInvocations).toBe(0);
   });
 
-  test("mixed-case author pubkey is accepted", async () => {
+  test("uppercase author pubkey is rejected", async () => {
     const crypto = trackingCrypto({
       pubkey: PK,
       decrypt: () => JSON.stringify([["p", PK2]]),
     });
-    const tags = await decryptPrivateTags(crypto, {
-      pubkey: PK.toUpperCase(),
-      content: "ciphertext",
-    });
-    expect(tags).toStrictEqual([["p", PK2]]);
-    expect(crypto.decryptInvocations).toBe(1);
+    await expect(
+      decryptPrivateTags(crypto, { pubkey: PK.toUpperCase(), content: "ciphertext" }),
+    ).rejects.toThrow(EventValidationError);
   });
 
   test("NIP-04-shaped content throws CryptoError and must not succeed", async () => {

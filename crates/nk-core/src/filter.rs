@@ -16,6 +16,7 @@ use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::event::{Event, EventId, Kind, canonical};
+use crate::hex;
 use crate::json::{self, JsonError, WireHexList, WireInt, WireU16List};
 use crate::key::PublicKey;
 use crate::limits::MAX_SAFE_INTEGER;
@@ -535,12 +536,12 @@ impl<'de> Deserialize<'de> for Filter {
                 while let Some(key) = json::next_key(&mut map, &mut seen)? {
                     match key.as_ref() {
                         "ids" => {
-                            let list = map.next_value::<WireHexList<32, false>>()?.0;
+                            let list = map.next_value::<WireHexList<32, true>>()?.0;
                             filter.ids =
                                 Some(sorted_dedup(list.into_iter().map(EventId::from_bytes)));
                         }
                         "authors" => {
-                            let list = map.next_value::<WireHexList<32, false>>()?.0;
+                            let list = map.next_value::<WireHexList<32, true>>()?.0;
                             filter.authors =
                                 Some(sorted_dedup(list.into_iter().map(PublicKey::from_bytes)));
                         }
@@ -566,8 +567,16 @@ impl<'de> Deserialize<'de> for Filter {
                         }
                         _ => {
                             if let Some(letter) = single_letter_key(&key) {
-                                let values =
-                                    tag_value_list(letter, map.next_value::<Vec<String>>()?);
+                                let raw = map.next_value::<Vec<String>>()?;
+                                // `#e`/`#p` are 64-hex protocol text:
+                                // lowercase only, nothing else.
+                                if matches!(letter.as_char(), 'e' | 'p') {
+                                    for value in &raw {
+                                        hex::decode_wire::<32>(value)
+                                            .map_err(serde::de::Error::custom)?;
+                                    }
+                                }
+                                let values = tag_value_list(letter, raw);
                                 match filter.tags.binary_search_by_key(&letter, |(l, _)| *l) {
                                     Ok(index) => {
                                         if let Some(slot) = filter.tags.get_mut(index) {
@@ -940,14 +949,14 @@ mod tests {
     #[test]
     fn deserialize_accepts_wire_rules() {
         let filter: Filter = serde_json::from_value(json!({
-            "ids": [ID_A.to_uppercase()],
-            "authors": [PK.to_uppercase()],
+            "ids": [ID_A],
+            "authors": [PK],
             "kinds": [1, 0],
             "since": 5,
             "until": 9,
             "limit": 3,
             "search": "q",
-            "#e": [ID_A.to_uppercase()],
+            "#e": [ID_A],
             "#custom": ["dropped"],
             "#9": ["dropped"],
             "unknown": { "kept": false }
@@ -1021,17 +1030,16 @@ mod tests {
     }
 
     #[test]
-    fn fingerprint_dedupes_semantically_identical_filters() {
-        let lower = Filter::new().ids([EventId::from_hex(ID_A).unwrap()]);
-        let mixed: Filter = serde_json::from_value(json!({"ids": [ID_A.to_uppercase()]})).unwrap();
+    fn fingerprint_of_parsed_filter_is_canonical() {
+        let filter = Filter::new().ids([EventId::from_hex(ID_A).unwrap()]);
         assert_eq!(
-            fingerprint(core::slice::from_ref(&lower)),
-            fingerprint(&[mixed])
-        );
-        assert_eq!(
-            fingerprint(&[lower]),
+            fingerprint(&[filter]),
             "[{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]"
         );
+        // Uppercase wire hex is invalid, never repaired into an equivalent.
+        assert!(serde_json::from_value::<Filter>(json!({"ids": [ID_A.to_uppercase()]})).is_err());
+        assert!(serde_json::from_value::<Filter>(json!({"#e": [ID_A.to_uppercase()]})).is_err());
+        assert!(serde_json::from_value::<Filter>(json!({"authors": [PK.to_uppercase()]})).is_err());
     }
 
     #[test]

@@ -223,7 +223,7 @@ export function signedMatchesUnsigned(signed: Event, unsigned: UnsignedEvent): b
   if (JSON.stringify(signed.tags) !== JSON.stringify(unsigned.tags)) {
     return false;
   }
-  if (unsigned.pubkey && signed.pubkey.toLowerCase() !== unsigned.pubkey.toLowerCase()) {
+  if (unsigned.pubkey && signed.pubkey !== unsigned.pubkey) {
     return false;
   }
   return true;

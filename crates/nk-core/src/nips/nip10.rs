@@ -56,7 +56,7 @@ pub struct ThreadReferences {
 
 /// 64-hex of any case is accepted and normalized to lowercase.
 fn is_hex32(value: &str) -> bool {
-    EventId::from_hex(value).is_ok()
+    EventId::from_wire_hex(value).is_ok()
 }
 
 /// `tag[i]` as a one-element relay list, or empty when absent/`""` — the TS
@@ -73,7 +73,7 @@ fn relay_slot(items: &[String], index: usize) -> Vec<String> {
 fn e_tag_author(items: &[String]) -> Option<PublicKey> {
     for index in [4usize, 3] {
         if let Some(author) = items.get(index)
-            && let Ok(pubkey) = PublicKey::from_hex(author)
+            && let Ok(pubkey) = PublicKey::from_wire_hex(author)
         {
             return Some(pubkey);
         }
@@ -84,7 +84,7 @@ fn e_tag_author(items: &[String]) -> Option<PublicKey> {
 /// `["e", id, relay?, …]` with a mixed-case
 /// hex32 id; relay hint kept verbatim, author from index 4 or 3.
 fn event_pointer(items: &[String]) -> Option<EventPointer> {
-    let id = EventId::from_hex(items.get(1)?).ok()?;
+    let id = EventId::from_wire_hex(items.get(1)?).ok()?;
     let mut pointer = EventPointer {
         id,
         relays: relay_slot(items, 2),
@@ -104,8 +104,8 @@ fn quote_from_tag(items: &[String]) -> Option<Quote> {
         return None;
     }
     let relays = relay_slot(items, 2);
-    if let Ok(id) = EventId::from_hex(value) {
-        let author = items.get(3).and_then(|a| PublicKey::from_hex(a).ok());
+    if let Ok(id) = EventId::from_wire_hex(value) {
+        let author = items.get(3).and_then(|a| PublicKey::from_wire_hex(a).ok());
         return Some(Quote::Event(EventPointer {
             id,
             relays,
@@ -113,7 +113,7 @@ fn quote_from_tag(items: &[String]) -> Option<Quote> {
             kind: None,
         }));
     }
-    let address = value.parse::<Coordinate>().ok()?;
+    let address = Coordinate::from_wire_str(value).ok()?;
     Some(Quote::Address(AddressPointer {
         identifier: String::from(address.identifier()),
         pubkey: address.pubkey(),
@@ -211,7 +211,7 @@ fn parse_thread_tags(tags: &Tags) -> ThreadReferences {
 
         if tag.name() == "p"
             && let Some(p_value) = value
-            && let Ok(pubkey) = PublicKey::from_hex(p_value)
+            && let Ok(pubkey) = PublicKey::from_wire_hex(p_value)
         {
             profiles.push(ProfilePointer {
                 pubkey,

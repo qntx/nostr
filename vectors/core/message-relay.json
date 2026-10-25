@@ -37,14 +37,10 @@
     },
     {
       "raw": "[\"COUNT\",\"s\",{\"count\":3,\"hll\":\"ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB\"}]",
-      "encoded": "[\"COUNT\",\"s\",{\"count\":3,\"hll\":\"abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\"}]"
+      "encoded": "[\"COUNT\",\"s\",{\"count\":3}]"
     },
     {
       "raw": "[\"NEG-MSG\",\"sub\",\"deadbeef\"]"
-    },
-    {
-      "raw": "[\"NEG-MSG\",\"sub\",\"AABB\"]",
-      "encoded": "[\"NEG-MSG\",\"sub\",\"aabb\"]"
     },
     {
       "raw": "[\"NEG-ERR\",\"sub\",\"error: something\"]"

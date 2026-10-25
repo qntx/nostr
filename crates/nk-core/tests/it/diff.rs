@@ -15,7 +15,7 @@ use nk_core::nips::nip10::{Quote, ThreadReferences};
 use nk_core::nips::nip19::{AddressPointer, Entity, EventPointer, ProfilePointer};
 use nk_core::nips::nip27::{ContentBlock, ParseOptions, Reference, parse_content};
 use nk_core::nips::nip46::{BunkerUri, NostrConnectUri};
-use nk_core::{ClientMessage, Event, Filter, PublicKey, RelayMessage, Tag, Tags, UnsignedEvent};
+use nk_core::{ClientMessage, Event, PublicKey, RelayMessage, Tag, Tags, UnsignedEvent};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -127,21 +127,10 @@ fn tags_from(input: &Value) -> Result<Tags, ()> {
     let mut tags = Tags::new();
     for t in raw {
         let arr = t.as_array().ok_or(())?;
-        // TS `parseThreadTags` only inspects `e`/`q`/`p` tags and throws when
-        // an accessed member is not a string; other tags are skipped whole.
-        let strict = matches!(arr.first().and_then(Value::as_str), Some("e" | "q" | "p"));
-        let mut items: Vec<String> = Vec::with_capacity(arr.len());
-        let mut clean = true;
-        for x in arr {
-            match x.as_str() {
-                Some(v) => items.push(v.to_owned()),
-                None if strict => return Err(()),
-                None => clean = false,
-            }
-        }
-        if !clean {
-            continue;
-        }
+        let items: Vec<String> = arr
+            .iter()
+            .map(|x| x.as_str().map(str::to_owned).ok_or(()))
+            .collect::<Result<_, _>>()?;
         if let Ok(tag) = Tag::new(items) {
             tags.push(tag);
         }
@@ -335,7 +324,7 @@ fn diff_filter_match() {
     replay("core.filter.match", |input| {
         let f_raw = raw_member(input, "filter").ok_or(())?;
         let e_raw = raw_member(input, "event").ok_or(())?;
-        let filter = Filter::from_json(f_raw).map_err(|_| ())?;
+        let filter = crate::common::caller_filter_raw(f_raw).map_err(|_| ())?;
         let event = Event::from_json(e_raw).map_err(|_| ())?;
         Ok(Value::Bool(filter.matches(&event)))
     });
@@ -345,7 +334,7 @@ fn diff_filter_match() {
 #[ignore = "requires NK_DIFF_DIR"]
 fn diff_filter_canonicalize() {
     replay("core.filter.canonicalize", |input| {
-        let filter = Filter::from_json(input).map_err(|_| ())?;
+        let filter = crate::common::caller_filter_raw(input).map_err(|_| ())?;
         str_out(filter.to_json())
     });
 }

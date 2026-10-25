@@ -66,10 +66,15 @@ impl Serialize for Hll {
 }
 
 impl<'de> Deserialize<'de> for Hll {
-    /// Deserializes a 512-char hex string of any case.
+    /// Deserializes a 512-char lowercase hex string (protocol text).
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(deserializer)?;
-        Self::from_str(&raw).map_err(serde::de::Error::custom)
+        if raw.len() != 512 {
+            return Err(serde::de::Error::custom(Error::InvalidHll));
+        }
+        hex::decode_wire::<256>(&raw)
+            .map(Self)
+            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -171,7 +176,7 @@ impl<'de> Visitor<'de> for OptHll {
     }
 
     fn visit_str<E: DeError>(self, v: &str) -> Result<Self::Value, E> {
-        Ok(Hll::from_str(v).ok())
+        Ok(hex::decode_wire::<256>(v).ok().map(Hll))
     }
 
     fn visit_string<E: DeError>(self, v: String) -> Result<Self::Value, E> {

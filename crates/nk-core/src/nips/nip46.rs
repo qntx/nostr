@@ -116,8 +116,8 @@ impl FromStr for BunkerUri {
             return Err(Error::UnexpectedScheme { expected: "bunker" });
         }
         // Any-case 64-hex is accepted.
-        let remote_signer =
-            PublicKey::from_hex(authority_or_path(&url)).map_err(|_| Error::InvalidPublicKey)?;
+        let remote_signer = PublicKey::from_wire_hex(authority_or_path(&url))
+            .map_err(|_| Error::InvalidPublicKey)?;
         let pairs: Vec<(Cow<'_, str>, Cow<'_, str>)> = url.query_pairs().collect();
         Ok(Self {
             remote_signer,
@@ -282,8 +282,8 @@ impl FromStr for NostrConnectUri {
                 expected: "nostrconnect",
             });
         }
-        let client =
-            PublicKey::from_hex(authority_or_path(&url)).map_err(|_| Error::InvalidPublicKey)?;
+        let client = PublicKey::from_wire_hex(authority_or_path(&url))
+            .map_err(|_| Error::InvalidPublicKey)?;
         let pairs: Vec<(Cow<'_, str>, Cow<'_, str>)> = url.query_pairs().collect();
         let secret = query_get(&pairs, "secret")
             .filter(|s| !s.is_empty())
@@ -603,9 +603,9 @@ relay=wss%3A%2F%2Frelay.one&relay=wss%3A%2F%2Frelay.two%2Fpath%3Fx%3D1&secret=s+
 
     #[test]
     fn bunker_parse_variants() {
-        // Uppercase hex, empty-secret pair, and whitespace padding.
-        let upper = PK.to_uppercase();
-        let parsed = format!("  bunker://{upper}?secret=  ")
+        // Empty-secret pair and whitespace padding parse; an uppercase
+        // authority is invalid protocol text.
+        let parsed = format!("  bunker://{PK}?secret=  ")
             .parse::<BunkerUri>()
             .unwrap();
         assert_eq!(
@@ -616,6 +616,10 @@ relay=wss%3A%2F%2Frelay.one&relay=wss%3A%2F%2Frelay.two%2Fpath%3Fx%3D1&secret=s+
                 secret: Some(String::new()),
             }
         );
+        assert!(matches!(
+            format!("bunker://{}", PK.to_uppercase()).parse::<BunkerUri>(),
+            Err(Error::InvalidPublicKey)
+        ));
         // Non-bunker schemes and malformed input.
         assert!(matches!(
             "nostrconnect://x".parse::<BunkerUri>(),

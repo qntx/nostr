@@ -14,7 +14,14 @@ import type { Event, EventTemplate } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import type { Mutable } from "../core/util.ts";
-import { assertHex32, bytesToHex, isRecord, nowSeconds, utf8Encoder } from "../core/util.ts";
+import {
+  assertHex32,
+  bytesToHex,
+  isHex32,
+  isRecord,
+  nowSeconds,
+  utf8Encoder,
+} from "../core/util.ts";
 import { fetchManual, requireGlobalFetch, sendManual } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 
@@ -58,11 +65,11 @@ export function getHashFromURL(url: string | URL): string | undefined {
   } catch {
     return undefined;
   }
-  const matches = path.match(/[0-9a-f]{64}/gi);
+  const matches = path.match(/[0-9a-f]{64}/g);
   if (matches === null || matches.length === 0) {
     return undefined;
   }
-  return matches.at(-1)?.toLowerCase();
+  return matches.at(-1);
 }
 
 export async function sha256Blob(data: Blob | ArrayBuffer | Uint8Array): Promise<string> {
@@ -461,7 +468,7 @@ function extensionFromHashUrl(url: string, hash: string): string {
   } catch {
     return "";
   }
-  const i = pathname.toLowerCase().lastIndexOf(hash);
+  const i = pathname.lastIndexOf(hash);
   if (i === -1) {
     return "";
   }
@@ -568,10 +575,10 @@ export function parseBlobDescriptor(json: unknown): BlobDescriptor {
   if (typeof raw["url"] !== "string" || !raw["url"]) {
     throw new BlossomError("blob descriptor missing url");
   }
-  if (typeof raw["sha256"] !== "string") {
+  if (typeof raw["sha256"] !== "string" || !isHex32(raw["sha256"])) {
     throw new BlossomError("blob descriptor missing sha256");
   }
-  const hash = assertHex32(raw["sha256"], "blob sha256");
+  const hash = raw["sha256"];
   if (typeof raw["size"] !== "number" || !Number.isInteger(raw["size"]) || raw["size"] < 0) {
     throw new BlossomError("blob descriptor missing size");
   }

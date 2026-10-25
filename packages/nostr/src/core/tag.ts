@@ -122,11 +122,27 @@ export function parseEventAddress(value: string): EventAddress | undefined {
   if (kind > 65535) {
     return undefined;
   }
-  const pubkey = value.slice(first + 1, second).toLowerCase();
+  const pubkey = value.slice(first + 1, second);
   if (!isHex32(pubkey)) {
     return undefined;
   }
   return { kind, pubkey, identifier: value.slice(second + 1) };
+}
+
+/**
+ * Caller-input form of {@link parseEventAddress}: the pubkey segment accepts any hex case; the
+ * case-sensitive `d` identifier stays verbatim. Protocol text must use {@link parseEventAddress},
+ * which is lowercase-only.
+ */
+export function parseEventAddressInput(value: string): EventAddress | undefined {
+  const first = value.indexOf(":");
+  const second = first === -1 ? -1 : value.indexOf(":", first + 1);
+  if (second < 0) {
+    return undefined;
+  }
+  return parseEventAddress(
+    `${value.slice(0, first + 1)}${value.slice(first + 1, second).toLowerCase()}${value.slice(second)}`,
+  );
 }
 
 /** Format an address as a `kind:pubkey:dTag` coordinate string. */

@@ -30,7 +30,9 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Changed
 
-- `@qntx/nostr`: NIP-11 `pubkey` and `self` are kept only as 64-hex public keys (lowercased); other values are dropped like wrong-typed fields. `parseRelayInformation` is exported.
+- **BREAKING:** `@qntx/nostr` protocol text accepts lowercase hex only — uppercase hex in event tag values, wire filters (`REQ`/`COUNT`/`NEG-OPEN`), relay and client messages (`OK` ids, `NEG-*` hex), NIP-05 and NIP-11 documents, NIP-46 URIs and RPC results, and Blossom descriptors and blob URLs is now an invalid value, handled like any other invalid value of that field (the tag is skipped, the filter or message is rejected, the document field is dropped, the URI is rejected). Nothing lowercases protocol text. Typed API arguments (`assertHex32`-checked parameters, `Keys`/`PublicKey`, NIP-19 encoders, developer-supplied `Filter` objects, gossip lookups) are unchanged — they still accept any case and normalize once at the boundary.
+- `nk-core`: protocol-text codecs are strict — `PublicKey::from_wire_hex`/`EventId::from_wire_hex` (lowercase only) are the wire decoders used across event/tag/message/filter/NEG-77/NIP-05/NIP-11/NIP-46/Blossom parsing and `Coordinate::from_wire_str`; `from_hex`/`FromStr` stay case-insensitive for caller-supplied values.
+- `@qntx/nostr`: NIP-11 `pubkey` and `self` are kept only as lowercase 64-hex public keys; other values are dropped like wrong-typed fields. `parseRelayInformation` is exported.
 - Vector cases whose input is non-canonical JSON (duplicate keys, non-integral number spellings, `-0`) now carry `"nonCanonicalJson": true`; Rust rejects those inputs while `JSON.parse` accepts them — the single permitted platform difference.
 
 ## [0.14.0] - 2026-10-15
