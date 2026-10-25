@@ -24,6 +24,9 @@ enum Hook {
     Raw(String),
     /// Close the socket (client sees a drop; it should reconnect).
     Drop,
+    /// Stop reading the socket: the codec never sees the client's pings,
+    /// so no pong is sent — the client's liveness deadline fires.
+    Freeze,
 }
 
 /// The live connection: frames go out through `hook_rx`.
@@ -136,6 +139,16 @@ async fn serve_ws(
                 match hook {
                     Ok(Hook::Raw(text)) => drop(ws.send(Frame::text(text)).await),
                     Ok(Hook::Drop) | Err(broadcast::error::RecvError::Closed) => return,
+                    // Frozen: stop reading the socket so the codec never
+                    // answers a ping; the client sees a dead connection.
+                    Ok(Hook::Freeze) => {
+                        while let Ok(h) = hook_rx.recv().await {
+                            if matches!(h, Hook::Drop) {
+                                return;
+                            }
+                        }
+                        return;
+                    }
                     Err(broadcast::error::RecvError::Lagged(_)) => {}
                 }
             }
@@ -271,6 +284,12 @@ impl MockRelay {
     /// Sends a raw text frame verbatim (malformed/NOTICE/CLOSED probes).
     pub fn send_raw(&self, text: &str) {
         drop(self.hooks.send(Hook::Raw(text.to_owned())));
+    }
+
+    /// Freezes the connection: the server stops reading the socket, so
+    /// the codec never answers the client's pings — liveness times out.
+    pub fn freeze_connection(&self) {
+        drop(self.hooks.send(Hook::Freeze));
     }
 
     /// Severs the connection — the client should observe a drop and

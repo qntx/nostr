@@ -2,7 +2,7 @@
 //! publishes, and inbound-message routing. No I/O, clock, or channels — the
 //! driver owns those; this owns the protocol decisions.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use nk_core::{Event, EventId, Filter, RelayMessage, SubscriptionId};
 
@@ -38,6 +38,22 @@ pub(crate) enum Out {
     Notice(String),
     /// Send `CLOSE` for `id` (the subscription is being ended locally).
     SendClose(SubscriptionId),
+    /// An inbound `EVENT` failed acceptance on a live subscription.
+    Rejected {
+        /// The subscription the event targeted.
+        id: SubscriptionId,
+        /// Why it was dropped.
+        reason: RejectReason,
+    },
+}
+
+/// Why a live subscription dropped an inbound `EVENT` (NIP-01 acceptance).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RejectReason {
+    /// `Event::verify` failed — bad id or signature.
+    InvalidSignature,
+    /// The event matched none of the subscription's filters.
+    FilterMismatch,
 }
 
 /// Per-subscription state.
@@ -47,8 +63,6 @@ struct SubState {
     filters: Vec<Filter>,
     /// `EOSE` has been delivered once.
     eose: bool,
-    /// The relay sent `CLOSED`; a terminal `Closed` output is pending.
-    closed: Option<String>,
 }
 
 /// The relay session: subscriptions, pending publishes, acceptance rules.
@@ -56,9 +70,7 @@ struct SubState {
 pub(crate) struct Session {
     subs: HashMap<SubscriptionId, SubState>,
     /// Events waiting on `OK`; joining concurrent publishes share the entry.
-    pending: HashMap<EventId, usize>,
-    /// Events dropped for a bad signature or a filter mismatch — diagnostics.
-    rejected_events: usize,
+    pending: HashSet<EventId>,
 }
 
 impl Session {
@@ -69,7 +81,6 @@ impl Session {
             SubState {
                 filters,
                 eose: false,
-                closed: None,
             },
         );
     }
@@ -81,33 +92,20 @@ impl Session {
 
     /// Registers `id` for an `OK`; `false` joins the in-flight publish.
     pub(crate) fn add_pending(&mut self, id: EventId) -> bool {
-        if let Some(waiters) = self.pending.get_mut(&id) {
-            *waiters += 1;
-            false
-        } else {
-            self.pending.insert(id, 1);
-            true
-        }
+        self.pending.insert(id)
     }
 
     /// Open `REQ`s to replay after a reconnect.
     pub(crate) fn replay_reqs(&self) -> Vec<(SubscriptionId, Vec<Filter>)> {
         self.subs
             .iter()
-            .filter(|(_, s)| s.closed.is_none())
             .map(|(id, s)| (id.clone(), s.filters.clone()))
             .collect()
     }
 
     /// Pending publish ids to fail on disconnect.
     pub(crate) fn take_pending(&mut self) -> Vec<EventId> {
-        self.pending.drain().map(|(id, _)| id).collect()
-    }
-
-    /// Inbound events dropped so far (signature or filter rejection).
-    #[cfg(test)]
-    pub(crate) const fn rejected_events(&self) -> usize {
-        self.rejected_events
+        self.pending.drain().collect()
     }
 
     /// The single entry point for inbound relay traffic.
@@ -120,15 +118,19 @@ impl Session {
                 let Some(sub) = self.subs.get(subscription_id.as_ref()) else {
                     return Vec::new();
                 };
-                if sub.closed.is_some() {
-                    return Vec::new();
-                }
                 // NIP-01: only verified events matching a filter are
-                // delivered; the rest are dropped and counted.
-                let ok = event.verify().is_ok() && sub.filters.iter().any(|f| f.matches(&event));
-                if !ok {
-                    self.rejected_events += 1;
-                    return Vec::new();
+                // delivered; the rest are reported as rejected.
+                if event.verify().is_err() {
+                    return vec![Out::Rejected {
+                        id: subscription_id.into_owned(),
+                        reason: RejectReason::InvalidSignature,
+                    }];
+                }
+                if !sub.filters.iter().any(|f| f.matches(&event)) {
+                    return vec![Out::Rejected {
+                        id: subscription_id.into_owned(),
+                        reason: RejectReason::FilterMismatch,
+                    }];
                 }
                 vec![Out::Deliver {
                     id: subscription_id.into_owned(),
@@ -141,7 +143,7 @@ impl Session {
                 message,
             } => {
                 // One `OK` releases every joining publish.
-                if self.pending.remove(&event_id).is_none() {
+                if !self.pending.remove(&event_id) {
                     return Vec::new();
                 }
                 vec![Out::PublishDone {
@@ -154,7 +156,7 @@ impl Session {
                 let Some(sub) = self.subs.get_mut(id.as_ref()) else {
                     return Vec::new();
                 };
-                if sub.eose || sub.closed.is_some() {
+                if sub.eose {
                     return Vec::new();
                 }
                 sub.eose = true;
@@ -164,10 +166,9 @@ impl Session {
                 subscription_id,
                 message,
             } => {
-                let Some(sub) = self.subs.get_mut(subscription_id.as_ref()) else {
+                if self.subs.remove(subscription_id.as_ref()).is_none() {
                     return Vec::new();
-                };
-                sub.closed = Some(message.to_string());
+                }
                 vec![Out::Closed {
                     id: subscription_id.into_owned(),
                     reason: message.into_owned(),
@@ -290,8 +291,13 @@ mod tests {
             id.as_str(),
             bad.to_json()
         )));
-        assert!(out.is_empty());
-        assert_eq!(s.rejected_events(), 1);
+        assert!(matches!(
+            out.as_slice(),
+            [Out::Rejected {
+                reason: RejectReason::InvalidSignature,
+                ..
+            }]
+        ));
     }
 
     #[test]
@@ -305,8 +311,13 @@ mod tests {
             id.as_str(),
             ev.to_json()
         )));
-        assert!(out.is_empty());
-        assert_eq!(s.rejected_events(), 1);
+        assert!(matches!(
+            out.as_slice(),
+            [Out::Rejected {
+                reason: RejectReason::FilterMismatch,
+                ..
+            }]
+        ));
     }
 
     #[test]
@@ -320,7 +331,6 @@ mod tests {
             ev.to_json()
         )));
         assert!(out.is_empty());
-        assert_eq!(s.rejected_events(), 0);
     }
 
     #[test]

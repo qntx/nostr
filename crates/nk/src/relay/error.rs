@@ -24,9 +24,6 @@ pub enum Error {
     /// The relay URL is not a `ws://`/`wss://` endpoint.
     #[error("invalid relay URL")]
     InvalidUrl,
-    /// The per-relay subscription id counter overflowed.
-    #[error("could not allocate a subscription id")]
-    SubscriptionId,
 }
 
 /// A type-erased transport failure.

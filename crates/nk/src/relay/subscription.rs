@@ -8,8 +8,6 @@ use futures_util::Stream;
 use nk_core::{Event, SubscriptionId};
 use tokio::sync::mpsc;
 
-use super::Cmd;
-
 /// Why a subscription ended.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -38,7 +36,8 @@ pub enum SubscriptionEvent {
 pub struct Subscription {
     id: SubscriptionId,
     rx: mpsc::Receiver<SubscriptionEvent>,
-    cmd: mpsc::Sender<Cmd>,
+    /// Drop-side `CLOSE` requests — unbounded, never lost under load.
+    drops: mpsc::UnboundedSender<SubscriptionId>,
     /// Set by the driver when the sub is ended while the channel is full
     /// (lagged) or the relay is closing.
     terminal: Arc<std::sync::Mutex<Option<CloseReason>>>,
@@ -81,9 +80,9 @@ impl Stream for Subscription {
 
 impl Drop for Subscription {
     fn drop(&mut self) {
-        drop(self.cmd.try_send(Cmd::CloseSub {
-            id: self.id.clone(),
-        }));
+        // `unbounded_send` fails only when the driver is gone — the socket
+        // and its `CLOSE` obligation died with it.
+        drop(self.drops.send(self.id.clone()));
     }
 }
 
@@ -97,7 +96,7 @@ impl std::fmt::Debug for Subscription {
 
 pub(crate) fn channel_pair(
     id: SubscriptionId,
-    cmd: mpsc::Sender<Cmd>,
+    drops: mpsc::UnboundedSender<SubscriptionId>,
     capacity: usize,
 ) -> (
     Subscription,
@@ -110,7 +109,7 @@ pub(crate) fn channel_pair(
         Subscription {
             id,
             rx,
-            cmd,
+            drops,
             terminal: Arc::clone(&terminal),
             done: false,
         },

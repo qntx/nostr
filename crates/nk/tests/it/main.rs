@@ -32,6 +32,14 @@ fn event(content: &str, kind: u16) -> Event {
         .expect("sign")
 }
 
+async fn mock_and_relay_with(f: impl Fn(&mut RelayOptions)) -> (MockRelay, Relay) {
+    let mock = MockRelay::start().await.expect("mock");
+    let mut opts = RelayOptions::default();
+    f(&mut opts);
+    let relay = Relay::new(&mock.url(), opts);
+    (mock, relay)
+}
+
 async fn mock_and_relay() -> (MockRelay, Relay) {
     let mock = MockRelay::start().await.expect("mock");
     let relay = Relay::new(&mock.url(), RelayOptions::default());
@@ -451,6 +459,72 @@ async fn subscribe_survives_reconnect() {
         }
     }
     assert!(saw_event, "no event after reconnect");
+}
+
+#[tokio::test]
+async fn pong_deadline_reconnects() {
+    // Short liveness timings so the missed pong is detected quickly.
+    let (mut mock, relay) = mock_and_relay_with(|o| {
+        o.ping_interval = Duration::from_millis(30);
+        o.pong_deadline = Duration::from_millis(50);
+        o.reconnect_min = Duration::from_millis(50);
+        o.reconnect_max = Duration::from_millis(100);
+    })
+    .await;
+    let sub = relay
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .await
+        .expect("sub");
+    assert!(
+        mock.wait_for_frame("REQ", Duration::from_secs(2))
+            .await
+            .is_some()
+    );
+    // The mock stops answering pings; the relay must notice the missed
+    // pong deadline, disconnect, and reconnect — proven by the replayed
+    // REQ landing on the fresh connection.
+    mock.freeze_connection();
+    let needle = format!("REQ\",\"{}", sub.id().as_str());
+    assert!(
+        mock.wait_for_frame(&needle, Duration::from_secs(10))
+            .await
+            .is_some(),
+        "REQ not replayed after liveness reconnect"
+    );
+    assert_eq!(relay.status(), RelayStatus::Connected);
+    drop(sub);
+}
+
+#[tokio::test]
+async fn drops_under_load_all_send_close() {
+    // Many subscriptions dropped while the driver is busy: every CLOSE
+    // must still reach the mock.
+    let (mut mock, relay) = mock_and_relay().await;
+    let mut subs = Vec::new();
+    for _ in 0..50 {
+        subs.push(
+            relay
+                .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+                .await
+                .expect("sub"),
+        );
+    }
+    assert!(
+        mock.wait_for_frame("REQ", Duration::from_secs(2))
+            .await
+            .is_some()
+    );
+    let ids: Vec<String> = subs.iter().map(|s| s.id().as_str().to_owned()).collect();
+    drop(subs);
+    for id in &ids {
+        let needle = format!("CLOSE\",\"{id}");
+        assert!(
+            mock.wait_for_frame(&needle, Duration::from_secs(5))
+                .await
+                .is_some(),
+            "CLOSE for {id} not received"
+        );
+    }
 }
 
 #[tokio::test]

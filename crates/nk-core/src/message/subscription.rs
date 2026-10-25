@@ -1,6 +1,6 @@
 //! The NIP-01 subscription id.
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use core::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -35,6 +35,15 @@ impl SubscriptionId {
             return Err(Error::InvalidSubscriptionId { len });
         }
         Ok(Self(id))
+    }
+
+    /// The decimal spelling of `n`.
+    ///
+    /// Every `u64` is 1–20 ASCII digits, always inside the `1..=64` bound —
+    /// this conversion cannot fail.
+    #[must_use]
+    pub fn from_u64(n: u64) -> Self {
+        Self(n.to_string())
     }
 
     /// A random 16-hex-char subscription id drawn from `rng`.
@@ -75,6 +84,13 @@ impl fmt::Display for SubscriptionId {
     }
 }
 
+impl From<u64> for SubscriptionId {
+    /// The decimal spelling of `n`; every `u64` is a valid id.
+    fn from(n: u64) -> Self {
+        Self::from_u64(n)
+    }
+}
+
 impl AsRef<str> for SubscriptionId {
     fn as_ref(&self) -> &str {
         self.as_str()
@@ -92,5 +108,24 @@ impl<'de> Deserialize<'de> for SubscriptionId {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(deserializer)?;
         Self::new(raw).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "unit-test fixtures panic loudly"
+)]
+mod tests {
+    use super::SubscriptionId;
+
+    #[test]
+    fn from_u64_at_max_is_valid() {
+        let id = SubscriptionId::from(u64::MAX);
+        assert_eq!(id.as_str(), "18446744073709551615");
+        assert_eq!(id.as_str().len(), 20);
+        assert!(SubscriptionId::new(id.as_str()).is_ok());
     }
 }
