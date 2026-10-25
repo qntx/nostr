@@ -11,7 +11,6 @@
 
 #[cfg(any(feature = "nip04", feature = "nip44"))]
 mod ecdh;
-mod util;
 
 pub mod blossom;
 #[cfg(feature = "nip04")]

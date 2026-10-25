@@ -1,23 +1,16 @@
-//! NIP-27 content tokenization: a hand-written scanner that reproduces the
-//! a single left-to-right scan matching the reference tokenizer.
+//! NIP-27 content tokenization — a hand-written scanner over Unicode
+//! scalar values; `packages/nostr/src/nips/nip27.ts` implements the same
+//! rules line for line.
 //!
-//! The JS semantics reproduced here:
+//! At position `i` the first rule whose shape matches decides — nostr,
+//! http(s), ws(s), invoice, hashtag, emoji, then (with `legacy_bech32`) bare
+//! bech32; a candidate that fails validation makes `i` text and the scan
+//! resumes at the next scalar (no later rule is tried at `i`). Keywords
+//! compare ASCII case-insensitively; there is no Unicode case folding and no
+//! backtracking.
 //!
-//! - Alternation is leftmost-first in rule order: at every position the rules
-//!   try nostr, http(s), ws(s), invoice, hashtag, emoji, then (with
-//!   `legacy_bech32`) bare bech32. The first textual match wins; a candidate
-//!   whose text matches but fails validation makes the scanner resume one
-//!   char after the candidate's start (every rule begins with ASCII, so a
-//!   JS UTF-16 `lastIndex = start + 1` equals the next byte).
-//! - `i` + `u` case-insensitivity is Unicode simple case folding: ASCII case
-//!   plus U+212A (folds to `k`) and U+017F (folds to `s`) — the only two
-//!   non-ASCII chars that fold into the ASCII letters these patterns use
-//!   (`fold`).
-//! - The invoice pattern backtracks like a JS regex: greedy `\d+` with
-//!   optional `[munp]` retries shorter amounts before the separator `1`
-//!   (`invoice_at`).
-//! - `\p{L}`/`\p{M}`/`\p{N}` come from `unicode-properties`; `\s` is the JS
-//!   whitespace class (`is_js_whitespace`); `\d` stays ASCII under `u`.
+//! `\p{L}`/`\p{M}`/`\p{N}` come from `unicode-properties`; `STOP` is Unicode
+//! `White_Space` (`char::is_whitespace`).
 
 use alloc::collections::BTreeMap;
 use alloc::string::String;
@@ -28,7 +21,6 @@ use unicode_properties::{GeneralCategoryGroup, UnicodeGeneralCategory};
 use url::Url;
 
 use crate::nips::nip19::{AddressPointer, Entity, EventPointer, ProfilePointer};
-use crate::nips::util::is_js_whitespace;
 
 /// A decoded NIP-19 reference carried by [`ContentBlock::Reference`].
 ///
@@ -93,20 +85,6 @@ pub struct ParseOptions<'a> {
     pub imeta: Option<&'a BTreeMap<String, String>>,
 }
 
-/// Unicode simple case folding for the letters the patterns use — JS `iu`
-/// canonicalization maps ASCII case plus U+212A KELVIN SIGN to `k` and
-/// U+017F LATIN SMALL LETTER LONG S to `s`; nothing else reaches these rules.
-/// `String.toLowerCase()` semantics for the folding that matters here:
-/// `K` (U+212A Kelvin) folds to `k`, but `ſ` (U+017F, already
-/// lowercase) does not fold to `s`.
-const fn fold(c: char) -> char {
-    match c {
-        'A'..='Z' => c.to_ascii_lowercase(),
-        '\u{212a}' => 'k',
-        _ => c,
-    }
-}
-
 /// ASCII-only case folding — the literal prefixes (`nostr:`, `https`,
 /// `lightning:`) are matched ASCII-insensitively (`asciiCi` in TS).
 const fn fold_ascii(c: char) -> char {
@@ -126,11 +104,12 @@ fn lit_at(rest: &str, lit: &str) -> Option<usize> {
     Some(consumed)
 }
 
-/// The bech32 data charset `[02-9ac-hj-np-z]` under `i` — uppercase letters
-/// and the two fold characters are accepted by the pattern even though a
-/// valid invoice/entity is all-lowercase.
+/// The bech32 data charset — `0`, `2`–`9`, `a c-h j-n p-z`, both ASCII cases.
 const fn is_bech32_char(c: char) -> bool {
-    matches!(fold(c), '0' | '2'..='9' | 'a' | 'c'..='h' | 'j'..='n' | 'p'..='z')
+    matches!(
+        fold_ascii(c),
+        '0' | '2'..='9' | 'a' | 'c'..='h' | 'j'..='n' | 'p'..='z'
+    )
 }
 
 /// Bytes of the maximal bech32-charset run at the start of `rest` (may be 0).
@@ -141,9 +120,9 @@ fn bech32_run(rest: &str) -> usize {
         .sum()
 }
 
-/// The emoji-token class `[A-Za-z0-9_-]` under `i` (fold chars included).
+/// The emoji-token class `[A-Za-z0-9_-]`.
 const fn is_emoji_char(c: char) -> bool {
-    matches!(fold(c), 'a'..='z' | '0'..='9' | '_' | '-')
+    matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-')
 }
 
 /// `[\p{L}\p{M}\p{N}_]` — the hashtag/boundary tag character.
@@ -166,10 +145,10 @@ fn is_word_char(c: char) -> bool {
     )
 }
 
-/// `URL_RUN` stop characters: JS `\s`, `<`, `>`, `"`, CJK punctuation
-/// U+3000–U+303F, and full-width forms U+FF00–U+FFEF.
+/// URL-run stop characters: Unicode `White_Space`, `<`, `>`, `"`, CJK
+/// punctuation U+3000–U+303F, and full-width forms U+FF00–U+FFEF.
 fn is_url_stop(c: char) -> bool {
-    is_js_whitespace(c)
+    c.is_whitespace()
         || matches!(c, '<' | '>' | '"')
         || ('\u{3000}'..='\u{303f}').contains(&c)
         || ('\u{ff00}'..='\u{ffef}').contains(&c)
@@ -216,48 +195,65 @@ fn url_at(rest: &str, ws: bool) -> Option<usize> {
     (run > 0).then_some(at + run)
 }
 
-/// `(?:lightning:)?ln(?:bcrt|tbs|bc|tb)(?:\d+[munp]?)?1[charset]+` with JS
-/// backtracking order: longest `\d+` first, `[munp]?` present before absent,
-/// the whole amount group before its absence. Returns `(prefix_len, end)`.
+/// `(lightning:)?ln(bcrt|tbs|bc|tb)` + a maximal `BECH32 ∪ {1}` run, then
+/// split at the run's last `1`: the amount before it is empty or `\d+` plus
+/// at most one of `munp` (ASCII either case), and the data after it is
+/// non-empty. Returns `(prefix_len, end)`.
 fn invoice_at(rest: &str) -> Option<(usize, usize)> {
     let prefix = lit_at(rest, "lightning:").unwrap_or(0);
     let mut at = prefix + lit_at(&rest[prefix..], "ln")?;
     at += ["bcrt", "tbs", "bc", "tb"]
         .iter()
         .find_map(|cur| lit_at(&rest[at..], cur))?;
-    let digits = rest[at..].chars().take_while(char::is_ascii_digit).count();
-    for k in (1..=digits).rev() {
-        let p = at + k; // digits are ASCII: k bytes
-        if let Some(end) = rest[p..]
-            .chars()
-            .next()
-            .filter(|c| matches!(fold(*c), 'm' | 'u' | 'n' | 'p'))
-            .and_then(|m| sep_then_data(rest, p + m.len_utf8()))
-        {
-            return Some((prefix, end));
+    // The maximal run may contain `1`s — the LAST `1` is the separator.
+    let mut run_end = at;
+    let mut last_sep = None;
+    for (off, c) in rest[at..].char_indices() {
+        if c == '1' {
+            last_sep = Some(at + off);
+        } else if !is_bech32_char(c) {
+            break;
         }
-        if let Some(end) = sep_then_data(rest, p) {
-            return Some((prefix, end));
+        run_end = at + off + c.len_utf8();
+    }
+    let last_sep = last_sep?;
+    if last_sep + 1 == run_end {
+        return None; // empty data
+    }
+    let amount = &rest[at..last_sep];
+    if !amount.is_empty() {
+        let digits = amount.bytes().take_while(u8::is_ascii_digit).count();
+        let tail = &amount[digits..];
+        if digits == 0
+            || tail.len() > 1
+            || (tail.len() == 1
+                && !matches!(
+                    tail.chars().next().map(fold_ascii),
+                    Some('m' | 'u' | 'n' | 'p')
+                ))
+        {
+            return None;
         }
     }
-    sep_then_data(rest, at).map(|end| (prefix, end))
+    Some((prefix, run_end))
 }
 
-/// `#[\p{L}\p{M}\p{N}_]{1,42}` — greedy, capped at 42 code points.
-fn hashtag_at(rest: &str) -> Option<usize> {
+/// `#` + a maximal `TAG` run — returns `(end, scalar count)`; the 1–42
+/// length cap is a validation.
+fn hashtag_at(rest: &str) -> Option<(usize, usize)> {
     if !rest.starts_with('#') {
         return None;
     }
     let mut end = 1;
     let mut count = 0;
     for (i, c) in rest[1..].char_indices() {
-        if count == 42 || !is_tag_char(c) {
+        if !is_tag_char(c) {
             break;
         }
         count += 1;
         end = 1 + i + c.len_utf8();
     }
-    (count > 0).then_some(end)
+    (count > 0).then_some((end, count))
 }
 
 /// `:[A-Za-z0-9_-]+:` — a shortcode candidate (membership checked later).
@@ -288,7 +284,7 @@ enum Token {
     Url,
     Relay,
     Invoice { prefix_len: usize },
-    Hashtag,
+    Hashtag { count: usize },
     Emoji,
     Bare,
 }
@@ -309,8 +305,8 @@ fn candidate_at(rest: &str, legacy: bool) -> Option<(Token, usize)> {
     if let Some((prefix_len, end)) = invoice_at(rest) {
         return Some((Token::Invoice { prefix_len }, end));
     }
-    if let Some(end) = hashtag_at(rest) {
-        return Some((Token::Hashtag, end));
+    if let Some((end, count)) = hashtag_at(rest) {
+        return Some((Token::Hashtag { count }, end));
     }
     if let Some(end) = emoji_at(rest) {
         return Some((Token::Emoji, end));
@@ -500,8 +496,8 @@ pub fn parse_content<'a>(
                     ))
                 }
             }
-            Token::Hashtag => {
-                if prev.is_some_and(is_tag_char) || next.is_some_and(is_tag_char) {
+            Token::Hashtag { count } => {
+                if count > 42 || prev.is_some_and(is_tag_char) {
                     None
                 } else {
                     Some((ContentBlock::Hashtag(&rest[1..end_rel]), end))
