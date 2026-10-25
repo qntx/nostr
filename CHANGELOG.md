@@ -11,6 +11,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Added
 
+- `nk`: Blossom on `http::HttpClient` — `upload`/`check_upload`/`list`/`delete`/`mirror`/`blob_exists`/`get_blob` (BUD-01/02/04/06, hash-verified descriptors and blobs), NIP-B7 `heal_blob_url` and `upload_to_servers`.
+- `nk-core`: Blossom codecs — `BlobHash`, `Server`, `BlobDescriptor`, kind-24242 `Authorization`, `authorization_header` and the kind-10063 `ServerList`, verified by the new shared `vectors/blossom`.
 - `nk`: `http` feature — `http::HttpClient` (hyper-util + rustls/ring + webpki-roots, never follows redirects, whole-exchange timeout, response-size cap) with NIP-11 `relay_information` and NIP-05 `nip05_document`/`nip05_profile`/`verify_nip05`; `testing::MockHttp` and `MockRelay::set_information` under `test-util`.
 - `nk-core`: NIP-11 `RelayInformation`/`Limitation` and NIP-05 `Nip05Address`/`Nip05Document`/`Nip46Discovery` codecs, verified by the new shared `vectors/nip05` and `vectors/nip11`.
 - `nk`: NIP-46 `nip46::RemoteSigner` (`connect`/`attach`/`nostr_connect`, `auth_url` challenges, `switch_relays`, `logout`) implementing `NostrSigner`; `nk-core` gains `Method::{SwitchRelays, Logout}`, `ClientMetadata`, `Request::{connect, sign_event}` and `parse_switch_relays`.

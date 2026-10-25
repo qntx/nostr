@@ -90,6 +90,8 @@ pub(crate) async fn blackhole_url() -> (nk_core::RelayUrl, tokio::task::JoinHand
     (url, hold)
 }
 
+#[cfg(feature = "http")]
+mod blossom;
 mod client;
 mod dm;
 #[cfg(feature = "http")]

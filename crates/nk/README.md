@@ -182,3 +182,37 @@ async fn demo() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+The same client carries Blossom (BUD-01/02/04/06): sign a kind
+`24242` `Authorization` and `upload` — the server hash is verified
+against the bytes:
+
+```rust,no_run
+#[cfg(feature = "http")]
+async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    use std::str::FromStr;
+
+    use nk::http::{HttpClient, HttpOptions};
+    use nk_core::nips::blossom::{AuthVerb, Authorization, Server};
+    use nk_core::rand_core::UnwrapErr;
+    use nk_core::{EventBuilder, Keys, SysRng, Timestamp};
+
+    let http = HttpClient::new(HttpOptions::default())?;
+    let server = Server::from_str("https://cdn.example.com")?;
+    let keys = Keys::generate()?;
+    let template = Authorization::new(
+        AuthVerb::Upload,
+        Timestamp::from_secs(Timestamp::now().as_secs() + 3600),
+    )
+    .message("Upload a blob")?;
+    let auth = keys.sign_event(
+        EventBuilder::from(template).build(keys.public_key()),
+        &mut UnwrapErr(SysRng),
+    )?;
+    let descriptor = http
+        .upload(&server, b"blob bytes".to_vec(), Some("text/plain"), &auth)
+        .await?;
+    println!("stored at {} ({} bytes)", descriptor.url, descriptor.size);
+    Ok(())
+}
+```

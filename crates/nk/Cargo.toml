@@ -53,5 +53,6 @@ webpki-roots   = { workspace = true, optional = true }
 nk           = { path = ".", features = ["test-util"] }
 nk-core      = { workspace = true, features = ["std", "clock", "os-rng", "nip44"] }
 nk-store     = { workspace = true }
+base64ct     = { workspace = true }
 futures-util = { workspace = true }
 tokio        = { workspace = true, features = ["rt-multi-thread", "test-util"] }

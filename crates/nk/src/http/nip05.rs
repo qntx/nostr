@@ -4,7 +4,7 @@ use nk_core::PublicKey;
 use nk_core::nips::nip05::{Nip05Address, Nip05Document};
 use nk_core::nips::nip19::ProfilePointer;
 
-use super::{Error, HttpClient, Result, utf8};
+use super::{Error, HttpClient, Response, Result, utf8};
 
 impl HttpClient {
     /// Fetches `address`'s `nostr.json`. NIP-05 requires an exact 200 —
@@ -14,7 +14,7 @@ impl HttpClient {
     ///
     /// [`Error::Status`] on any non-200 status (with `X-Reason` when
     /// sent); [`Error::Nip05`] on a document failing the wire checks;
-    /// the transport errors of `HttpClient::get`.
+    /// the transport errors of `HttpClient::send`.
     pub async fn nip05_document(&self, address: &Nip05Address) -> Result<Nip05Document> {
         self.nip05_document_at(&address.well_known_url()).await
     }
@@ -22,7 +22,11 @@ impl HttpClient {
     /// The URL-level fetch — the crate-private seam tests drive
     /// against `http://` mock servers (public API stays `https://`).
     pub(crate) async fn nip05_document_at(&self, url: &str) -> Result<Nip05Document> {
-        let (status, reason, body) = self.get(url, &[]).await?;
+        let Response {
+            status,
+            reason,
+            body,
+        } = self.send(hyper::Method::GET, url, &[], None).await?;
         if status != 200 {
             return Err(Error::Status { status, reason });
         }

@@ -7,6 +7,7 @@
 //!
 //! No `hyper`/`rustls` types appear in the public API.
 
+mod blossom;
 mod nip05;
 mod nip11;
 
@@ -69,6 +70,15 @@ pub enum Error {
     /// The relay information document failed the NIP-11 wire checks.
     #[error("invalid nip-11 document")]
     Nip11(#[source] nk_core::nips::nip11::Error),
+    /// A Blossom document or descriptor failed the wire checks.
+    #[error("invalid blossom response")]
+    Blossom(#[source] nk_core::nips::blossom::Error),
+    /// A fetched blob or descriptor does not match the requested hash.
+    #[error("blob sha256 mismatch")]
+    HashMismatch,
+    /// A server list or a multi-server call was given no servers.
+    #[error("no blossom servers")]
+    NoServers,
 }
 
 /// [`HttpClient`] tuning. `#[non_exhaustive]` — construct via
@@ -101,8 +111,16 @@ impl Default for HttpOptions {
 
 type InnerClient = hyper_util::client::legacy::Client<
     hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>,
-    http_body_util::Empty<Bytes>,
+    http_body_util::Full<Bytes>,
 >;
+
+/// A completed exchange — status, the `X-Reason` header when the
+/// server sent one, and the size-capped body.
+pub(crate) struct Response {
+    status: u16,
+    reason: Option<String>,
+    body: Bytes,
+}
 
 /// A plain-HTTP client for NIP-05/NIP-11 (and later Blossom). `Clone`
 /// is cheap — clones share the connection pool. Never follows
@@ -143,24 +161,26 @@ impl HttpClient {
         })
     }
 
-    /// One GET exchange: `Uri` parse, request, status read and a
-    /// size-capped body read, all under `timeout`. Status interpretation
-    /// is the caller's.
-    async fn get(
+    /// One exchange: `Uri` parse, request, status read and a
+    /// size-capped body read, all under `timeout`. Status
+    /// interpretation is the caller's.
+    async fn send(
         &self,
+        method: hyper::Method,
         url: &str,
         headers: &[(&str, &str)],
-    ) -> Result<(u16, Option<String>, Bytes)> {
+        body: Option<Bytes>,
+    ) -> Result<Response> {
         let uri: hyper::Uri = url.parse().map_err(|_| Error::InvalidUrl)?;
         let mut builder = hyper::Request::builder()
-            .method(hyper::Method::GET)
+            .method(method)
             .uri(uri)
             .header(hyper::header::USER_AGENT, self.options.user_agent.clone());
         for (name, value) in headers {
             builder = builder.header(*name, *value);
         }
         let request = builder
-            .body(http_body_util::Empty::<Bytes>::new())
+            .body(http_body_util::Full::new(body.unwrap_or_default()))
             .map_err(|e| Error::Request(RequestError::new(e)))?;
         let exchange = async {
             let response = self
@@ -175,11 +195,15 @@ impl HttpClient {
                 .and_then(|v| v.to_str().ok().map(str::to_owned));
             let limited =
                 http_body_util::Limited::new(response.into_body(), self.options.max_response_size);
-            let body = match limited.collect().await {
+            let bytes = match limited.collect().await {
                 Ok(collected) => collected.to_bytes(),
                 Err(e) => return Err(body_error(e)),
             };
-            Ok((status, reason, body))
+            Ok(Response {
+                status,
+                reason,
+                body: bytes,
+            })
         };
         tokio::time::timeout(self.options.timeout, exchange)
             .await
