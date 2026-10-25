@@ -41,5 +41,6 @@ mod nip42;
 mod nip46;
 mod nip51;
 mod nip57;
+mod nip59;
 mod nip65;
 mod nip98;

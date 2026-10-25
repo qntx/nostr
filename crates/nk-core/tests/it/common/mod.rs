@@ -112,3 +112,20 @@ pub(crate) fn hex_str(bytes: &[u8]) -> String {
     }
     out
 }
+
+#[cfg(feature = "os-rng")]
+use std::future::Future;
+
+/// Drives a future to completion — the `it` binary is std, no executor
+/// dependency needed.
+#[cfg(feature = "os-rng")]
+pub(crate) fn block_on<F: Future>(fut: F) -> F::Output {
+    let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+    let mut fut = std::pin::pin!(fut);
+    loop {
+        match fut.as_mut().poll(&mut cx) {
+            std::task::Poll::Ready(v) => return v,
+            std::task::Poll::Pending => std::thread::yield_now(),
+        }
+    }
+}

@@ -310,3 +310,66 @@ fn nip17_relay_list_parse() {
         assert_eq!(got, want, "{name}");
     }
 }
+
+#[cfg(all(feature = "nip44", feature = "os-rng"))]
+#[test]
+fn wrap_direct_message_with_signer_matches_keys_targets() {
+    use nk_core::nips::nip17::wrap_direct_message_with_signer;
+    use nk_core::nips::nip59::Rumor;
+    use nk_core::{EventBuilder, Keys, Kind, SecretKey, SysRng};
+
+    fn key(n: u8) -> Keys {
+        Keys::new(SecretKey::from_bytes([n; 32]).expect("key"))
+    }
+    let (alice, bob, carol) = (key(31), key(32), key(33));
+    let recipients = [
+        Recipient {
+            pubkey: alice.public_key(),
+            relay_hint: Some(RelayUrl::parse("wss://alice.example").expect("url")),
+        },
+        Recipient {
+            pubkey: bob.public_key(),
+            relay_hint: None,
+        },
+        Recipient {
+            pubkey: bob.public_key(),
+            relay_hint: None,
+        },
+        Recipient {
+            pubkey: carol.public_key(),
+            relay_hint: Some(RelayUrl::parse("wss://carol.example").expect("url")),
+        },
+    ];
+    let rumor = Rumor::new(
+        EventBuilder::new(Kind::new(14), "dm")
+            .build_at(alice.public_key(), Timestamp::from_secs(1_700_000_000)),
+    );
+    let options = WrapOptions::new(Timestamps::Random {
+        now: Timestamp::from_secs(1_800_000_000),
+        scope: nk_core::nips::nip59::RandomScope::SealAndWrap,
+    });
+    let via_keys =
+        wrap_direct_message(&alice, &recipients, &rumor, &options, &mut SysRng).expect("keys wrap");
+    let via_signer = crate::common::block_on(wrap_direct_message_with_signer(
+        &alice,
+        &recipients,
+        &rumor,
+        &options,
+        &mut SysRng,
+    ))
+    .expect("signer wrap");
+    // Same targets, same order, same count.
+    let keys_targets: Vec<_> = via_keys.iter().map(|(p, _)| *p).collect();
+    let signer_targets: Vec<_> = via_signer.iter().map(|(p, _)| *p).collect();
+    assert_eq!(keys_targets, signer_targets);
+    // Every copy unwraps to the same rumor for its recipient.
+    for (pk, wrap) in &via_signer {
+        let recipient_keys = [alice.clone(), bob.clone(), carol.clone()]
+            .into_iter()
+            .find(|k| k.public_key() == *pk)
+            .expect("target key");
+        let back = Rumor::from_gift_wrap(wrap, &recipient_keys).expect("unwrap");
+        assert_eq!(back.unsigned().content(), "dm", "{pk}");
+        assert_eq!(back.unsigned().pubkey(), alice.public_key());
+    }
+}

@@ -20,6 +20,7 @@ use alloc::vec;
 
 use crate::event::Error as EventError;
 use crate::json::JsonError;
+use crate::signer::NostrSigner;
 use crate::{Event, EventId, Keys, Kind, PublicKey, RelayUrl, Tag, Tags, Timestamp, UnsignedEvent};
 
 use crate::nips::nip44;
@@ -86,6 +87,10 @@ pub enum Error {
     /// The computed timestamp is out of range.
     #[error("cannot sign invalid unsigned event")]
     InvalidUnsignedEvent,
+    /// The async signer returned an error (its own backend, or it does not
+    /// implement the needed NIP-44 step).
+    #[error("signer failed")]
+    Signer(#[source] crate::SignerError),
 }
 
 /// Result type for NIP-59 operations.
@@ -249,6 +254,81 @@ impl Rumor {
         let rumor_json = decrypt_layer(seal.content(), recipient, &seal.pubkey())?;
         open_rumor(&seal, &rumor_json)
     }
+
+    /// Wraps like [`Rumor::wrap`], but encryption and signing go through an
+    /// async [`NostrSigner`] — the sender's private key never enters this
+    /// process (e.g. a NIP-46 bunker or hardware device).
+    ///
+    /// Runtime-agnostic: the future only awaits the signer's own futures;
+    /// it is `Send` when `R: Send` (and the signer's futures are).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::PubkeyMismatch`] when the signer's public key is not the
+    /// rumor author's — checked before any crypto; [`Error::Signer`] on a
+    /// signer failure; [`Error::Rng`], [`Error::EphemeralKey`],
+    /// [`Error::Encrypt`], [`Error::Sign`], and [`Error::Json`] from the
+    /// local wrap steps.
+    ///
+    /// ```
+    /// use nk_core::nips::nip59::{Error, RandomScope, Rumor, Timestamps, WrapOptions};
+    /// use nk_core::{Event, NostrSigner, PublicKey, Timestamp};
+    ///
+    /// // Any signer works — a local `Keys`, a NIP-46 bunker, a device.
+    /// async fn wrap_for(
+    ///     rumor: &Rumor,
+    ///     signer: &dyn NostrSigner,
+    ///     recipient: &PublicKey,
+    ///     now: Timestamp,
+    ///     rng: &mut (impl nk_core::rand_core::TryCryptoRng + ?Sized),
+    /// ) -> Result<Event, Error> {
+    ///     let options = WrapOptions::new(Timestamps::Random {
+    ///         now,
+    ///         scope: RandomScope::SealAndWrap,
+    ///     });
+    ///     rumor.wrap_with_signer(signer, recipient, &options, rng).await
+    /// }
+    /// ```
+    pub async fn wrap_with_signer<R>(
+        &self,
+        signer: &dyn NostrSigner,
+        recipient: &PublicKey,
+        options: &WrapOptions,
+        rng: &mut R,
+    ) -> Result<Event>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        let seal = seal_with_signer(self, signer, recipient, options, rng).await?;
+        gift_wrap(&seal, recipient, options, rng)
+    }
+
+    /// Unwraps like [`Rumor::from_gift_wrap`], with both NIP-44 decryptions
+    /// done by the async [`NostrSigner`]. Runtime-agnostic — the future only
+    /// awaits the signer's own futures.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NotGiftWrap`]/[`Error::GiftWrapSignature`] on a malformed or
+    /// badly-signed wrap, [`Error::Signer`] on a signer failure,
+    /// [`Error::NotSeal`]/[`Error::SealTags`]/[`Error::SealSignature`] on a
+    /// malformed seal, and the [`Rumor::from_json`] errors.
+    pub async fn from_gift_wrap_with_signer(
+        gift_wrap: &Event,
+        signer: &dyn NostrSigner,
+    ) -> Result<Self> {
+        check_gift_wrap(gift_wrap)?;
+        let seal_json = signer
+            .nip44_decrypt(&gift_wrap.pubkey(), gift_wrap.content())
+            .await
+            .map_err(Error::Signer)?;
+        let seal = parse_seal(&seal_json)?;
+        let rumor_json = signer
+            .nip44_decrypt(&seal.pubkey(), seal.content())
+            .await
+            .map_err(Error::Signer)?;
+        open_rumor(&seal, &rumor_json)
+    }
 }
 
 /// Timestamp strategy for `seal`, `gift_wrap`, and [`Rumor::wrap`].
@@ -405,6 +485,32 @@ where
     sign(unsigned, author, rng)
 }
 
+/// The signer-driven counterpart of [`seal`]: the public key, the NIP-44
+/// encryption and the signature come from the signer; the timestamp, the
+/// rumor JSON and the seal template are computed locally.
+async fn seal_with_signer<R>(
+    rumor: &Rumor,
+    signer: &dyn NostrSigner,
+    recipient: &PublicKey,
+    options: &WrapOptions,
+    rng: &mut R,
+) -> Result<Event>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+{
+    let pubkey = signer.public_key().await.map_err(Error::Signer)?;
+    if pubkey != rumor.unsigned().pubkey() {
+        return Err(Error::PubkeyMismatch);
+    }
+    let created_at = options.seal_created_at(rumor, rng)?;
+    let content = signer
+        .nip44_encrypt(recipient, &rumor.to_json())
+        .await
+        .map_err(Error::Signer)?;
+    let unsigned = seal_template(pubkey, content, created_at, options.expiration);
+    signer.sign_event(unsigned).await.map_err(Error::Signer)
+}
+
 /// Encrypts `seal` to `recipient` under a fresh ephemeral key (TS
 /// `giftWrap`).
 ///
@@ -427,7 +533,7 @@ where
 {
     let ephemeral = Keys::from_rng(rng).map_err(Error::EphemeralKey)?;
     let created_at = options.wrap_created_at(rng)?;
-    let seal_json = serde_json::to_string(seal).unwrap_or_default();
+    let seal_json = serde_json::to_string(seal).map_err(|e| Error::Json(JsonError::from(e)))?;
     let content = encrypt_layer(&seal_json, &ephemeral, recipient, rng)?;
     let kind = if options.ephemeral {
         Kind::GIFT_WRAP_EPHEMERAL

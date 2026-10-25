@@ -287,6 +287,65 @@ pub fn wrap_direct_message<R>(
 where
     R: rand_core::TryCryptoRng + ?Sized,
 {
+    let targets = wrap_targets(recipients, rumor)?;
+    let mut out = Vec::with_capacity(targets.len());
+    for target in targets {
+        let seal = nip59::seal(rumor, sender, &target.pubkey, options, rng)?;
+        let wrap = nip59::gift_wrap(
+            &seal,
+            &target.pubkey,
+            &options.dm_wrap(target.relay_hint),
+            rng,
+        )?;
+        out.push((target.pubkey, wrap));
+    }
+    Ok(out)
+}
+
+/// `wrap_direct_message` driven by an async [`crate::NostrSigner`] instead of
+/// local `Keys` — the private key never enters this process (NIP-46
+/// bunker, hardware device). Same targets, same order, same layers.
+///
+/// Runtime-agnostic: the future only awaits the signer's futures; it is
+/// `Send` when `R: Send` and the signer's futures are.
+///
+/// # Errors
+///
+/// [`Error::Empty`] on no recipients, plus the
+/// [`Rumor::wrap_with_signer`](crate::nips::nip59::Rumor::wrap_with_signer)
+/// errors for each copy.
+#[cfg(feature = "nip44")]
+pub async fn wrap_direct_message_with_signer<R>(
+    signer: &dyn crate::NostrSigner,
+    recipients: &[Recipient],
+    rumor: &Rumor,
+    options: &WrapOptions,
+    rng: &mut R,
+) -> Result<Vec<(PublicKey, Event)>>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+{
+    let targets = wrap_targets(recipients, rumor)?;
+    let mut out = Vec::with_capacity(targets.len());
+    for target in targets {
+        let wrap = rumor
+            .wrap_with_signer(
+                signer,
+                &target.pubkey,
+                &options.dm_wrap(target.relay_hint),
+                rng,
+            )
+            .await?;
+        out.push((target.pubkey, wrap));
+    }
+    Ok(out)
+}
+
+/// The wrap targets: the sender copy first (inheriting its relay hint
+/// when present in `recipients`), then every recipient deduplicated by
+/// pubkey. `Empty` when `recipients` is empty.
+#[cfg(feature = "nip44")]
+fn wrap_targets(recipients: &[Recipient], rumor: &Rumor) -> Result<Vec<Recipient>> {
     if recipients.is_empty() {
         return Err(Error::Empty("recipients must not be empty"));
     }
@@ -305,16 +364,5 @@ where
         }
         targets.push(recipient.clone());
     }
-    let mut out = Vec::with_capacity(targets.len());
-    for target in targets {
-        let seal = nip59::seal(rumor, sender, &target.pubkey, options, rng)?;
-        let wrap = nip59::gift_wrap(
-            &seal,
-            &target.pubkey,
-            &options.dm_wrap(target.relay_hint),
-            rng,
-        )?;
-        out.push((target.pubkey, wrap));
-    }
-    Ok(out)
+    Ok(targets)
 }
