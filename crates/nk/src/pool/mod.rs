@@ -20,6 +20,9 @@ pub use subscription::{PoolEvent, PoolSubscription};
 
 /// A fan-out over one [`Relay`] per URL. `Clone` is cheap — every handle
 /// shares the same relay map.
+///
+/// The fan-out methods create relays on demand and must therefore run
+/// inside a tokio runtime.
 #[derive(Clone)]
 pub struct RelayPool {
     inner: Arc<Inner>,
@@ -56,8 +59,11 @@ impl RelayPool {
 
     /// The shared relay for `url` — returns the cached handle or spawns
     /// one. An entry whose status is `Closed` (through any handle) is
-    /// replaced with a fresh relay. Needs a tokio runtime, like
-    /// [`Relay::new`].
+    /// replaced with a fresh relay.
+    ///
+    /// # Panics
+    ///
+    /// Outside a tokio runtime — a new relay calls `tokio::spawn`.
     #[must_use]
     pub fn relay(&self, url: &RelayUrl) -> Relay {
         let mut relays = self

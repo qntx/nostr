@@ -66,31 +66,48 @@ pub struct PublishOutcome {
 }
 
 pub(crate) enum Cmd {
+    /// `Relay::connect` — bring the socket up now.
     Connect(oneshot::Sender<Result<()>>),
+    /// `Relay::subscribe` — open a `REQ`.
     Subscribe {
+        /// The subscription filters.
         filters: Vec<Filter>,
+        /// Where the `Subscription` goes.
         reply: oneshot::Sender<Result<Subscription>>,
     },
+    /// `Relay::fetch` — a bounded read until `EOSE`/`CLOSED`/timeout.
     Fetch {
+        /// The fetch filters.
         filters: Vec<Filter>,
+        /// The caller's deadline.
         timeout: Duration,
+        /// Where the `FetchOutcome` goes.
         reply: oneshot::Sender<Result<FetchOutcome>>,
     },
+    /// `Relay::publish` — send `EVENT`, wait for `OK`.
     Publish {
+        /// The signed event.
         event: Event,
+        /// Where the `PublishOutcome` goes.
         reply: oneshot::Sender<Result<PublishOutcome>>,
     },
     /// `Relay::count` — send `["COUNT", id, filters...]`.
     Count {
+        /// The count filters.
         filters: Vec<Filter>,
+        /// Where the `CountResult` goes.
         reply: oneshot::Sender<Result<nk_core::CountResult>>,
     },
     /// `Relay::reconcile` — NIP-77 sync over one `NEG-OPEN`.
     Reconcile {
+        /// The reconcile filter.
         filter: Filter,
+        /// Local `(created_at, id)` items.
         items: Vec<(nk_core::Timestamp, nk_core::EventId)>,
+        /// Where the `Reconciliation` goes.
         reply: oneshot::Sender<Result<Reconciliation>>,
     },
+    /// `Relay::close` — terminate the driver.
     Close(oneshot::Sender<()>),
 }
 
@@ -111,8 +128,12 @@ pub struct Relay {
 }
 
 impl Relay {
-    /// Creates the driver (spawns on the current tokio runtime); the socket
+    /// Spawns the driver task on the current tokio runtime; the socket
     /// connects lazily on first use.
+    ///
+    /// # Panics
+    ///
+    /// Outside a tokio runtime — `new` calls `tokio::spawn`.
     #[must_use]
     pub fn new(url: &RelayUrl, options: RelayOptions) -> Self {
         let (cmd, rx) = mpsc::channel(256);
@@ -132,6 +153,14 @@ impl Relay {
         }
     }
 
+    /// One command → reply round-trip through the driver; `Closed`
+    /// when the driver is gone.
+    async fn request<T>(&self, make: impl FnOnce(oneshot::Sender<Result<T>>) -> Cmd) -> Result<T> {
+        let (tx, rx) = oneshot::channel();
+        self.cmd.send(make(tx)).await.map_err(|_| Error::Closed)?;
+        rx.await.map_err(|_| Error::Closed)?
+    }
+
     /// Connects now instead of lazily.
     ///
     /// # Errors
@@ -141,12 +170,7 @@ impl Relay {
     /// [`Error::InvalidUrl`] when the URL can't be parsed;
     /// [`Error::Closed`] once `close` has run.
     pub async fn connect(&self) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        self.cmd
-            .send(Cmd::Connect(tx))
-            .await
-            .map_err(|_| Error::Closed)?;
-        rx.await.map_err(|_| Error::Closed)?
+        self.request(Cmd::Connect).await
     }
 
     /// Opens a `REQ`. `filters` must not be empty (NIP-01).
@@ -161,12 +185,8 @@ impl Relay {
         if filters.is_empty() {
             return Err(Error::InvalidFilters);
         }
-        let (reply, rx) = oneshot::channel();
-        self.cmd
-            .send(Cmd::Subscribe { filters, reply })
+        self.request(|reply| Cmd::Subscribe { filters, reply })
             .await
-            .map_err(|_| Error::Closed)?;
-        rx.await.map_err(|_| Error::Closed)?
     }
 
     /// A bounded read: collects until `EOSE`, `CLOSED`, or `timeout`.
@@ -182,16 +202,12 @@ impl Relay {
         if filters.is_empty() {
             return Err(Error::InvalidFilters);
         }
-        let (tx, rx) = oneshot::channel();
-        self.cmd
-            .send(Cmd::Fetch {
-                filters,
-                timeout,
-                reply: tx,
-            })
-            .await
-            .map_err(|_| Error::Closed)?;
-        rx.await.map_err(|_| Error::Closed)?
+        self.request(|reply| Cmd::Fetch {
+            filters,
+            timeout,
+            reply,
+        })
+        .await
     }
 
     /// Sends `EVENT` and waits for `OK`. Concurrent publishes of the same
@@ -205,15 +221,11 @@ impl Relay {
     /// [`Error::Disconnected`] when the socket drops mid-publish;
     /// [`Error::Closed`] once `close` has run.
     pub async fn publish(&self, event: &Event) -> Result<PublishOutcome> {
-        let (tx, rx) = oneshot::channel();
-        self.cmd
-            .send(Cmd::Publish {
-                event: event.clone(),
-                reply: tx,
-            })
-            .await
-            .map_err(|_| Error::Closed)?;
-        rx.await.map_err(|_| Error::Closed)?
+        self.request(|reply| Cmd::Publish {
+            event: event.clone(),
+            reply,
+        })
+        .await
     }
 
     /// The driver's current state.
@@ -227,21 +239,18 @@ impl Relay {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidFilters`] on an empty filter list;
-    /// [`Error::Timeout`] when the relay does not answer in time;
+    /// [`Error::InvalidFilters`] on an empty filter list; the connect
+    /// errors ([`Error::Timeout`], [`Error::Transport`],
+    /// [`Error::InvalidUrl`]) when the socket can't connect;
+    /// [`Error::Timeout`] when no reply arrives inside `request_timeout`;
     /// [`Error::Refused`] when the relay `CLOSED` the count;
-    /// [`Error::Closed`] once `close` has run;
-    /// [`Error::Disconnected`] when the socket can't connect.
+    /// [`Error::Disconnected`] when the socket drops mid-request;
+    /// [`Error::Closed`] once `close` has run.
     pub async fn count(&self, filters: Vec<Filter>) -> Result<nk_core::CountResult> {
         if filters.is_empty() {
             return Err(Error::InvalidFilters);
         }
-        let (tx, rx) = oneshot::channel();
-        self.cmd
-            .send(Cmd::Count { filters, reply: tx })
-            .await
-            .map_err(|_| Error::Closed)?;
-        rx.await.map_err(|_| Error::Closed)?
+        self.request(|reply| Cmd::Count { filters, reply }).await
     }
 
     /// NIP-77 reconcile: syncs `items` (our `(created_at, id)` set)
@@ -249,26 +258,24 @@ impl Relay {
     ///
     /// # Errors
     ///
+    /// The connect errors ([`Error::Timeout`], [`Error::Transport`],
+    /// [`Error::InvalidUrl`]) when the socket can't connect;
     /// [`Error::Timeout`] when the sync doesn't finish in time;
     /// [`Error::Refused`] on `NEG-ERR` or a `CLOSED`;
     /// [`Error::Negentropy`] on a malformed sync;
-    /// [`Error::Closed`] once `close` has run;
-    /// [`Error::Disconnected`] when the socket can't connect.
+    /// [`Error::Disconnected`] when the socket drops mid-request;
+    /// [`Error::Closed`] once `close` has run.
     pub async fn reconcile(
         &self,
         filter: Filter,
         items: Vec<(nk_core::Timestamp, nk_core::EventId)>,
     ) -> Result<Reconciliation> {
-        let (tx, rx) = oneshot::channel();
-        self.cmd
-            .send(Cmd::Reconcile {
-                filter,
-                items,
-                reply: tx,
-            })
-            .await
-            .map_err(|_| Error::Closed)?;
-        rx.await.map_err(|_| Error::Closed)?
+        self.request(|reply| Cmd::Reconcile {
+            filter,
+            items,
+            reply,
+        })
+        .await
     }
 
     /// Terminates the driver — every subscription ends `Closed(RelayClosed)`.

@@ -29,6 +29,23 @@ enum Hook {
     Freeze,
 }
 
+/// Per-mock state shared by every accepted connection.
+#[derive(Clone)]
+struct Shared {
+    /// The mock's event store — `REQ` replies, `COUNT`, live checks.
+    store: Arc<MemoryStore>,
+    /// Held-mode flag — swallow frames, answer nothing.
+    hold: Arc<AtomicBool>,
+    /// NIP-42: refuse unauthenticated `EVENT`/`REQ`/`COUNT`/`NEG-OPEN`.
+    require_auth: Arc<AtomicBool>,
+    /// The mock's `ws://` URL (checked in AUTH `relay` tags).
+    relay_url: Arc<str>,
+    /// Live WebSocket session count.
+    conns: Arc<AtomicUsize>,
+    /// Every raw client frame, for test assertions.
+    log: mpsc::Sender<String>,
+}
+
 /// The live connection: frames go out through `hook_rx`.
 /// `EVENT` → store + `OK`, then live delivery to this conn's `REQ`s.
 async fn on_event(
@@ -185,16 +202,14 @@ async fn auth_reject(ws: &mut yawc::HttpWebSocket, id: &str) {
 }
 
 /// Routes one client text frame; `false` closes the connection.
-#[allow(clippy::too_many_arguments, reason = "per-connection state")]
 async fn on_client_frame(
     ws: &mut yawc::HttpWebSocket,
-    store: &MemoryStore,
+    shared: &Shared,
     open: &mut Vec<(SubscriptionId, Vec<nk_core::Filter>)>,
     negs: &mut std::collections::HashMap<
         SubscriptionId,
         negentropy::Negentropy<'static, negentropy::NegentropyStorageVector>,
     >,
-    hold: &AtomicBool,
     auth: &AuthState<'_>,
     text: &str,
 ) -> bool {
@@ -203,7 +218,7 @@ async fn on_client_frame(
     };
     match msg {
         ClientMessage::Event(event) => {
-            if hold.load(Ordering::Relaxed) {
+            if shared.hold.load(Ordering::Relaxed) {
                 return true;
             }
             if auth.required.load(Ordering::Relaxed) && !auth.authed.load(Ordering::Relaxed) {
@@ -214,7 +229,7 @@ async fn on_client_frame(
                 drop(ws.send(Frame::text(frame)).await);
                 return true;
             }
-            on_event(ws, store, open, &event).await;
+            on_event(ws, &shared.store, open, &event).await;
         }
         ClientMessage::Req {
             subscription_id,
@@ -224,7 +239,15 @@ async fn on_client_frame(
                 auth_reject(ws, subscription_id.as_str()).await;
                 return true;
             }
-            on_req(ws, store, open, hold, &subscription_id, &filters).await;
+            on_req(
+                ws,
+                &shared.store,
+                open,
+                &shared.hold,
+                &subscription_id,
+                &filters,
+            )
+            .await;
         }
         ClientMessage::Count {
             subscription_id,
@@ -234,10 +257,10 @@ async fn on_client_frame(
                 auth_reject(ws, subscription_id.as_str()).await;
                 return true;
             }
-            if hold.load(Ordering::Relaxed) {
+            if shared.hold.load(Ordering::Relaxed) {
                 return true;
             }
-            let n = store.count(&filters).unwrap_or(0);
+            let n = shared.store.count(&filters).unwrap_or(0);
             let frame = format!(
                 r#"["COUNT","{}",{{"count":{n}}}]"#,
                 subscription_id.as_str()
@@ -253,10 +276,10 @@ async fn on_client_frame(
                 auth_reject(ws, subscription_id.as_str()).await;
                 return true;
             }
-            if hold.load(Ordering::Relaxed) {
+            if shared.hold.load(Ordering::Relaxed) {
                 return true;
             }
-            if let Some(mut neg) = server_neg(store, &filter) {
+            if let Some(mut neg) = server_neg(&shared.store, &filter) {
                 let reply = server_neg_round(&mut neg, &subscription_id, &message);
                 negs.insert(subscription_id.clone().into_owned(), neg);
                 drop(ws.send(Frame::text(reply)).await);
@@ -301,21 +324,15 @@ async fn on_client_frame(
     true
 }
 
-#[allow(clippy::too_many_arguments, reason = "per-connection state plumbing")]
 async fn serve_ws(
     mut ws: yawc::HttpWebSocket,
-    store: Arc<MemoryStore>,
-    hold: Arc<AtomicBool>,
-    require_auth: Arc<AtomicBool>,
-    relay_url: Arc<str>,
+    shared: Shared,
     mut hook_rx: broadcast::Receiver<Hook>,
-    log: mpsc::Sender<String>,
-    conns: Arc<AtomicUsize>,
 ) {
     // `connections()` counts live WebSocket sessions: one per upgraded
     // socket, from the first frame until this loop exits.
-    conns.fetch_add(1, Ordering::Relaxed);
-    let _guard = ConnGuard::new(&conns);
+    shared.conns.fetch_add(1, Ordering::Relaxed);
+    let _guard = ConnGuard::new(&shared.conns);
     // Open subscriptions on this connection for live EVENT delivery.
     let mut open: Vec<(SubscriptionId, Vec<nk_core::Filter>)> = Vec::new();
     // Live server-side negentropy sessions keyed by NEG-OPEN id.
@@ -323,16 +340,16 @@ async fn serve_ws(
         SubscriptionId,
         negentropy::Negentropy<'static, negentropy::NegentropyStorageVector>,
     > = std::collections::HashMap::new();
-    let authed = AtomicBool::new(!require_auth.load(Ordering::Relaxed));
+    let authed = AtomicBool::new(!shared.require_auth.load(Ordering::Relaxed));
     let challenge = format!("auth-challenge-{}", ulid_like());
-    if require_auth.load(Ordering::Relaxed) {
+    if shared.require_auth.load(Ordering::Relaxed) {
         let frame = format!(r#"["AUTH","{challenge}"]"#);
         drop(ws.send(Frame::text(frame)).await);
     }
     let auth = AuthState {
-        required: &require_auth,
+        required: &shared.require_auth,
         authed: &authed,
-        url: &relay_url,
+        url: &shared.relay_url,
         challenge: &challenge,
     };
     loop {
@@ -347,8 +364,8 @@ async fn serve_ws(
                 let Ok(text) = std::str::from_utf8(f.payload()) else {
                     continue;
                 };
-                drop(log.try_send(text.to_owned()));
-                if !on_client_frame(&mut ws, &store, &mut open, &mut negs, &hold, &auth, text).await {
+                drop(shared.log.try_send(text.to_owned()));
+                if !on_client_frame(&mut ws, &shared, &mut open, &mut negs, &auth, text).await {
                     return;
                 }
             }
@@ -374,28 +391,13 @@ async fn serve_ws(
 }
 
 /// One accepted TCP connection: HTTP/1 + upgrades.
-#[allow(clippy::too_many_arguments, reason = "per-connection state plumbing")]
-async fn serve_conn(
-    stream: tokio::net::TcpStream,
-    store: Arc<MemoryStore>,
-    hold: Arc<AtomicBool>,
-    require_auth: Arc<AtomicBool>,
-    relay_url: Arc<str>,
-    rx: broadcast::Receiver<Hook>,
-    log: mpsc::Sender<String>,
-    conns: Arc<AtomicUsize>,
-) {
+async fn serve_conn(stream: tokio::net::TcpStream, shared: Shared, rx: broadcast::Receiver<Hook>) {
     let io = TokioIo::new(stream);
     let svc = service_fn(|req: Request<Incoming>| {
         std::future::ready(Ok::<_, Infallible>(serve_request(
             req,
-            Arc::clone(&store),
-            Arc::clone(&hold),
-            Arc::clone(&require_auth),
-            Arc::clone(&relay_url),
+            shared.clone(),
             rx.resubscribe(),
-            log.clone(),
-            Arc::clone(&conns),
         )))
     });
     drop(
@@ -407,23 +409,17 @@ async fn serve_conn(
 }
 
 /// One HTTP request: upgrade it, then spawn the WebSocket loop.
-#[allow(clippy::too_many_arguments, reason = "per-connection state plumbing")]
 fn serve_request(
     mut req: Request<Incoming>,
-    store: Arc<MemoryStore>,
-    hold: Arc<AtomicBool>,
-    require_auth: Arc<AtomicBool>,
-    relay_url: Arc<str>,
+    shared: Shared,
     rx: broadcast::Receiver<Hook>,
-    log: mpsc::Sender<String>,
-    conns: Arc<AtomicUsize>,
 ) -> Response<Empty<Bytes>> {
     match WebSocket::upgrade(&mut req) {
         Ok((resp, fut)) => {
             tokio::spawn(async move {
                 match fut.await {
                     Ok(ws) => {
-                        serve_ws(ws, store, hold, require_auth, relay_url, rx, log, conns).await;
+                        serve_ws(ws, shared, rx).await;
                     }
                     Err(e) => debug!("mock ws upgrade: {e}"),
                 }
@@ -472,43 +468,32 @@ impl MockRelay {
         let addr: SocketAddr = listener.local_addr()?;
         let url = RelayUrl::parse(&format!("ws://{addr}"))
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?;
-        let store = Arc::new(MemoryStore::new());
-        let conns = Arc::new(AtomicUsize::new(0));
-        let conns_accept = Arc::clone(&conns);
-        let hold = Arc::new(AtomicBool::new(false));
-        let hold_accept = Arc::clone(&hold);
-        let require_auth = Arc::new(AtomicBool::new(false));
-        let auth_accept = Arc::clone(&require_auth);
-        let relay_url: Arc<str> = Arc::from(url.as_str().to_owned());
-        let url_accept = Arc::clone(&relay_url);
         let (hook_tx, _) = broadcast::channel::<Hook>(16);
         let (log_tx, log_rx) = mpsc::channel::<String>(4096);
         let hook_for_accept = hook_tx.clone();
-        let store_accept = Arc::clone(&store);
+        let store = Arc::new(MemoryStore::new());
+        let shared = Shared {
+            store: Arc::clone(&store),
+            hold: Arc::new(AtomicBool::new(false)),
+            require_auth: Arc::new(AtomicBool::new(false)),
+            relay_url: Arc::from(url.as_str().to_owned()),
+            conns: Arc::new(AtomicUsize::new(0)),
+            log: log_tx,
+        };
+        let accept_shared = shared.clone();
         let accept = tokio::spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
-                let conn_store = Arc::clone(&store_accept);
-                let log = log_tx.clone();
                 let rx = hook_for_accept.subscribe();
-                tokio::spawn(serve_conn(
-                    stream,
-                    conn_store,
-                    Arc::clone(&hold_accept),
-                    Arc::clone(&auth_accept),
-                    Arc::clone(&url_accept),
-                    rx,
-                    log,
-                    Arc::clone(&conns_accept),
-                ));
+                tokio::spawn(serve_conn(stream, accept_shared.clone(), rx));
             }
         });
         Ok(Self {
             url,
             hooks: hook_tx,
             log_rx,
-            conns,
-            hold,
-            require_auth,
+            conns: shared.conns,
+            hold: shared.hold,
+            require_auth: shared.require_auth,
             store,
             _accept: accept,
         })
