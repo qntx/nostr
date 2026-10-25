@@ -448,6 +448,8 @@ pub struct MockRelay {
     conns: Arc<AtomicUsize>,
     hold: Arc<AtomicBool>,
     require_auth: Arc<AtomicBool>,
+    /// The shared event store — seeds `REQ` replies and `COUNT`.
+    store: Arc<MemoryStore>,
     _accept: tokio::task::JoinHandle<()>,
 }
 
@@ -482,14 +484,15 @@ impl MockRelay {
         let (hook_tx, _) = broadcast::channel::<Hook>(16);
         let (log_tx, log_rx) = mpsc::channel::<String>(4096);
         let hook_for_accept = hook_tx.clone();
+        let store_accept = Arc::clone(&store);
         let accept = tokio::spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
-                let store = Arc::clone(&store);
+                let conn_store = Arc::clone(&store_accept);
                 let log = log_tx.clone();
                 let rx = hook_for_accept.subscribe();
                 tokio::spawn(serve_conn(
                     stream,
-                    store,
+                    conn_store,
                     Arc::clone(&hold_accept),
                     Arc::clone(&auth_accept),
                     Arc::clone(&url_accept),
@@ -506,8 +509,15 @@ impl MockRelay {
             conns,
             hold,
             require_auth,
+            store,
             _accept: accept,
         })
+    }
+
+    /// The shared event store — seed stored events for `REQ`/`COUNT`.
+    #[must_use]
+    pub fn store(&self) -> &MemoryStore {
+        &self.store
     }
 
     /// The `ws://` URL to pass to [`Relay::new`](crate::relay::Relay::new).

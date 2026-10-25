@@ -26,3 +26,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+`pool::RelayPool` fans out across relays — one shared `Relay` per URL,
+concurrent operations, per-relay results:
+
+```rust,no_run
+use nk::pool::RelayPool;
+use nk::relay::RelayOptions;
+use nk_core::{EventBuilder, Filter, Keys, RelayUrl, SysRng, Timestamp};
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = RelayPool::new(RelayOptions::default());
+    let urls = [
+        RelayUrl::parse("wss://relay.damus.io")?,
+        RelayUrl::parse("wss://nos.lol")?,
+    ];
+    // Read across all of them at once.
+    let out = pool
+        .fetch(&urls, vec![Filter::new()], std::time::Duration::from_secs(5))
+        .await?;
+    assert_eq!(out.relays.len(), 2);
+    // Or publish to all of them, per-relay outcome included.
+    let keys = Keys::generate()?;
+    let unsigned =
+        EventBuilder::text_note("hi").build_at(keys.public_key(), Timestamp::now());
+    let event = keys.sign_event(unsigned, &mut SysRng)?;
+    let results = pool.publish(&urls, &event).await;
+    assert_eq!(results.len(), 2);
+    Ok(())
+}
+```
