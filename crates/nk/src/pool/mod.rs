@@ -16,6 +16,7 @@ use crate::relay::{
     RelayStatus, Result,
 };
 
+pub(crate) use subscription::RecentIds;
 pub use subscription::{PoolEvent, PoolSubscription};
 
 /// A fan-out over one [`Relay`] per URL. `Clone` is cheap — every handle

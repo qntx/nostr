@@ -4,6 +4,7 @@
 //! Sync/DM and NIP-46 layers build on this facade; it adds composition
 //! and ingest only — no new protocol logic.
 
+mod dm;
 mod persist;
 mod subscription;
 mod sync;
@@ -13,6 +14,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+pub use dm::{
+    DmOptions, PrivateMessageEvent, PrivateMessages, ReceivedMessage, SentMessage, WrapDelivery,
+};
 use nk_core::{Event, EventBuilder, Filter, Kind, NostrSigner, PublicKey, RelayUrl, SignerError};
 use nk_store::EventStore;
 use persist::Persister;
@@ -49,6 +53,12 @@ pub enum Error {
     /// A relay call failed mid-sync.
     #[error("{0}")]
     Relay(#[source] relay::Error),
+    /// A DM target has no kind `10050` relay list.
+    #[error("no DM relays for {0}")]
+    NoDmRelays(PublicKey),
+    /// A NIP-17 DM operation failed.
+    #[error("{0}")]
+    Dm(#[source] nk_core::nips::nip17::Error),
     /// The client is closed, or the runtime is shutting down mid-call.
     #[error("client closed")]
     Closed,

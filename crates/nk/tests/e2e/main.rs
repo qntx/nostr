@@ -473,3 +473,53 @@ async fn client_sync_both_ways() {
     assert!(out.events.iter().any(|e| e.id() == local.id()));
     client.close().await;
 }
+
+/// `send_private_message` → `fetch_private_messages` through nosfry's
+/// authenticated restricted-read path for kind 1059.
+#[tokio::test]
+#[ignore = "needs NK_E2E_RELAY"]
+async fn private_message_round_trip() {
+    let alice = Keys::generate().expect("alice");
+    let bob = Keys::generate().expect("bob");
+    let mut alice_opts = nk::client::ClientOptions::default();
+    alice_opts.relays = vec![url()];
+    alice_opts.gossip.allow_insecure = true;
+    alice_opts.signer = Some(Arc::new(alice.clone()));
+    let alice_client = nk::client::Client::new(alice_opts);
+    let mut bob_opts = nk::client::ClientOptions::default();
+    bob_opts.relays = vec![url()];
+    bob_opts.gossip.allow_insecure = true;
+    bob_opts.signer = Some(Arc::new(bob.clone()));
+    let bob_client = nk::client::Client::new(bob_opts);
+
+    alice_client
+        .set_dm_relays([url()])
+        .await
+        .expect("alice 10050");
+    bob_client.set_dm_relays([url()]).await.expect("bob 10050");
+
+    alice_client
+        .send_private_message(
+            &[nk_core::nips::nip17::Recipient {
+                pubkey: bob.public_key(),
+                relay_hint: None,
+            }],
+            "hello from rust",
+            nk::client::DmOptions::default(),
+        )
+        .await
+        .expect("send");
+
+    let inbox = bob_client
+        .fetch_private_messages(None, None, Duration::from_secs(10))
+        .await
+        .expect("fetch");
+    assert!(
+        inbox
+            .iter()
+            .any(|m| m.rumor.unsigned().content() == "hello from rust"
+                && m.rumor.unsigned().pubkey() == alice.public_key())
+    );
+    alice_client.close().await;
+    bob_client.close().await;
+}

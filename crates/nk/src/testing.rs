@@ -44,17 +44,15 @@ struct Shared {
     conns: Arc<AtomicUsize>,
     /// Every raw client frame, for test assertions.
     log: mpsc::Sender<String>,
+    /// Stored events, broadcast to every connection so each forwards to
+    /// its own matching subscriptions.
+    events: broadcast::Sender<Event>,
 }
 
 /// The live connection: frames go out through `hook_rx`.
 /// `EVENT` → store + `OK`, then live delivery to this conn's `REQ`s.
-async fn on_event(
-    ws: &mut yawc::HttpWebSocket,
-    store: &MemoryStore,
-    open: &[(SubscriptionId, Vec<nk_core::Filter>)],
-    event: &Event,
-) {
-    let (saved, note) = match store.put(event) {
+async fn on_event(ws: &mut yawc::HttpWebSocket, shared: &Shared, event: &Event) {
+    let (saved, note) = match shared.store.put(event) {
         Ok(PutOutcome::Duplicate) => (false, "duplicate:"),
         Ok(PutOutcome::Rejected) => (false, "rejected:"),
         Ok(_) => (true, ""),
@@ -65,12 +63,9 @@ async fn on_event(
     if !saved {
         return;
     }
-    for (id, filters) in open {
-        if filters.iter().any(|f| f.matches(event)) {
-            let frame = format!(r#"["EVENT","{}",{}]"#, id.as_str(), event.to_json());
-            drop(ws.send(Frame::text(frame)).await);
-        }
-    }
+    // Live delivery goes through the broadcast: every connection
+    // (including this one) forwards to its own matching subscriptions.
+    drop(shared.events.send(event.clone()));
 }
 
 /// `REQ` → stored matches + `EOSE`; the sub stays open for live events.
@@ -201,6 +196,21 @@ async fn auth_reject(ws: &mut yawc::HttpWebSocket, id: &str) {
     drop(ws.send(Frame::text(frame)).await);
 }
 
+/// One connection's live delivery: every open subscription whose
+/// filters match gets an `EVENT` frame for `event`.
+async fn forward_event(
+    ws: &mut yawc::HttpWebSocket,
+    open: &[(SubscriptionId, Vec<nk_core::Filter>)],
+    event: &Event,
+) {
+    for (id, filters) in open {
+        if filters.iter().any(|f| f.matches(event)) {
+            let frame = format!(r#"["EVENT","{}",{}]"#, id.as_str(), event.to_json());
+            drop(ws.send(Frame::text(frame)).await);
+        }
+    }
+}
+
 /// Routes one client text frame; `false` closes the connection.
 async fn on_client_frame(
     ws: &mut yawc::HttpWebSocket,
@@ -229,7 +239,7 @@ async fn on_client_frame(
                 drop(ws.send(Frame::text(frame)).await);
                 return true;
             }
-            on_event(ws, &shared.store, open, &event).await;
+            on_event(ws, shared, &event).await;
         }
         ClientMessage::Req {
             subscription_id,
@@ -340,6 +350,7 @@ async fn serve_ws(
         SubscriptionId,
         negentropy::Negentropy<'static, negentropy::NegentropyStorageVector>,
     > = std::collections::HashMap::new();
+    let mut events_rx = shared.events.subscribe();
     let authed = AtomicBool::new(!shared.require_auth.load(Ordering::Relaxed));
     let challenge = format!("auth-challenge-{}", ulid_like());
     if shared.require_auth.load(Ordering::Relaxed) {
@@ -367,6 +378,11 @@ async fn serve_ws(
                 drop(shared.log.try_send(text.to_owned()));
                 if !on_client_frame(&mut ws, &shared, &mut open, &mut negs, &auth, text).await {
                     return;
+                }
+            }
+            event = events_rx.recv() => {
+                if let Ok(ev) = event {
+                    forward_event(&mut ws, &open, &ev).await;
                 }
             }
             hook = hook_rx.recv() => {
@@ -479,6 +495,7 @@ impl MockRelay {
             relay_url: Arc::from(url.as_str().to_owned()),
             conns: Arc::new(AtomicUsize::new(0)),
             log: log_tx,
+            events: broadcast::channel(1024).0,
         };
         let accept_shared = shared.clone();
         let accept = tokio::spawn(async move {

@@ -27,7 +27,7 @@ test-util = ["dep:hyper", "dep:hyper-util", "dep:http-body-util", "tokio/net", "
 
 [dependencies]
 hashlink     = { workspace = true }
-nk-core      = { workspace = true, features = ["std", "clock", "os-rng"] }
+nk-core      = { workspace = true, features = ["std", "clock", "os-rng", "nip44"] }
 tokio        = { workspace = true, features = ["rt", "sync", "time", "macros"] }
 yawc         = { workspace = true }
 futures-util = { workspace = true }
@@ -47,7 +47,7 @@ http-body-util = { version = "0.1", optional = true }
 
 [dev-dependencies]
 nk           = { path = ".", features = ["test-util"] }
-nk-core      = { workspace = true, features = ["std", "clock", "os-rng"] }
+nk-core      = { workspace = true, features = ["std", "clock", "os-rng", "nip44"] }
 nk-store     = { workspace = true }
 futures-util = { workspace = true }
 tokio        = { workspace = true, features = ["rt-multi-thread", "test-util"] }

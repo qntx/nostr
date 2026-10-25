@@ -61,7 +61,7 @@ impl Stream for Tagged {
 
 /// A fixed-capacity cross-relay dedupe set — the oldest id is evicted at
 /// capacity.
-struct RecentIds {
+pub(crate) struct RecentIds {
     seen: HashSet<EventId>,
     order: VecDeque<EventId>,
     capacity: usize,
@@ -70,7 +70,7 @@ struct RecentIds {
 impl RecentIds {
     const CAPACITY: usize = 65_536;
 
-    fn with_capacity(capacity: usize) -> Self {
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
             seen: HashSet::with_capacity(capacity.min(1024)),
             order: VecDeque::with_capacity(capacity.min(1024)),
@@ -79,7 +79,7 @@ impl RecentIds {
     }
 
     /// `true` when `id` is new; evicts the oldest at capacity.
-    fn insert(&mut self, id: EventId) -> bool {
+    pub(crate) fn insert(&mut self, id: EventId) -> bool {
         if !self.seen.insert(id) {
             return false;
         }
