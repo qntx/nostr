@@ -11,6 +11,10 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Added
 
+- `nk`: `http` feature — `http::HttpClient` (hyper-util + rustls/ring + webpki-roots, never follows redirects, whole-exchange timeout, response-size cap) with NIP-11 `relay_information` and NIP-05 `nip05_document`/`nip05_profile`/`verify_nip05`; `testing::MockHttp` and `MockRelay::set_information` under `test-util`.
+- `nk-core`: NIP-11 `RelayInformation`/`Limitation` and NIP-05 `Nip05Address`/`Nip05Document`/`Nip46Discovery` codecs, verified by the new shared `vectors/nip05` and `vectors/nip11`.
+- `nk`: NIP-46 `nip46::RemoteSigner` (`connect`/`attach`/`nostr_connect`, `auth_url` challenges, `switch_relays`, `logout`) implementing `NostrSigner`; `nk-core` gains `Method::{SwitchRelays, Logout}`, `ClientMetadata`, `Request::{connect, sign_event}` and `parse_switch_relays`.
+- `nk`: `client::Client` — `RelayPool` + gossip routing + an `EventStore` behind one handle, with NIP-77 `sync`/`sync_with` and NIP-17 private messages through any `NostrSigner`; `gossip::Gossip` NIP-65/10050 routing and `RelayPool::{fetch_routed, subscribe_routed}`; `RelayPool` multi-relay fan-out.
 - `nk`: NIP-77 `Relay::reconcile(filter, items) -> Reconciliation { have, need }` over the `negentropy` crate (60 000-byte frame limit, `NEG-ERR` → `Error::Refused`, `auth-required:` retries through the NIP-42 path).
 - `nk`: NIP-42 auth (`RelayOptions.signer`, one kind-22242 `AUTH` per challenge with one-shot request retry) and NIP-45 `Relay::count`.
 - `nk-core`: `NostrSigner` object-safe async signer trait (`public_key`/`sign_event` required, NIP-44/NIP-04 with `Unsupported` defaults), `Keys` implements it under `os-rng`; `EventBuilder::auth`.
@@ -126,11 +130,6 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Added
 
-- `nk`: NIP-77 `Relay::reconcile(filter, items) -> Reconciliation { have, need }` over the `negentropy` crate (60 000-byte frame limit, `NEG-ERR` → `Error::Refused`, `auth-required:` retries through the NIP-42 path).
-- `nk`: NIP-42 auth (`RelayOptions.signer`, one kind-22242 `AUTH` per challenge with one-shot request retry) and NIP-45 `Relay::count`.
-- `nk-core`: `NostrSigner` object-safe async signer trait (`public_key`/`sign_event` required, NIP-44/NIP-04 with `Unsupported` defaults), `Keys` implements it under `os-rng`; `EventBuilder::auth`.
-- `nk` (`crates/nk`) — the SDK crate: `Relay` (single-relay client with lazy connect, WebSocket ping liveness, and jittered exponential-backoff reconnect replaying open `REQ`s), `Subscription` (a `Stream` ended by `EOSE`/`CLOSED`/lag/`close()` and sending `CLOSE` on drop), `fetch`/`publish`/`status`/`close`, and `testing::MockRelay` behind `test-util`.
-- `nk-store` (`crates/nk-store`) — the synchronous `EventStore` trait (`put`/`put_many`/`get`/`query`/`count`/`negentropy_items`/`remove`/`clear` with `PutOutcome` semantics), `MemoryStore`, and `SqliteStore` behind the `sqlite` feature; a shared private `policy` module keeps insertion/deletion rules identical across backends, and the SQLite schema is byte-identical to the TS store so files are interchangeable.
 - `nk-core` is published to crates.io from this release on. The crate is a from-scratch implementation inside this repository and is unrelated to the old `nk` 0.3.x crates on crates.io.
 - `nk-core` crate foundation: `no_std` + `alloc` error type, limits, internal hex codec, `Timestamp`, and `RelayUrl` — the Rust counterpart of `normalizeURL`/`normalizeRelayUrls`, verified byte-for-byte against the shared `vectors/core/url-normalize.json` cases by the new `nk-vectors` runner. The Hermes smoke test now runs the same vectors through the `whatwg-url` polyfill.
 - `nk-core` event model: `Kind`/`KindClass` (every named `Kind` constant), `PublicKey`, `EventId`, `Signature`, `Tag`/`Tags`/`EventAddress`, `UnsignedEvent`/`Event`, canonical NIP-01 serialization and SHA-256 event ids, `cmp_newest_first`/`cmp_oldest_first`, and `ErrorKind::EventValidation` — parity-verified by the shared kind/tag/event/hex vectors in `nk-vectors`.
