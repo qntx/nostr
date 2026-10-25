@@ -256,10 +256,11 @@ async fn subscribe_opens_relays_concurrently() {
     // ~300ms; sequential would be >= 600ms.
     let (url_a, _hold_a) = blackhole_url().await;
     let (url_b, _hold_b) = blackhole_url().await;
-    let pool = RelayPool::new(RelayOptions {
-        reconnect: false,
-        connect_timeout: Duration::from_millis(300),
-        ..RelayOptions::default()
+    let pool = RelayPool::new({
+        let mut o = RelayOptions::default();
+        o.reconnect = false;
+        o.connect_timeout = Duration::from_millis(300);
+        o
     });
     let start = std::time::Instant::now();
     let mut sub = pool
@@ -495,7 +496,11 @@ async fn gossip_route_drives_routed_fetch() {
         )
         .expect("sign");
     let x_pub = xk.public_key();
-    let mut g = Gossip::new(GossipOptions::default());
+    let mut g = Gossip::new({
+        let mut o = GossipOptions::default();
+        o.allow_insecure = true;
+        o
+    });
     assert!(g.ingest(&list));
     let y_pub = Keys::new(SecretKey::from_bytes([9; 32]).expect("key")).public_key();
     let routing = g.route(&[Filter::new().authors([x_pub, y_pub])]);

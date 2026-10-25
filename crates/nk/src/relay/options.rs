@@ -5,8 +5,15 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Relay driver configuration.
+/// Relay driver configuration. `#[non_exhaustive]` — construct via
+/// `Default::default()` and mutate the fields:
+///
+/// ```
+/// let mut opts = nk::relay::RelayOptions::default();
+/// opts.reconnect = false;
+/// ```
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct RelayOptions {
     /// Deadline for the WebSocket handshake.
     pub connect_timeout: Duration,

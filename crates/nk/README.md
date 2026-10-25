@@ -1,6 +1,39 @@
 # nk
 
-The `nk-*` workspace SDK: a single-relay client on top of `nk-core`.
+The `nk-*` workspace SDK on top of `nk-core`: relays, pools, gossip
+routing, and the client that composes them with an event store.
+
+`client::Client` composes the pool, the gossip routing table and the
+event store — the main entry point:
+
+```rust,no_run
+use nk::client::{Client, ClientOptions};
+use nk_core::{EventBuilder, Filter, Keys, Kind, SingleLetterTag, Timestamp};
+use std::sync::Arc;
+use std::time::Duration;
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut options = ClientOptions::default();
+    options.relays = vec![nk_core::RelayUrl::parse("wss://relay.damus.io")?];
+    options.signer = Some(Arc::new(Keys::generate()?));
+    let client = Client::new(options);
+
+    client
+        .hydrate(&[Keys::generate()?.public_key()], Duration::from_secs(10))
+        .await?;
+    let out = client
+        .fetch(vec![Filter::new().limit(1)], Duration::from_secs(10))
+        .await?;
+    let _ = out.events.len();
+    let note = client
+        .sign(EventBuilder::new(Kind::new(1), "hello"))
+        .await?;
+    client.publish(&note).await?;
+    client.close().await;
+    Ok(())
+}
+```
 
 `relay::Relay` drives one WebSocket — subscribe, fetch, publish, and close —
 while `relay::session` keeps the protocol state machine sans-IO.

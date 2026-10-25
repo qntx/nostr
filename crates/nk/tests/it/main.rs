@@ -90,5 +90,6 @@ pub(crate) async fn blackhole_url() -> (nk_core::RelayUrl, tokio::task::JoinHand
     (url, hold)
 }
 
+mod client;
 mod pool;
 mod relay;

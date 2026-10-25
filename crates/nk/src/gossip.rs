@@ -16,7 +16,13 @@ const P_TAG: SingleLetterTag = match SingleLetterTag::new('p') {
     None => unreachable!(),
 };
 
-/// Tunables for [`Gossip`].
+/// Tunables for [`Gossip`]. `#[non_exhaustive]` — construct via
+/// `Default::default()` and mutate the fields:
+///
+/// ```
+/// let mut opts = nk::gossip::GossipOptions::default();
+/// opts.max_relays_per_pubkey = 2;
+/// ```
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub struct GossipOptions {
@@ -24,6 +30,11 @@ pub struct GossipOptions {
     pub max_pubkeys: usize,
     /// Relays kept per list, in list order.
     pub max_relays_per_pubkey: usize,
+    /// Keep insecure `ws://` URLs from third-party lists. Default
+    /// `false`: gossip-sourced relays are untrusted, so plain `ws://`
+    /// (except `.onion`) is dropped before dedupe — the key falls back
+    /// to the caller's own relays. TS `isInsecureRelayUrl`.
+    pub allow_insecure: bool,
 }
 
 impl Default for GossipOptions {
@@ -31,6 +42,7 @@ impl Default for GossipOptions {
         Self {
             max_pubkeys: 10_000,
             max_relays_per_pubkey: 4,
+            allow_insecure: false,
         }
     }
 }
@@ -151,6 +163,7 @@ impl Routing {
 pub struct Gossip {
     routes: LruCache<PublicKey, Routes>,
     max_relays: usize,
+    allow_insecure: bool,
 }
 
 impl Gossip {
@@ -160,10 +173,12 @@ impl Gossip {
         let GossipOptions {
             max_pubkeys,
             max_relays_per_pubkey,
+            allow_insecure,
         } = options;
         Self {
             routes: LruCache::new(max_pubkeys),
             max_relays: max_relays_per_pubkey,
+            allow_insecure,
         }
     }
 
@@ -190,8 +205,18 @@ impl Gossip {
                     return false;
                 };
                 let routes = self.routes.entry(pubkey).or_insert_with(Routes::default);
-                routes.write = take(list.write().cloned(), self.max_relays);
-                routes.read = take(list.read().cloned(), self.max_relays);
+                routes.write = take(
+                    list.write()
+                        .filter(|u| self.allow_insecure || secure(u))
+                        .cloned(),
+                    self.max_relays,
+                );
+                routes.read = take(
+                    list.read()
+                        .filter(|u| self.allow_insecure || secure(u))
+                        .cloned(),
+                    self.max_relays,
+                );
                 routes.relay_list = Some(version);
                 true
             }
@@ -203,7 +228,13 @@ impl Gossip {
                     return false;
                 };
                 let routes = self.routes.entry(pubkey).or_insert_with(Routes::default);
-                routes.dm = take(list.relays().iter().cloned(), self.max_relays);
+                routes.dm = take(
+                    list.relays()
+                        .iter()
+                        .filter(|u| self.allow_insecure || secure(u))
+                        .cloned(),
+                    self.max_relays,
+                );
                 routes.dm_list = Some(version);
                 true
             }
@@ -453,6 +484,21 @@ impl Gossip {
     }
 }
 
+/// Insecure means `ws://` on a non-`.onion` host — the TS
+/// `isInsecureRelayUrl` rule (every `RelayUrl` normalizes to `ws://` or
+/// `wss://`, so only `ws` needs the check).
+fn secure(url: &RelayUrl) -> bool {
+    if !url.as_str().starts_with("ws://") {
+        return true;
+    }
+    let Ok(parsed) = url::Url::parse(url.as_str()) else {
+        return true;
+    };
+    parsed
+        .host_str()
+        .is_some_and(|host| host.to_ascii_lowercase().ends_with(".onion"))
+}
+
 /// First `n` unique relays in list order — dedup before truncation so
 /// duplicates can't burn slots.
 fn take(iter: impl Iterator<Item = RelayUrl>, n: usize) -> Vec<RelayUrl> {
@@ -597,6 +643,7 @@ mod tests {
         let mut g = Gossip::new(GossipOptions {
             max_pubkeys: 10,
             max_relays_per_pubkey: 2,
+            allow_insecure: false,
         });
         assert!(g.ingest(&list_10002(
             &k,
@@ -770,6 +817,43 @@ mod tests {
     }
 
     #[test]
+    fn insecure_ws_url_is_dropped() {
+        let k = keys(26);
+        let mut g = Gossip::new(GossipOptions::default());
+        assert!(g.ingest(&list_10002(&k, T1, &["ws://127.0.0.1:7777"], &[])));
+        let r = g.routes(&k.public_key()).expect("routes");
+        assert!(r.write().is_empty(), "ws:// dropped -> empty routes");
+        let routing = g.route(&[Filter::new().authors([k.public_key()])]);
+        assert!(routing.per_relay.is_empty());
+        assert_eq!(routing.remainder.len(), 1, "unrouted key -> remainder");
+    }
+
+    #[test]
+    fn onion_ws_url_is_kept() {
+        let k = keys(27);
+        let mut g = Gossip::new(GossipOptions::default());
+        assert!(g.ingest(&list_10002(&k, T1, &["ws://abcdefghij.onion"], &[])));
+        assert_eq!(
+            g.routes(&k.public_key()).expect("routes").write(),
+            &[url("ws://abcdefghij.onion")]
+        );
+    }
+
+    #[test]
+    fn allow_insecure_keeps_ws() {
+        let k = keys(28);
+        let mut g = Gossip::new(GossipOptions {
+            allow_insecure: true,
+            ..GossipOptions::default()
+        });
+        assert!(g.ingest(&list_10002(&k, T1, &["ws://127.0.0.1:7777"], &[])));
+        assert_eq!(
+            g.routes(&k.public_key()).expect("routes").write(),
+            &[url("ws://127.0.0.1:7777")]
+        );
+    }
+
+    #[test]
     fn remove_clear_len() {
         let k = keys(17);
         let mut g = Gossip::new(GossipOptions::default());
@@ -789,6 +873,7 @@ mod tests {
         let mut g = Gossip::new(GossipOptions {
             max_pubkeys: 2,
             max_relays_per_pubkey: 4,
+            allow_insecure: true,
         });
         g.ingest(&list_10002(&k, T1, &["wss://keep"], &[]));
         for i in 26..126u8 {
@@ -828,6 +913,7 @@ mod tests {
         let mut g = Gossip::new(GossipOptions {
             max_pubkeys: 10,
             max_relays_per_pubkey: 3,
+            allow_insecure: false,
         });
         // With truncate-first: [a,a,b] -> dedup [a,b]. Dedup-first: [a,b,c].
         assert!(g.ingest(&list_10002(

@@ -265,9 +265,10 @@ async fn pool_isolates_dead_relay() {
         drop(listener);
         RelayUrl::parse(&format!("ws://{addr}")).expect("url")
     };
-    let pool = RelayPool::new(RelayOptions {
-        reconnect: false,
-        ..RelayOptions::default()
+    let pool = RelayPool::new({
+        let mut o = RelayOptions::default();
+        o.reconnect = false;
+        o
     });
     let out = pool
         .fetch(
@@ -298,7 +299,11 @@ async fn gossip_routes_to_outbox() {
         .expect("sign list");
     let note = event(&tag, "outbox", 1, &author);
     relay(|_| {}).publish(&note).await.expect("publish");
-    let mut g = nk::gossip::Gossip::new(nk::gossip::GossipOptions::default());
+    let mut g = nk::gossip::Gossip::new({
+        let mut o = nk::gossip::GossipOptions::default();
+        o.allow_insecure = true;
+        o
+    });
     assert!(g.ingest(&list));
     let routing = g.route(&[Filter::new()
         .authors([author.public_key()])
@@ -312,4 +317,101 @@ async fn gossip_routes_to_outbox() {
         .await;
     assert_eq!(out.events.len(), 1);
     assert_eq!(out.events[0].id(), note.id());
+}
+
+/// End-to-end `Client`: sign + publish → hydrate + routes on a fresh
+/// client → routed fetch → local query → live subscribe.
+#[tokio::test]
+#[ignore = "needs NK_E2E_RELAY"]
+async fn client_end_to_end() {
+    let tag = unique_tag();
+    let author = Keys::generate().expect("keys");
+    let mut writer_opts = nk::client::ClientOptions::default();
+    writer_opts.relays = vec![url()];
+    writer_opts.gossip.allow_insecure = true;
+    writer_opts.signer = Some(Arc::new(author.clone()));
+    let writer = nk::client::Client::new(writer_opts);
+
+    // 1. Sign + publish a 10002 listing nosfry as write, plus a note.
+    let list = writer
+        .sign(EventBuilder::from(nk_core::nips::nip65::RelayList::new(
+            vec![nk_core::nips::nip65::RelayListItem {
+                url: url(),
+                marker: nk_core::nips::nip65::RelayMarker::Write,
+            }],
+        )))
+        .await
+        .expect("sign list");
+    writer.publish(&list).await.expect("publish list");
+    let note = writer
+        .sign(
+            EventBuilder::new(Kind::new(1), "client note").tags([Tag::custom("t", [tag.as_str()])]),
+        )
+        .await
+        .expect("sign note");
+    let out = writer.publish(&note).await.expect("publish note");
+    assert!(
+        out.values().all(|r| matches!(r, Ok(o) if o.accepted)),
+        "{out:?}"
+    );
+
+    // 2. A second client (fresh store) hydrates the routes.
+    let mut reader_opts = nk::client::ClientOptions::default();
+    reader_opts.relays = vec![url()];
+    reader_opts.gossip.allow_insecure = true;
+    let reader = nk::client::Client::new(reader_opts);
+    reader
+        .hydrate(&[author.public_key()], Duration::from_secs(10))
+        .await
+        .expect("hydrate");
+    assert_eq!(
+        reader.routes(&author.public_key()).expect("routes").write(),
+        &[url()]
+    );
+
+    // 3. Routed fetch returns the note.
+    let fetched = reader
+        .fetch(
+            vec![
+                Filter::new()
+                    .authors([author.public_key()])
+                    .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()]),
+            ],
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("fetch");
+    assert!(fetched.events.iter().any(|e| e.id() == note.id()));
+
+    // 4. flush, then query finds it locally.
+    reader.flush().await.expect("flush");
+    let stored = reader.query(vec![Filter::new()]).await.expect("query");
+    assert!(stored.iter().any(|e| e.id() == note.id()));
+
+    // 5. subscribe(#t) on the reader; the writer publishes another note
+    // → the reader's stream yields it.
+    let mut sub = reader
+        .subscribe(vec![
+            Filter::new().tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()]),
+        ])
+        .await
+        .expect("subscribe");
+    let note2 = writer
+        .sign(
+            EventBuilder::new(Kind::new(1), "client note 2")
+                .tags([Tag::custom("t", [tag.as_str()])]),
+        )
+        .await
+        .expect("sign note 2");
+    writer.publish(&note2).await.expect("publish note 2");
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        match tokio::time::timeout_at(deadline, sub.next()).await {
+            Ok(Some(nk::pool::PoolEvent::Event { event, .. })) if event.id() == note2.id() => break,
+            Ok(Some(_)) => {}
+            _ => panic!("stream ended without note 2"),
+        }
+    }
+    writer.close().await;
+    reader.close().await;
 }

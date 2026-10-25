@@ -5,9 +5,12 @@
     reason = "`nk` is a dev-dependency of itself so `tests/` can enable `test-util`; the lib target never uses it"
 )]
 
+pub mod client;
 pub mod gossip;
 pub mod pool;
 pub mod relay;
 
 #[cfg(feature = "test-util")]
 pub mod testing;
+
+pub use nk_store as store;

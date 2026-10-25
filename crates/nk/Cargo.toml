@@ -22,7 +22,8 @@ name              = "it"
 required-features = ["test-util"]
 
 [features]
-test-util = ["dep:nk-store", "dep:hyper", "dep:hyper-util", "dep:http-body-util", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread"]
+sqlite    = ["nk-store/sqlite"]
+test-util = ["dep:hyper", "dep:hyper-util", "dep:http-body-util", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread"]
 
 [dependencies]
 hashlink     = { workspace = true }
@@ -37,8 +38,9 @@ tracing      = { workspace = true }
 thiserror    = { workspace = true }
 url          = { workspace = true }
 
+nk-store = { workspace = true }
+
 # test-util only
-nk-store       = { workspace = true, optional = true }
 hyper          = { version = "1", optional = true }
 hyper-util     = { version = "0.1.21", optional = true, features = ["server", "tokio"] }
 http-body-util = { version = "0.1", optional = true }

@@ -189,13 +189,11 @@ async fn drop_sends_close() {
 #[tokio::test]
 async fn lagged_consumer_closed() {
     let (mock, relay) = mock_and_relay().await;
-    let relay2 = Relay::new(
-        &mock.url(),
-        RelayOptions {
-            subscription_capacity: 1,
-            ..RelayOptions::default()
-        },
-    );
+    let relay2 = Relay::new(&mock.url(), {
+        let mut o = RelayOptions::default();
+        o.subscription_capacity = 1;
+        o
+    });
     let mut sub = relay2.subscribe(vec![Filter::new()]).await.expect("sub");
     // Flood the bounded channel without consuming: capacity 1 + EOSE →
     // the second event lags.
@@ -284,9 +282,10 @@ async fn publish_disconnected_fails_fast() {
     drop(listener);
     let relay = Relay::new(
         &nk_core::RelayUrl::parse(&format!("ws://{addr}")).expect("url"),
-        RelayOptions {
-            reconnect: false,
-            ..RelayOptions::default()
+        {
+            let mut o = RelayOptions::default();
+            o.reconnect = false;
+            o
         },
     );
     let started = std::time::Instant::now();
@@ -841,10 +840,11 @@ async fn fetch_fails_fast_when_unreachable() {
     drop(listener);
     let relay = Relay::new(
         &nk_core::RelayUrl::parse(&format!("ws://{addr}")).expect("url"),
-        RelayOptions {
-            reconnect: true,
-            connect_timeout: Duration::from_millis(50),
-            ..RelayOptions::default()
+        {
+            let mut o = RelayOptions::default();
+            o.reconnect = true;
+            o.connect_timeout = Duration::from_millis(50);
+            o
         },
     );
     let start = std::time::Instant::now();
