@@ -36,8 +36,7 @@ pub enum Error {
         /// The event's actual kind.
         found: u16,
     },
-    /// The event author is not the expected key's owner, or the private
-    /// plaintext is not a tag array.
+    /// The event author is not the expected key's owner.
     #[error("{0}")]
     Validation(&'static str),
     /// `rng` failed.
@@ -530,13 +529,11 @@ pub(crate) fn private_tags_plaintext(tags: &Tags) -> String {
 ///
 /// # Errors
 ///
-/// [`ErrorKind::EventValidation`] `invalid NIP-51 private tags` for any
-/// non-array, non-tag-array, or malformed JSON input.
+/// [`Error::PrivateJson`] for any non-array, non-tag-array, or malformed
+/// JSON input.
 #[cfg(feature = "nip44")]
 pub(crate) fn parse_private_tags(plaintext: &str) -> Result<Tags> {
-    serde_json::from_str::<Tags>(plaintext)
-        .map_err(|e| Error::PrivateJson(e.into()))
-        .map_err(|_| Error::Validation("invalid NIP-51 private tags"))
+    serde_json::from_str::<Tags>(plaintext).map_err(|e| Error::PrivateJson(e.into()))
 }
 
 /// NIP-44 ciphertext of the private tags, conversation peer = the author's

@@ -1,11 +1,13 @@
 //! The NIP implementations of `nk-core`: `nip04`/`nip44`/`nip49` sit behind
-//! their extra dependencies (and `nip44` also enables `nip17`, `nip59` and
-//! the NIP-51 private-tag helpers); every other NIP is always compiled.
+//! their extra dependencies; every other NIP is always compiled.
+//!
+//! `nip44` additionally enables `nip59`, the gift-wrap half of `nip17`
+//! (`Recipient`/`ChatMessage`/`wrap_direct_message`), and the NIP-51
+//! private-tag helpers — `nip17`'s `DmRelayList` needs no crypto.
 //!
 //! Platform-neutral (`no_std` + `alloc`, sans-IO) counterparts of
-//! `@qntx/nostr`'s `nips` layer. `Error`/`ErrorKind`/`Result` here are the
-//! NIP-layer error types; the crate-root modules each carry their own
-//! error enum.
+//! `@qntx/nostr`'s `nips` layer. Each NIP module carries its own
+//! `#[non_exhaustive]` `Error` enum and `Result` alias.
 
 #[cfg(any(feature = "nip04", feature = "nip44"))]
 mod ecdh;
@@ -15,7 +17,6 @@ mod util;
 pub mod nip04;
 pub mod nip10;
 pub mod nip13;
-#[cfg(feature = "nip44")]
 pub mod nip17;
 pub mod nip19;
 pub mod nip21;
@@ -52,9 +53,9 @@ const _: () = {
     assert_send_sync::<nip98::Error>();
     #[cfg(feature = "nip04")]
     assert_send_sync::<nip04::Error>();
+    assert_send_sync::<nip17::Error>();
     #[cfg(feature = "nip44")]
     {
-        assert_send_sync::<nip17::Error>();
         assert_send_sync::<nip44::Error>();
         assert_send_sync::<nip59::Error>();
     }

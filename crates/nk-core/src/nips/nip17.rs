@@ -2,25 +2,25 @@
 //!
 //! Counterpart of `@qntx/nostr/nips/nip17`: kind `10050` DM relay lists,
 //! kind `14` chat-message rumor construction, and per-recipient gift
-//! wrapping built on [`crate::nips::nip59`].
+//! wrapping built on `nip59` (enabled by `nip44`).
 //!
 //! TS drives wrapping through the injected asynchronous `Nip59Crypto`; this
-//! layer mirrors the local-key flow — [`wrap_direct_message`]. A signer
-//! layer composes the same flow from [`crate::nips::nip59`]'s pure steps for
-//! remote signers.
+//! layer mirrors the local-key flow — `wrap_direct_message` under
+//! `nip44`. A signer layer composes the same flow from `nip59`'s pure
+//! steps for remote signers.
 //!
 //! @see <https://github.com/nostr-protocol/nips/blob/master/17.md>
 
-use alloc::borrow::ToOwned;
-use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::{
-    Event, EventBuilder, EventId, Keys, Kind, PublicKey, RelayUrl, Tag, Tags, Timestamp,
-    UnsignedEvent,
-};
+use crate::{Event, EventBuilder, Kind, RelayUrl, Tag, Tags};
 
+#[cfg(feature = "nip44")]
 use crate::nips::nip59::{self, Rumor, WrapOptions};
+#[cfg(feature = "nip44")]
+use crate::{EventId, Keys, PublicKey, Timestamp, UnsignedEvent};
+#[cfg(feature = "nip44")]
+use alloc::{borrow::ToOwned, string::String};
 
 /// The error type returned by NIP-17 operations.
 #[non_exhaustive]
@@ -38,9 +38,11 @@ pub enum Error {
     #[error("{0}")]
     Empty(&'static str),
     /// A NIP-59 wrap/unwrap step failed.
+    #[cfg(feature = "nip44")]
     #[error("{0}")]
     Wrap(#[from] nip59::Error),
     /// `rng` failed inside a NIP-59 step (already surfaced there).
+    #[cfg(feature = "nip44")]
     #[error("rng failed")]
     Rng,
 }
@@ -131,6 +133,7 @@ impl DmRelayList {
 
 /// A direct-message recipient. The relay hint goes on the
 /// wrap's `p` tag.
+#[cfg(feature = "nip44")]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Recipient {
     /// The recipient's public key.
@@ -140,6 +143,7 @@ pub struct Recipient {
 }
 
 /// The event a chat message replies to.
+#[cfg(feature = "nip44")]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ReplyTo {
     /// The replied-to event id.
@@ -152,6 +156,7 @@ pub struct ReplyTo {
 /// A kind `14` chat-message rumor builder:
 /// `ChatMessageOptions`. Tag order: one `p` per recipient (with relay
 /// hint), then the unmarked reply `e` tag, then `subject`.
+#[cfg(feature = "nip44")]
 #[derive(Clone, Debug)]
 pub struct ChatMessage {
     recipients: Vec<Recipient>,
@@ -160,6 +165,7 @@ pub struct ChatMessage {
     subject: Option<String>,
 }
 
+#[cfg(feature = "nip44")]
 impl ChatMessage {
     /// A chat message to `recipients` with `content` (TS
     /// `buildChatMessageRumor`'s positional arguments).
@@ -240,6 +246,7 @@ impl ChatMessage {
 
 /// Dedupes by public key, keeping the first
 /// occurrence (and its relay hint).
+#[cfg(feature = "nip44")]
 pub(crate) fn normalize_recipients<I: IntoIterator<Item = Recipient>>(
     recipients: I,
 ) -> Vec<Recipient> {
@@ -269,6 +276,7 @@ pub(crate) fn normalize_recipients<I: IntoIterator<Item = Recipient>>(
 ///
 /// [`Error::Empty`] `recipients must not be empty`, and any [`nip59`]
 /// errors propagated per copy.
+#[cfg(feature = "nip44")]
 pub fn wrap_direct_message<R>(
     sender: &Keys,
     recipients: &[Recipient],

@@ -152,8 +152,8 @@ pub fn authorization_header(event: &Event) -> String {
 ///
 /// # Errors
 ///
-/// `ErrorKind::Nip98` for a missing token, malformed base64, non-object JSON,
-/// invalid JSON, or JSON that is not a signed event.
+/// [`Error::MissingToken`], [`Error::TokenEncoding`], [`Error::InvalidToken`],
+/// [`Error::TokenJson`], or [`Error::NotSignedEvent`].
 pub fn unpack_token(token: &str) -> Result<Event> {
     if token.is_empty() {
         return Err(Error::MissingToken);

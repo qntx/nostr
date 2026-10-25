@@ -1,14 +1,26 @@
 //! vectors/nip17/codec.json — `nip17.wrap`/`chat`/`normalize`/`relay_list`.
 
-use nk_core::nips::nip17::{ChatMessage, DmRelayList, Recipient, ReplyTo, wrap_direct_message};
-use nk_core::nips::nip59::{Rumor, Timestamps, WrapOptions};
-use nk_core::{Event, Keys, PublicKey, RelayUrl, SecretKey, Timestamp};
+use nk_core::nips::nip17::DmRelayList;
+use nk_core::{Event, PublicKey, Timestamp};
 
+#[cfg(feature = "nip44")]
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
+#[cfg(feature = "nip44")]
 use crate::common::{BytesRng, unhex, unhex_arr};
+#[cfg(feature = "nip44")]
+use nk_core::RelayUrl;
+#[cfg(feature = "nip44")]
+use nk_core::nips::nip17::{ChatMessage, Recipient, ReplyTo, wrap_direct_message};
+#[cfg(feature = "nip44")]
+use nk_core::nips::nip59::{Rumor, Timestamps, WrapOptions};
+#[cfg(feature = "nip44")]
+use nk_core::{Keys, SecretKey};
+#[cfg(feature = "nip44")]
+use serde_json::json;
 
+#[cfg(feature = "nip44")]
 #[derive(Deserialize)]
 struct WrapCase {
     name: String,
@@ -26,6 +38,7 @@ struct WrapCase {
     error: Option<String>,
 }
 
+#[cfg(feature = "nip44")]
 #[derive(Deserialize)]
 struct Recip {
     pubkey: String,
@@ -33,12 +46,14 @@ struct Recip {
     relay_hint: Option<String>,
 }
 
+#[cfg(feature = "nip44")]
 #[derive(Deserialize)]
 struct WrapOut {
     recipient: String,
     wrap: Value,
 }
 
+#[cfg(feature = "nip44")]
 #[derive(Deserialize)]
 struct ChatCase {
     name: String,
@@ -53,6 +68,7 @@ struct ChatCase {
     rumor: Option<Value>,
 }
 
+#[cfg(feature = "nip44")]
 #[derive(Deserialize)]
 struct NormCase {
     name: String,
@@ -65,6 +81,7 @@ const JSON: &str = include_str!(concat!(
     "/../../vectors/nip17/codec.json"
 ));
 
+#[cfg(feature = "nip44")]
 fn recipient(r: &Recip) -> Recipient {
     Recipient {
         pubkey: PublicKey::from_hex(&r.pubkey).unwrap(),
@@ -72,6 +89,7 @@ fn recipient(r: &Recip) -> Recipient {
     }
 }
 
+#[cfg(feature = "nip44")]
 fn wrap_options(v: &Value) -> WrapOptions {
     let timestamps = match &v["timestamps"] {
         t if t.is_object() => Timestamps::Fixed {
@@ -96,6 +114,7 @@ fn wrap_options(v: &Value) -> WrapOptions {
     o
 }
 
+#[cfg(feature = "nip44")]
 #[test]
 fn nip17_wrap() {
     let doc: Value = serde_json::from_str(JSON).unwrap();
@@ -130,6 +149,7 @@ fn nip17_wrap() {
     }
 }
 
+#[cfg(feature = "nip44")]
 #[test]
 fn nip17_chat() {
     let doc: Value = serde_json::from_str(JSON).unwrap();
@@ -171,6 +191,7 @@ fn nip17_chat() {
     }
 }
 
+#[cfg(feature = "nip44")]
 #[test]
 fn nip17_normalize() {
     let doc: Value = serde_json::from_str(JSON).unwrap();

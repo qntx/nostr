@@ -366,7 +366,7 @@ fn quote_to_tag(quote: &Quote) -> BuiltQuote {
 ///
 /// # Errors
 ///
-/// [`ErrorKind::EventValidation`] `NIP-10 replyTo is for kind 1` — NIP-10 is
+/// [`Error::Validation`] `NIP-10 replyTo is for kind 1` — NIP-10 is
 /// kind 1 only (comments are NIP-22).
 pub(crate) fn reply_tags(
     parent: &Event,

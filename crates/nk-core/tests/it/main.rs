@@ -33,7 +33,6 @@ mod core;
 mod diff;
 mod nip10;
 mod nip13;
-#[cfg(feature = "nip44")]
 mod nip17;
 mod nip19;
 mod nip21;

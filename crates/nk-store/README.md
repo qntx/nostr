@@ -7,7 +7,7 @@ insertion/deletion policy so put semantics cannot drift.
 - [`MemoryStore`] — `RwLock` + `Arc`-shared events in ordered buckets
   (all / pubkey / kind / kind+pubkey / single-letter tag `name:value`),
   with a per-filter planner choosing the smallest usable index.
-- [`SqliteStore`] (feature `sqlite`) — a `Mutex<Connection>` backend
+- `SqliteStore` (feature `sqlite`) — a `Mutex<Connection>` backend
   whose schema is byte-identical to `@qntx/nostr`'s SQLite store: the
   files are interchangeable across languages, `put_many` is one
   transaction, and deletion tombstones persist.
