@@ -2,12 +2,14 @@
 
 mod driver;
 mod error;
+mod neg;
 mod options;
 mod session;
 mod subscription;
 mod transport;
 
 pub use error::{Error, Result, TransportError};
+pub use neg::Reconciliation;
 pub use options::RelayOptions;
 pub use subscription::{CloseReason, Subscription, SubscriptionEvent};
 
@@ -89,6 +91,16 @@ pub(crate) enum Cmd {
     Count {
         filters: Vec<Filter>,
         reply: oneshot::Sender<Result<nk_core::CountResult>>,
+    },
+    /// The reconcile timeout fired.
+    NegTimeout {
+        id: SubscriptionId,
+    },
+    /// `Relay::reconcile` — NIP-77 sync over one `NEG-OPEN`.
+    Reconcile {
+        filter: Filter,
+        items: Vec<(nk_core::Timestamp, nk_core::EventId)>,
+        reply: oneshot::Sender<Result<Reconciliation>>,
     },
     Close(oneshot::Sender<()>),
 }
@@ -226,6 +238,31 @@ impl Relay {
 
     /// Terminal close: subscriptions end `Closed(RelayClosed)` and the
     /// socket shuts; idempotent.
+    /// NIP-77 reconcile: syncs `items` (our `(created_at, id)` set)
+    /// against the relay's for `filter`. Times out at `publish_timeout`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Timeout`] when the sync doesn't finish in time;
+    /// [`Error::Refused`] on `NEG-ERR`.
+    pub async fn reconcile(
+        &self,
+        filter: Filter,
+        items: Vec<(nk_core::Timestamp, nk_core::EventId)>,
+    ) -> Result<Reconciliation> {
+        let (tx, rx) = oneshot::channel();
+        self.cmd
+            .send(Cmd::Reconcile {
+                filter,
+                items,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| Error::Disconnected)?;
+        rx.await.map_err(|_| Error::Disconnected)?
+    }
+
+    /// Terminates the driver — every subscription ends `Closed(RelayClosed)`.
     pub async fn close(&self) {
         let (tx, rx) = oneshot::channel();
         if self.cmd.send(Cmd::Close(tx)).await.is_ok() {

@@ -87,6 +87,53 @@ fn ulid_like() -> String {
     format!("{n:016x}")
 }
 
+/// Lowercase hex, for negentropy wire messages.
+fn to_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    bytes
+        .iter()
+        .flat_map(|b| [b >> 4, b & 0x0f])
+        .map(|n| char::from(HEX.get(usize::from(n)).copied().unwrap_or(b'0')))
+        .collect()
+}
+
+/// Builds the server-side negentropy for one `NEG-OPEN` filter.
+fn server_neg(
+    store: &MemoryStore,
+    filter: &nk_core::Filter,
+) -> Option<negentropy::Negentropy<'static, negentropy::NegentropyStorageVector>> {
+    let mut storage = negentropy::NegentropyStorageVector::new();
+    for item in store.negentropy_items(filter).unwrap_or_default() {
+        drop(storage.insert(
+            item.created_at.as_secs(),
+            negentropy::Id::from_byte_array(*item.id.as_bytes()),
+        ));
+    }
+    drop(storage.seal());
+    negentropy::Negentropy::owned(storage, 60_000).ok()
+}
+
+/// One `NEG-MSG` server round: reply hex for `message`.
+fn server_neg_round(
+    neg: &mut negentropy::Negentropy<'static, negentropy::NegentropyStorageVector>,
+    id: &SubscriptionId,
+    message: &str,
+) -> String {
+    let query = message
+        .as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .filter_map(|p| {
+            std::str::from_utf8(p)
+                .ok()
+                .and_then(|s| u8::from_str_radix(s, 16).ok())
+        })
+        .collect::<Vec<u8>>();
+    let out = neg.reconcile(&query).unwrap_or_default();
+    format!(r#"["NEG-MSG","{}", "{}"]"#, id.as_str(), to_hex(&out))
+}
+
 /// The AUTH event's verdict: kind, tags, signature, and freshness.
 fn verify_auth_event(event: &Event, relay_url: &str, challenge: &str) -> Result<(), &'static str> {
     if event.kind().as_u16() != 22242 {
@@ -142,6 +189,10 @@ async fn on_client_frame(
     ws: &mut yawc::HttpWebSocket,
     store: &MemoryStore,
     open: &mut Vec<(SubscriptionId, Vec<nk_core::Filter>)>,
+    negs: &mut std::collections::HashMap<
+        SubscriptionId,
+        negentropy::Negentropy<'static, negentropy::NegentropyStorageVector>,
+    >,
     hold: &AtomicBool,
     auth: &AuthState<'_>,
     text: &str,
@@ -189,6 +240,36 @@ async fn on_client_frame(
             );
             drop(ws.send(Frame::text(frame)).await);
         }
+        ClientMessage::NegOpen {
+            subscription_id,
+            filter,
+            message,
+        } => {
+            if auth.required.load(Ordering::Relaxed) && !auth.authed.load(Ordering::Relaxed) {
+                auth_reject(ws, subscription_id.as_str()).await;
+                return true;
+            }
+            if hold.load(Ordering::Relaxed) {
+                return true;
+            }
+            if let Some(mut neg) = server_neg(store, &filter) {
+                let reply = server_neg_round(&mut neg, &subscription_id, &message);
+                negs.insert(subscription_id.clone().into_owned(), neg);
+                drop(ws.send(Frame::text(reply)).await);
+            }
+        }
+        ClientMessage::NegMsg {
+            subscription_id,
+            message,
+        } => {
+            if let Some(neg) = negs.get_mut(&subscription_id) {
+                let reply = server_neg_round(neg, &subscription_id, &message);
+                drop(ws.send(Frame::text(reply)).await);
+            }
+        }
+        ClientMessage::NegClose(id) => {
+            negs.remove(&id);
+        }
         ClientMessage::Auth(event) => match verify_auth_event(&event, auth.url, auth.challenge) {
             Ok(()) => {
                 auth.authed.store(true, Ordering::Relaxed);
@@ -227,6 +308,11 @@ async fn serve_ws(
 ) {
     // Open subscriptions on this connection for live EVENT delivery.
     let mut open: Vec<(SubscriptionId, Vec<nk_core::Filter>)> = Vec::new();
+    // Live server-side negentropy sessions keyed by NEG-OPEN id.
+    let mut negs: std::collections::HashMap<
+        SubscriptionId,
+        negentropy::Negentropy<'static, negentropy::NegentropyStorageVector>,
+    > = std::collections::HashMap::new();
     let authed = AtomicBool::new(!require_auth.load(Ordering::Relaxed));
     let challenge = format!("auth-challenge-{}", ulid_like());
     if require_auth.load(Ordering::Relaxed) {
@@ -252,7 +338,7 @@ async fn serve_ws(
                     continue;
                 };
                 drop(log.send(text.to_owned()).await);
-                if !on_client_frame(&mut ws, &store, &mut open, &hold, &auth, text).await {
+                if !on_client_frame(&mut ws, &store, &mut open, &mut negs, &hold, &auth, text).await {
                     return;
                 }
             }

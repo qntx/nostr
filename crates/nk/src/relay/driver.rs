@@ -9,6 +9,7 @@ use nk_core::{ClientMessage, Event, EventBuilder, EventId, Filter, RelayMessage,
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::debug;
 
+use super::neg::{NegSession, Reconciliation};
 use super::session::{Out, Retry, Session};
 use super::subscription::{CloseReason, Subscription, SubscriptionEvent, channel_pair};
 use super::transport::{Endpoint, Inbound, Transport};
@@ -18,6 +19,15 @@ use super::{
 };
 
 type PublishWaiters = Vec<oneshot::Sender<Result<PublishOutcome>>>;
+
+/// A live `NEG-OPEN`: the session, its waiter, and the retry context.
+struct NegEntry {
+    session: NegSession,
+    reply: oneshot::Sender<Result<Reconciliation>>,
+    filter: Filter,
+    items: Vec<(nk_core::Timestamp, EventId)>,
+    out: Reconciliation,
+}
 
 /// Per-subscription channel handles.
 struct SubHandles {
@@ -145,6 +155,8 @@ struct Driver {
     counts: HashMap<SubscriptionId, oneshot::Sender<Result<nk_core::CountResult>>>,
     /// `(retry, fallback)` requests queued behind the in-flight AUTH.
     auth_pending: Option<Vec<(Retry, Out)>>,
+    /// Live NEG sessions by id.
+    negs: HashMap<SubscriptionId, NegEntry>,
     backoff: Duration,
     reconnect_at: Option<tokio::time::Instant>,
     /// Deadline after the last ping with no inbound frame.
@@ -309,6 +321,177 @@ impl Driver {
         });
     }
 
+    /// NIP-77: build the session, send `NEG-OPEN`, arm the timeout.
+    async fn on_reconcile(
+        &mut self,
+        filter: Filter,
+        items: Vec<(nk_core::Timestamp, EventId)>,
+        reply: oneshot::Sender<Result<Reconciliation>>,
+    ) {
+        let id = self.alloc_sub_id();
+        let mut session = match NegSession::new(&items) {
+            Ok(s) => s,
+            Err(e) => {
+                drop(reply.send(Err(e)));
+                return;
+            }
+        };
+        let msg = match session.initiate() {
+            Ok(m) => m,
+            Err(e) => {
+                drop(reply.send(Err(e)));
+                return;
+            }
+        };
+        let _ = self.session.add_neg(id.clone());
+        self.negs.insert(
+            id.clone(),
+            NegEntry {
+                session,
+                reply,
+                filter: filter.clone(),
+                items,
+                out: Reconciliation::default(),
+            },
+        );
+        drop(self.ensure_connected().await);
+        drop(
+            self.write(ClientMessage::NegOpen {
+                subscription_id: Cow::Borrowed(&id),
+                filter: Cow::Borrowed(&filter),
+                message: Cow::Borrowed(&*msg),
+            })
+            .await,
+        );
+        let tx = self.cmd.clone();
+        let timeout = self.options.publish_timeout;
+        tokio::spawn(async move {
+            tokio::time::sleep(timeout).await;
+            drop(tx.send(Cmd::NegTimeout { id }).await);
+        });
+    }
+
+    /// One `NEG-MSG` round on `id`.
+    async fn on_neg_msg(&mut self, id: &SubscriptionId, message: &str) {
+        let Some(entry) = self.negs.get_mut(id) else {
+            return;
+        };
+        match entry.session.on_msg(message, &mut entry.out) {
+            Ok(Some(next)) => {
+                drop(
+                    self.write(ClientMessage::NegMsg {
+                        subscription_id: Cow::Borrowed(id),
+                        message: Cow::Borrowed(&*next),
+                    })
+                    .await,
+                );
+            }
+            Ok(None) => {
+                let Some(done) = self.negs.remove(id) else {
+                    return;
+                };
+                self.session_close_neg(id);
+                drop(self.write(ClientMessage::NegClose(Cow::Borrowed(id))).await);
+                drop(done.reply.send(Ok(done.out)));
+            }
+            Err(e) => {
+                let Some(failed) = self.negs.remove(id) else {
+                    return;
+                };
+                drop(failed.reply.send(Err(e)));
+            }
+        }
+    }
+
+    /// Removes a neg id from the session table.
+    fn session_close_neg(&mut self, id: &SubscriptionId) {
+        self.session.close_neg(id);
+    }
+
+    /// `NEG-ERR` — auth-required retries, else the reason surfaces.
+    fn on_neg_err(&mut self, id: &SubscriptionId, message: &str) {
+        let Some(entry) = self.negs.remove(id) else {
+            return;
+        };
+        if message.starts_with("auth-required:") && self.challenge.is_some() {
+            let retry = Retry::Neg {
+                id: id.clone(),
+                filter: entry.filter.clone(),
+                items: entry.items.clone(),
+            };
+            let fallback = Out::NegErr {
+                id: id.clone(),
+                reason: message.to_owned(),
+            };
+            self.negs.insert(id.clone(), entry);
+            self.on_auth_required(retry, fallback);
+            return;
+        }
+        drop(entry.reply.send(Err(Error::Refused(message.to_owned()))));
+    }
+
+    /// A `CLOSED` on a neg id — same auth/Refused routing as `NEG-ERR`.
+    fn on_neg_closed(&mut self, id: &SubscriptionId, reason: &str) {
+        let Some(entry) = self.negs.remove(id) else {
+            return;
+        };
+        if reason.starts_with("auth-required:") && self.challenge.is_some() {
+            let retry = Retry::Neg {
+                id: id.clone(),
+                filter: entry.filter.clone(),
+                items: entry.items.clone(),
+            };
+            let fallback = Out::NegErr {
+                id: id.clone(),
+                reason: reason.to_owned(),
+            };
+            self.negs.insert(id.clone(), entry);
+            self.on_auth_required(retry, fallback);
+            return;
+        }
+        drop(entry.reply.send(Err(Error::Refused(reason.to_owned()))));
+    }
+
+    /// Rebuilds a neg session after a good `AUTH`.
+    async fn retry_neg(
+        &mut self,
+        id: SubscriptionId,
+        filter: Filter,
+        items: Vec<(nk_core::Timestamp, EventId)>,
+    ) {
+        let Some(entry) = self.negs.get_mut(&id) else {
+            return;
+        };
+        let Ok(mut session) = NegSession::new(&items) else {
+            return;
+        };
+        let Ok(msg) = session.initiate() else {
+            return;
+        };
+        entry.session = session;
+        let _ = self.session.add_neg(id.clone());
+        drop(
+            self.write(ClientMessage::NegOpen {
+                subscription_id: Cow::Borrowed(&id),
+                filter: Cow::Borrowed(&filter),
+                message: Cow::Borrowed(&*msg),
+            })
+            .await,
+        );
+    }
+
+    /// The reconcile deadline hit — end the session with `Timeout`.
+    async fn on_neg_timeout(&mut self, id: SubscriptionId) {
+        let Some(entry) = self.negs.remove(&id) else {
+            return;
+        };
+        drop(
+            self.write(ClientMessage::NegClose(Cow::Borrowed(&id)))
+                .await,
+        );
+        drop(entry.reply.send(Err(Error::Timeout)));
+    }
+
     /// Sends `EVENT`; fails fast with `Disconnected` on a dead socket.
     async fn on_publish(&mut self, event: Event, reply: oneshot::Sender<Result<PublishOutcome>>) {
         drop(self.ensure_connected().await);
@@ -442,10 +625,36 @@ impl Driver {
 
     /// Routes one inbound text frame through the session.
     async fn on_frame(&mut self, text: &str) {
-        let outs: Vec<Out> = RelayMessage::from_json(text)
-            .ok()
-            .map(|m| self.session.handle(m))
-            .unwrap_or_default();
+        let Ok(msg) = RelayMessage::from_json(text) else {
+            return;
+        };
+        // NEG frames bypass the sub/count session entirely.
+        match msg {
+            RelayMessage::NegMsg {
+                subscription_id,
+                message,
+            } => self.on_neg_msg(&subscription_id, &message).await,
+            RelayMessage::NegErr {
+                subscription_id,
+                message,
+            } => self.on_neg_err(&subscription_id, &message),
+            other => {
+                // A CLOSED on a neg id needs the waiter's reason.
+                if let RelayMessage::Closed {
+                    subscription_id,
+                    message,
+                } = &other
+                {
+                    self.on_neg_closed(subscription_id, message);
+                }
+                let outs = self.session.handle(other);
+                self.route_outs(outs).await;
+            }
+        }
+    }
+
+    /// Applies one batch of session outputs.
+    async fn route_outs(&mut self, outs: Vec<Out>) {
         let mut to_close = Vec::new();
         for out in outs {
             match out {
@@ -468,6 +677,7 @@ impl Driver {
                     self.on_auth_required(retry, *fallback);
                 }
                 Out::Counted { id, result } => self.on_counted(&id, result),
+                Out::NegErr { id, reason } => self.on_neg_closed(&id, &reason),
                 Out::Notice(m) => debug!("relay notice: {m}"),
                 Out::SendClose(id) => to_close.push(id),
             }
@@ -516,6 +726,18 @@ impl Driver {
             }
             Some(Cmd::AuthDone { event, challenge }) => {
                 self.on_auth_done(event, challenge).await;
+                true
+            }
+            Some(Cmd::Reconcile {
+                filter,
+                items,
+                reply,
+            }) => {
+                self.on_reconcile(filter, items, reply).await;
+                true
+            }
+            Some(Cmd::NegTimeout { id }) => {
+                self.on_neg_timeout(id).await;
                 true
             }
             Some(Cmd::Close(reply)) => {
@@ -647,6 +869,7 @@ impl Driver {
                     let _ = self.session.add_count(id.clone(), filters.clone());
                     drop(self.count(&id, &filters).await);
                 }
+                Retry::Neg { id, filter, items } => self.retry_neg(id, filter, items).await,
             }
         }
     }
@@ -660,6 +883,11 @@ impl Driver {
                 accepted,
                 message,
             } => self.resolve_publish(id, accepted, &message),
+            Out::NegErr { id, reason } => {
+                if let Some(entry) = self.negs.remove(&id) {
+                    drop(entry.reply.send(Err(Error::Refused(reason))));
+                }
+            }
             other => debug!("unhandled auth fallback: {other:?}"),
         }
     }
@@ -735,6 +963,7 @@ pub(crate) async fn driver_loop(
         challenge: None,
         auth_ok_id: None,
         counts: HashMap::new(),
+        negs: HashMap::new(),
         auth_pending: None,
         reconnect_at: None,
         pong_deadline: None,

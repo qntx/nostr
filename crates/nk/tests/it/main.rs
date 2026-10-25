@@ -665,6 +665,122 @@ async fn count_timeout() {
     }
 }
 
+/// A negentropy item pair: `(created_at, id)` from a built event.
+const fn neg_item(ev: &Event) -> (Timestamp, nk_core::EventId) {
+    (ev.created_at(), ev.id())
+}
+
+#[tokio::test]
+async fn reconcile_disjoint_sets() {
+    let (_mock, relay) = mock_and_relay().await;
+    let ours = event("ours", 1);
+    let theirs = event("theirs", 2);
+    relay.publish(&theirs).await.expect("publish");
+    let rec = relay
+        .reconcile(Filter::new(), vec![neg_item(&ours)])
+        .await
+        .expect("reconcile");
+    assert_eq!(rec.have, vec![ours.id()]);
+    assert_eq!(rec.need, vec![theirs.id()]);
+}
+
+#[tokio::test]
+async fn reconcile_overlapping_sets() {
+    let (_mock, relay) = mock_and_relay().await;
+    let shared = event("shared", 1);
+    relay.publish(&shared).await.expect("publish shared");
+    relay
+        .publish(&event("theirs", 2))
+        .await
+        .expect("publish theirs");
+    let ours = event("ours", 3);
+    let rec = relay
+        .reconcile(Filter::new(), vec![neg_item(&shared), neg_item(&ours)])
+        .await
+        .expect("reconcile");
+    assert_eq!(rec.have, vec![ours.id()]);
+    assert_eq!(rec.need.len(), 1);
+}
+
+#[tokio::test]
+async fn reconcile_identical_and_empty() {
+    let (_mock, relay) = mock_and_relay().await;
+    let ev = event("same", 1);
+    relay.publish(&ev).await.expect("publish");
+    let rec = relay
+        .reconcile(Filter::new(), vec![neg_item(&ev)])
+        .await
+        .expect("identical");
+    assert_eq!(rec, nk::relay::Reconciliation::default());
+
+    let empty = relay
+        .reconcile(Filter::new().kinds([Kind::new(404)]), vec![])
+        .await
+        .expect("empty");
+    assert_eq!(empty.need.len(), 0);
+}
+
+#[tokio::test]
+async fn reconcile_neg_err_surfaces_reason() {
+    let (mut mock, relay) = mock_and_relay().await;
+    mock.set_hold_reqs(true);
+    let relay2 = relay.clone();
+    let fetch = tokio::spawn(async move { relay2.reconcile(Filter::new(), vec![]).await });
+    let req = mock
+        .wait_for_frame("NEG-OPEN", Duration::from_secs(2))
+        .await
+        .expect("NEG-OPEN frame");
+    mock.send_raw(&format!(
+        r#"["NEG-ERR","{}","blocked: no sync"]"#,
+        req_id(&req)
+    ));
+    match fetch.await.expect("join") {
+        Err(nk::relay::Error::Refused(reason)) => {
+            assert!(reason.contains("blocked"), "{reason}");
+        }
+        other => panic!("expected refused, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn reconcile_timeout() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("addr");
+    drop(listener);
+    let relay = Relay::new(
+        &nk_core::RelayUrl::parse(&format!("ws://{addr}")).expect("url"),
+        RelayOptions {
+            reconnect: false,
+            publish_timeout: Duration::from_millis(50),
+            ..RelayOptions::default()
+        },
+    );
+    match relay.reconcile(Filter::new(), vec![]).await {
+        Err(nk::relay::Error::Timeout | nk::relay::Error::Disconnected) => {}
+        other => panic!("expected timeout, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn reconcile_auth_retry_with_signer() {
+    let (mock, relay) = mock_and_relay_with(|o| {
+        o.signer = Some(Arc::new(Keys::generate().expect("keys")));
+    })
+    .await;
+    mock.require_auth(true);
+    let theirs = event("theirs", 2);
+    relay.publish(&theirs).await.expect("publish");
+    let ours = event("ours", 1);
+    let rec = relay
+        .reconcile(Filter::new(), vec![neg_item(&ours)])
+        .await
+        .expect("reconcile");
+    assert_eq!(rec.have, vec![ours.id()]);
+    assert_eq!(rec.need, vec![theirs.id()]);
+}
+
 #[tokio::test]
 async fn last_handle_drop_stops_driver() {
     let (mock, relay) = mock_and_relay().await;

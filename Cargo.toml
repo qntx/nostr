@@ -38,6 +38,7 @@ serde_json            = { version = "1.0.151", default-features = false, feature
 sha2                  = { version = "0.11", default-features = false }
 thiserror             = { version = "2.0.21", default-features = false }
 tokio                 = { version = "1.53", default-features = false }
+negentropy            = "=0.5.2"
 tracing               = "0.1"
 yawc                  = { version = "0.5.0", features = ["tls", "rustls-ring"] }
 unicode-normalization = { version = "0.1", default-features = false }

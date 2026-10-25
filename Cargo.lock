@@ -991,6 +991,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "negentropy"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3d66662cb5ca384d4991509755ed5a42dd8e31c4282bf881938e506fc3146ec"
+
+[[package]]
 name = "nk"
 version = "0.14.0"
 dependencies = [
@@ -998,6 +1004,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "negentropy",
  "nk",
  "nk-core",
  "nk-store",

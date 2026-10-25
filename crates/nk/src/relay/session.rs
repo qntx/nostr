@@ -47,6 +47,13 @@ pub(crate) enum Out {
         /// The output to deliver if AUTH fails.
         fallback: Box<Self>,
     },
+    /// A `NEG-ERR`/`CLOSED` reason a failed AUTH must surface.
+    NegErr {
+        /// The neg id.
+        id: SubscriptionId,
+        /// The reason text.
+        reason: String,
+    },
     /// A NIP-45 `COUNT` reply.
     Counted {
         /// The count's id.
@@ -77,6 +84,15 @@ pub(crate) enum Retry {
     },
     /// Resend the pending `["EVENT", …]` for this id.
     Publish(EventId),
+    /// Re-open `["NEG-OPEN", id, filter, msg]`.
+    Neg {
+        /// The NEG id.
+        id: SubscriptionId,
+        /// Its filter.
+        filter: Filter,
+        /// The original item set (rebuilds the session).
+        items: Vec<(nk_core::Timestamp, EventId)>,
+    },
     /// Resend `["COUNT", id, filters...]`.
     Count {
         /// The count id.
@@ -114,6 +130,8 @@ pub(crate) struct Session {
     challenge: Option<String>,
     /// Open NIP-45 counts — never replayed after reconnect.
     counts: HashMap<SubscriptionId, Vec<Filter>>,
+    /// Open NEG sessions — never replayed after reconnect.
+    negs: HashSet<SubscriptionId>,
 }
 
 impl Session {
@@ -143,6 +161,16 @@ impl Session {
         self.pending.insert(id)
     }
 
+    /// Registers a NEG id; `false` when taken.
+    pub(crate) fn add_neg(&mut self, id: SubscriptionId) -> bool {
+        self.negs.insert(id)
+    }
+
+    /// Removes a NEG id.
+    pub(crate) fn close_neg(&mut self, id: &SubscriptionId) {
+        self.negs.remove(id);
+    }
+
     /// Registers a NIP-45 `COUNT`; `false` when `id` is already taken.
     pub(crate) fn add_count(&mut self, id: SubscriptionId, filters: Vec<Filter>) -> bool {
         self.counts.insert(id, filters).is_none()
@@ -165,10 +193,12 @@ impl Session {
     /// sub/count with the reason.
     fn on_closed(&mut self, id: SubscriptionId, reason: String) -> Vec<Out> {
         let was_count = self.counts.remove(&id);
+        let was_neg = self.negs.remove(&id);
         let sub = self.subs.remove(&id);
         let auth = reason.starts_with("auth-required:") && self.challenge.is_some();
         match (sub, was_count) {
-            (None, None) => Vec::new(),
+            (None, Some(_)) | (Some(_), _) if !auth => vec![Out::Closed { id, reason }],
+            (None, None) if !was_neg => Vec::new(),
             (None, Some(filters)) if auth => vec![Out::AuthRequired {
                 retry: Retry::Count {
                     id: id.clone(),

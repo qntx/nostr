@@ -11,6 +11,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Added
 
+- `nk`: NIP-77 `Relay::reconcile(filter, items) -> Reconciliation { have, need }` over the `negentropy` crate (60 000-byte frame limit, `NEG-ERR` → `Error::Refused`, `auth-required:` retries through the NIP-42 path).
 - `nk`: NIP-42 auth (`RelayOptions.signer`, one kind-22242 `AUTH` per challenge with one-shot request retry) and NIP-45 `Relay::count`.
 - `nk-core`: `NostrSigner` object-safe async signer trait (`public_key`/`sign_event` required, NIP-44/NIP-04 with `Unsupported` defaults), `Keys` implements it under `os-rng`; `EventBuilder::auth`.
 - `nk` (`crates/nk`) — the SDK crate: `Relay` (single-relay client with lazy connect, WebSocket ping liveness, and jittered exponential-backoff reconnect replaying open `REQ`s), `Subscription` (a `Stream` ended by `EOSE`/`CLOSED`/lag/`close()` and sending `CLOSE` on drop), `fetch`/`publish`/`status`/`close`, and `testing::MockRelay` behind `test-util`.
@@ -124,6 +125,7 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Added
 
+- `nk`: NIP-77 `Relay::reconcile(filter, items) -> Reconciliation { have, need }` over the `negentropy` crate (60 000-byte frame limit, `NEG-ERR` → `Error::Refused`, `auth-required:` retries through the NIP-42 path).
 - `nk`: NIP-42 auth (`RelayOptions.signer`, one kind-22242 `AUTH` per challenge with one-shot request retry) and NIP-45 `Relay::count`.
 - `nk-core`: `NostrSigner` object-safe async signer trait (`public_key`/`sign_event` required, NIP-44/NIP-04 with `Unsupported` defaults), `Keys` implements it under `os-rng`; `EventBuilder::auth`.
 - `nk` (`crates/nk`) — the SDK crate: `Relay` (single-relay client with lazy connect, WebSocket ping liveness, and jittered exponential-backoff reconnect replaying open `REQ`s), `Subscription` (a `Stream` ended by `EOSE`/`CLOSED`/lag/`close()` and sending `CLOSE` on drop), `fetch`/`publish`/`status`/`close`, and `testing::MockRelay` behind `test-util`.
