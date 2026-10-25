@@ -14,16 +14,16 @@
 
 use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
+use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 use core::str::FromStr;
 
-use crate::PublicKey;
+use crate::nips::util::trim_js;
+use crate::{Kind, PublicKey, Tags, Timestamp, UnsignedEvent};
 use serde::{Deserialize, Serialize};
 use url::Url;
 use url::form_urlencoded::Serializer;
-
-use crate::nips::util::trim_js;
 
 /// Errors produced by NIP-46 URI parsing and RPC JSON decoding.
 #[non_exhaustive]
@@ -359,6 +359,10 @@ pub enum Method {
     Nip44Encrypt,
     /// `nip44_decrypt`.
     Nip44Decrypt,
+    /// `switch_relays`.
+    SwitchRelays,
+    /// `logout`.
+    Logout,
     /// Any other method name, preserved verbatim.
     Other(String),
 }
@@ -376,6 +380,8 @@ impl Method {
             Self::Nip04Decrypt => "nip04_decrypt",
             Self::Nip44Encrypt => "nip44_encrypt",
             Self::Nip44Decrypt => "nip44_decrypt",
+            Self::SwitchRelays => "switch_relays",
+            Self::Logout => "logout",
             Self::Other(name) => name,
         }
     }
@@ -392,6 +398,8 @@ impl From<String> for Method {
             "nip04_decrypt" => Self::Nip04Decrypt,
             "nip44_encrypt" => Self::Nip44Encrypt,
             "nip44_decrypt" => Self::Nip44Decrypt,
+            "switch_relays" => Self::SwitchRelays,
+            "logout" => Self::Logout,
             _ => Self::Other(name),
         }
     }
@@ -420,7 +428,78 @@ pub struct Request {
     pub params: Vec<String>,
 }
 
+/// Optional client metadata sent as the fourth `connect` parameter.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize)]
+pub struct ClientMetadata {
+    /// The client's display name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The client's URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// The client's image URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+}
+
+impl ClientMetadata {
+    /// `{"name":…,"url":…,"image":…}` in field order — absent fields are
+    /// omitted, never `null`.
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_default()
+    }
+}
+
 impl Request {
+    /// A `connect` request: `[remote-signer, secret-or-"", perms?,
+    /// metadata?]` — a metadata-without-perms call sends `""` for perms.
+    #[must_use]
+    pub fn connect(
+        id: impl Into<String>,
+        remote_signer: &PublicKey,
+        secret: Option<&str>,
+        perms: &[String],
+        metadata: Option<&ClientMetadata>,
+    ) -> Self {
+        let mut params = vec![remote_signer.to_hex(), String::from(secret.unwrap_or(""))];
+        if !perms.is_empty() || metadata.is_some() {
+            params.push(perms.join(","));
+        }
+        if let Some(metadata) = metadata {
+            params.push(metadata.to_json());
+        }
+        Self {
+            id: id.into(),
+            method: Method::Connect,
+            params,
+        }
+    }
+
+    /// A `sign_event` request: one param, the template
+    /// `{"kind":…,"content":…,"tags":…,"created_at":…}` — no pubkey/id/sig.
+    #[must_use]
+    pub fn sign_event(id: impl Into<String>, unsigned: &UnsignedEvent) -> Self {
+        #[derive(Serialize)]
+        struct Template<'a> {
+            kind: Kind,
+            content: &'a str,
+            tags: &'a Tags,
+            created_at: Timestamp,
+        }
+        let template = Template {
+            kind: unsigned.kind(),
+            content: unsigned.content(),
+            tags: unsigned.tags(),
+            created_at: unsigned.created_at(),
+        };
+        Self {
+            id: id.into(),
+            method: Method::SignEvent,
+            params: vec![serde_json::to_string(&template).unwrap_or_default()],
+        }
+    }
+
     /// Decodes a `{id, method, params}` JSON object.
     ///
     /// # Errors
@@ -434,6 +513,23 @@ impl Request {
     #[must_use]
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap_or_default()
+    }
+}
+
+/// Decodes a `switch_relays` result: a JSON array of relay URLs, or
+/// `null` when nothing changes.
+///
+/// # Errors
+///
+/// [`Error::MissingRelays`] on an empty array; [`Error::InvalidJson`]
+/// on malformed JSON or a non-array/non-string payload.
+pub fn parse_switch_relays(result: &str) -> Result<Option<Vec<String>>, Error> {
+    let parsed: Option<Vec<String>> =
+        serde_json::from_str(result).map_err(|e| Error::InvalidJson { source: e.into() })?;
+    match parsed {
+        None => Ok(None),
+        Some(urls) if urls.is_empty() => Err(Error::MissingRelays),
+        Some(urls) => Ok(Some(urls)),
     }
 }
 
@@ -645,6 +741,8 @@ relay=wss%3A%2F%2Frelay.damus.io&secret=hunter2&perms=nip44_encrypt%2Csign_event
             (Method::Nip04Decrypt, "nip04_decrypt"),
             (Method::Nip44Encrypt, "nip44_encrypt"),
             (Method::Nip44Decrypt, "nip44_decrypt"),
+            (Method::SwitchRelays, "switch_relays"),
+            (Method::Logout, "logout"),
         ];
         for (method, name) in cases {
             assert_eq!(method.as_str(), name);
@@ -715,6 +813,76 @@ relay=wss%3A%2F%2Frelay.damus.io&secret=hunter2&perms=nip44_encrypt%2Csign_event
         assert_eq!(err.to_json(), r#"{"id":"r","error":"denied"}"#);
         let ok = Response::from_json(r#"{"id":"r","result":"sig"}"#).unwrap();
         assert_eq!(ok.to_json(), r#"{"id":"r","result":"sig"}"#);
+    }
+
+    #[test]
+    fn connect_param_shapes() {
+        let remote = pubkey();
+        let bare = Request::connect("a", &remote, None, &[], None);
+        assert_eq!(bare.method, Method::Connect);
+        assert_eq!(bare.params, [PK, ""]);
+
+        let secret = Request::connect("b", &remote, Some("s3cr3t"), &[], None);
+        assert_eq!(secret.params, [PK, "s3cr3t"]);
+
+        let perms = Request::connect("c", &remote, None, &[String::from("sign_event")], None);
+        assert_eq!(perms.params, [PK, "", "sign_event"]);
+
+        let metadata = ClientMetadata {
+            name: Some(String::from("My App")),
+            ..ClientMetadata::default()
+        };
+        // Metadata without perms still sends `""` in the third slot.
+        let meta_only = Request::connect("d", &remote, None, &[], Some(&metadata));
+        assert_eq!(meta_only.params, [PK, "", "", r#"{"name":"My App"}"#]);
+
+        let both = Request::connect(
+            "e",
+            &remote,
+            Some("s"),
+            &[String::from("ping"), String::from("sign_event")],
+            Some(&metadata),
+        );
+        assert_eq!(
+            both.params,
+            [PK, "s", "ping,sign_event", r#"{"name":"My App"}"#]
+        );
+    }
+
+    #[test]
+    fn sign_event_sends_bare_template() {
+        let unsigned = UnsignedEvent::new(
+            pubkey(),
+            Timestamp::from_secs(1_700_000_000),
+            Kind::new(1),
+            Tags::new(),
+            "hello",
+        );
+        let request = Request::sign_event("s1", &unsigned);
+        assert_eq!(request.method, Method::SignEvent);
+        assert_eq!(
+            request.params,
+            [r#"{"kind":1,"content":"hello","tags":[],"created_at":1700000000}"#]
+        );
+    }
+
+    #[test]
+    fn parse_switch_relays_cases() {
+        assert_eq!(parse_switch_relays("null").unwrap(), None);
+        assert_eq!(
+            parse_switch_relays(r#"["wss://a","wss://b"]"#).unwrap(),
+            Some(vec![String::from("wss://a"), String::from("wss://b")])
+        );
+        assert!(matches!(
+            parse_switch_relays("[]"),
+            Err(Error::MissingRelays)
+        ));
+        for bad in ["{", "42", r#""wss://a""#, r#"["wss://a",7]"#, r#"{"a":1}"#] {
+            assert!(
+                matches!(parse_switch_relays(bad), Err(Error::InvalidJson { .. })),
+                "{bad}"
+            );
+        }
     }
 
     #[test]
