@@ -1002,6 +1002,7 @@ version = "0.14.0"
 dependencies = [
  "faster-hex",
  "futures-util",
+ "hashlink",
  "http-body-util",
  "hyper",
  "hyper-util",

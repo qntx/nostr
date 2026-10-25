@@ -5,6 +5,7 @@
     reason = "`nk` is a dev-dependency of itself so `tests/` can enable `test-util`; the lib target never uses it"
 )]
 
+pub mod gossip;
 pub mod pool;
 pub mod relay;
 

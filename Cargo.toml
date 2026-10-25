@@ -27,6 +27,7 @@ criterion             = { version = "0.8", default-features = false }
 faster-hex            = { version = "1.0", default-features = false, features = ["alloc"] }
 futures-util          = "0.3.34"
 getrandom             = { version = "0.4", default-features = false }
+hashlink              = "0.12"
 hkdf                  = { version = "0.13", default-features = false }
 hmac                  = { version = "0.13", default-features = false, features = ["zeroize"] }
 rand_core             = { version = "0.10", default-features = false }

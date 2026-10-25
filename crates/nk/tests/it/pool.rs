@@ -1,8 +1,11 @@
 //! `RelayPool` tests against `testing::MockRelay`.
 
 use super::*;
+use nk::gossip::{Gossip, GossipOptions};
 use nk::pool::{PoolEvent, RelayPool};
 use nk::relay::{Error as RelayError, Reconciliation};
+use nk_core::rand_core::UnwrapErr;
+use nk_core::{EventBuilder, SecretKey, SysRng, Tag, Timestamp};
 use nk_store::EventStore;
 use std::collections::BTreeSet;
 
@@ -403,4 +406,108 @@ async fn remove_and_statuses() {
     assert!(pool.remove(&mock_a.url()).await);
     assert!(!pool.statuses().contains_key(&mock_a.url()));
     assert!(!pool.remove(&mock_a.url()).await);
+}
+
+#[tokio::test]
+async fn fetch_routed_sends_per_relay_filters() {
+    let (mut mock_a, mut mock_b, pool) = pool(|_| {}).await;
+    let x = event("x", 1);
+    let z = event("z", 7);
+    mock_a.store().put(&x).expect("seed");
+    mock_b.store().put(&z).expect("seed");
+    // Plan: A gets kind 1, B gets kind 7 — each relay sees only its own.
+    let mut plan = std::collections::BTreeMap::new();
+    plan.insert(mock_a.url(), vec![Filter::new().kinds([Kind::new(1)])]);
+    plan.insert(mock_b.url(), vec![Filter::new().kinds([Kind::new(7)])]);
+    let out = pool.fetch_routed(plan, Duration::from_secs(5)).await;
+    let req_a = mock_a
+        .wait_for_frame("REQ", Duration::from_secs(2))
+        .await
+        .expect("a req");
+    let req_b = mock_b
+        .wait_for_frame("REQ", Duration::from_secs(2))
+        .await
+        .expect("b req");
+    assert!(req_a.contains(r#""kinds":[1]"#), "{req_a}");
+    assert!(req_b.contains(r#""kinds":[7]"#), "{req_b}");
+    let mut ids: Vec<_> = out.events.iter().map(Event::id).collect();
+    ids.sort();
+    let mut want = vec![x.id(), z.id()];
+    want.sort();
+    assert_eq!(ids, want);
+    assert!(out.relays.values().all(|r| matches!(r, Ok(FetchEnd::Eose))));
+}
+
+#[tokio::test]
+async fn subscribe_routed_empty_list_fails_that_relay() {
+    let (mock_a, mock_b, pool) = pool(|_| {}).await;
+    mock_a.store().put(&event("x", 1)).expect("seed");
+    let mut plan = std::collections::BTreeMap::new();
+    plan.insert(mock_a.url(), vec![Filter::new().kinds([Kind::new(1)])]);
+    plan.insert(mock_b.url(), vec![]);
+    let mut sub = pool.subscribe_routed(plan).await;
+    let mut got_failed = false;
+    let mut got_event = false;
+    let mut got_eose = false;
+    for _ in 0..8 {
+        match tokio::time::timeout(Duration::from_secs(2), sub.next())
+            .await
+            .expect("item")
+        {
+            Some(PoolEvent::Failed { relay, error }) if relay == mock_b.url() => {
+                assert!(matches!(error, RelayError::InvalidFilters));
+                got_failed = true;
+            }
+            Some(PoolEvent::Event { .. }) => got_event = true,
+            Some(PoolEvent::Eose) => {
+                got_eose = true;
+                break;
+            }
+            Some(_) => {}
+            None => break,
+        }
+    }
+    assert!(got_failed && got_event && got_eose);
+}
+
+#[tokio::test]
+async fn gossip_route_drives_routed_fetch() {
+    let (mut mock_a, mock_b, pool) = pool(|_| {}).await;
+    // Author X (signs with [7;32]) has a 10002 pointing at A; author
+    // Y (the shared keys, [9;32]) is unknown.
+    let xk = Keys::new(SecretKey::from_bytes([7; 32]).expect("key"));
+    let x = xk
+        .sign_event(
+            EventBuilder::new(Kind::new(1), "x")
+                .build_at(xk.public_key(), Timestamp::from_secs(1_700_000_000)),
+            &mut UnwrapErr(SysRng),
+        )
+        .expect("sign x");
+    let y = event("y", 1);
+    mock_a.store().put(&x).expect("seed x");
+    mock_b.store().put(&y).expect("seed y");
+    let list = xk
+        .sign_event(
+            EventBuilder::new(Kind::new(10002), "")
+                .tags([Tag::custom("r", [mock_a.url().as_str()])])
+                .build_at(xk.public_key(), Timestamp::from_secs(1_700_000_000)),
+            &mut UnwrapErr(SysRng),
+        )
+        .expect("sign");
+    let x_pub = xk.public_key();
+    let mut g = Gossip::new(GossipOptions::default());
+    assert!(g.ingest(&list));
+    let y_pub = Keys::new(SecretKey::from_bytes([9; 32]).expect("key")).public_key();
+    let routing = g.route(&[Filter::new().authors([x_pub, y_pub])]);
+    let plan = routing.with_fallback(&[mock_b.url()]).expect("plan");
+    assert!(plan.contains_key(&mock_a.url()), "X routes to A");
+    assert!(plan.contains_key(&mock_b.url()), "Y falls back to B");
+    let out = pool.fetch_routed(plan, Duration::from_secs(5)).await;
+    assert_eq!(out.events.len(), 2);
+    let req_a = mock_a
+        .wait_for_frame("REQ", Duration::from_secs(2))
+        .await
+        .expect("a req");
+    assert!(req_a.contains(&x_pub.to_hex()), "A's REQ carries X only");
+    assert!(!req_a.contains(&y_pub.to_hex()), "A's REQ must not carry Y");
 }

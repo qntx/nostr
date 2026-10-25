@@ -111,12 +111,11 @@ pub struct PoolSubscription {
 impl PoolSubscription {
     /// Opens a `REQ` on each relay, queues `Failed` items for the ones
     /// that couldn't, and tracks every attached relay for EOSE.
-    pub(crate) async fn open(relays: Vec<(RelayUrl, Relay)>, filters: Vec<Filter>) -> Self {
+    pub(crate) async fn open(relays: Vec<(RelayUrl, Relay, Vec<Filter>)>) -> Self {
         // Concurrent opens — a slow relay must not serialize the
         // others' connect timeouts.
-        let results = join_all(relays.iter().map(|(url, relay)| {
-            let filters = filters.clone();
-            async move { (url.clone(), relay.subscribe(filters).await) }
+        let results = join_all(relays.iter().map(|(url, relay, filters)| async move {
+            (url.clone(), relay.subscribe(filters.clone()).await)
         }))
         .await;
         let mut subs = Vec::with_capacity(results.len());

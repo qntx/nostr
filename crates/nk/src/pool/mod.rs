@@ -152,8 +152,31 @@ impl RelayPool {
         if filters.is_empty() {
             return Err(Error::InvalidFilters);
         }
-        let relays = self.relays_for(&Self::urls(urls));
-        Ok(PoolSubscription::open(relays, filters).await)
+        let plan = Self::urls(urls)
+            .into_iter()
+            .map(|u| (u, filters.clone()))
+            .collect();
+        Ok(self.subscribe_routed(plan).await)
+    }
+
+    /// Opens a per-relay `REQ` plan — one filter list per relay.
+    ///
+    /// Use this when routes differ per relay (e.g. from
+    /// `Gossip::route(..).with_fallback(..)`); a relay whose list is
+    /// empty surfaces [`PoolEvent::Failed`] with
+    /// [`Error::InvalidFilters`].
+    pub async fn subscribe_routed(
+        &self,
+        plan: BTreeMap<RelayUrl, Vec<Filter>>,
+    ) -> PoolSubscription {
+        let relays = plan
+            .into_iter()
+            .map(|(u, filters)| {
+                let relay = self.relay(&u);
+                (u, relay, filters)
+            })
+            .collect();
+        PoolSubscription::open(relays).await
     }
 
     /// A bounded read across relays: events merged by id, newest first;
@@ -171,10 +194,25 @@ impl RelayPool {
         if filters.is_empty() {
             return Err(Error::InvalidFilters);
         }
-        let relays = self.relays_for(&Self::urls(urls));
-        let results = join_all(relays.iter().map(|(u, r)| {
-            let filters = filters.clone();
-            async move { (u.clone(), r.fetch(filters, timeout).await) }
+        let plan = Self::urls(urls)
+            .into_iter()
+            .map(|u| (u, filters.clone()))
+            .collect();
+        Ok(self.fetch_routed(plan, timeout).await)
+    }
+
+    /// A bounded read with a per-relay filter plan — one list per
+    /// relay. Use this when routes differ per relay (e.g. from
+    /// `Gossip::route(..).with_fallback(..)`); a relay whose list is
+    /// empty surfaces [`Error::InvalidFilters`] in `relays`.
+    pub async fn fetch_routed(
+        &self,
+        plan: BTreeMap<RelayUrl, Vec<Filter>>,
+        timeout: Duration,
+    ) -> PoolFetch {
+        let results = join_all(plan.into_iter().map(|(u, f)| {
+            let r = self.relay(&u);
+            async move { (u.clone(), r.fetch(f, timeout).await) }
         }))
         .await;
         let mut by_id = HashMap::new();
@@ -184,10 +222,10 @@ impl RelayPool {
         }
         let mut events: Vec<Event> = by_id.into_values().collect();
         events.sort_by(Event::cmp_newest_first);
-        Ok(PoolFetch {
+        PoolFetch {
             events,
             relays: ends,
-        })
+        }
     }
 
     /// One relay's fetch result merged into the by-id map and ends.

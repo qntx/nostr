@@ -282,3 +282,34 @@ async fn pool_isolates_dead_relay() {
     assert!(matches!(out.relays[&url()], Ok(FetchEnd::Eose)));
     assert!(out.relays[&dead].is_err());
 }
+
+#[tokio::test]
+#[ignore = "needs NK_E2E_RELAY"]
+async fn gossip_routes_to_outbox() {
+    let tag = unique_tag();
+    let author = keys();
+    // Author's 10002 lists this relay — ingest it, then the route must
+    // be per-relay-only with no remainder.
+    let list = EventBuilder::new(Kind::new(10002), "")
+        .tags([Tag::custom("r", [url().as_str()])])
+        .build_at(author.public_key(), Timestamp::now());
+    let list = author
+        .sign_event(list, &mut UnwrapErr(SysRng))
+        .expect("sign list");
+    let note = event(&tag, "outbox", 1, &author);
+    relay(|_| {}).publish(&note).await.expect("publish");
+    let mut g = nk::gossip::Gossip::new(nk::gossip::GossipOptions::default());
+    assert!(g.ingest(&list));
+    let routing = g.route(&[Filter::new()
+        .authors([author.public_key()])
+        .tag(SingleLetterTag::new('t').expect("letter"), [tag.as_str()])]);
+    assert!(routing.remainder.is_empty(), "author routes to the outbox");
+    assert_eq!(routing.per_relay.len(), 1);
+    assert!(routing.per_relay.contains_key(&url()));
+    let pool = RelayPool::new(RelayOptions::default());
+    let out = pool
+        .fetch_routed(routing.per_relay, Duration::from_secs(10))
+        .await;
+    assert_eq!(out.events.len(), 1);
+    assert_eq!(out.events[0].id(), note.id());
+}
