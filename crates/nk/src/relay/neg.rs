@@ -4,7 +4,7 @@
 
 use negentropy::{Id, Negentropy, NegentropyStorageVector};
 
-use super::{Error, Result};
+use super::{Error, NegentropyError, Result};
 
 /// TS `DEFAULT_FRAME_SIZE_LIMIT` — matches `packages/nostr/src/nips/nip77.ts`.
 pub(crate) const FRAME_SIZE_LIMIT: u64 = 60_000;
@@ -45,13 +45,13 @@ impl NegSession {
             bytes.copy_from_slice(id.as_bytes());
             storage
                 .insert(ts.as_secs(), Id::from_byte_array(bytes))
-                .map_err(|e| Error::Transport(super::TransportError::new(e)))?;
+                .map_err(|e| Error::Negentropy(NegentropyError::new(e)))?;
         }
         storage
             .seal()
-            .map_err(|e| Error::Transport(super::TransportError::new(e)))?;
+            .map_err(|e| Error::Negentropy(NegentropyError::new(e)))?;
         let neg = Negentropy::owned(storage, frame_size_limit)
-            .map_err(|e| Error::Transport(super::TransportError::new(e)))?;
+            .map_err(|e| Error::Negentropy(NegentropyError::new(e)))?;
         Ok(Self {
             neg,
             done: false,
@@ -65,7 +65,7 @@ impl NegSession {
         let msg = self
             .neg
             .initiate()
-            .map_err(|e| Error::Transport(super::TransportError::new(e)))?;
+            .map_err(|e| Error::Negentropy(NegentropyError::new(e)))?;
         Ok(hex_lower(&msg))
     }
 
@@ -76,7 +76,7 @@ impl NegSession {
         let next = self
             .neg
             .reconcile_with_ids(&bytes, &mut self.have, &mut self.need)
-            .map_err(|e| Error::Transport(super::TransportError::new(e)))?;
+            .map_err(|e| Error::Negentropy(NegentropyError::new(e)))?;
         if let Some(msg) = next {
             return Ok(Some(hex_lower(&msg)));
         }
@@ -88,36 +88,20 @@ impl NegSession {
 }
 
 fn hex_lower(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    bytes
-        .iter()
-        .flat_map(|b| [b >> 4, b & 0x0f])
-        .map(|n| char::from(HEX.get(usize::from(n)).copied().unwrap_or(b'0')))
-        .collect()
+    faster_hex::hex_string(bytes)
 }
 
 fn hex_bytes(hex: &str) -> Result<Vec<u8>> {
-    if !hex.len().is_multiple_of(2) {
-        return Err(Error::Transport(super::TransportError::new(
-            std::io::Error::other("odd-length negentropy hex"),
-        )));
+    faster_hex::hex_decode_vec(hex.as_bytes())
+        .map_err(|e| Error::Negentropy(NegentropyError::new(e)))
+}
+
+impl std::fmt::Debug for NegSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NegSession")
+            .field("done", &self.done)
+            .finish_non_exhaustive()
     }
-    hex.as_bytes()
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|pair| {
-            std::str::from_utf8(pair)
-                .ok()
-                .and_then(|s| u8::from_str_radix(s, 16).ok())
-                .ok_or(())
-        })
-        .collect::<std::result::Result<Vec<u8>, ()>>()
-        .map_err(|()| {
-            Error::Transport(super::TransportError::new(std::io::Error::other(
-                "invalid negentropy hex",
-            )))
-        })
 }
 
 fn ids_to_events(ids: Vec<Id>) -> Vec<nk_core::EventId> {

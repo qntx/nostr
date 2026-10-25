@@ -79,6 +79,22 @@ async fn on_req(
     open.push((id.clone(), filters.to_vec()));
 }
 
+/// Decrements `conns` when the WebSocket loop exits.
+struct ConnGuard(Arc<AtomicUsize>);
+
+impl ConnGuard {
+    /// Returns a guard that decrements `conns` on drop.
+    fn new(conns: &Arc<AtomicUsize>) -> Self {
+        Self(Arc::clone(conns))
+    }
+}
+
+impl Drop for ConnGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 /// A per-connection challenge id.
 fn ulid_like() -> String {
     use std::sync::atomic::AtomicU64;
@@ -89,12 +105,7 @@ fn ulid_like() -> String {
 
 /// Lowercase hex, for negentropy wire messages.
 fn to_hex(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    bytes
-        .iter()
-        .flat_map(|b| [b >> 4, b & 0x0f])
-        .map(|n| char::from(HEX.get(usize::from(n)).copied().unwrap_or(b'0')))
-        .collect()
+    faster_hex::hex_string(bytes)
 }
 
 /// Builds the server-side negentropy for one `NEG-OPEN` filter.
@@ -119,17 +130,7 @@ fn server_neg_round(
     id: &SubscriptionId,
     message: &str,
 ) -> String {
-    let query = message
-        .as_bytes()
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .filter_map(|p| {
-            std::str::from_utf8(p)
-                .ok()
-                .and_then(|s| u8::from_str_radix(s, 16).ok())
-        })
-        .collect::<Vec<u8>>();
+    let query = faster_hex::hex_decode_vec(message.as_bytes()).unwrap_or_default();
     let out = neg.reconcile(&query).unwrap_or_default();
     format!(r#"["NEG-MSG","{}", "{}"]"#, id.as_str(), to_hex(&out))
 }
@@ -202,6 +203,9 @@ async fn on_client_frame(
     };
     match msg {
         ClientMessage::Event(event) => {
+            if hold.load(Ordering::Relaxed) {
+                return true;
+            }
             if auth.required.load(Ordering::Relaxed) && !auth.authed.load(Ordering::Relaxed) {
                 let frame = format!(
                     r#"["OK","{}",false,"auth-required: we only allow publishing to authenticated clients"]"#,
@@ -297,6 +301,7 @@ async fn on_client_frame(
     true
 }
 
+#[allow(clippy::too_many_arguments, reason = "per-connection state plumbing")]
 async fn serve_ws(
     mut ws: yawc::HttpWebSocket,
     store: Arc<MemoryStore>,
@@ -305,7 +310,12 @@ async fn serve_ws(
     relay_url: Arc<str>,
     mut hook_rx: broadcast::Receiver<Hook>,
     log: mpsc::Sender<String>,
+    conns: Arc<AtomicUsize>,
 ) {
+    // `connections()` counts live WebSocket sessions: one per upgraded
+    // socket, from the first frame until this loop exits.
+    conns.fetch_add(1, Ordering::Relaxed);
+    let _guard = ConnGuard::new(&conns);
     // Open subscriptions on this connection for live EVENT delivery.
     let mut open: Vec<(SubscriptionId, Vec<nk_core::Filter>)> = Vec::new();
     // Live server-side negentropy sessions keyed by NEG-OPEN id.
@@ -337,7 +347,7 @@ async fn serve_ws(
                 let Ok(text) = std::str::from_utf8(f.payload()) else {
                     continue;
                 };
-                drop(log.send(text.to_owned()).await);
+                drop(log.try_send(text.to_owned()));
                 if !on_client_frame(&mut ws, &store, &mut open, &mut negs, &hold, &auth, text).await {
                     return;
                 }
@@ -375,7 +385,6 @@ async fn serve_conn(
     log: mpsc::Sender<String>,
     conns: Arc<AtomicUsize>,
 ) {
-    conns.fetch_add(1, Ordering::Relaxed);
     let io = TokioIo::new(stream);
     let svc = service_fn(|req: Request<Incoming>| {
         std::future::ready(Ok::<_, Infallible>(serve_request(
@@ -386,6 +395,7 @@ async fn serve_conn(
             Arc::clone(&relay_url),
             rx.resubscribe(),
             log.clone(),
+            Arc::clone(&conns),
         )))
     });
     drop(
@@ -394,10 +404,10 @@ async fn serve_conn(
             .with_upgrades()
             .await,
     );
-    conns.fetch_sub(1, Ordering::Relaxed);
 }
 
 /// One HTTP request: upgrade it, then spawn the WebSocket loop.
+#[allow(clippy::too_many_arguments, reason = "per-connection state plumbing")]
 fn serve_request(
     mut req: Request<Incoming>,
     store: Arc<MemoryStore>,
@@ -406,12 +416,15 @@ fn serve_request(
     relay_url: Arc<str>,
     rx: broadcast::Receiver<Hook>,
     log: mpsc::Sender<String>,
+    conns: Arc<AtomicUsize>,
 ) -> Response<Empty<Bytes>> {
     match WebSocket::upgrade(&mut req) {
         Ok((resp, fut)) => {
             tokio::spawn(async move {
                 match fut.await {
-                    Ok(ws) => serve_ws(ws, store, hold, require_auth, relay_url, rx, log).await,
+                    Ok(ws) => {
+                        serve_ws(ws, store, hold, require_auth, relay_url, rx, log, conns).await;
+                    }
                     Err(e) => debug!("mock ws upgrade: {e}"),
                 }
             });
@@ -467,7 +480,7 @@ impl MockRelay {
         let relay_url: Arc<str> = Arc::from(url.as_str().to_owned());
         let url_accept = Arc::clone(&relay_url);
         let (hook_tx, _) = broadcast::channel::<Hook>(16);
-        let (log_tx, log_rx) = mpsc::channel::<String>(256);
+        let (log_tx, log_rx) = mpsc::channel::<String>(4096);
         let hook_for_accept = hook_tx.clone();
         let accept = tokio::spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
@@ -533,7 +546,7 @@ impl MockRelay {
 
     /// Holds or releases REQs: while held the mock records a REQ but sends
     /// neither stored events nor `EOSE` — tests answer it via `send_raw`.
-    pub fn set_hold_reqs(&self, hold: bool) {
+    pub fn set_hold(&self, hold: bool) {
         self.hold.store(hold, Ordering::Relaxed);
     }
 

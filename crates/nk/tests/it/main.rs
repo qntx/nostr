@@ -126,7 +126,7 @@ fn req_id(frame: &str) -> &str {
 #[tokio::test]
 async fn fetch_ends_on_closed() {
     let (mut mock, relay) = mock_and_relay().await;
-    mock.set_hold_reqs(true);
+    mock.set_hold(true);
     let relay2 = relay.clone();
     let fetch = tokio::spawn(async move {
         relay2
@@ -151,7 +151,7 @@ async fn fetch_ends_on_closed() {
 #[tokio::test]
 async fn subscribe_closed_by_relay() {
     let (mock, relay) = mock_and_relay().await;
-    mock.set_hold_reqs(true);
+    mock.set_hold(true);
     let mut sub = relay.subscribe(vec![Filter::new()]).await.expect("sub");
     mock.send_raw(&format!(
         r#"["CLOSED","{}","closed: by test"]"#,
@@ -167,17 +167,10 @@ async fn subscribe_closed_by_relay() {
 
 #[tokio::test]
 async fn fetch_ends_on_timeout() {
-    // A dead port: the REQ never reaches a relay, so no EOSE arrives and
-    // the deadline ends the fetch.
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind");
-    let addr = listener.local_addr().expect("addr");
-    drop(listener);
-    let relay = Relay::new(
-        &nk_core::RelayUrl::parse(&format!("ws://{addr}")).expect("url"),
-        RelayOptions::default(),
-    );
+    // A live-but-silent relay: the REQ goes out, nothing answers, and
+    // the fetch deadline ends it.
+    let (mock, relay) = mock_and_relay().await;
+    mock.set_hold(true);
     let out = relay
         .fetch(
             vec![Filter::new().kinds([Kind::new(42)])],
@@ -516,17 +509,25 @@ async fn drops_under_load_all_send_close() {
             .await
             .is_some()
     );
-    let ids: Vec<String> = subs.iter().map(|s| s.id().as_str().to_owned()).collect();
+    let ids: std::collections::HashSet<String> =
+        subs.iter().map(|s| s.id().as_str().to_owned()).collect();
     drop(subs);
-    for id in &ids {
-        let needle = format!("CLOSE\",\"{id}");
-        assert!(
-            mock.wait_for_frame(&needle, Duration::from_secs(5))
-                .await
-                .is_some(),
-            "CLOSE for {id} not received"
-        );
+    // The lagged/EOSE path can write a CLOSE out of drop order — collect
+    // the set rather than matching one needle at a time.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    let mut seen = std::collections::HashSet::new();
+    while seen.len() < ids.len() && tokio::time::Instant::now() < deadline {
+        let Ok(Some(text)) = tokio::time::timeout_at(deadline, mock.next_client_frame()).await
+        else {
+            break;
+        };
+        if let Some(rest) = text.strip_prefix(r#"["CLOSE",""#)
+            && let Some(id) = rest.strip_suffix(r#""]"#)
+        {
+            seen.insert(id.to_owned());
+        }
     }
+    assert_eq!(seen, ids, "missing CLOSEs");
 }
 
 #[tokio::test]
@@ -625,7 +626,7 @@ async fn count_returns_stored_matches() {
 #[tokio::test]
 async fn count_closed_surfaces_reason() {
     let (mut mock, relay) = mock_and_relay().await;
-    mock.set_hold_reqs(true);
+    mock.set_hold(true);
     let relay2 = relay.clone();
     let fetch = tokio::spawn(async move { relay2.count(vec![Filter::new()]).await });
     let req = mock
@@ -646,21 +647,14 @@ async fn count_closed_surfaces_reason() {
 
 #[tokio::test]
 async fn count_timeout() {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind");
-    let addr = listener.local_addr().expect("addr");
-    drop(listener);
-    let relay = Relay::new(
-        &nk_core::RelayUrl::parse(&format!("ws://{addr}")).expect("url"),
-        RelayOptions {
-            reconnect: false,
-            publish_timeout: Duration::from_millis(50),
-            ..RelayOptions::default()
-        },
-    );
+    // A live-but-silent relay: the COUNT goes out, no reply ever comes.
+    let (mock, relay) = mock_and_relay_with(|o| {
+        o.request_timeout = Duration::from_millis(50);
+    })
+    .await;
+    mock.set_hold(true);
     match relay.count(vec![Filter::new()]).await {
-        Err(nk::relay::Error::Timeout | nk::relay::Error::Disconnected) => {}
+        Err(nk::relay::Error::Timeout) => {}
         other => panic!("expected timeout, got {other:?}"),
     }
 }
@@ -723,7 +717,7 @@ async fn reconcile_identical_and_empty() {
 #[tokio::test]
 async fn reconcile_neg_err_surfaces_reason() {
     let (mut mock, relay) = mock_and_relay().await;
-    mock.set_hold_reqs(true);
+    mock.set_hold(true);
     let relay2 = relay.clone();
     let fetch = tokio::spawn(async move { relay2.reconcile(Filter::new(), vec![]).await });
     let req = mock
@@ -744,21 +738,13 @@ async fn reconcile_neg_err_surfaces_reason() {
 
 #[tokio::test]
 async fn reconcile_timeout() {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind");
-    let addr = listener.local_addr().expect("addr");
-    drop(listener);
-    let relay = Relay::new(
-        &nk_core::RelayUrl::parse(&format!("ws://{addr}")).expect("url"),
-        RelayOptions {
-            reconnect: false,
-            publish_timeout: Duration::from_millis(50),
-            ..RelayOptions::default()
-        },
-    );
+    let (mock, relay) = mock_and_relay_with(|o| {
+        o.request_timeout = Duration::from_millis(50);
+    })
+    .await;
+    mock.set_hold(true);
     match relay.reconcile(Filter::new(), vec![]).await {
-        Err(nk::relay::Error::Timeout | nk::relay::Error::Disconnected) => {}
+        Err(nk::relay::Error::Timeout) => {}
         other => panic!("expected timeout, got {other:?}"),
     }
 }
@@ -782,16 +768,264 @@ async fn reconcile_auth_retry_with_signer() {
 }
 
 #[tokio::test]
-async fn last_handle_drop_stops_driver() {
-    let (mock, relay) = mock_and_relay().await;
+async fn publish_times_out_without_ok() {
+    // The mock swallows the EVENT — no OK ever comes; the publish
+    // deadline fires.
+    let (mock, relay) = mock_and_relay_with(|o| {
+        o.request_timeout = Duration::from_millis(50);
+    })
+    .await;
+    mock.set_hold(true);
+    match relay.publish(&event("never", 1)).await {
+        Err(nk::relay::Error::Timeout) => {}
+        other => panic!("expected timeout, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn count_fails_fast_on_disconnect() {
+    // Held COUNT + a dropped socket: the waiter gets Disconnected well
+    // before the request timeout.
+    let (mut mock, relay) = mock_and_relay_with(|o| {
+        o.request_timeout = Duration::from_secs(30);
+        o.reconnect_min = Duration::from_secs(60);
+    })
+    .await;
+    mock.set_hold(true);
+    let relay2 = relay.clone();
+    let pending = tokio::spawn(async move { relay2.count(vec![Filter::new()]).await });
+    mock.wait_for_frame("COUNT", Duration::from_secs(2))
+        .await
+        .expect("COUNT frame");
+    mock.drop_connection();
+    match pending.await.expect("join") {
+        Err(nk::relay::Error::Disconnected) => {}
+        other => panic!("expected disconnected, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn reconcile_fails_fast_on_disconnect() {
+    let (mut mock, relay) = mock_and_relay_with(|o| {
+        o.request_timeout = Duration::from_secs(30);
+        o.reconnect_min = Duration::from_secs(60);
+    })
+    .await;
+    mock.set_hold(true);
+    let relay2 = relay.clone();
+    let pending = tokio::spawn(async move { relay2.reconcile(Filter::new(), vec![]).await });
+    mock.wait_for_frame("NEG-OPEN", Duration::from_secs(2))
+        .await
+        .expect("NEG-OPEN frame");
+    mock.drop_connection();
+    match pending.await.expect("join") {
+        Err(nk::relay::Error::Disconnected) => {}
+        other => panic!("expected disconnected, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_challenge_resets_on_reconnect() {
+    // After a drop + reconnect the relay issues a NEW challenge; the
+    // driver signs against it, not the stale one.
+    let (mut mock, relay) = mock_and_relay_with(|o| {
+        o.signer = Some(Arc::new(Keys::generate().expect("keys")));
+        o.reconnect_min = Duration::from_millis(10);
+        o.reconnect_max = Duration::from_millis(50);
+    })
+    .await;
+    mock.require_auth(true);
+    let ev = event("authed", 1);
+    relay.publish(&ev).await.expect("first publish authed");
+    let first_auth = mock
+        .wait_for_frame(r#""AUTH""#, Duration::from_secs(2))
+        .await
+        .expect("first AUTH frame");
+    mock.drop_connection();
+    // Reconnect — the new connection's challenge must arrive before any
+    // refused request can sign it. A subscribe is refused auth-required,
+    // which triggers the second sign.
+    relay.connect().await.expect("reconnect");
+    let sub = relay
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .await
+        .expect("sub");
+    let second_auth = mock
+        .wait_for_frame(r#""AUTH""#, Duration::from_secs(2))
+        .await
+        .expect("second AUTH frame");
+    assert_ne!(first_auth, second_auth, "challenge did not reset");
+    // And a publish after AUTH retries successfully.
+    relay
+        .publish(&event("second", 1))
+        .await
+        .expect("authed publish");
+    drop(sub);
+}
+
+#[tokio::test]
+async fn fetch_large_burst_is_complete() {
+    // 400 events against a subscription_capacity of 8 — the fetch
+    // accumulates in the waiter, independent of the stream channel.
+    let (_mock, relay) = mock_and_relay_with(|o| o.subscription_capacity = 8).await;
+    for i in 0..400u16 {
+        relay
+            .publish(&event(&format!("e{i}"), 1))
+            .await
+            .expect("publish");
+    }
+    let out = relay
+        .fetch(
+            vec![Filter::new().kinds([Kind::new(1)])],
+            Duration::from_secs(5),
+        )
+        .await
+        .expect("fetch");
+    assert_eq!(out.end, FetchEnd::Eose);
+    assert_eq!(out.events.len(), 400);
+}
+
+#[tokio::test]
+async fn fetch_fails_fast_when_unreachable() {
+    // Dead port + reconnect on: the fetch surfaces the connect error
+    // promptly instead of hanging for the fetch timeout.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("addr");
+    drop(listener);
+    let relay = Relay::new(
+        &nk_core::RelayUrl::parse(&format!("ws://{addr}")).expect("url"),
+        RelayOptions {
+            reconnect: true,
+            connect_timeout: Duration::from_millis(50),
+            ..RelayOptions::default()
+        },
+    );
+    let start = std::time::Instant::now();
+    let out = relay
+        .fetch(vec![Filter::new()], Duration::from_secs(30))
+        .await;
+    assert!(start.elapsed() < Duration::from_secs(5), "fetch hung");
+    assert!(
+        matches!(
+            out,
+            Err(nk::relay::Error::Transport(_) | nk::relay::Error::Timeout)
+        ),
+        "expected connect error, got {out:?}"
+    );
+}
+
+#[tokio::test]
+async fn oversized_message_disconnects() {
+    // The mock floods a frame larger than max_message_size; the client
+    // must drop the socket.
+    let (mock, relay) = mock_and_relay_with(|o| {
+        o.max_message_size = 1_024;
+        o.reconnect = false;
+    })
+    .await;
     relay.connect().await.expect("connect");
-    drop(relay);
-    // The driver exits; the mock sees the connection close.
+    mock.send_raw(&format!(r#"["NOTICE","{}"]"#, "x".repeat(4_096)));
+    // The oversized frame is refused — the socket drops for good.
     for _ in 0..40 {
-        if mock.connections() == 0 {
+        if relay.status() == RelayStatus::Disconnected {
             return;
         }
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
-    panic!("connection still open after last handle dropped");
+    panic!("oversized frame did not drop the connection");
+}
+
+#[tokio::test]
+async fn last_handle_drop_stops_driver() {
+    let (mock, relay) = mock_and_relay().await;
+    relay.connect().await.expect("connect");
+    let mut sub = relay
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .await
+        .expect("sub");
+    // The live WebSocket — not just the HTTP handshake — is counted.
+    for _ in 0..40 {
+        if mock.connections() == 1 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert_eq!(mock.connections(), 1, "expected one live ws session");
+    drop(relay);
+    // The driver exits; the mock sees the connection close.
+    for _ in 0..40 {
+        if mock.connections() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert_eq!(mock.connections(), 0, "connection still open");
+    // The open subscription ends with `Closed(RelayClosed)`.
+    match sub.next().await {
+        Some(SubscriptionEvent::Closed(CloseReason::RelayClosed)) => {}
+        other => panic!("expected Closed(RelayClosed), got {other:?}"),
+    }
+}
+
+/// A signer whose `sign_event` panics: AUTH wedging must fail the queue,
+/// not hang it.
+struct PanicSigner;
+
+impl std::fmt::Debug for PanicSigner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PanicSigner").finish()
+    }
+}
+
+impl nk_core::NostrSigner for PanicSigner {
+    fn public_key(
+        &self,
+    ) -> nk_core::BoxFuture<'_, Result<nk_core::PublicKey, nk_core::SignerError>> {
+        Box::pin(async { panic!("signer exploded") })
+    }
+
+    fn sign_event(
+        &self,
+        _unsigned: nk_core::UnsignedEvent,
+    ) -> nk_core::BoxFuture<'_, Result<Event, nk_core::SignerError>> {
+        Box::pin(async { panic!("signer exploded") })
+    }
+}
+
+#[tokio::test]
+async fn panicking_signer_fails_fast() {
+    let (mock, relay) = mock_and_relay_with(|o| {
+        o.signer = Some(Arc::new(PanicSigner));
+        o.request_timeout = Duration::from_millis(500);
+    })
+    .await;
+    mock.require_auth(true);
+    // The sign task panics — the JoinSet reports it, `sign_failed` runs,
+    // and the subscribe ends `Closed` with the original refusal reason.
+    let mut sub = relay
+        .subscribe(vec![Filter::new().kinds([Kind::new(1)])])
+        .await
+        .expect("sub");
+    let mut seen = None;
+    while let Some(item) = sub.next().await {
+        if let SubscriptionEvent::Closed(reason) = item {
+            seen = Some(reason);
+            break;
+        }
+    }
+    match seen {
+        Some(CloseReason::Relay(reason)) => {
+            assert!(reason.starts_with("auth-required:"), "{reason}");
+        }
+        other => panic!("expected Closed(Relay(auth-required:..)), got {other:?}"),
+    }
+    // A following count answers promptly — AUTH is not wedged.
+    match relay.count(vec![Filter::new()]).await {
+        Err(nk::relay::Error::Refused(reason)) => {
+            assert!(reason.starts_with("auth-required:"), "{reason}");
+        }
+        other => panic!("expected Refused(auth-required:..), got {other:?}"),
+    }
 }

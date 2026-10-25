@@ -40,14 +40,22 @@ pub(crate) struct Transport {
 }
 
 impl Transport {
-    /// Handshakes with `endpoint` inside `timeout`.
+    /// Handshakes with `endpoint` inside `timeout`, enforcing
+    /// `max_message_size` on inbound frames.
     ///
     /// # Errors
     ///
     /// [`Error::Timeout`] when the deadline expires;
     /// [`Error::Transport`] when the handshake fails.
-    pub(crate) async fn connect(endpoint: &Endpoint, timeout: std::time::Duration) -> Result<Self> {
-        let ws = tokio::time::timeout(timeout, WebSocket::connect(endpoint.0.clone()))
+    pub(crate) async fn connect(
+        endpoint: &Endpoint,
+        timeout: std::time::Duration,
+        max_message_size: usize,
+    ) -> Result<Self> {
+        let builder = WebSocket::connect(endpoint.0.clone()).with_options(
+            yawc::Options::default().with_limits(max_message_size, 2 * max_message_size),
+        );
+        let ws = tokio::time::timeout(timeout, builder)
             .await
             .map_err(|_| Error::Timeout)?
             .map_err(|e| Error::Transport(TransportError::new(e)))?;

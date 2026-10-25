@@ -29,7 +29,9 @@ nk-core      = { workspace = true, features = ["std", "clock", "os-rng"] }
 tokio        = { workspace = true, features = ["rt", "sync", "time", "macros"] }
 yawc         = { workspace = true }
 futures-util = { workspace = true }
+faster-hex   = { workspace = true }
 negentropy   = { workspace = true }
+tokio-util   = { workspace = true }
 tracing      = { workspace = true }
 thiserror    = { workspace = true }
 url          = { workspace = true }

@@ -1000,6 +1000,7 @@ checksum = "a3d66662cb5ca384d4991509755ed5a42dd8e31c4282bf881938e506fc3146ec"
 name = "nk"
 version = "0.14.0"
 dependencies = [
+ "faster-hex",
  "futures-util",
  "http-body-util",
  "hyper",
@@ -1010,6 +1011,7 @@ dependencies = [
  "nk-store",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
  "url",
  "yawc",
@@ -1673,6 +1675,7 @@ dependencies = [
  "futures-sink",
  "libc",
  "pin-project-lite",
+ "slab",
  "tokio",
 ]
 

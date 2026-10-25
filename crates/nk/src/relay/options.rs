@@ -10,8 +10,9 @@ use std::time::Duration;
 pub struct RelayOptions {
     /// Deadline for the WebSocket handshake.
     pub connect_timeout: Duration,
-    /// Deadline for a publish's `OK`.
-    pub publish_timeout: Duration,
+    /// Deadline for one-shot replies: a publish's `OK`, a `COUNT`, a
+    /// `NEG` sync.
+    pub request_timeout: Duration,
     /// Idle interval between WebSocket pings.
     pub ping_interval: Duration,
     /// Maximum time to wait for a pong before reconnecting.
@@ -35,7 +36,7 @@ impl Default for RelayOptions {
     fn default() -> Self {
         Self {
             connect_timeout: Duration::from_secs(5),
-            publish_timeout: Duration::from_secs(10),
+            request_timeout: Duration::from_secs(10),
             ping_interval: Duration::from_secs(30),
             pong_deadline: Duration::from_secs(10),
             reconnect: true,

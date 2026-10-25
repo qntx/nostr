@@ -1,33 +1,87 @@
-//! The driver task: owns the socket, the session, and the select loop.
+//! The driver task: owns the socket (through [`Connection`]), the waiter
+//! tables, the deadline queue, and the select loop. Protocol decisions
+//! live in [`Session`]; this module routes its [`Out`]s.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use nk_core::{ClientMessage, Event, EventBuilder, EventId, Filter, RelayMessage, SubscriptionId};
+use nk_core::{ClientMessage, CountResult, Event, EventId, Filter, RelayUrl, SubscriptionId};
 use tokio::sync::{mpsc, oneshot, watch};
+use tokio::task::JoinSet;
+use tokio_util::time::{DelayQueue, delay_queue};
 use tracing::debug;
 
-use super::neg::{NegSession, Reconciliation};
-use super::session::{Out, Retry, Session};
+use super::connection::Connection;
+use super::neg::Reconciliation;
+use super::session::{Out, Session};
 use super::subscription::{CloseReason, Subscription, SubscriptionEvent, channel_pair};
-use super::transport::{Endpoint, Inbound, Transport};
+use super::transport::{Endpoint, Inbound};
 use super::{
     Cmd, Error, FetchEnd, FetchOutcome, PublishOutcome, RelayOptions, RelayStatus, Result,
-    TransportError,
 };
 
-type PublishWaiters = Vec<oneshot::Sender<Result<PublishOutcome>>>;
-
-/// A live `NEG-OPEN`: the session, its waiter, and the retry context.
-struct NegEntry {
-    session: NegSession,
-    reply: oneshot::Sender<Result<Reconciliation>>,
-    filter: Filter,
-    items: Vec<(nk_core::Timestamp, EventId)>,
-    out: Reconciliation,
+/// A request's one-shot deadline in the [`DelayQueue`].
+#[derive(Debug)]
+enum Deadline {
+    /// A subscription-id-keyed request (fetch/count/reconcile).
+    Request(SubscriptionId),
+    /// A pending publish's `OK` deadline.
+    Publish(EventId),
 }
+
+/// One live request's driver-side reply channel.
+enum Waiter {
+    /// A subscription's event channel.
+    Stream(SubHandles),
+    /// A fetch accumulating events in place.
+    Fetch {
+        /// Events collected so far.
+        events: Vec<Event>,
+        /// The caller's reply.
+        reply: oneshot::Sender<Result<FetchOutcome>>,
+        /// The deadline-queue entry.
+        deadline: delay_queue::Key,
+    },
+    /// A `COUNT` awaiting `Counted`.
+    Count {
+        /// The caller's reply.
+        reply: oneshot::Sender<Result<CountResult>>,
+        /// The deadline-queue entry.
+        deadline: delay_queue::Key,
+    },
+    /// A reconcile awaiting `Reconciled`.
+    Reconcile {
+        /// The caller's reply.
+        reply: oneshot::Sender<Result<Reconciliation>>,
+        /// The deadline-queue entry.
+        deadline: delay_queue::Key,
+    },
+}
+
+impl Waiter {
+    /// Terminates this waiter with `error`; a stream ends with its
+    /// terminal mark instead.
+    fn fail(self, error: Error) {
+        match self {
+            Self::Stream(h) => Driver::mark_terminal(h, CloseReason::RelayClosed),
+            Self::Fetch { reply, .. } => drop(reply.send(Err(error))),
+            Self::Count { reply, .. } => drop(reply.send(Err(error))),
+            Self::Reconcile { reply, .. } => drop(reply.send(Err(error))),
+        }
+    }
+}
+
+/// A pending publish's reply fan-out.
+struct PublishWaiter {
+    /// Everyone who joined this publish.
+    replies: Vec<oneshot::Sender<Result<PublishOutcome>>>,
+    /// The deadline-queue entry.
+    deadline: delay_queue::Key,
+}
+
+/// What a finished signing task yields.
+type SignResult = (String, Result<Event, nk_core::SignerError>);
 
 /// Per-subscription channel handles.
 struct SubHandles {
@@ -37,148 +91,66 @@ struct SubHandles {
     terminal: Arc<std::sync::Mutex<Option<CloseReason>>>,
 }
 
-/// Fails every pending publish with `Disconnected` after a socket drop.
-fn fail_pending(
-    session: &mut Session,
-    publishes: &mut HashMap<EventId, PublishWaiters>,
-    pending_events: &mut HashMap<EventId, Event>,
-) {
-    for id in session.take_pending() {
-        pending_events.remove(&id);
-        if let Some(waiters) = publishes.remove(&id) {
-            for w in waiters {
-                drop(w.send(Err(Error::Disconnected)));
-            }
-        }
-    }
-}
-
-/// Handshakes once inside the connect timeout.
-async fn connect_once(url: &Endpoint, options: &RelayOptions) -> Result<Transport> {
-    Transport::connect(url, options.connect_timeout).await
-}
-
-/// Replays every open `REQ` after (re)connect.
-async fn replay(session: &Session, ws: &mut Transport) {
-    for (id, filters) in session.replay_reqs() {
-        drop(
-            ws.send(&ClientMessage::Req {
-                subscription_id: Cow::Owned(id),
-                filters: Cow::Owned(filters),
-            })
-            .await,
-        );
-    }
-}
-
-/// The detached fetch collector: drains the sub's stream until `EOSE`,
-/// `CLOSED`, or the deadline.
-async fn collect_fetch(
-    rx: &mut mpsc::Receiver<SubscriptionEvent>,
-    terminal: &std::sync::Mutex<Option<CloseReason>>,
-    timeout: Duration,
-) -> FetchOutcome {
-    let mut events = Vec::new();
-    let deadline = tokio::time::Instant::now() + timeout;
-    loop {
-        match tokio::time::timeout_at(deadline, rx.recv()).await {
-            Ok(Some(SubscriptionEvent::Event(e))) => events.push(e),
-            Ok(Some(SubscriptionEvent::Eose)) => {
-                return FetchOutcome {
-                    events,
-                    end: FetchEnd::Eose,
-                };
-            }
-            Ok(Some(SubscriptionEvent::Closed(CloseReason::Relay(r)))) => {
-                return FetchOutcome {
-                    events,
-                    end: FetchEnd::Closed(r),
-                };
-            }
-            Ok(Some(SubscriptionEvent::Closed(_))) | Err(_) => {
-                return FetchOutcome {
-                    events,
-                    end: FetchEnd::Timeout,
-                };
-            }
-            // Channel end without a terminal item: the driver's mark.
-            Ok(None) => {
-                let reason = terminal
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .take();
-                let end = match reason {
-                    Some(CloseReason::Relay(r)) => FetchEnd::Closed(r),
-                    Some(_) | None => FetchEnd::Timeout,
-                };
-                return FetchOutcome { events, end };
-            }
-        }
-    }
-}
-
-/// Randomized ±25% of `base` so a fleet doesn't reconnect in lockstep.
-fn jittered(base: Duration) -> Duration {
-    use nk_core::rand_core::TryRng;
-    let mut rng = nk_core::SysRng;
-    let mut buf = [0u8; 8];
-    let frac = rng
-        .try_fill_bytes(&mut buf)
-        .map_or(25, |()| (u64::from_le_bytes(buf) % 51) as u32);
-    base.mul_f64(0.75 + f64::from(frac) / 100.0)
-}
-
 /// Shared driver state threaded through the per-command handlers.
 struct Driver {
     session: Session,
+    conn: Connection,
+    waiters: HashMap<SubscriptionId, Waiter>,
+    publishes: HashMap<EventId, PublishWaiter>,
+    /// One queue for every request/publish deadline.
+    deadlines: DelayQueue<Deadline>,
+    /// Off-loop AUTH signing; results arrive through the select loop.
+    signing: JoinSet<SignResult>,
     /// Drop-side `CLOSE` requests — unbounded, always delivered.
     drops: mpsc::UnboundedReceiver<SubscriptionId>,
-    /// Sender side — handed to each new .
+    /// Sender side — handed to each new [`Subscription`].
     drop_tx: mpsc::UnboundedSender<SubscriptionId>,
-    subs: HashMap<SubscriptionId, SubHandles>,
-    publishes: HashMap<EventId, PublishWaiters>,
-    /// The `EVENT` payload per pending publish — needed to resend after
-    /// an `auth-required:` + `AUTH` retry.
-    pending_events: HashMap<EventId, Event>,
-    ws: Option<Transport>,
-    cmd: mpsc::Sender<Cmd>,
-    url: Option<Endpoint>,
-    /// The relay url text for `EventBuilder::auth`.
-    url_string: String,
+    /// The relay url — `EventBuilder::auth` takes it unchanged.
+    relay_url: RelayUrl,
     options: RelayOptions,
     status: watch::Sender<RelayStatus>,
-    /// Latest AUTH challenge and whether it has been answered.
-    challenge: Option<(String, bool)>,
-    /// The AUTH event id awaiting its `OK`.
-    auth_ok_id: Option<EventId>,
-    /// COUNT id → waiter for `Out::Counted` (or its `CLOSED` reason).
-    counts: HashMap<SubscriptionId, oneshot::Sender<Result<nk_core::CountResult>>>,
-    /// `(retry, fallback)` requests queued behind the in-flight AUTH.
-    auth_pending: Option<Vec<(Retry, Out)>>,
-    /// Live NEG sessions by id.
-    negs: HashMap<SubscriptionId, NegEntry>,
-    backoff: Duration,
-    reconnect_at: Option<tokio::time::Instant>,
-    /// Deadline after the last ping with no inbound frame.
-    pong_deadline: Option<tokio::time::Instant>,
     next_sub: u64,
 }
 
 impl Driver {
-    /// The single disconnect path: drop the socket, fail pending publishes,
-    /// and (when enabled) arm the jittered backoff reconnect.
+    /// The single disconnect path: drop the socket, fail every one-shot
+    /// waiter, and let [`Connection`] arm the backoff.
     fn disconnect(&mut self) {
-        self.ws = None;
-        self.pong_deadline = None;
+        self.conn.disconnect();
         self.status.send_replace(RelayStatus::Disconnected);
-        fail_pending(
-            &mut self.session,
-            &mut self.publishes,
-            &mut self.pending_events,
-        );
-        if self.options.reconnect {
-            self.reconnect_at = Some(tokio::time::Instant::now() + jittered(self.backoff));
-            self.backoff = (self.backoff * 2).min(self.options.reconnect_max);
+        let lost = self.session.disconnected();
+        for id in lost.requests {
+            self.fail_waiter(&id, Error::Disconnected);
+        }
+        for id in lost.publishes {
+            self.fail_publish(&id);
+        }
+    }
+
+    /// Connects when the socket is down; replays open `REQ`s on success.
+    /// A replay write failure is a disconnect, surfaced to the caller.
+    async fn ensure_connected(&mut self) -> Result<()> {
+        if self.conn.is_open() {
+            return Ok(());
+        }
+        self.status.send_replace(RelayStatus::Connecting);
+        match self.conn.connect().await {
+            Ok(()) => {
+                self.status.send_replace(RelayStatus::Connected);
+                self.replay().await
+            }
+            Err(e) => {
+                self.disconnect();
+                Err(e)
+            }
+        }
+    }
+
+    /// Writes one message; a failure is a disconnect.
+    async fn write(&mut self, msg: &ClientMessage<'_>) {
+        if let Err(e) = self.conn.send(msg).await {
+            debug!("send failed: {e}");
+            self.disconnect();
         }
     }
 
@@ -188,99 +160,83 @@ impl Driver {
         SubscriptionId::from(self.next_sub)
     }
 
-    /// Connects if the socket is down; replays open `REQ`s on success.
-    async fn ensure_connected(&mut self) -> Result<()> {
-        if self.ws.is_some() {
-            return Ok(());
-        }
-        let Some(url) = self.url.clone() else {
-            self.disconnect();
-            return Err(Error::InvalidUrl);
-        };
-        self.status.send_replace(RelayStatus::Connecting);
-        match connect_once(&url, &self.options).await {
-            Ok(mut sock) => {
-                self.status.send_replace(RelayStatus::Connected);
-                self.backoff = self.options.reconnect_min;
-                self.reconnect_at = None;
-                replay(&self.session, &mut sock).await;
-                self.ws = Some(sock);
-                Ok(())
+    /// Arms a request deadline; returns its queue key.
+    fn arm(&mut self, id: SubscriptionId, dur: Duration) -> delay_queue::Key {
+        self.deadlines
+            .insert_at(Deadline::Request(id), tokio::time::Instant::now() + dur)
+    }
+
+    /// Arms a publish deadline; returns its queue key.
+    fn arm_publish(&mut self, id: EventId, dur: Duration) -> delay_queue::Key {
+        self.deadlines
+            .insert_at(Deadline::Publish(id), tokio::time::Instant::now() + dur)
+    }
+
+    /// Removes the waiter for `id`, dropping its queue entry.
+    fn take_waiter(&mut self, id: &SubscriptionId) -> Option<Waiter> {
+        let w = self.waiters.remove(id)?;
+        match &w {
+            Waiter::Fetch { deadline, .. }
+            | Waiter::Count { deadline, .. }
+            | Waiter::Reconcile { deadline, .. } => {
+                drop(self.deadlines.try_remove(deadline));
             }
-            Err(e) => {
-                self.disconnect();
-                Err(e)
+            Waiter::Stream(_) => {}
+        }
+        Some(w)
+    }
+
+    /// Removes the publish waiter for `id`, dropping its queue entry.
+    fn take_publish(&mut self, id: &EventId) -> Option<PublishWaiter> {
+        let w = self.publishes.remove(id)?;
+        drop(self.deadlines.try_remove(&w.deadline));
+        Some(w)
+    }
+
+    /// Fails a request waiter with `error` and drops its deadline.
+    fn fail_waiter(&mut self, id: &SubscriptionId, error: Error) {
+        if let Some(w) = self.take_waiter(id) {
+            w.fail(error);
+        }
+    }
+
+    /// Fails a publish's waiters with `Disconnected` (the only caller
+    /// path) and drops its deadline.
+    fn fail_publish(&mut self, id: &EventId) {
+        if let Some(w) = self.take_publish(id) {
+            for reply in w.replies {
+                drop(reply.send(Err(Error::Disconnected)));
             }
         }
     }
 
-    /// Writes a client message; a send failure drops the socket through
-    /// [`Driver::disconnect`].
-    async fn write(&mut self, msg: ClientMessage<'_>) -> Result<()> {
-        let Some(sock) = self.ws.as_mut() else {
-            return Err(Error::Disconnected);
-        };
-        match sock.send(&msg).await {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                self.disconnect();
-                Err(e)
-            }
+    /// Ends a stream waiter with the terminal mark, dropping its sender.
+    fn mark_terminal(h: SubHandles, reason: CloseReason) {
+        if let Ok(mut t) = h.terminal.lock() {
+            *t = Some(reason);
         }
+        drop(h.tx);
     }
 
-    /// Sends a `REQ` (no-op while disconnected — replay covers it).
-    async fn req(&mut self, id: &SubscriptionId, filters: &[Filter]) -> Result<()> {
-        if self.ws.is_none() {
-            return Ok(());
-        }
-        self.write(ClientMessage::Req {
-            subscription_id: Cow::Borrowed(id),
-            filters: Cow::Borrowed(filters),
-        })
-        .await
-    }
-
-    /// Sends a `COUNT` (no-op while disconnected).
-    async fn count(&mut self, id: &SubscriptionId, filters: &[Filter]) -> Result<()> {
-        if self.ws.is_none() {
-            return Ok(());
-        }
-        self.write(ClientMessage::Count {
-            subscription_id: Cow::Borrowed(id),
-            filters: Cow::Borrowed(filters),
-        })
-        .await
-    }
-
-    /// Sends a `CLOSE` (no-op while disconnected).
-    async fn close(&mut self, id: &SubscriptionId) -> Result<()> {
-        if self.ws.is_none() {
-            return Ok(());
-        }
-        self.write(ClientMessage::Close(Cow::Borrowed(id))).await
-    }
-
-    /// Connects now and reports the handshake's real error.
+    /// `Cmd::Connect` — handshake now, report the real error.
     async fn on_connect(&mut self, reply: oneshot::Sender<Result<()>>) {
         drop(reply.send(self.ensure_connected().await));
     }
 
-    /// Registers the subscription. With reconnect enabled a dead socket
-    /// just means the `REQ` replays later; without it a failed connect
-    /// attempt propagates the error.
+    /// `Cmd::Subscribe` — registers the sub; with reconnect enabled a dead
+    /// socket just means the `REQ` replays later.
     async fn on_subscribe(
         &mut self,
         filters: Vec<Filter>,
         reply: oneshot::Sender<Result<Subscription>>,
     ) {
         let id = self.alloc_sub_id();
-        let was_connected = self.ws.is_some();
-        self.session.add_sub(id.clone(), filters.clone());
+        let msg = self.session.open_sub(&id, filters);
+        let was_connected = self.conn.is_open();
         if let Err(e) = self.ensure_connected().await
             && !self.options.reconnect
         {
-            let _ = self.session.close_sub(&id);
+            drop(self.session.close(&id));
             drop(reply.send(Err(e)));
             return;
         }
@@ -289,365 +245,197 @@ impl Driver {
             self.drop_tx.clone(),
             self.options.subscription_capacity,
         );
-        self.subs.insert(id.clone(), SubHandles { tx, terminal });
-        // A socket that was already open needs the REQ written now; a fresh
-        // connect got it through replay.
+        self.waiters
+            .insert(id, Waiter::Stream(SubHandles { tx, terminal }));
         if was_connected {
-            drop(self.req(&id, &filters).await);
+            self.write(&msg).await;
         }
         drop(reply.send(Ok(sub)));
     }
 
-    /// NIP-45 count: one `COUNT`, one waiter, `publish_timeout` deadline.
-    async fn on_count(
-        &mut self,
-        filters: Vec<Filter>,
-        reply: oneshot::Sender<Result<nk_core::CountResult>>,
-    ) {
-        let id = self.alloc_sub_id();
-        self.session.add_count(id.clone(), filters.clone());
-        drop(self.ensure_connected().await);
-        let (tx, rx) = oneshot::channel();
-        self.counts.insert(id.clone(), tx);
-        drop(self.count(&id, &filters).await);
-        let timeout = self.options.publish_timeout;
-        tokio::spawn(async move {
-            let out = match tokio::time::timeout(timeout, rx).await {
-                Ok(Ok(r)) => r,
-                Ok(Err(_)) => Err(Error::Disconnected),
-                Err(_) => Err(Error::Timeout),
-            };
-            drop(reply.send(out));
-        });
-    }
-
-    /// NIP-77: build the session, send `NEG-OPEN`, arm the timeout.
-    async fn on_reconcile(
-        &mut self,
-        filter: Filter,
-        items: Vec<(nk_core::Timestamp, EventId)>,
-        reply: oneshot::Sender<Result<Reconciliation>>,
-    ) {
-        let id = self.alloc_sub_id();
-        let mut session = match NegSession::new(&items) {
-            Ok(s) => s,
-            Err(e) => {
-                drop(reply.send(Err(e)));
-                return;
-            }
-        };
-        let msg = match session.initiate() {
-            Ok(m) => m,
-            Err(e) => {
-                drop(reply.send(Err(e)));
-                return;
-            }
-        };
-        let _ = self.session.add_neg(id.clone());
-        self.negs.insert(
-            id.clone(),
-            NegEntry {
-                session,
-                reply,
-                filter: filter.clone(),
-                items,
-                out: Reconciliation::default(),
-            },
-        );
-        drop(self.ensure_connected().await);
-        drop(
-            self.write(ClientMessage::NegOpen {
-                subscription_id: Cow::Borrowed(&id),
-                filter: Cow::Borrowed(&filter),
-                message: Cow::Borrowed(&*msg),
-            })
-            .await,
-        );
-        let tx = self.cmd.clone();
-        let timeout = self.options.publish_timeout;
-        tokio::spawn(async move {
-            tokio::time::sleep(timeout).await;
-            drop(tx.send(Cmd::NegTimeout { id }).await);
-        });
-    }
-
-    /// One `NEG-MSG` round on `id`.
-    async fn on_neg_msg(&mut self, id: &SubscriptionId, message: &str) {
-        let Some(entry) = self.negs.get_mut(id) else {
-            return;
-        };
-        match entry.session.on_msg(message, &mut entry.out) {
-            Ok(Some(next)) => {
-                drop(
-                    self.write(ClientMessage::NegMsg {
-                        subscription_id: Cow::Borrowed(id),
-                        message: Cow::Borrowed(&*next),
-                    })
-                    .await,
-                );
-            }
-            Ok(None) => {
-                let Some(done) = self.negs.remove(id) else {
-                    return;
-                };
-                self.session_close_neg(id);
-                drop(self.write(ClientMessage::NegClose(Cow::Borrowed(id))).await);
-                drop(done.reply.send(Ok(done.out)));
-            }
-            Err(e) => {
-                let Some(failed) = self.negs.remove(id) else {
-                    return;
-                };
-                drop(failed.reply.send(Err(e)));
-            }
-        }
-    }
-
-    /// Removes a neg id from the session table.
-    fn session_close_neg(&mut self, id: &SubscriptionId) {
-        self.session.close_neg(id);
-    }
-
-    /// `NEG-ERR` — auth-required retries, else the reason surfaces.
-    fn on_neg_err(&mut self, id: &SubscriptionId, message: &str) {
-        let Some(entry) = self.negs.remove(id) else {
-            return;
-        };
-        if message.starts_with("auth-required:") && self.challenge.is_some() {
-            let retry = Retry::Neg {
-                id: id.clone(),
-                filter: entry.filter.clone(),
-                items: entry.items.clone(),
-            };
-            let fallback = Out::NegErr {
-                id: id.clone(),
-                reason: message.to_owned(),
-            };
-            self.negs.insert(id.clone(), entry);
-            self.on_auth_required(retry, fallback);
-            return;
-        }
-        drop(entry.reply.send(Err(Error::Refused(message.to_owned()))));
-    }
-
-    /// A `CLOSED` on a neg id — same auth/Refused routing as `NEG-ERR`.
-    fn on_neg_closed(&mut self, id: &SubscriptionId, reason: &str) {
-        let Some(entry) = self.negs.remove(id) else {
-            return;
-        };
-        if reason.starts_with("auth-required:") && self.challenge.is_some() {
-            let retry = Retry::Neg {
-                id: id.clone(),
-                filter: entry.filter.clone(),
-                items: entry.items.clone(),
-            };
-            let fallback = Out::NegErr {
-                id: id.clone(),
-                reason: reason.to_owned(),
-            };
-            self.negs.insert(id.clone(), entry);
-            self.on_auth_required(retry, fallback);
-            return;
-        }
-        drop(entry.reply.send(Err(Error::Refused(reason.to_owned()))));
-    }
-
-    /// Rebuilds a neg session after a good `AUTH`.
-    async fn retry_neg(
-        &mut self,
-        id: SubscriptionId,
-        filter: Filter,
-        items: Vec<(nk_core::Timestamp, EventId)>,
-    ) {
-        let Some(entry) = self.negs.get_mut(&id) else {
-            return;
-        };
-        let Ok(mut session) = NegSession::new(&items) else {
-            return;
-        };
-        let Ok(msg) = session.initiate() else {
-            return;
-        };
-        entry.session = session;
-        let _ = self.session.add_neg(id.clone());
-        drop(
-            self.write(ClientMessage::NegOpen {
-                subscription_id: Cow::Borrowed(&id),
-                filter: Cow::Borrowed(&filter),
-                message: Cow::Borrowed(&*msg),
-            })
-            .await,
-        );
-    }
-
-    /// The reconcile deadline hit — end the session with `Timeout`.
-    async fn on_neg_timeout(&mut self, id: SubscriptionId) {
-        let Some(entry) = self.negs.remove(&id) else {
-            return;
-        };
-        drop(
-            self.write(ClientMessage::NegClose(Cow::Borrowed(&id)))
-                .await,
-        );
-        drop(entry.reply.send(Err(Error::Timeout)));
-    }
-
-    /// Sends `EVENT`; fails fast with `Disconnected` on a dead socket.
-    async fn on_publish(&mut self, event: Event, reply: oneshot::Sender<Result<PublishOutcome>>) {
-        drop(self.ensure_connected().await);
-        if self.ws.is_none() {
-            drop(reply.send(Err(Error::Disconnected)));
-            return;
-        }
-        if !self.session.add_pending(event.id()) {
-            self.publishes.entry(event.id()).or_default().push(reply);
-            return;
-        }
-        self.publishes.insert(event.id(), vec![reply]);
-        self.pending_events.insert(event.id(), event.clone());
-        let r = self
-            .write(ClientMessage::Event(Cow::Borrowed(&event)))
-            .await;
-        if r.is_err() {
-            // The publish is now a failed pending entry; disconnect already
-            // failed every waiter.
-        }
-    }
-
-    /// Unbounded, lossless drop path.
+    /// `Cmd::Fetch` — a one-shot bounded read; fails fast when the socket
+    /// can't connect.
     async fn on_fetch(
         &mut self,
         filters: Vec<Filter>,
         timeout: Duration,
         reply: oneshot::Sender<Result<FetchOutcome>>,
     ) {
-        let id = self.alloc_sub_id();
-        let was_connected = self.ws.is_some();
-        self.session.add_sub(id.clone(), filters.clone());
-        if let Err(e) = self.ensure_connected().await
-            && !self.options.reconnect
-        {
-            let _ = self.session.close_sub(&id);
+        if let Err(e) = self.ensure_connected().await {
             drop(reply.send(Err(e)));
             return;
         }
-        let (tx, mut rx) = mpsc::channel(256);
-        let terminal = Arc::new(std::sync::Mutex::new(None));
-        self.subs.insert(
-            id.clone(),
-            SubHandles {
-                tx,
-                terminal: Arc::clone(&terminal),
+        let id = self.alloc_sub_id();
+        let msg = self.session.open_fetch(&id, filters);
+        let deadline = self.arm(id.clone(), timeout);
+        self.waiters.insert(
+            id,
+            Waiter::Fetch {
+                events: Vec::new(),
+                reply,
+                deadline,
             },
         );
-        if was_connected {
-            drop(self.req(&id, &filters).await);
+        self.write(&msg).await;
+    }
+
+    /// `Cmd::Publish` — fails fast when the socket can't connect; a join
+    /// on an in-flight id shares the same deadline.
+    async fn on_publish(&mut self, event: Event, reply: oneshot::Sender<Result<PublishOutcome>>) {
+        if let Err(e) = self.ensure_connected().await {
+            drop(reply.send(Err(e)));
+            return;
         }
-        let cmd = self.cmd.clone();
-        tokio::spawn(async move {
-            let outcome = collect_fetch(&mut rx, &terminal, timeout).await;
-            drop(cmd.send(Cmd::CloseSub { id }).await);
-            drop(reply.send(Ok(outcome)));
-        });
-    }
-
-    /// Ends the subscription locally and sends `CLOSE`.
-    async fn on_close_sub(&mut self, id: SubscriptionId) {
-        self.subs.remove(&id);
-        let _ = self.session.close_sub(&id);
-        drop(self.close(&id).await);
-    }
-
-    /// Terminal: every subscription ends `Closed(RelayClosed)`.
-    async fn on_close(&mut self, reply: oneshot::Sender<()>) {
-        self.status.send_replace(RelayStatus::Closed);
-        self.reconnect_at = None;
-        for (_, h) in self.subs.drain() {
-            if let Ok(mut t) = h.terminal.lock() {
-                *t = Some(CloseReason::RelayClosed);
+        let Some(msg) = self.session.publish(event.clone()) else {
+            // Join the in-flight publish — same waiters, same deadline.
+            if let Some(w) = self.publishes.get_mut(&event.id()) {
+                w.replies.push(reply);
             }
-            drop(h.tx);
+            return;
+        };
+        let deadline = self.arm_publish(event.id(), self.options.request_timeout);
+        self.publishes.insert(
+            event.id(),
+            PublishWaiter {
+                replies: vec![reply],
+                deadline,
+            },
+        );
+        self.write(&msg).await;
+    }
+
+    /// `Cmd::Count` — one `COUNT`, one waiter, `request_timeout` deadline.
+    async fn on_count(
+        &mut self,
+        filters: Vec<Filter>,
+        reply: oneshot::Sender<Result<CountResult>>,
+    ) {
+        if let Err(e) = self.ensure_connected().await {
+            drop(reply.send(Err(e)));
+            return;
         }
-        if let Some(mut sock) = self.ws.take() {
-            sock.close().await;
+        let id = self.alloc_sub_id();
+        let msg = self.session.open_count(&id, filters);
+        let deadline = self.arm(id.clone(), self.options.request_timeout);
+        self.waiters.insert(id, Waiter::Count { reply, deadline });
+        self.write(&msg).await;
+    }
+
+    /// `Cmd::Reconcile` — a NIP-77 sync; `request_timeout` deadline.
+    async fn on_reconcile(
+        &mut self,
+        filter: Filter,
+        items: Vec<(nk_core::Timestamp, EventId)>,
+        reply: oneshot::Sender<Result<Reconciliation>>,
+    ) {
+        if let Err(e) = self.ensure_connected().await {
+            drop(reply.send(Err(e)));
+            return;
         }
+        let id = self.alloc_sub_id();
+        let msg = match self.session.open_neg(id.clone(), filter, items) {
+            Ok(m) => m,
+            Err(e) => {
+                drop(reply.send(Err(e)));
+                return;
+            }
+        };
+        let deadline = self.arm(id.clone(), self.options.request_timeout);
+        self.waiters
+            .insert(id, Waiter::Reconcile { reply, deadline });
+        self.write(&msg).await;
+    }
+
+    /// `Cmd::Close` — terminal: streams end `Closed(RelayClosed)` and the
+    /// socket closes. Returns `false` so the loop exits.
+    async fn on_close(&mut self, reply: oneshot::Sender<()>) {
+        self.shutdown().await;
         if reply.send(()).is_err() {
             debug!("close reply receiver dropped");
         }
     }
 
-    /// Forwards `EOSE` to the subscription's stream.
-    fn send_eose(&self, id: &SubscriptionId) {
-        if let Some(h) = self.subs.get(id) {
-            drop(h.tx.try_send(SubscriptionEvent::Eose));
+    /// The shared teardown: terminal marks, socket close, status.
+    async fn shutdown(&mut self) {
+        self.status.send_replace(RelayStatus::Closed);
+        self.deadlines.clear();
+        for (_, w) in self.waiters.drain() {
+            w.fail(Error::Closed);
+        }
+        for (_, w) in self.publishes.drain() {
+            for reply in w.replies {
+                drop(reply.send(Err(Error::Closed)));
+            }
+        }
+        self.conn.close().await;
+    }
+
+    /// A dropped `Subscription` — remove the waiter and send `CLOSE`.
+    async fn on_drop(&mut self, id: SubscriptionId) {
+        self.waiters.remove(&id);
+        if let Some(msg) = self.session.close(&id) {
+            self.write(&msg).await;
         }
     }
 
-    /// Ends `id` with `reason`: set the terminal mark, drop the sender —
-    /// the stream yields `Closed(reason)` when the channel drains.
-    fn end_sub(&mut self, id: &SubscriptionId, reason: CloseReason) {
-        let Some(h) = self.subs.remove(id) else {
-            return;
-        };
-        if let Ok(mut t) = h.terminal.lock() {
-            *t = Some(reason);
-        }
-        drop(h.tx);
-    }
-
-    /// Fans one `OK` out to every waiter that joined the publish.
-    fn resolve_publish(&mut self, id: EventId, accepted: bool, message: &str) {
-        self.pending_events.remove(&id);
-        let Some(waiters) = self.publishes.remove(&id) else {
-            return;
-        };
-        for w in waiters {
-            drop(w.send(Ok(PublishOutcome {
-                accepted,
-                message: message.to_owned(),
-            })));
+    /// One resolved read: liveness evidence first, then route.
+    async fn on_wire(&mut self, frame: Result<Option<Inbound>>) {
+        match frame {
+            Ok(Some(Inbound::Text(text))) => {
+                self.conn.saw_inbound();
+                let Ok(msg) = nk_core::RelayMessage::from_json(&text) else {
+                    return;
+                };
+                let outs = self.session.handle(msg);
+                self.route_outs(outs).await;
+            }
+            Ok(Some(_)) => self.conn.saw_inbound(),
+            Ok(None) => self.disconnect(),
+            Err(e) => {
+                debug!("read failed: {e}");
+                self.disconnect();
+            }
         }
     }
 
-    /// Delivers an event; a lagged consumer ends `Closed(Lagged)` + `CLOSE`.
-    fn deliver(&mut self, id: &SubscriptionId, event: Event, to_close: &mut Vec<SubscriptionId>) {
-        let lagged = self
-            .subs
-            .get(id)
-            .is_some_and(|h| h.tx.try_send(SubscriptionEvent::Event(event)).is_err());
-        if !lagged {
-            return;
-        }
-        self.end_sub(id, CloseReason::Lagged);
-        let _ = self.session.close_sub(id);
-        to_close.push(id.clone());
-    }
-
-    /// Routes one inbound text frame through the session.
-    async fn on_frame(&mut self, text: &str) {
-        let Ok(msg) = RelayMessage::from_json(text) else {
-            return;
-        };
-        // NEG frames bypass the sub/count session entirely.
-        match msg {
-            RelayMessage::NegMsg {
-                subscription_id,
-                message,
-            } => self.on_neg_msg(&subscription_id, &message).await,
-            RelayMessage::NegErr {
-                subscription_id,
-                message,
-            } => self.on_neg_err(&subscription_id, &message),
-            other => {
-                // A CLOSED on a neg id needs the waiter's reason.
-                if let RelayMessage::Closed {
-                    subscription_id,
-                    message,
-                } = &other
-                {
-                    self.on_neg_closed(subscription_id, message);
+    /// A fired deadline: close the session entry, surface `Timeout`.
+    async fn on_deadline(&mut self, expired: delay_queue::Expired<Deadline>) {
+        match expired.into_inner() {
+            Deadline::Publish(id) => {
+                self.session.forget_publish(&id);
+                self.publish_deadline(&id);
+            }
+            Deadline::Request(id) => {
+                // The deadline already fired — the queue entry is gone;
+                // remove the waiter map entry only.
+                if let Some(msg) = self.session.close(&id) {
+                    self.write(&msg).await;
                 }
-                let outs = self.session.handle(other);
+                match self.waiters.remove(&id) {
+                    Some(Waiter::Fetch { events, reply, .. }) => {
+                        drop(reply.send(Ok(FetchOutcome {
+                            events,
+                            end: FetchEnd::Timeout,
+                        })));
+                    }
+                    Some(w) => w.fail(Error::Timeout),
+                    None => {}
+                }
+            }
+        }
+    }
+
+    /// A finished signing task — `signed` routes the AUTH or re-signs.
+    async fn on_signed(&mut self, result: SignResult) {
+        let (challenge, event) = result;
+        match event {
+            Ok(event) => {
+                let outs = self.session.signed(&challenge, event);
+                self.route_outs(outs).await;
+            }
+            Err(e) => {
+                debug!("signer failed: {e}");
+                let outs = self.session.sign_failed();
                 self.route_outs(outs).await;
             }
         }
@@ -655,45 +443,174 @@ impl Driver {
 
     /// Applies one batch of session outputs.
     async fn route_outs(&mut self, outs: Vec<Out>) {
-        let mut to_close = Vec::new();
+        let mut to_write = Vec::new();
         for out in outs {
             match out {
-                Out::Deliver { id, event } => self.deliver(&id, event, &mut to_close),
-                Out::Eose(id) => self.send_eose(&id),
-                Out::Closed { id, reason } => {
-                    self.on_count_closed(&id, &reason);
-                    self.end_sub(&id, CloseReason::Relay(reason));
-                }
-                Out::PublishDone {
+                Out::Send(msg) => to_write.push(msg),
+                Out::Sign(challenge) => self.spawn_sign(challenge),
+                Out::Event { id, event } => self.deliver(&id, event, &mut to_write),
+                Out::Eose(id) => self.on_eose(&id, &mut to_write),
+                Out::Closed { id, reason } => self.on_closed_waiter(&id, reason),
+                Out::Counted { id, result } => self.resolve_count(&id, result),
+                Out::Reconciled { id, result } => self.resolve_reconcile(&id, result),
+                Out::Failed { id, error } => self.fail_waiter(&id, error),
+                Out::Published {
                     id,
                     accepted,
                     message,
-                } => self.on_publish_done(id, accepted, &message).await,
+                } => self.resolve_publish(id, accepted, &message),
                 Out::Rejected { id, reason } => {
                     debug!("rejected event for {id}: {reason:?}");
                 }
-                Out::AuthChallenge(c) => self.challenge = Some((c, false)),
-                Out::AuthRequired { retry, fallback } => {
-                    self.on_auth_required(retry, *fallback);
-                }
-                Out::Counted { id, result } => self.on_counted(&id, result),
-                Out::NegErr { id, reason } => self.on_neg_closed(&id, &reason),
                 Out::Notice(m) => debug!("relay notice: {m}"),
-                Out::SendClose(id) => to_close.push(id),
             }
         }
-        for id in to_close {
-            drop(self.close(&id).await);
+        for msg in to_write {
+            self.write(&msg).await;
+        }
+    }
+
+    /// Spawns the off-loop signer for one challenge; the `JoinSet` result
+    /// lands back on the select loop.
+    fn spawn_sign(&mut self, challenge: String) {
+        let Some(signer) = self.options.signer.clone() else {
+            return;
+        };
+        let url = self.relay_url.clone();
+        let ch = challenge.clone();
+        self.signing.spawn(async move {
+            let event = async {
+                let pk = signer.public_key().await?;
+                let unsigned = nk_core::EventBuilder::auth(&url, &ch).build(pk);
+                signer.sign_event(unsigned).await
+            }
+            .await;
+            (challenge, event)
+        });
+    }
+
+    /// Delivers an event to its waiter; a lagged stream ends `Lagged`.
+    fn deliver(
+        &mut self,
+        id: &SubscriptionId,
+        event: Event,
+        to_write: &mut Vec<ClientMessage<'static>>,
+    ) {
+        match self.waiters.get_mut(id) {
+            Some(Waiter::Fetch { events, .. }) => {
+                events.push(event);
+            }
+            Some(Waiter::Stream(h)) if h.tx.try_send(SubscriptionEvent::Event(event)).is_err() => {
+                self.end_stream(id, CloseReason::Lagged, to_write);
+            }
+            _ => {}
+        }
+    }
+
+    /// Replays every open `REQ` after a connect; a write failure is a
+    /// disconnect surfaced to the caller.
+    async fn replay(&mut self) -> Result<()> {
+        for msg in self.session.replay() {
+            if let Err(e) = self.conn.send(&msg).await {
+                self.disconnect();
+                return Err(e);
+            }
+        }
+        Ok(())
+    }
+
+    /// A fired publish deadline — `Timeout` to every waiter that joined.
+    fn publish_deadline(&mut self, id: &EventId) {
+        if let Some(w) = self.publishes.remove(id) {
+            for reply in w.replies {
+                drop(reply.send(Err(Error::Timeout)));
+            }
+        }
+    }
+
+    /// A `Counted` reply → its waiter, dropping the deadline.
+    fn resolve_count(&mut self, id: &SubscriptionId, result: CountResult) {
+        if let Some(Waiter::Count { reply, .. }) = self.take_waiter(id) {
+            drop(reply.send(Ok(result)));
+        }
+    }
+
+    /// A `Reconciled` reply → its waiter, dropping the deadline.
+    fn resolve_reconcile(&mut self, id: &SubscriptionId, result: Reconciliation) {
+        if let Some(Waiter::Reconcile { reply, .. }) = self.take_waiter(id) {
+            drop(reply.send(Ok(result)));
+        }
+    }
+
+    /// Ends a stream waiter and queues its `CLOSE`.
+    fn end_stream(
+        &mut self,
+        id: &SubscriptionId,
+        reason: CloseReason,
+        to_write: &mut Vec<ClientMessage<'static>>,
+    ) {
+        if let Some(Waiter::Stream(h)) = self.waiters.remove(id) {
+            Self::mark_terminal(h, reason);
+        }
+        if let Some(msg) = self.session.close(id) {
+            to_write.push(msg);
+        }
+    }
+
+    /// `EOSE`: a fetch resolves `Eose`; a stream gets the item — a full
+    /// channel ends it `Lagged` like a dropped event.
+    fn on_eose(&mut self, id: &SubscriptionId, to_write: &mut Vec<ClientMessage<'static>>) {
+        if let Some(Waiter::Stream(h)) = self.waiters.get_mut(id)
+            && h.tx.try_send(SubscriptionEvent::Eose).is_err()
+        {
+            self.end_stream(id, CloseReason::Lagged, to_write);
+            return;
+        }
+        // Only a fetch resolves here — a stream stays open.
+        if matches!(self.waiters.get(id), Some(Waiter::Fetch { .. }))
+            && let Some(Waiter::Fetch { events, reply, .. }) = self.take_waiter(id)
+        {
+            drop(reply.send(Ok(FetchOutcome {
+                events,
+                end: FetchEnd::Eose,
+            })));
+        }
+    }
+
+    /// A terminal `Closed` for `id`: maps to the right waiter output.
+    fn on_closed_waiter(&mut self, id: &SubscriptionId, reason: String) {
+        match self.take_waiter(id) {
+            Some(Waiter::Stream(h)) => Self::mark_terminal(h, CloseReason::Relay(reason)),
+            Some(Waiter::Fetch { events, reply, .. }) => {
+                drop(reply.send(Ok(FetchOutcome {
+                    events,
+                    end: FetchEnd::Closed(reason),
+                })));
+            }
+            Some(w) => w.fail(Error::Refused(reason)),
+            None => {}
+        }
+    }
+
+    /// Fans one `OK` out to every waiter that joined the publish.
+    fn resolve_publish(&mut self, id: EventId, accepted: bool, message: &str) {
+        let Some(w) = self.take_publish(&id) else {
+            return;
+        };
+        for reply in w.replies {
+            drop(reply.send(Ok(PublishOutcome {
+                accepted,
+                message: message.to_owned(),
+            })));
         }
     }
 
     /// One command off the channel; `false` means the driver exits.
     async fn dispatch(&mut self, cmd: Option<Cmd>) -> bool {
         match cmd {
+            // The last `Relay` dropped — the channel closed on its own.
             None => {
-                if let Some(mut sock) = self.ws.take() {
-                    sock.close().await;
-                }
+                self.shutdown().await;
                 false
             }
             Some(Cmd::Connect(reply)) => {
@@ -704,10 +621,6 @@ impl Driver {
                 self.on_subscribe(filters, reply).await;
                 true
             }
-            Some(Cmd::Publish { event, reply }) => {
-                self.on_publish(event, reply).await;
-                true
-            }
             Some(Cmd::Fetch {
                 filters,
                 timeout,
@@ -716,16 +629,12 @@ impl Driver {
                 self.on_fetch(filters, timeout, reply).await;
                 true
             }
-            Some(Cmd::CloseSub { id }) => {
-                self.on_close_sub(id).await;
+            Some(Cmd::Publish { event, reply }) => {
+                self.on_publish(event, reply).await;
                 true
             }
             Some(Cmd::Count { filters, reply }) => {
                 self.on_count(filters, reply).await;
-                true
-            }
-            Some(Cmd::AuthDone { event, challenge }) => {
-                self.on_auth_done(event, challenge).await;
                 true
             }
             Some(Cmd::Reconcile {
@@ -736,10 +645,6 @@ impl Driver {
                 self.on_reconcile(filter, items, reply).await;
                 true
             }
-            Some(Cmd::NegTimeout { id }) => {
-                self.on_neg_timeout(id).await;
-                true
-            }
             Some(Cmd::Close(reply)) => {
                 self.on_close(reply).await;
                 false
@@ -747,286 +652,112 @@ impl Driver {
         }
     }
 
-    /// One resolved read: liveness evidence first, then route or drop.
-    async fn on_wire(&mut self, frame: Option<Result<Option<Inbound>>>) {
-        if frame.is_some() {
-            self.pong_deadline = None;
+    /// The reconnect deadline fired — connect and replay, or stay down.
+    async fn on_reconnect_due(&mut self) {
+        if let Err(e) = self.ensure_connected().await {
+            debug!("reconnect failed: {e}");
         }
-        match frame {
-            Some(Ok(Some(Inbound::Text(t)))) => self.on_frame(&t).await,
-            Some(Ok(Some(_))) => {}
-            Some(Ok(None)) | None => self.disconnect(),
-            Some(Err(e)) => {
-                debug!("ws error: {e}");
+    }
+
+    /// The ping interval fired — a write failure is a dead socket.
+    async fn on_ping_tick(&mut self) {
+        if let Err(e) = self.conn.ping().await {
+            debug!("ping failed: {e}");
+            self.disconnect();
+        }
+    }
+
+    /// One select iteration; `false` means the driver exits.
+    #[allow(
+        clippy::cognitive_complexity,
+        reason = "select! arms are independent handlers"
+    )]
+    async fn step(
+        &mut self,
+        rx: &mut mpsc::Receiver<Cmd>,
+        ping: &mut tokio::time::Interval,
+    ) -> bool {
+        let open = self.conn.is_open();
+        let reconnect_at = self.conn.reconnect_at();
+        let pong_due = self.conn.pong_deadline();
+        tokio::select! {
+            cmd = rx.recv() => {
+                return self.dispatch(cmd).await;
+            }
+            frame = async {
+                if open { self.conn.next().await } else { Ok(None) }
+            }, if open => {
+                self.on_wire(frame).await;
+            }
+            Some(expired) = futures_util::StreamExt::next(&mut self.deadlines), if !self.deadlines.is_empty() => {
+                self.on_deadline(expired).await;
+            }
+            signed = self.signing.join_next(), if !self.signing.is_empty() => {
+                match signed {
+                    Some(Ok(result)) => self.on_signed(result).await,
+                    // A panicking signer or an aborted task: fail the queue.
+                    Some(Err(e)) => {
+                        debug!("sign task failed: {e}");
+                        let outs = self.session.sign_failed();
+                        self.route_outs(outs).await;
+                    }
+                    None => {}
+                }
+            }
+            () = async {
+                match reconnect_at {
+                    Some(t) => tokio::time::sleep_until(t).await,
+                    None => std::future::pending::<()>().await,
+                }
+            }, if self.options.reconnect && !open && reconnect_at.is_some() => {
+                self.on_reconnect_due().await;
+            }
+            _ = ping.tick(), if open => {
+                self.on_ping_tick().await;
+            }
+            () = async {
+                match pong_due {
+                    Some(t) => tokio::time::sleep_until(t).await,
+                    None => std::future::pending::<()>().await,
+                }
+            }, if pong_due.is_some() && open => {
+                debug!("pong deadline expired");
                 self.disconnect();
             }
-        }
-    }
-
-    /// An `auth-required:` refusal: queue `retry` behind the in-flight
-    /// AUTH or kick one off through `Cmd::AuthNeeded` (signing happens
-    /// off the select loop).
-    fn on_auth_required(&mut self, retry: Retry, fallback: Out) {
-        let Some(signer) = self.options.signer.clone() else {
-            self.route_fallback(fallback);
-            return;
-        };
-        let Some((challenge, answered)) = self.challenge.clone() else {
-            self.route_fallback(fallback);
-            return;
-        };
-        let _ = answered;
-        if let Some(waiting) = self.auth_pending.as_mut() {
-            waiting.push((retry, fallback));
-            return;
-        }
-        self.auth_pending = Some(vec![(retry, fallback)]);
-        // Sign the AUTH event off the select loop; it reports via Cmd::AuthDone.
-        let tx = self.cmd.clone();
-        let url = self.url_string.clone();
-        tokio::spawn(async move {
-            let event = async {
-                let pk = signer
-                    .public_key()
-                    .await
-                    .map_err(|e| Error::Transport(TransportError::new(e)))?;
-                let unsigned = EventBuilder::auth(
-                    &nk_core::RelayUrl::parse(&url).map_err(|_| Error::InvalidUrl)?,
-                    &challenge,
-                )
-                .build(pk);
-                signer
-                    .sign_event(unsigned)
-                    .await
-                    .map_err(|e| Error::Transport(TransportError::new(e)))
-            }
-            .await;
-            drop(tx.send(Cmd::AuthDone { event, challenge }).await);
-        });
-    }
-
-    /// Resends the pending `EVENT` after a good `AUTH`.
-    async fn retry_publish(&mut self, id: EventId) {
-        let Some(event) = self.pending_events.get(&id).cloned() else {
-            return;
-        };
-        self.session.readd_pending(id);
-        drop(
-            self.write(ClientMessage::Event(Cow::Borrowed(&event)))
-                .await,
-        );
-    }
-
-    /// `Cmd::AuthDone` — send the signed `AUTH` and wait for its `OK`, or
-    /// route the original reasons when signing failed.
-    async fn on_auth_done(&mut self, event: Result<Event>, challenge: String) {
-        // Mark this challenge answered only when we have an event to send.
-        if let Some((c, answered)) = self.challenge.as_mut()
-            && *c == challenge
-        {
-            *answered = true;
-        }
-        let Ok(event) = event else {
-            self.fail_auth_queue();
-            return;
-        };
-        self.auth_ok_id = Some(event.id());
-        let _ = self.session.add_pending(event.id());
-        drop(self.write(ClientMessage::Auth(Cow::Borrowed(&event))).await);
-    }
-
-    /// Routes every queued `(retry, fallback)` to the fallback path.
-    fn fail_auth_queue(&mut self) {
-        self.auth_ok_id = None;
-        let Some(waiting) = self.auth_pending.take() else {
-            return;
-        };
-        for (_, fallback) in waiting {
-            self.route_fallback(fallback);
-        }
-    }
-
-    /// An `OK` for the in-flight `AUTH` event: retry or surface.
-    async fn on_auth_ok(&mut self, accepted: bool) {
-        self.auth_ok_id = None;
-        let Some(waiting) = self.auth_pending.take() else {
-            return;
-        };
-        if !accepted {
-            for (_, fallback) in waiting {
-                self.route_fallback(fallback);
-            }
-            return;
-        }
-        for (retry, _) in waiting {
-            match retry {
-                Retry::Req { id, filters } => {
-                    self.session.add_sub(id.clone(), filters.clone());
-                    drop(self.req(&id, &filters).await);
-                }
-                Retry::Publish(id) => self.retry_publish(id).await,
-                Retry::Count { id, filters } => {
-                    let _ = self.session.add_count(id.clone(), filters.clone());
-                    drop(self.count(&id, &filters).await);
-                }
-                Retry::Neg { id, filter, items } => self.retry_neg(id, filter, items).await,
+            Some(id) = self.drops.recv() => {
+                self.on_drop(id).await;
             }
         }
-    }
-
-    /// Surfaces the original refusal output when AUTH can't run.
-    fn route_fallback(&mut self, fallback: Out) {
-        match fallback {
-            Out::Closed { id, reason } => self.end_sub(&id, CloseReason::Relay(reason)),
-            Out::PublishDone {
-                id,
-                accepted,
-                message,
-            } => self.resolve_publish(id, accepted, &message),
-            Out::NegErr { id, reason } => {
-                if let Some(entry) = self.negs.remove(&id) {
-                    drop(entry.reply.send(Err(Error::Refused(reason))));
-                }
-            }
-            other => debug!("unhandled auth fallback: {other:?}"),
-        }
-    }
-
-    /// One `OK`: the in-flight `AUTH` verdict, else a publish reply.
-    async fn on_publish_done(&mut self, id: EventId, accepted: bool, message: &str) {
-        if self.auth_ok_id == Some(id) {
-            self.on_auth_ok(accepted).await;
-        } else {
-            self.resolve_publish(id, accepted, message);
-        }
-    }
-
-    /// A NIP-45 reply → its waiter.
-    fn on_counted(&mut self, id: &SubscriptionId, result: nk_core::CountResult) {
-        if let Some(tx) = self.counts.remove(id) {
-            drop(tx.send(Ok(result)));
-        }
-    }
-
-    /// A `CLOSED` on a count id → its waiter with the relay's reason.
-    fn on_count_closed(&mut self, id: &SubscriptionId, reason: &str) {
-        if let Some(tx) = self.counts.remove(id) {
-            drop(tx.send(Err(Error::Refused(reason.to_owned()))));
-        }
-    }
-
-    /// A reconnect attempt after the armed deadline.
-    async fn try_reconnect(&mut self) {
-        self.reconnect_at = None;
-        let Some(url) = self.url.clone() else {
-            return;
-        };
-        self.status.send_replace(RelayStatus::Connecting);
-        match connect_once(&url, &self.options).await {
-            Ok(mut sock) => {
-                self.status.send_replace(RelayStatus::Connected);
-                self.backoff = self.options.reconnect_min;
-                replay(&self.session, &mut sock).await;
-                self.ws = Some(sock);
-            }
-            Err(e) => {
-                debug!("reconnect failed: {e}");
-                self.disconnect();
-            }
-        }
+        true
     }
 }
 
+/// The driver task.
 pub(crate) async fn driver_loop(
     mut rx: mpsc::Receiver<Cmd>,
     drops: mpsc::UnboundedReceiver<SubscriptionId>,
     drop_tx: mpsc::UnboundedSender<SubscriptionId>,
-    cmd_tx: mpsc::Sender<Cmd>,
-    url: String,
+    relay_url: RelayUrl,
     options: RelayOptions,
     status: watch::Sender<RelayStatus>,
 ) {
+    // An unparseable URL yields `Error::InvalidUrl` from `connect` —
+    // permanent, never retried. (`RelayUrl` can't produce one from tests.)
+    let endpoint = Endpoint::parse(relay_url.as_str()).ok();
     let mut d = Driver {
-        session: Session::default(),
+        session: Session::new(options.signer.is_some()),
+        conn: Connection::new(endpoint, &options),
+        waiters: HashMap::new(),
+        publishes: HashMap::new(),
+        deadlines: DelayQueue::new(),
+        signing: JoinSet::new(),
         drops,
         drop_tx,
-        subs: HashMap::new(),
-        publishes: HashMap::new(),
-        pending_events: HashMap::new(),
-        ws: None,
-        cmd: cmd_tx,
-        url: Endpoint::parse(&url).ok(),
-        url_string: url,
-        options: options.clone(),
+        relay_url,
+        options,
         status,
-        backoff: options.reconnect_min,
-        challenge: None,
-        auth_ok_id: None,
-        counts: HashMap::new(),
-        negs: HashMap::new(),
-        auth_pending: None,
-        reconnect_at: None,
-        pong_deadline: None,
         next_sub: 0,
     };
     let mut ping = tokio::time::interval(d.options.ping_interval);
-    loop {
-        tokio::select! {
-            cmd = rx.recv() => {
-                if !d.dispatch(cmd).await {
-                    return;
-                }
-            }
-            frame = async {
-                match d.ws.as_mut() {
-                    Some(sock) => Some(sock.next().await),
-                    None => None,
-                }
-            }, if d.ws.is_some() => {
-                d.on_wire(frame).await;
-            }
-            () = async {
-                match d.reconnect_at {
-                    Some(t) => tokio::time::sleep_until(t).await,
-                    None => std::future::pending::<()>().await,
-                }
-            }, if d.options.reconnect && d.ws.is_none() && d.reconnect_at.is_some() => {
-                d.try_reconnect().await;
-            }
-            _ = ping.tick(), if d.ws.is_some() => {
-                let Some(sock) = d.ws.as_mut() else {
-                    continue;
-                };
-                match sock.ping().await {
-                    Ok(()) => {
-                        // Arm once per unanswered ping — re-arming on every
-                        // tick would keep the deadline just out of reach.
-                        if d.pong_deadline.is_none() {
-                            d.pong_deadline = Some(
-                                tokio::time::Instant::now() + d.options.pong_deadline,
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        debug!("ping failed: {e}");
-                        d.disconnect();
-                    }
-                }
-            }
-            () = async {
-                match d.pong_deadline {
-                    Some(t) => tokio::time::sleep_until(t).await,
-                    None => std::future::pending::<()>().await,
-                }
-            }, if d.pong_deadline.is_some() && d.ws.is_some() => {
-                debug!("pong deadline expired");
-                d.disconnect();
-            }
-            drop_id = d.drops.recv() => {
-                if let Some(id) = drop_id {
-                    d.on_close_sub(id).await;
-                }
-            }
-        }
-    }
+    while d.step(&mut rx, &mut ping).await {}
 }

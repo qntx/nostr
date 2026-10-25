@@ -25,6 +25,9 @@ pub enum Error {
     /// The WebSocket transport failed.
     #[error("transport failure")]
     Transport(#[source] TransportError),
+    /// A NIP-77 sync failed inside the negentropy codec.
+    #[error("negentropy failure")]
+    Negentropy(#[source] NegentropyError),
     /// The relay URL is not a `ws://`/`wss://` endpoint.
     #[error("invalid relay URL")]
     InvalidUrl,
@@ -48,6 +51,29 @@ impl fmt::Display for TransportError {
 }
 
 impl std::error::Error for TransportError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
+
+/// A type-erased NIP-77 sync failure.
+#[derive(Debug)]
+pub struct NegentropyError(Box<dyn std::error::Error + Send + Sync>);
+
+impl NegentropyError {
+    /// Wraps any negentropy error.
+    pub(crate) fn new(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self(Box::new(error))
+    }
+}
+
+impl fmt::Display for NegentropyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for NegentropyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.0.source()
     }
