@@ -21,9 +21,10 @@ export type CryptoWasmExports = {
   ) => number;
   nostr_sign: (id: number, seckey: number, aux: number, outSig: number) => number;
   nostr_public_key: (seckey: number, outPubkey: number) => number;
+  nostr_ecdh_x: (seckey: number, pubkeyX: number, out32: number) => number;
 };
 
-export const NOSTR_ABI_VERSION = 3;
+export const NOSTR_ABI_VERSION = 4;
 
 const SEED_LEN = 32;
 
@@ -62,6 +63,7 @@ function asExports(raw: WebAssembly.Exports): CryptoWasmExports {
     nostr_verify_serialized: requireFn(raw["nostr_verify_serialized"], "nostr_verify_serialized"),
     nostr_sign: requireFn(raw["nostr_sign"], "nostr_sign"),
     nostr_public_key: requireFn(raw["nostr_public_key"], "nostr_public_key"),
+    nostr_ecdh_x: requireFn(raw["nostr_ecdh_x"], "nostr_ecdh_x"),
   };
 }
 
@@ -196,4 +198,24 @@ export async function instantiateCryptoWasm(
     throw new CryptoError("nostr_init failed to randomize the wasm context");
   }
   return exports;
+}
+
+/**
+ * Returns the 32-byte x coordinate of the ECDH shared point, or an empty array on failure (invalid
+ * input). The wasm module zeroes the scratch copy of `seckey` before returning.
+ */
+export function wasmEcdhX(
+  exports: CryptoWasmExports,
+  seckey: Uint8Array,
+  publicKeyX: Uint8Array,
+): Uint8Array {
+  const outOffset = SECKEY_LEN + PUBKEY_LEN;
+  const { ptr, view } = scratch(exports, outOffset + 32);
+  view.set(seckey, 0);
+  view.set(publicKeyX, SECKEY_LEN);
+  const status = exports.nostr_ecdh_x(ptr, ptr + SECKEY_LEN, ptr + outOffset);
+  if (status !== 0) {
+    return new Uint8Array(0);
+  }
+  return takeOut(exports, ptr + outOffset, 32);
 }

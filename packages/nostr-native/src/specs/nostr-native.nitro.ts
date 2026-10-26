@@ -18,4 +18,6 @@ export interface NostrNative extends HybridObject<{ ios: "c++"; android: "c++" }
   ): boolean;
   publicKey(secretKey: ArrayBuffer): ArrayBuffer;
   sign(id: ArrayBuffer, secretKey: ArrayBuffer, auxRand: ArrayBuffer): ArrayBuffer;
+  /** ECDH shared point's x coordinate — the NIP-04/NIP-44 shared secret input. Throws on bad input. */
+  ecdhX(secretKey: ArrayBuffer, publicKeyX: ArrayBuffer): ArrayBuffer;
 }

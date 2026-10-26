@@ -24,7 +24,6 @@ docs/*
 # Rust build output (crates/interop is a standalone Cargo project; the
 # parity streams also generate under target/parity)
 target/
-packages/nostr-wasm/src/nostr_wasm.wasm
 
 # Hermes smoke bundle (built by packages/nostr/scripts/hermes-smoke.ts)
 .hermes-smoke.iife.js

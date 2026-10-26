@@ -87,7 +87,7 @@ describe("wasm sign/publicKey", () => {
     expect(wasm.verify(id, pk, sig)).toBe(true);
   });
 
-  test("NostrWasm works as a SigningBackend for Keys", () => {
+  test("NostrWasm works as a NostrBackend for Keys", () => {
     const sk = hexToBytes(SK_HEX);
     const keys = Keys.fromSecretKey(sk, wasm);
     expect(keys.backend).toBe(wasm);

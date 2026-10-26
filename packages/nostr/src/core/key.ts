@@ -1,11 +1,18 @@
-import { schnorr } from "@noble/curves/secp256k1.js";
+import { schnorr, secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 
 import { CryptoError, EventValidationError } from "./error.ts";
 import { markVerified, serializeValidatedEvent, validateEvent } from "./event.ts";
 import type { Event, EventTemplate, UnsignedEvent } from "./event.ts";
-import { assertHex32, assertSecretKeyBytes, bytesToHex, hexToBytes, utf8Encoder } from "./util.ts";
+import {
+  assertByteLength,
+  assertHex32,
+  assertSecretKeyBytes,
+  bytesToHex,
+  hexToBytes,
+  utf8Encoder,
+} from "./util.ts";
 
 /** 32-byte secret key held as bytes; prefer zeroize when done. */
 export class SecretKey {
@@ -71,18 +78,54 @@ export function publicKeyFromHex(hex: string): PublicKey {
 }
 
 /**
- * BIP-340 signing backend. `publicKey` returns the 32-byte x-only public key of a 32-byte secret
- * key; `sign` returns the 64-byte BIP-340 signature of a 32-byte `id` using 32 bytes of auxiliary
- * randomness. Both throw on invalid input (for example an out-of-range secret key).
+ * The crypto primitives every secret-key operation routes through. `publicKey` returns the 32-byte
+ * x-only public key of a 32-byte secret key; `sign` returns the 64-byte BIP-340 signature of a
+ * 32-byte `id` using 32 bytes of auxiliary randomness; `verifySerialized` returns true iff
+ * `sha256(serializedUtf8)` equals `id` and `sig` is a valid BIP-340 signature of `id` by the x-only
+ * `pubkey`; `ecdhX` returns the 32-byte x coordinate of the ECDH shared point between `secretKey`
+ * and the even-Y lift of `publicKeyX` (the shared secret both NIP-04 and NIP-44 derive from). All
+ * throw on invalid input (for example an out-of-range secret key or a non-lifting public key).
  */
-export type SigningBackend = {
+export type NostrBackend = {
   publicKey: (secretKey: Uint8Array) => Uint8Array;
   sign: (id: Uint8Array, secretKey: Uint8Array, auxRand: Uint8Array) => Uint8Array;
+  verifySerialized: (
+    serializedUtf8: Uint8Array,
+    id: Uint8Array,
+    pubkey: Uint8Array,
+    sig: Uint8Array,
+  ) => boolean;
+  ecdhX: (secretKey: Uint8Array, publicKeyX: Uint8Array) => Uint8Array;
 };
 
-const nobleSigning: SigningBackend = {
+/** The @noble/curves backend — the default everywhere a backend is optional. */
+export const nobleBackend: NostrBackend = {
   publicKey: (secretKey) => schnorr.getPublicKey(secretKey),
   sign: (id, secretKey, auxRand) => schnorr.sign(id, secretKey, auxRand),
+  verifySerialized: (serializedUtf8, id, pubkey, sig) => {
+    try {
+      const digest = sha256(serializedUtf8);
+      if (!digest.every((byte, i) => byte === id[i])) {
+        return false;
+      }
+      return schnorr.verify(sig, id, pubkey);
+    } catch {
+      return false;
+    }
+  },
+  ecdhX: (secretKey, publicKeyX) => {
+    assertSecretKeyBytes(secretKey);
+    assertByteLength(publicKeyX, 32, "public key");
+    let shared: Uint8Array;
+    try {
+      shared = secp256k1.getSharedSecret(secretKey, new Uint8Array([0x02, ...publicKeyX]));
+    } catch (error) {
+      throw new CryptoError("invalid ECDH input", { cause: error });
+    }
+    const x = shared.slice(1, 33);
+    shared.fill(0);
+    return x;
+  },
 };
 
 /** Derive the public key for a secret key given as SecretKey, bytes, or hex. */
@@ -95,13 +138,13 @@ export class Keys {
   readonly secretKey: SecretKey;
   readonly publicKey: PublicKey;
   /**
-   * BIP-340 backend that derived {@link publicKey} and signs in {@link finalizeEvent}/
+   * Crypto backend that derived {@link publicKey} and signs in {@link finalizeEvent}/
    * {@link signEvent}. Defaults to noble; pass a loaded `NostrWasm` module or a native backend to
-   * delegate signing.
+   * delegate the work.
    */
-  readonly backend: SigningBackend;
+  readonly backend: NostrBackend;
 
-  private constructor(secretKey: SecretKey, backend: SigningBackend) {
+  private constructor(secretKey: SecretKey, backend: NostrBackend) {
     this.secretKey = secretKey;
     this.backend = backend;
     const secretBytes = secretKey.bytes;
@@ -117,11 +160,11 @@ export class Keys {
     this.publicKey = bytesToHex(pubkey);
   }
 
-  static generate(backend: SigningBackend = nobleSigning): Keys {
+  static generate(backend: NostrBackend = nobleBackend): Keys {
     return new Keys(SecretKey.generate(), backend);
   }
 
-  static fromSecretKey(secretKey: SecretKeyInput, backend: SigningBackend = nobleSigning): Keys {
+  static fromSecretKey(secretKey: SecretKeyInput, backend: NostrBackend = nobleBackend): Keys {
     return new Keys(toSecretKey(secretKey), backend);
   }
 }

@@ -51,6 +51,7 @@ namespace margelo::nitro::nostrnative {
       virtual bool verifySerialized(const std::shared_ptr<ArrayBuffer>& serializedUtf8, const std::shared_ptr<ArrayBuffer>& id, const std::shared_ptr<ArrayBuffer>& pubkey, const std::shared_ptr<ArrayBuffer>& sig) = 0;
       virtual std::shared_ptr<ArrayBuffer> publicKey(const std::shared_ptr<ArrayBuffer>& secretKey) = 0;
       virtual std::shared_ptr<ArrayBuffer> sign(const std::shared_ptr<ArrayBuffer>& id, const std::shared_ptr<ArrayBuffer>& secretKey, const std::shared_ptr<ArrayBuffer>& auxRand) = 0;
+      virtual std::shared_ptr<ArrayBuffer> ecdhX(const std::shared_ptr<ArrayBuffer>& secretKey, const std::shared_ptr<ArrayBuffer>& publicKeyX) = 0;
 
     protected:
       // Hybrid Setup

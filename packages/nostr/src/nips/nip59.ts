@@ -16,6 +16,7 @@ import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
 import { assertHex32, isRecord, nowSeconds, lowerAscii } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
+import type { EventVerifier } from "../core/verifier.ts";
 import { encrypt, getConversationKey } from "./nip44.ts";
 
 /** Unsigned event with a computed id. Never has `sig`. */
@@ -32,6 +33,11 @@ export type Nip59Crypto = {
   signEvent: (unsigned: UnsignedEvent) => Promise<Event>;
   nip44Encrypt: (peer: string, plaintext: string) => Promise<string>;
   nip44Decrypt: (peer: string, payload: string) => Promise<string>;
+  /**
+   * Optional batch unwrap: one entry per input event, preserving order — a Rumor on success or an
+   * Error for that wrap's failure. A single bad wrap never fails the batch.
+   */
+  unwrapGiftWraps?: (events: ReadonlyArray<Event>) => Promise<ReadonlyArray<Rumor | Error>>;
 };
 
 export type Nip44Decryptor = {
@@ -98,12 +104,14 @@ type Nip59CryptoInput = {
   signEvent: (unsigned: UnsignedEvent) => Promise<Event>;
   nip44Encrypt?: (peer: string, plaintext: string) => Promise<string>;
   nip44Decrypt?: (peer: string, payload: string) => Promise<string>;
+  unwrapGiftWraps?: (events: ReadonlyArray<Event>) => Promise<ReadonlyArray<Rumor | Error>>;
 };
 
 /** Narrow a signer-shaped object to {@link Nip59Crypto}, or throw. */
 export function requireNip59Crypto(crypto: Nip59CryptoInput): Nip59Crypto {
   const encrypt = crypto.nip44Encrypt;
   const decrypt = crypto.nip44Decrypt;
+  const batch = crypto.unwrapGiftWraps;
   if (!encrypt || !decrypt) {
     throw new Nip59Error("NIP-44 is required");
   }
@@ -112,6 +120,11 @@ export function requireNip59Crypto(crypto: Nip59CryptoInput): Nip59Crypto {
     signEvent: async (unsigned) => crypto.signEvent(unsigned),
     nip44Encrypt: async (peer, plaintext) => encrypt.call(crypto, peer, plaintext),
     nip44Decrypt: async (peer, payload) => decrypt.call(crypto, peer, payload),
+    ...(batch === undefined
+      ? {}
+      : {
+          unwrapGiftWraps: async (events: ReadonlyArray<Event>) => batch.call(crypto, events),
+        }),
   };
 }
 
@@ -337,12 +350,17 @@ async function decryptLayer(
   }
 }
 
-export async function unwrap(crypto: Nip44Decryptor, giftWrap: Event): Promise<Rumor> {
+export async function unwrap(
+  crypto: Nip44Decryptor,
+  giftWrap: Event,
+  options?: { verify?: EventVerifier | undefined },
+): Promise<Rumor> {
   const decryptor = requireNip44Decryptor(crypto);
+  const verify = options?.verify ?? verifyEvent;
   if (!validateSignedEvent(giftWrap) || !isGiftWrapKind(giftWrap.kind)) {
     throw new Nip59Error("expected gift wrap");
   }
-  if (!verifyEvent(giftWrap)) {
+  if (!verify(giftWrap)) {
     throw new Nip59Error("gift wrap signature");
   }
 
@@ -360,7 +378,7 @@ export async function unwrap(crypto: Nip44Decryptor, giftWrap: Event): Promise<R
       throw new Nip59Error("seal tags must be empty");
     }
   }
-  if (!verifyEvent(sealRaw)) {
+  if (!verify(sealRaw)) {
     throw new Nip59Error("seal signature");
   }
 

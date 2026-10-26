@@ -29,6 +29,22 @@ std::shared_ptr<ArrayBuffer> HybridNostrNative::publicKey(
   return out;
 }
 
+std::shared_ptr<ArrayBuffer> HybridNostrNative::ecdhX(
+    const std::shared_ptr<ArrayBuffer>& secretKey,
+    const std::shared_ptr<ArrayBuffer>& publicKeyX) {
+  if (secretKey->size() != 32) {
+    throw std::invalid_argument("secretKey must be 32 bytes");
+  }
+  if (publicKeyX->size() != 32) {
+    throw std::invalid_argument("publicKeyX must be 32 bytes");
+  }
+  auto out = ArrayBuffer::allocate(32);
+  if (!nostr_native_ecdh_x(secretKey->data(), publicKeyX->data(), out->data())) {
+    throw std::invalid_argument("invalid ECDH input");
+  }
+  return out;
+}
+
 std::shared_ptr<ArrayBuffer> HybridNostrNative::sign(
     const std::shared_ptr<ArrayBuffer>& id,
     const std::shared_ptr<ArrayBuffer>& secretKey,

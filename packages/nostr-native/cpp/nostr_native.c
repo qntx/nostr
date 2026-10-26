@@ -36,6 +36,10 @@ static nostr_native_secp256k1_context *module_context(void) {
   return module_ctx;
 }
 
+int nostr_native_abi_version(void) {
+  return NOSTR_NATIVE_ABI_VERSION;
+}
+
 int nostr_native_verify_serialized(const unsigned char *serialized, size_t len,
                                    const unsigned char id[32],
                                    const unsigned char pubkey[32],
@@ -46,6 +50,11 @@ int nostr_native_verify_serialized(const unsigned char *serialized, size_t len,
 
 int nostr_native_public_key(const unsigned char seckey[32], unsigned char out_xonly[32]) {
   return nostr_core_public_key(module_context(), seckey, out_xonly) == NOSTR_CORE_OK;
+}
+
+int nostr_native_ecdh_x(const unsigned char seckey[32], const unsigned char pubkey_x[32],
+                        unsigned char out32[32]) {
+  return nostr_core_ecdh_x(module_context(), seckey, pubkey_x, out32) == NOSTR_CORE_OK;
 }
 
 int nostr_native_sign(const unsigned char id[32], const unsigned char seckey[32],

@@ -42,7 +42,6 @@ const vendorDir = join(packageDir, "vendor", "secp256k1");
 const SRC_DIR_EXCLUDES = new Set([
   "asm",
   "wycheproof",
-  "modules/ecdh",
   "modules/recovery",
   "modules/musig",
   "modules/ellswift",

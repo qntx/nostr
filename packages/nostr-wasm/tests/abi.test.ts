@@ -99,6 +99,7 @@ describe("nostr byte ABI contract", () => {
       nostr_verify_serialized: () => 0,
       nostr_sign: () => 0,
       nostr_public_key: () => 0,
+      nostr_ecdh_x: () => 0,
     };
     expect(() => wasmVerify(fake, BIP340_V0_MSG, BIP340_V0_PK, BIP340_V0_SIG)).toThrow(CryptoError);
     expect(() => wasmVerify(fake, BIP340_V0_MSG, BIP340_V0_PK, BIP340_V0_SIG)).toThrow(

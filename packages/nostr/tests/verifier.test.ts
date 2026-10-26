@@ -4,9 +4,15 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { isMarkedFailed, isMarkedVerified, serializeEvent } from "../src/core/event.ts";
 import type { Event } from "../src/core/event.ts";
+import type { NostrBackend } from "../src/core/key.ts";
 import { bytesToHex, utf8Encoder } from "../src/core/util.ts";
-import type { SerializedEventVerifier } from "../src/core/verifier.ts";
-import { createEventVerifier, finalizeEvent, Kind, verifyEvent } from "../src/index.ts";
+import {
+  createEventVerifier,
+  finalizeEvent,
+  Kind,
+  nobleBackend,
+  verifyEvent,
+} from "../src/index.ts";
 
 const SK_HEX = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const OTHER_SK_HEX = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -28,7 +34,12 @@ function flipFirstHexChar(hex: string): string {
 }
 
 // A caller-provided backend built from the library's own primitives: hash check plus BIP-340.
-const nobleBackend: SerializedEventVerifier = (serializedUtf8, id, pubkey, sig) => {
+const nobleVerifySerialized: NostrBackend["verifySerialized"] = (
+  serializedUtf8,
+  id,
+  pubkey,
+  sig,
+) => {
   try {
     const digest = sha256(serializedUtf8);
     if (!digest.every((byte, i) => byte === id[i])) {
@@ -40,10 +51,16 @@ const nobleBackend: SerializedEventVerifier = (serializedUtf8, id, pubkey, sig) 
   }
 };
 
+function verifierWith(
+  verifySerialized: NostrBackend["verifySerialized"],
+): ReturnType<typeof createEventVerifier> {
+  return createEventVerifier({ ...nobleBackend, verifySerialized });
+}
+
 describe("createEventVerifier", () => {
   test("passes serialized bytes and decoded id/pubkey/sig to the backend", () => {
     const seen: Array<{ serialized: string; id: string; pubkey: string; sig: string }> = [];
-    const verify = createEventVerifier((serializedUtf8, id, pubkey, sig) => {
+    const verify = verifierWith((serializedUtf8, id, pubkey, sig) => {
       seen.push({
         serialized: new TextDecoder().decode(serializedUtf8),
         id: bytesToHex(id),
@@ -106,9 +123,9 @@ describe("createEventVerifier", () => {
   describe("cache behaviour", () => {
     test("backend is called once per event object, then cached", () => {
       let calls = 0;
-      const verify = createEventVerifier((...args) => {
+      const verify = verifierWith((...args) => {
         calls += 1;
-        return nobleBackend(...args);
+        return nobleVerifySerialized(...args);
       });
       const event = { ...freshEvent() };
       expect(verify(event)).toBe(true);
@@ -119,9 +136,9 @@ describe("createEventVerifier", () => {
 
     test("finalizeEvent output is already verified and never hits the backend", () => {
       let calls = 0;
-      const verify = createEventVerifier((...args) => {
+      const verify = verifierWith((...args) => {
         calls += 1;
-        return nobleBackend(...args);
+        return nobleVerifySerialized(...args);
       });
       expect(verify(freshEvent())).toBe(true);
       expect(calls).toBe(0);
@@ -129,9 +146,9 @@ describe("createEventVerifier", () => {
 
     test("a failed event is cached and never re-verified", () => {
       let calls = 0;
-      const verify = createEventVerifier((...args) => {
+      const verify = verifierWith((...args) => {
         calls += 1;
-        return nobleBackend(...args);
+        return nobleVerifySerialized(...args);
       });
       const bad = { ...freshEvent(), content: "tampered" };
       expect(verify(bad)).toBe(false);
@@ -142,9 +159,9 @@ describe("createEventVerifier", () => {
 
     test("structurally invalid events are rejected without calling the backend", () => {
       let calls = 0;
-      const verify = createEventVerifier((...args) => {
+      const verify = verifierWith((...args) => {
         calls += 1;
-        return nobleBackend(...args);
+        return nobleVerifySerialized(...args);
       });
       const bad = { ...freshEvent(), pubkey: "zz" };
       expect(verify(bad)).toBe(false);
@@ -156,7 +173,7 @@ describe("createEventVerifier", () => {
   describe("backend exceptions", () => {
     test("propagate to the caller and leave the event unmarked", () => {
       let calls = 0;
-      const verify = createEventVerifier(() => {
+      const verify = verifierWith(() => {
         calls += 1;
         throw new Error("backend exploded");
       });
@@ -171,9 +188,9 @@ describe("createEventVerifier", () => {
 
   test("shares the verification cache with verifyEvent", () => {
     let calls = 0;
-    const verify = createEventVerifier((...args) => {
+    const verify = verifierWith((...args) => {
       calls += 1;
-      return nobleBackend(...args);
+      return nobleVerifySerialized(...args);
     });
     const event = { ...freshEvent() };
     expect(verify(event)).toBe(true);
@@ -185,7 +202,7 @@ describe("createEventVerifier", () => {
 
   test("serializes as UTF-8 before calling the backend", () => {
     const bytes: Uint8Array[] = [];
-    const verify = createEventVerifier((serializedUtf8) => {
+    const verify = verifierWith((serializedUtf8) => {
       bytes.push(serializedUtf8);
       return true;
     });

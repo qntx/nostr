@@ -46,7 +46,8 @@
     "access": "public"
   },
   "scripts": {
-    "build:wasm": "vp run @qntx/nostr#build && bash scripts/build.sh && vp pack && publint && attw --pack . --profile esm-only",
+    "build": "vp pack",
+    "build:wasm": "vp run @qntx/nostr#build && bash scripts/docker-build.sh && vp pack && publint && attw --pack . --profile esm-only",
     "test:wasm": "vp test",
     "bench:wasm": "BENCH=1 vp test tests/bench.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.src.json",

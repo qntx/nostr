@@ -1,6 +1,6 @@
 import { NitroModules } from "react-native-nitro-modules";
 
-import type { SerializedEventVerifier, SigningBackend } from "@qntx/nostr/core";
+import type { NostrBackend } from "@qntx/nostr/core";
 
 import type { NostrNative } from "./specs/nostr-native.nitro.ts";
 
@@ -15,10 +15,16 @@ function asArrayBuffer(view: Uint8Array): ArrayBuffer {
 }
 
 /**
- * `SerializedEventVerifier` backed by native libsecp256k1 — plug into `createEventVerifier` from
- * `@qntx/nostr/core`. The Nitro hybrid object is created once at module load.
+ * `NostrBackend["verifySerialized"]` backed by native libsecp256k1 — plug into
+ * `createEventVerifier` from `@qntx/nostr/core`. The Nitro hybrid object is created once at module
+ * load.
  */
-export const verifySerialized: SerializedEventVerifier = (serializedUtf8, id, pubkey, sig) =>
+export const verifySerialized: NostrBackend["verifySerialized"] = (
+  serializedUtf8,
+  id,
+  pubkey,
+  sig,
+) =>
   nostrNative.verifySerialized(
     asArrayBuffer(serializedUtf8),
     asArrayBuffer(id),
@@ -27,11 +33,15 @@ export const verifySerialized: SerializedEventVerifier = (serializedUtf8, id, pu
   );
 
 /**
- * `SigningBackend` backed by native libsecp256k1 — plug into `Keys.fromSecretKey(secretKey,
- * signing)` or `Keys.generate(signing)` so signing runs on the same randomized context as
- * verification. Throws on an invalid secret key or wrong-length input.
+ * `NostrBackend` (without `ecdhX`, which lands in T4 with the native `ecdh_x` export) backed by
+ * native libsecp256k1 — plug into `Keys.fromSecretKey(secretKey, signing)` or
+ * `Keys.generate(signing)` so signing runs on the same randomized context as verification. Throws
+ * on an invalid secret key or wrong-length input.
  */
-export const signing: SigningBackend = {
+export const signing: NostrBackend = {
+  ecdhX: (secretKey, publicKeyX) =>
+    new Uint8Array(nostrNative.ecdhX(asArrayBuffer(secretKey), asArrayBuffer(publicKeyX))),
+  verifySerialized,
   publicKey: (secretKey) => new Uint8Array(nostrNative.publicKey(asArrayBuffer(secretKey))),
   sign: (id, secretKey, auxRand) =>
     new Uint8Array(

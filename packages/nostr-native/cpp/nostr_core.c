@@ -15,6 +15,7 @@
  */
 #include "../vendor/secp256k1/src/secp256k1.c"
 #include "../vendor/secp256k1/include/secp256k1_extrakeys.h"
+#include "../vendor/secp256k1/include/secp256k1_ecdh.h"
 #include "../vendor/secp256k1/include/secp256k1_schnorrsig.h"
 
 #include "nostr_core.h"
@@ -93,6 +94,34 @@ int nostr_core_public_key(const nostr_native_secp256k1_context *ctx,
        nostr_native_secp256k1_keypair_xonly_pub(ctx, &pubkey, NULL, &keypair) &&
        nostr_native_secp256k1_xonly_pubkey_serialize(ctx, out_xonly, &pubkey);
   nostr_native_secp256k1_memclear_explicit(&keypair, sizeof(keypair));
+  return ok ? NOSTR_CORE_OK : NOSTR_CORE_INVALID_INPUT;
+}
+
+/* ECDH hash function: writes the shared point's x coordinate, nothing else. */
+static int nostr_core_ecdh_xonly_hash(unsigned char *output, const unsigned char *x,
+                                    const unsigned char *y, void *data) {
+  (void)y;
+  (void)data;
+  memcpy(output, x, 32);
+  return 1;
+}
+
+int nostr_core_ecdh_x(const nostr_native_secp256k1_context *ctx, const unsigned char seckey[32],
+                      const unsigned char pubkey_x[32], unsigned char out32[32]) {
+  unsigned char compressed[33];
+  nostr_native_secp256k1_pubkey point;
+  int ok;
+
+  if (ctx == NULL || seckey == NULL || pubkey_x == NULL || out32 == NULL) {
+    return NOSTR_CORE_INVALID_INPUT;
+  }
+
+  compressed[0] = 0x02;
+  memcpy(compressed + 1, pubkey_x, 32);
+  ok = nostr_native_secp256k1_ec_pubkey_parse(ctx, &point, compressed, 33) &&
+       nostr_native_secp256k1_ecdh(ctx, out32, &point, seckey, nostr_core_ecdh_xonly_hash, NULL);
+  nostr_native_secp256k1_memclear_explicit(compressed, sizeof(compressed));
+  nostr_native_secp256k1_memclear_explicit(&point, sizeof(point));
   return ok ? NOSTR_CORE_OK : NOSTR_CORE_INVALID_INPUT;
 }
 

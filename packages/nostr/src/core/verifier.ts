@@ -1,6 +1,3 @@
-import { schnorr } from "@noble/curves/secp256k1.js";
-import { sha256 } from "@noble/hashes/sha2.js";
-
 import {
   isMarkedFailed,
   isMarkedVerified,
@@ -10,20 +7,9 @@ import {
   validateSignedEvent,
 } from "./event.ts";
 import type { Event } from "./event.ts";
+import { nobleBackend } from "./key.ts";
+import type { NostrBackend } from "./key.ts";
 import { hexToBytes, utf8Encoder } from "./util.ts";
-
-/**
- * Verification backend: return true iff `sha256(serializedUtf8)` equals `id` and `sig` is a valid
- * BIP-340 signature of `id` by the x-only `pubkey`. Inputs are raw bytes (`id`/`pubkey` 32, `sig`
- * 64). Exceptions propagate through the built verifier unmarked — a throwing backend is broken and
- * must surface.
- */
-export type SerializedEventVerifier = (
-  serializedUtf8: Uint8Array,
-  id: Uint8Array,
-  pubkey: Uint8Array,
-  sig: Uint8Array,
-) => boolean;
 
 /** Whole-event verifier: return true iff the event's id and BIP-340 signature verify. */
 export type EventVerifier = (event: Event) => boolean;
@@ -33,7 +19,7 @@ export type EventVerifier = (event: Event) => boolean;
  * signature check to `backend`. Verified/failed results share `verifyEvent`'s WeakSet caches, so
  * verifiers built this way and `verifyEvent` agree on (and reuse) each other's results.
  */
-export function createEventVerifier(backend: SerializedEventVerifier): EventVerifier {
+export function createEventVerifier(backend: NostrBackend): EventVerifier {
   return (event) => {
     if (isMarkedVerified(event)) {
       return true;
@@ -45,7 +31,7 @@ export function createEventVerifier(backend: SerializedEventVerifier): EventVeri
       markUnverified(event);
       return false;
     }
-    const ok = backend(
+    const ok = backend.verifySerialized(
       utf8Encoder.encode(serializeValidatedEvent(event)),
       hexToBytes(event.id),
       hexToBytes(event.pubkey),
@@ -60,17 +46,5 @@ export function createEventVerifier(backend: SerializedEventVerifier): EventVeri
   };
 }
 
-const nobleSerializedVerify: SerializedEventVerifier = (serializedUtf8, id, pubkey, sig) => {
-  try {
-    const digest = sha256(serializedUtf8);
-    if (!digest.every((byte, i) => byte === id[i])) {
-      return false;
-    }
-    return schnorr.verify(sig, id, pubkey);
-  } catch {
-    return false;
-  }
-};
-
 /** Verify event id and BIP-340 signature. Uses WeakSet cache (does not mutate the event). */
-export const verifyEvent: EventVerifier = createEventVerifier(nobleSerializedVerify);
+export const verifyEvent: EventVerifier = createEventVerifier(nobleBackend);

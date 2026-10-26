@@ -1,8 +1,10 @@
 import type { Event, UnsignedEvent } from "../core/event.ts";
-import type { SecretKeyInput } from "../core/key.ts";
-import { Keys, signEvent } from "../core/key.ts";
+import type { NostrBackend, SecretKeyInput } from "../core/key.ts";
+import { Keys, nobleBackend, signEvent } from "../core/key.ts";
 import * as nip04 from "../nips/nip04.ts";
 import * as nip44 from "../nips/nip44.ts";
+import * as nip59 from "../nips/nip59.ts";
+import type { Rumor } from "../nips/nip59.ts";
 import { SignerDisposedError } from "./error.ts";
 import type { NostrSigner } from "./types.ts";
 
@@ -12,8 +14,11 @@ export class KeysSigner implements NostrSigner {
   readonly #convKeys = new Map<string, Uint8Array>();
   #disposed = false;
 
-  constructor(secretKey: SecretKeyInput | Keys) {
-    this.#keys = secretKey instanceof Keys ? secretKey : Keys.fromSecretKey(secretKey);
+  constructor(secretKey: SecretKeyInput | Keys, options?: { backend?: NostrBackend | undefined }) {
+    this.#keys =
+      secretKey instanceof Keys
+        ? secretKey
+        : Keys.fromSecretKey(secretKey, options?.backend ?? nobleBackend);
   }
 
   /**
@@ -44,7 +49,7 @@ export class KeysSigner implements NostrSigner {
     this.#assertUsable();
     const secret = this.#keys.secretKey.bytes;
     try {
-      return nip04.encryptToPubkey(plaintext, secret, peer);
+      return nip04.encryptToPubkey(plaintext, secret, peer, this.#keys.backend);
     } finally {
       secret.fill(0);
     }
@@ -54,7 +59,7 @@ export class KeysSigner implements NostrSigner {
     this.#assertUsable();
     const secret = this.#keys.secretKey.bytes;
     try {
-      return nip04.decryptFromPubkey(ciphertext, secret, peer);
+      return nip04.decryptFromPubkey(ciphertext, secret, peer, this.#keys.backend);
     } finally {
       secret.fill(0);
     }
@@ -66,7 +71,7 @@ export class KeysSigner implements NostrSigner {
     if (!key) {
       const secret = this.#keys.secretKey.bytes;
       try {
-        key = nip44.getConversationKey(secret, pk);
+        key = nip44.getConversationKey(secret, pk, this.#keys.backend);
       } finally {
         secret.fill(0);
       }
@@ -83,6 +88,21 @@ export class KeysSigner implements NostrSigner {
   async nip44Decrypt(peer: string, payload: string): Promise<string> {
     this.#assertUsable();
     return nip44.decrypt(payload, this.#conversationKey(peer));
+  }
+
+  /** Unwraps each gift wrap independently — a bad wrap yields an Error, never fails the batch. */
+  async unwrapGiftWraps(events: ReadonlyArray<Event>): Promise<ReadonlyArray<Rumor | Error>> {
+    this.#assertUsable();
+    const results: Array<Rumor | Error> = [];
+    for (const event of events) {
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- per-wrap order is the contract
+        results.push(await nip59.unwrap(this, event));
+      } catch (error) {
+        results.push(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+    return results;
   }
 
   /**

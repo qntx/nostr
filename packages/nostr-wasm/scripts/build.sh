@@ -38,6 +38,7 @@ if ! "${cc_wasm}" --target=wasm32-unknown-unknown -nostdlib -Wl,--version \
   exit 1
 fi
 
+root="$(cd "${pkg}/../.." && pwd)"
 out="${pkg}/src/nostr_wasm.wasm"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
@@ -47,10 +48,12 @@ trap 'rm -rf "${tmp}"' EXIT
 # includes vendor/secp256k1/src/secp256k1.c — the precomputed tables are separate TUs.
 "${cc_wasm}" \
   --target=wasm32-unknown-unknown \
+  -ffile-prefix-map="${root}=." \
   -O3 -flto -nostdlib -mbulk-memory \
   -I"${pkg}/c/include" \
   -I"${native}/cpp" \
   -I"${native}/vendor/secp256k1/include" \
+  -DENABLE_MODULE_ECDH=1 \
   -DENABLE_MODULE_EXTRAKEYS=1 \
   -DENABLE_MODULE_SCHNORRSIG=1 \
   -DUSE_FORCE_WIDEMUL_INT64=1 \
@@ -80,4 +83,22 @@ br_size=""
 if command -v brotli >/dev/null; then
   br_size="$(brotli -cq 11 "${out}" | wc -c | tr -d ' ')"
 fi
-echo "nostr_wasm.wasm: $(wc -c <"${out}" | tr -d ' ') B raw, ${gz_size} B gzip${br_size:+, ${br_size} B brotli}"
+digest="$(openssl dgst -sha256 -binary "${out}" | openssl base64 -A)"
+# The emitted file must stay byte-identical to the committed integrity.ts —
+# CI rebuilds and fails on a diff.
+cat > "${pkg}/src/integrity.ts" <<EOF
+/*
+ * Subresource Integrity hash (\`sha256-<base64>\`) of the shipped \`nostr_wasm.wasm\`, regenerated
+ * whenever build:wasm runs. Pass it to \`fetch(url, { integrity })\` so the browser refuses to
+ * execute a tampered module:
+ *
+ *   const res = await fetch(wasmUrl, { integrity: NOSTR_WASM_INTEGRITY });
+ *   const wasm = await loadNostrWasm({ module: await res.arrayBuffer() });
+ *
+ * The constant only guards fetch-time delivery — callers that want SRI enforcement must fetch
+ * with \`integrity\` and pass \`module\`.
+ */
+export const NOSTR_WASM_INTEGRITY = "sha256-${digest}";
+EOF
+
+echo "nostr_wasm.wasm: $(wc -c <"${out}" | tr -d ' ') B raw, ${gz_size} B gzip${br_size:+, ${br_size} B brotli}, sha256-${digest}"

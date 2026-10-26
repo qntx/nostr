@@ -251,6 +251,17 @@
     }
   },
   {
+    "id": "ecdh",
+    "ts": {
+      "module": "packages/nostr/src/core/key.ts",
+      "tests": ["packages/nostr/tests/vectors/ecdh.test.ts"]
+    },
+    "vectors": ["vectors/ecdh.json"],
+    "rust": {
+      "tests": ["crates/nk-core/tests/it/ecdh.rs"]
+    }
+  },
+  {
     "id": "nip19.codec",
     "ts": {
       "module": "packages/nostr/src/nips/nip19.ts",
@@ -493,7 +504,8 @@
         "packages/nostr-wasm/tests/abi.test.ts",
         "packages/nostr-wasm/tests/verify.test.ts",
         "packages/nostr-wasm/tests/sign.test.ts",
-        "packages/nostr-wasm/tests/node-load.test.ts"
+        "packages/nostr-wasm/tests/node-load.test.ts",
+        "packages/nostr-wasm/tests/ecdh.test.ts"
       ]
     },
     "vectors": [
@@ -503,5 +515,16 @@
     ],
     "rust": null,
     "rustNote": "the wasm ABI is C now: packages/nostr-wasm/c/nostr_wasm.c over the shared nostr_core.c in packages/nostr-native/cpp; no rust-nostr counterpart to compare"
+  },
+  {
+    "id": "nip47",
+    "ts": {
+      "module": "packages/nostr/src/nips/nip47.ts",
+      "tests": ["packages/nostr/tests/nip47.test.ts"]
+    },
+    "vectors": ["vectors/nip47.json"],
+    "rust": {
+      "tests": ["crates/nk-core/tests/it/nip47.rs"]
+    }
   }
 ]

@@ -10,7 +10,7 @@
 //! `#[non_exhaustive]` `Error` enum and `Result` alias.
 
 #[cfg(any(feature = "nip04", feature = "nip44"))]
-mod ecdh;
+pub mod ecdh;
 
 pub mod blossom;
 #[cfg(feature = "nip04")]
@@ -27,6 +27,7 @@ pub mod nip42;
 #[cfg(feature = "nip44")]
 pub mod nip44;
 pub mod nip46;
+pub mod nip47;
 #[cfg(feature = "nip49")]
 pub mod nip49;
 pub mod nip51;

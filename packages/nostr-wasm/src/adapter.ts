@@ -1,5 +1,5 @@
 import { NostrError, createEventVerifier } from "@qntx/nostr/core";
-import type { EventVerifier, SerializedEventVerifier } from "@qntx/nostr/core";
+import type { EventVerifier, NostrBackend } from "@qntx/nostr/core";
 
 /** Wasm instance aborted; later calls on that instance fail. */
 export class WasmPoisonedError extends NostrError {
@@ -33,10 +33,10 @@ export function runPoisoned<T>(poison: { error?: Error }, fn: () => T): T {
  * `WasmPoisonedError`; any other backend error verifies `false` (the event is marked failed).
  */
 export function createWasmEventVerifier(
-  verifySerialized: SerializedEventVerifier,
+  verifySerialized: NostrBackend["verifySerialized"],
   poison: { error?: Error },
 ): EventVerifier {
-  const backend: SerializedEventVerifier = (serializedUtf8, id, pubkey, sig) => {
+  const raw: NostrBackend["verifySerialized"] = (serializedUtf8, id, pubkey, sig) => {
     try {
       return runPoisoned(poison, () => verifySerialized(serializedUtf8, id, pubkey, sig));
     } catch (error) {
@@ -45,6 +45,20 @@ export function createWasmEventVerifier(
       }
       return false;
     }
+  };
+  const backend: NostrBackend = {
+    verifySerialized: raw,
+    // createEventVerifier only calls verifySerialized; the rest of the shape is
+    // required by NostrBackend and never invoked.
+    publicKey: () => {
+      throw new NostrError("wasm verifier backend: publicKey is unsupported");
+    },
+    sign: () => {
+      throw new NostrError("wasm verifier backend: sign is unsupported");
+    },
+    ecdhX: () => {
+      throw new NostrError("wasm verifier backend: ecdhX is unsupported");
+    },
   };
   return createEventVerifier(backend);
 }

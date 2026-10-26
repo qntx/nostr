@@ -15,7 +15,7 @@ import {
 } from "../nips/nip17.ts";
 import type { Recipient } from "../nips/nip17.ts";
 import { unwrap } from "../nips/nip59.ts";
-import type { Nip59Crypto } from "../nips/nip59.ts";
+import type { Rumor, Nip59Crypto } from "../nips/nip59.ts";
 import type { Pool, PoolPublishResult } from "../relay/pool.ts";
 import type { Closer } from "../relay/subscription.ts";
 import type {
@@ -148,10 +148,35 @@ export async function fetchPrivateMessages(
   );
 
   const byRumor = new Map<string, ReceivedPrivateMessage>();
-  for (const wrap of events) {
+  // Batch unwrap in chunks of 50 when the signer supports it — a corrupt wrap lands as an
+  // Error entry and the batch continues, so results and ordering match the fallback exactly.
+  const results: Array<Rumor | Error> = [];
+  if (crypto.unwrapGiftWraps === undefined) {
+    for (const wrap of events) {
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- unwraps run serially so ingest/seenOn keep relay order
+        results.push(await unwrap(crypto, wrap));
+      } catch (error) {
+        results.push(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+  } else {
+    for (let i = 0; i < events.length; i += 50) {
+      const chunk = events.slice(i, i + 50);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- chunks keep relay order
+      const unwrapped = await crypto.unwrapGiftWraps(chunk);
+      if (unwrapped.length !== chunk.length) {
+        throw new TypeError("unwrapGiftWraps must return one result per gift wrap");
+      }
+      results.push(...unwrapped);
+    }
+  }
+  for (const [idx, wrap] of events.entries()) {
+    const rumor = results[idx];
+    if (rumor === undefined || rumor instanceof Error) {
+      continue; // junk / forgery / key mismatch — not stored
+    }
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- unwraps run serially so ingest/seenOn keep relay order
-      const rumor = await unwrap(crypto, wrap);
       const wrapUrls = urls.get(wrap.id);
       const firstUrl = wrapUrls?.values().next().value;
       if (opts?.observe !== false) {
@@ -171,7 +196,7 @@ export async function fetchPrivateMessages(
         ...(firstUrl === undefined ? {} : { relayUrl: firstUrl }),
       });
     } catch {
-      // junk / forgery / key mismatch — not stored
+      // ingest/observe failure — not stored
     }
   }
 
