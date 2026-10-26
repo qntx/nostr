@@ -251,6 +251,17 @@
     }
   },
   {
+    "id": "ecdh",
+    "ts": {
+      "module": "packages/nostr/src/core/key.ts",
+      "tests": ["packages/nostr/tests/vectors/ecdh.test.ts"]
+    },
+    "vectors": ["vectors/ecdh.json"],
+    "rust": {
+      "tests": ["crates/nk-core/tests/it/ecdh.rs"]
+    }
+  },
+  {
     "id": "nip19.codec",
     "ts": {
       "module": "packages/nostr/src/nips/nip19.ts",

@@ -3,11 +3,6 @@
 use crate::{PublicKey, SecretKey};
 use zeroize::{Zeroize, Zeroizing};
 
-/// Returns the x coordinate of `secp256k1::ecdh::shared_secret_point` between
-/// `secret` and `peer` lifted to an even-parity x-only key (TS
-/// `secp256k1.getSharedSecret(secret, 02 || peer).slice(1, 33)`). The
-/// temporary `secp256k1::SecretKey` and the shared point are erased.
-///
 /// The ECDH computation failed.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,7 +25,15 @@ impl std::error::Error for Error {}
 /// The ECDH computation failed.
 pub type Result<T> = core::result::Result<T, Error>;
 
-/// `Err(Error::InvalidPeerKey)` when `peer`'s bytes do not lift to a curve point.
+/// Returns the x coordinate of the ECDH shared point.
+///
+/// `peer` is lifted to an even-parity x-only key — TS
+/// `secp256k1.getSharedSecret(secret, 02 || peer).slice(1, 33)`; the temporary
+/// `secp256k1::SecretKey` and the shared point are erased.
+///
+/// # Errors
+///
+/// [`Error::InvalidPeerKey`] when `peer`'s bytes do not lift to a curve point.
 pub fn shared_x(secret: &SecretKey, peer: &PublicKey) -> Result<Zeroizing<[u8; 32]>> {
     secret.with_secret_bytes(|bytes| {
         // nk's `SecretKey` already validated the scalar.

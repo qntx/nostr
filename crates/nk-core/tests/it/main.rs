@@ -32,6 +32,7 @@ mod blossom;
 mod common;
 mod core;
 mod diff;
+mod ecdh;
 mod nip05;
 mod nip10;
 mod nip11;
