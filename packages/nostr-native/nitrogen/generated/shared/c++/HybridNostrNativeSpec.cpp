@@ -17,6 +17,7 @@ namespace margelo::nitro::nostrnative {
       prototype.registerHybridMethod("verifySerialized", &HybridNostrNativeSpec::verifySerialized);
       prototype.registerHybridMethod("publicKey", &HybridNostrNativeSpec::publicKey);
       prototype.registerHybridMethod("sign", &HybridNostrNativeSpec::sign);
+      prototype.registerHybridMethod("ecdhX", &HybridNostrNativeSpec::ecdhX);
     });
   }
 

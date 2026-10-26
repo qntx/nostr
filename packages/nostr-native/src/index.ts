@@ -38,7 +38,9 @@ export const verifySerialized: NostrBackend["verifySerialized"] = (
  * `Keys.generate(signing)` so signing runs on the same randomized context as verification. Throws
  * on an invalid secret key or wrong-length input.
  */
-export const signing: Omit<NostrBackend, "ecdhX"> = {
+export const signing: NostrBackend = {
+  ecdhX: (secretKey, publicKeyX) =>
+    new Uint8Array(nostrNative.ecdhX(asArrayBuffer(secretKey), asArrayBuffer(publicKeyX))),
   verifySerialized,
   publicKey: (secretKey) => new Uint8Array(nostrNative.publicKey(asArrayBuffer(secretKey))),
   sign: (id, secretKey, auxRand) =>

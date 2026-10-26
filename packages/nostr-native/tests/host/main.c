@@ -45,6 +45,14 @@ typedef struct {
   const char *name;
 } bad_seckey_case;
 
+typedef struct {
+  unsigned char seckey[32];
+  unsigned char pubx[32];
+  unsigned char shared[32];
+  int ok;
+  const char *name;
+} ecdh_case;
+
 #include "vectors.generated.h"
 
 static int checks = 0;
@@ -104,6 +112,24 @@ int main(void) {
                            SIGN_CASES[0].aux, sig),
           0, BAD_SECKEYS[i].name);
   }
+
+  /* ABI version is the compiled-in constant. */
+  check(nostr_native_abi_version(), NOSTR_NATIVE_ABI_VERSION, "abi-version");
+
+  /* ECDH: shared vectors/ecdh.json cases, byte-for-byte. */
+  for (i = 0; i < sizeof(ECDH_CASES) / sizeof(ECDH_CASES[0]); i++) {
+    memset(out, 0xaa, 32);
+    check(nostr_native_ecdh_x(ECDH_CASES[i].seckey, ECDH_CASES[i].pubx, out),
+          ECDH_CASES[i].ok, ECDH_CASES[i].name);
+    if (ECDH_CASES[i].ok) {
+      check(memcmp(out, ECDH_CASES[i].shared, 32), 0, ECDH_CASES[i].name);
+    }
+  }
+  /* NULL and invalid inputs on the ecdh entry point. */
+  check(nostr_native_ecdh_x(NULL, ECDH_CASES[0].pubx, out), 0, "ecdh-null-seckey");
+  check(nostr_native_ecdh_x(ECDH_CASES[0].seckey, NULL, out), 0, "ecdh-null-pubx");
+  check(nostr_native_ecdh_x(BAD_SECKEYS[0].seckey, ECDH_CASES[0].pubx, out), 0,
+        "ecdh-bad-seckey");
 
   /* Robustness: NULL inputs must return 0, never crash. */
   check(nostr_native_verify_serialized(NULL, 0, NULL, NULL, NULL), 0, "null-args");
