@@ -196,9 +196,9 @@ pub enum NwcOutcome {
 }
 
 fn is_msat(value: &serde_json::Value) -> bool {
-    value
-        .as_f64()
-        .is_some_and(|f| f.fract() == 0.0 && (0.0..=9_007_199_254_740_992.0).contains(&f))
+    // `as_u64` rejects floats and negatives — a `1.0`-spelled integer is non-canonical
+    // JSON for amounts and is rejected, matching the vector `nonCanonicalJson` class.
+    value.as_u64().is_some_and(|n| n <= 9_007_199_254_740_991)
 }
 
 /// Validate a decrypted kind-23195 payload against its request method.
