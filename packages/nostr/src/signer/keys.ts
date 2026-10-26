@@ -3,6 +3,8 @@ import type { NostrBackend, SecretKeyInput } from "../core/key.ts";
 import { Keys, nobleBackend, signEvent } from "../core/key.ts";
 import * as nip04 from "../nips/nip04.ts";
 import * as nip44 from "../nips/nip44.ts";
+import * as nip59 from "../nips/nip59.ts";
+import type { Rumor } from "../nips/nip59.ts";
 import { SignerDisposedError } from "./error.ts";
 import type { NostrSigner } from "./types.ts";
 
@@ -86,6 +88,21 @@ export class KeysSigner implements NostrSigner {
   async nip44Decrypt(peer: string, payload: string): Promise<string> {
     this.#assertUsable();
     return nip44.decrypt(payload, this.#conversationKey(peer));
+  }
+
+  /** Unwraps each gift wrap independently — a bad wrap yields an Error, never fails the batch. */
+  async unwrapGiftWraps(events: ReadonlyArray<Event>): Promise<ReadonlyArray<Rumor | Error>> {
+    this.#assertUsable();
+    const results: Array<Rumor | Error> = [];
+    for (const event of events) {
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- per-wrap order is the contract
+        results.push(await nip59.unwrap(this, event));
+      } catch (error) {
+        results.push(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+    return results;
   }
 
   /**

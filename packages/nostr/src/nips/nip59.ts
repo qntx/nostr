@@ -33,6 +33,11 @@ export type Nip59Crypto = {
   signEvent: (unsigned: UnsignedEvent) => Promise<Event>;
   nip44Encrypt: (peer: string, plaintext: string) => Promise<string>;
   nip44Decrypt: (peer: string, payload: string) => Promise<string>;
+  /**
+   * Optional batch unwrap: one entry per input event, preserving order — a Rumor on success or an
+   * Error for that wrap's failure. A single bad wrap never fails the batch.
+   */
+  unwrapGiftWraps?: (events: ReadonlyArray<Event>) => Promise<ReadonlyArray<Rumor | Error>>;
 };
 
 export type Nip44Decryptor = {
@@ -99,12 +104,14 @@ type Nip59CryptoInput = {
   signEvent: (unsigned: UnsignedEvent) => Promise<Event>;
   nip44Encrypt?: (peer: string, plaintext: string) => Promise<string>;
   nip44Decrypt?: (peer: string, payload: string) => Promise<string>;
+  unwrapGiftWraps?: (events: ReadonlyArray<Event>) => Promise<ReadonlyArray<Rumor | Error>>;
 };
 
 /** Narrow a signer-shaped object to {@link Nip59Crypto}, or throw. */
 export function requireNip59Crypto(crypto: Nip59CryptoInput): Nip59Crypto {
   const encrypt = crypto.nip44Encrypt;
   const decrypt = crypto.nip44Decrypt;
+  const batch = crypto.unwrapGiftWraps;
   if (!encrypt || !decrypt) {
     throw new Nip59Error("NIP-44 is required");
   }
@@ -113,6 +120,11 @@ export function requireNip59Crypto(crypto: Nip59CryptoInput): Nip59Crypto {
     signEvent: async (unsigned) => crypto.signEvent(unsigned),
     nip44Encrypt: async (peer, plaintext) => encrypt.call(crypto, peer, plaintext),
     nip44Decrypt: async (peer, payload) => decrypt.call(crypto, peer, payload),
+    ...(batch === undefined
+      ? {}
+      : {
+          unwrapGiftWraps: async (events: ReadonlyArray<Event>) => batch.call(crypto, events),
+        }),
   };
 }
 

@@ -379,6 +379,105 @@ describe("Client NIP-17", () => {
     await bob.shutdown();
   });
 
+  test("fetchPrivateMessages batches unwrapGiftWraps in chunks of 50", async () => {
+    const aliceKeys = Keys.fromSecretKey(ALICE_SK);
+    const bobKeys = Keys.fromSecretKey(BOB_SK);
+    seedLists(net, aliceKeys, bobKeys);
+
+    const alice = new KeysSigner(aliceKeys);
+    const gifts = await Promise.all(
+      Array.from({ length: 51 }, async (_, i) =>
+        wrap(
+          alice,
+          bobKeys.publicKey,
+          createRumor(aliceKeys.publicKey, {
+            kind: Kind.PrivateDirectMessage,
+            content: `msg-${i}`,
+            tags: [["p", bobKeys.publicKey]],
+            created_at: 10 + i,
+          }),
+        ),
+      ),
+    );
+    net.relay(BOB_DM).seed(gifts);
+
+    const bobSigner = new KeysSigner(bobKeys);
+    const calls: number[] = [];
+    const inner = bobSigner.unwrapGiftWraps.bind(bobSigner);
+    bobSigner.unwrapGiftWraps = async (events) => {
+      calls.push(events.length);
+      return inner(events);
+    };
+    const bob = new Client({
+      signer: bobSigner,
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    await bob.connect();
+
+    const inbox = await bob.fetchPrivateMessages({ timeoutMs: 2000 });
+    expect(calls).toStrictEqual([50, 1]);
+    expect(inbox).toHaveLength(51);
+    expect(inbox.map((m) => m.rumor.content).toSorted()).toStrictEqual(
+      gifts.map((_, i) => `msg-${i}`).toSorted(),
+    );
+    bobSigner.dispose();
+    await bob.shutdown();
+  });
+
+  test("fetchPrivateMessages falls back per-event when the signer lacks unwrapGiftWraps", async () => {
+    const aliceKeys = Keys.fromSecretKey(ALICE_SK);
+    const bobKeys = Keys.fromSecretKey(BOB_SK);
+    seedLists(net, aliceKeys, bobKeys);
+
+    const alice = new KeysSigner(aliceKeys);
+    const gift = await wrap(
+      alice,
+      bobKeys.publicKey,
+      createRumor(aliceKeys.publicKey, {
+        kind: Kind.PrivateDirectMessage,
+        content: "hola",
+        tags: [["p", bobKeys.publicKey]],
+        created_at: 10,
+      }),
+    );
+    const junk = finalizeEvent(
+      {
+        kind: Kind.GiftWrap,
+        content: "not-valid-nip44",
+        created_at: 11,
+        tags: [["p", bobKeys.publicKey]],
+      },
+      Keys.generate().secretKey,
+    );
+    net.relay(BOB_DM).seed([gift, junk]);
+
+    // A Nip59Crypto without unwrapGiftWraps: same surface, the client unwraps per event.
+    const bobSigner = new KeysSigner(bobKeys);
+    const fallbackSigner = {
+      getPublicKey: async () => bobSigner.getPublicKey(),
+      signEvent: async (unsigned: Parameters<KeysSigner["signEvent"]>[0]) =>
+        bobSigner.signEvent(unsigned),
+      nip44Encrypt: async (peer: string, plaintext: string) =>
+        bobSigner.nip44Encrypt(peer, plaintext),
+      nip44Decrypt: async (peer: string, payload: string) => bobSigner.nip44Decrypt(peer, payload),
+    };
+    const bob = new Client({
+      signer: fallbackSigner,
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    await bob.connect();
+
+    const inbox = await bob.fetchPrivateMessages({ timeoutMs: 2000 });
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]!.rumor.content).toBe("hola");
+    bobSigner.dispose();
+    await bob.shutdown();
+  });
+
   test("fetchPrivateMessages REQ kinds are 1059 only and skip seeded 21059", async () => {
     const aliceKeys = Keys.fromSecretKey(ALICE_SK);
     const bobKeys = Keys.fromSecretKey(BOB_SK);
