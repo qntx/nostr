@@ -46,6 +46,7 @@
     "access": "public"
   },
   "scripts": {
+    "build": "vp pack",
     "build:wasm": "vp run @qntx/nostr#build && bash scripts/docker-build.sh && vp pack && publint && attw --pack . --profile esm-only",
     "test:wasm": "vp test",
     "bench:wasm": "BENCH=1 vp test tests/bench.ts",
