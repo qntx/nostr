@@ -43,6 +43,7 @@ mod nip21;
 mod nip27;
 mod nip42;
 mod nip46;
+mod nip47;
 mod nip51;
 mod nip57;
 mod nip59;

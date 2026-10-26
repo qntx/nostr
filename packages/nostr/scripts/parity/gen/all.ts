@@ -6,6 +6,7 @@
 await import("./core.ts");
 await import("./ecdh.ts");
 await import("./nip04.ts");
+await import("./nip47.ts");
 await import("./nip10.ts");
 await import("./nip13.ts");
 await import("./nip17.ts");

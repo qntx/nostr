@@ -22,6 +22,7 @@
     "prepare": "vp config"
   },
   "devDependencies": {
+    "@getalby/sdk": "8.1.1",
     "@qntx/oxfmt": "1.1.1",
     "@qntx/oxlint": "1.1.1",
     "@qntx/tsconfig": "1.0.1",
