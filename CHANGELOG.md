@@ -11,6 +11,25 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Added
 
+- `NostrBackend` (`@qntx/nostr` `core/key.ts`): the injected signing/verification/ECDH backend — `publicKey`, `sign`, `verifySerialized`, `ecdhX` — with `nobleBackend` as the default implementation. Injection points: `Keys.generate`/`Keys.fromSecretKey(…, backend?)`, `KeysSigner({ backend? })` (NIP-04 shared secrets and NIP-44 conversation keys go through `backend.ecdhX`; the conversation-key cache and `dispose()` zeroing are unchanged), `nip04.encryptToPubkey`/`decryptFromPubkey`, `nip44.getConversationKey`, and `createEventVerifier(backend)`; `nip59.unwrap` accepts `{ verify? }` defaulting to `verifyEvent`.
+- `nostr_core_ecdh_x` in the shared C core (vendored libsecp256k1 ECDH module enabled in the iOS podspec, Android CMake, wasm and host-test builds) and `nk_core::nips::ecdh::shared_x` — the x coordinate of the ECDH shared point, verified byte-for-byte by the shared `vectors/ecdh.json` (46 cases: all NIP-44 `get_conversation_key` spec rows cross-checked via HKDF, fixed-seed random pairs, and invalid inputs).
+- `nostr-wasm`: `nostr_ecdh_x` export making `NostrWasm` a full `NostrBackend`; `NOSTR_ABI_VERSION` is now 4. The wasm is built reproducibly in a pinned container image (rust:1.99.1-slim by digest, binaryen 132 verified by SHA-256, `-ffile-prefix-map`) and committed as `src/nostr_wasm.wasm` (79,744 B / 32,755 B gzip); `NOSTR_WASM_INTEGRITY` (`src/integrity.ts`) is the SRI hash for `fetch(url, { integrity })` checks. CI and the publish pipeline rebuild the wasm and `git diff --exit-code` both artifacts, so the published tarball ships exactly the committed bytes.
+- `nostr-native`: `HybridNostrNative::ecdhX` via the Nitro spec, making the native adapter a full `NostrBackend`. `nostr_native.h` is now the stable public C interface: `NOSTR_NATIVE_ABI_VERSION 2`, `nostr_native_abi_version()`, and `nostr_native_ecdh_x` (1/0, documented argument lengths, caller-wipes secret inputs, existing global context).
+- `NostrSigner.unwrapGiftWraps?(events)` — optional batch DM unwrapping (`nips/nip59`): `KeysSigner` implements it by unwrapping each event, so one corrupt wrap yields an `Error` entry and the batch continues; `client.dm` uses it in batches of 50 when present and falls back to per-event unwrap otherwise, with identical results and ordering.
+- `nips/nip47` — the Nostr Wallet Connect **client** (`@qntx/nostr/nips/nip47`): `parseConnectionUri` (`nostr+walletconnect://`, `wss://` relays, `ws://localhost` allowed), `parseInfoEvent` (kind 13194, `encryption`/`extensions` tags), `encodeRequest`/`decodeResponse` (kinds 23194/23195, NIP-44 only, full response validation), typed request/result/error unions, and `NwcError`. nk-core mirrors the surface in `nips::nip47` (`parse_connection_uri`, `parse_info_event`, `decode_response_payload`, always compiled) and both sides run the shared `vectors/nip47.json`. A cross-test exercises our client against `@getalby/sdk`'s `NWCWalletService` over the in-memory relay for `get_info`, `get_balance`, `pay_invoice` and an error arm.
+
+### Removed
+
+- **BREAKING:** `SigningBackend` and `SerializedEventVerifier` are deleted without aliases — implement `NostrBackend` instead (`verifySerialized` replaces the standalone serialized verifier).
+
+### Changed
+
+- **BREAKING:** `nostr-wasm` ABI bumped to 4 (`nostr_ecdh_x` added); a wasm built for ABI 3 is rejected by `NOSTR_ABI_VERSION` checking.
+- **BREAKING:** `nostr_native.h` ABI bumped to 2 (`nostr_native_abi_version()`, `nostr_native_ecdh_x`); consumers should call `nostr_native_abi_version()` before dispatch.
+- `nostr-wasm` publishes the committed reproducible wasm — the publish job packs the committed artifact after a reproducibility rebuild-and-diff gate instead of rebuilding on the release runner, so the published module always matches `NOSTR_WASM_INTEGRITY`.
+
+### Added
+
 - `nk`: Blossom on `http::HttpClient` — `upload`/`check_upload`/`list`/`delete`/`mirror`/`blob_exists`/`get_blob` (BUD-01/02/04/06, hash-verified descriptors and blobs), NIP-B7 `heal_blob_url` and `upload_to_servers`.
 - `nk-core`: Blossom codecs — `BlobHash`, `Server`, `BlobDescriptor`, kind-24242 `Authorization`, `authorization_header` and the kind-10063 `ServerList`, verified by the new shared `vectors/blossom`.
 - `nk`: `http` feature — `http::HttpClient` (hyper-util + rustls/ring + webpki-roots, never follows redirects, whole-exchange timeout, response-size cap) with NIP-11 `relay_information` and NIP-05 `nip05_document`/`nip05_profile`/`verify_nip05`; `testing::MockHttp` and `MockRelay::set_information` under `test-util`.
