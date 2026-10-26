@@ -90,14 +90,12 @@ fn nip47_matches_vectors() {
                 let outcome =
                     nip47::decode_response_payload(case["method"].as_str().unwrap(), &plaintext);
                 assert_eq!(outcome.is_ok(), ok, "{id}");
-                if ok {
-                    if let Some(code) = case["expect"].get("code") {
-                        assert_eq!(
-                            outcome.unwrap(),
-                            NwcOutcome::Err(code.as_str().unwrap().to_string()),
-                            "{id}"
-                        );
-                    }
+                if ok && let Some(code) = case["expect"].get("code") {
+                    assert_eq!(
+                        outcome.unwrap(),
+                        NwcOutcome::Err(code.as_str().unwrap().to_string()),
+                        "{id}"
+                    );
                 }
             }
             other => panic!("unknown case kind {other}"),
