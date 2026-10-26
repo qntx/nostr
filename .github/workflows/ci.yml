@@ -33,7 +33,7 @@ jobs:
       install-directory: .
       dist-export: .
       bench: true
-      # test:parity replays the differential streams through crates/interop;
+      # test:parity replays the differential streams through crates/nk-core;
       # rustup on the runner picks up rust-toolchain.toml on demand.
       scripts: test:parity
       scripts-directory: .
@@ -43,7 +43,53 @@ jobs:
     permissions:
       contents: read
     with:
-      # rust-version omitted: crates/interop/rust-toolchain.toml pins it.
-      working-directory: crates/interop
+      # rust-version omitted: rust-toolchain.toml pins it.
       deny: true
       doc: true
+      package-check: true
+      each-feature: true
+      packages: nk nk-core nk-store
+
+  rust-minimal:
+    uses: qntx/workflows/.github/workflows/ci-rust.yml@v2
+    permissions:
+      contents: read
+    with:
+      packages: nk nk-core nk-store
+      features: --no-default-features
+
+  # nk-store with rusqlite bundled: the C SQLite sources must build for the
+  # mobile targets. --all-features enables `sqlite`.
+  portable-store:
+    uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
+    permissions:
+      contents: read
+    with:
+      targets: aarch64-linux-android x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
+      packages: nk-store
+      features: --all-features
+      forbid-deps: tokio
+
+  # secp256k1-sys compiles C on every target; ci-rust-cross supplies the
+  # wasm clang, Android NDK and iOS SDK toolchains.
+  portable:
+    uses: qntx/workflows/.github/workflows/ci-rust-cross.yml@v2
+    permissions:
+      contents: read
+    with:
+      targets: wasm32-unknown-unknown aarch64-linux-android armv7-linux-androideabi x86_64-linux-android aarch64-apple-ios aarch64-apple-ios-sim
+      packages: nk-core
+      features: --no-default-features
+      forbid-deps: getrandom tokio
+
+  # Runs the nk E2E suite against a pinned nosfry release binary.
+  e2e:
+    name: e2e (nosfry)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: crates/nk/tests/e2e/run.sh

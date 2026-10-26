@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-59 `createSeal`/`createGiftWrap`/`wrap`/`unwrap`
 // semantics as frozen vectors shared by the TS test suite
-// (tests/vectors/nip59.test.ts) and crates/interop.
+// (tests/vectors/nip59.test.ts) and crates/nk-core.
 //
 // Every event is produced by the real TS API under a deterministic entropy
 // stream: `WrapOptions.randomBytes` feeds the gift wrap's ephemeral key,
@@ -641,12 +641,8 @@ async function main(): Promise<void> {
       [],
       new Stream(entropy(0xa5)),
     );
-    unwrap.push({
-      name: "rumor-uppercase-id",
-      gift_wrap: wrapSeal(seal, 0xa7),
-      recipient_secret_key: RECIPIENT,
-      rumor: { ...rumorBase, id: rumorOf(rumorBase).id },
-    });
+    // The rumor id is protocol text — uppercase does not match.
+    unwrap.push(err("rumor-uppercase-id", wrapSeal(seal, 0xa7), "invalid rumor"));
   }
 
   mkdirSync(vectors, { recursive: true });

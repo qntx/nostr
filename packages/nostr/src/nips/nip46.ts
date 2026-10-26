@@ -6,7 +6,7 @@
  */
 import { NostrError } from "../core/error.ts";
 import type { Mutable } from "../core/util.ts";
-import { containsLoneSurrogate, isHex32, isRecord } from "../core/util.ts";
+import { containsLoneSurrogate, isHex32, isRecord, lowerAscii, trimAscii } from "../core/util.ts";
 
 export type BunkerPointer = {
   /** Remote signer / bunker public key (hex). */
@@ -63,7 +63,7 @@ export function toBunkerURL(pointer: BunkerPointer): string {
 export function parseBunkerURL(input: string): BunkerPointer | undefined {
   let url: URL;
   try {
-    url = new URL(input.trim());
+    url = new URL(trimAscii(input));
   } catch {
     return undefined;
   }
@@ -71,11 +71,11 @@ export function parseBunkerURL(input: string): BunkerPointer | undefined {
     return undefined;
   }
   const pubkey = url.hostname || url.pathname.replace(/^\/*/, "");
-  if (!isHex32(pubkey.toLowerCase())) {
+  if (!isHex32(pubkey)) {
     return undefined;
   }
   return {
-    pubkey: pubkey.toLowerCase(),
+    pubkey,
     relays: url.searchParams.getAll("relay"),
     secret: url.searchParams.get("secret") ?? undefined,
   };
@@ -83,7 +83,8 @@ export function parseBunkerURL(input: string): BunkerPointer | undefined {
 
 /** Build a client-initiated `nostrconnect://` URI. */
 export function createNostrConnectURI(params: NostrConnectParams): string {
-  if (!isHex32(params.clientPubkey.toLowerCase())) {
+  const clientPubkey = lowerAscii(params.clientPubkey);
+  if (!isHex32(clientPubkey)) {
     throw new Nip46Error("invalid client pubkey");
   }
   if (!params.secret) {
@@ -111,7 +112,7 @@ export function createNostrConnectURI(params: NostrConnectParams): string {
     query.set("image", params.image);
   }
 
-  return `nostrconnect://${params.clientPubkey.toLowerCase()}?${query.toString()}`;
+  return `nostrconnect://${clientPubkey}?${query.toString()}`;
 }
 
 /** Parse a `nostrconnect://` URI. */
@@ -128,7 +129,7 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
     throw new Nip46Error(`expected nostrconnect: scheme, got ${url.protocol}`);
   }
   const clientPubkey = url.hostname || url.pathname.replace(/^\/*/, "");
-  if (!isHex32(clientPubkey.toLowerCase())) {
+  if (!isHex32(clientPubkey)) {
     throw new Nip46Error("invalid client pubkey in nostrconnect URI");
   }
   const secret = url.searchParams.get("secret");
@@ -140,7 +141,7 @@ export function parseNostrConnectURI(uri: string): NostrConnectParams {
     throw new Nip46Error("missing relays in nostrconnect URI");
   }
   const params: Mutable<NostrConnectParams> = {
-    clientPubkey: clientPubkey.toLowerCase(),
+    clientPubkey,
     relays,
     secret,
   };

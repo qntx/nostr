@@ -2,6 +2,7 @@ import { touchKey, trimOldest } from "../core/collections.ts";
 import type { Event } from "../core/event.ts";
 import { isReplaceableWinner } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
+import { canonicalizeFilter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
 import { normalizeRelayUrls, normalizeURL, nowSeconds } from "../core/util.ts";
 import { parseDmRelayList } from "../nips/nip17.ts";
@@ -235,20 +236,24 @@ export class Gossip {
    * - Mixed → remainder is the narrowed leftover; all routed → no remainder
    */
   route(filter: Filter): RoutedFilter {
-    const authors = filter.authors?.map((a) => a.toLowerCase());
-    const pTags = filter["#p"]?.map((p) => p.toLowerCase());
+    const f = canonicalizeFilter(filter);
+    const { authors } = f;
+    const pTags = f["#p"];
 
-    if ((!authors || authors.length === 0) && (!pTags || pTags.length === 0)) {
-      return { perRelay: new Map(), remainder: filter };
+    if (authors === undefined && pTags === undefined) {
+      return { perRelay: new Map(), remainder: f };
     }
 
-    if (authors && authors.length > 0 && (!pTags || pTags.length === 0)) {
-      return this.#breakAuthors(filter, authors, "write");
+    if (authors !== undefined && pTags === undefined) {
+      return this.#breakAuthors(f, [...authors], "write");
     }
 
-    if (pTags && pTags.length > 0 && (!authors || authors.length === 0)) {
-      const { authors: _authors, ...base } = filter;
-      return this.#breakAuthors(base, pTags, "read", (b, pubkeys) => ({ ...b, "#p": pubkeys }));
+    if (pTags !== undefined && authors === undefined) {
+      const { authors: _authors, ...base } = f;
+      return this.#breakAuthors(base, [...pTags], "read", (b, pubkeys) => ({
+        ...b,
+        "#p": pubkeys,
+      }));
     }
 
     // both authors and #p: send full filter to union of routes

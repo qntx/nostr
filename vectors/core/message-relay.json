@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.12.1",
+    "version": "0.14.0",
     "cross_check": null
   },
   "cases": [
@@ -37,14 +37,10 @@
     },
     {
       "raw": "[\"COUNT\",\"s\",{\"count\":3,\"hll\":\"ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB\"}]",
-      "encoded": "[\"COUNT\",\"s\",{\"count\":3,\"hll\":\"abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\"}]"
+      "encoded": "[\"COUNT\",\"s\",{\"count\":3}]"
     },
     {
       "raw": "[\"NEG-MSG\",\"sub\",\"deadbeef\"]"
-    },
-    {
-      "raw": "[\"NEG-MSG\",\"sub\",\"AABB\"]",
-      "encoded": "[\"NEG-MSG\",\"sub\",\"aabb\"]"
     },
     {
       "raw": "[\"NEG-ERR\",\"sub\",\"error: something\"]"
@@ -54,11 +50,13 @@
     },
     {
       "raw": "[\"COUNT\",\"s\",{\"count\":1,\"count\":2}]",
-      "encoded": "[\"COUNT\",\"s\",{\"count\":2}]"
+      "encoded": "[\"COUNT\",\"s\",{\"count\":2}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"COUNT\",\"s\",{\"count\":1e2}]",
-      "encoded": "[\"COUNT\",\"s\",{\"count\":100}]"
+      "encoded": "[\"COUNT\",\"s\",{\"count\":100}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"COUNT\",\"s\",{\"count\":3,\"approximate\":\"yes\",\"hll\":\"zz\"}]",

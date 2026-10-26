@@ -3,7 +3,7 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-27 `parseContent` tokenizer semantics as frozen
 // vectors shared by the TS test suite (tests/vectors/nip27.test.ts) and the
-// crates/interop. The canonical `ContentBlock` JSON encoding lives in
+// crates/nk-core. The canonical `ContentBlock` JSON encoding lives in
 // ../content-json.ts and is shared with the seeded `nip27.tokenize`
 // differential stream (diff.ts).
 
@@ -144,6 +144,7 @@ tokenize("url stops at quote", 'https://a.b/x"y');
 tokenize("url stops at cjk period", "https://a.b/x。tail");
 tokenize("url stops at fullwidth bang", "https://a.b/x！tail");
 tokenize("url stops at bom whitespace", "https://a.b/x﻿y");
+tokenize("url stops at U+0085 NEL", "https://a.b/xy");
 tokenize("url stops at space", "https://a.b/x y");
 
 // Media classification — imeta first, then extension.
@@ -175,6 +176,11 @@ tokenize("imeta key must equal trimmed url", "https://a.b/f.png.", {
 tokenize("invoice plain", "lnbc1xyz");
 tokenize("invoice amount", "lnbc2100n1xyz");
 tokenize("invoice amount multiplier", "lnbc10m1xyz");
+tokenize("invoice amount micro", "lnbc10u1xyz");
+tokenize("invoice amount nano", "lnbc2500n1xyz");
+tokenize("invoice second separator in run is text", "lnbc1x1y");
+tokenize("invoice bcrt beats bc", "lnbcrt1x");
+tokenize("invoice bc before rt is text", "lnbc1rt1x");
 tokenize("invoice backtracks separator", "lnbc101xyz");
 tokenize("invoice digit-1 splits amount", "lnbc21xyz");
 tokenize("invoice no-amount with multiplier-shaped data", "lnbc1uxyz");

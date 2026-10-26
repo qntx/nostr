@@ -65,13 +65,13 @@ describe("NIP-45 COUNT codec", () => {
     expect("hll" in countPayload(notString)).toBe(false);
   });
 
-  test("lowercases a valid 512-hex hll", () => {
+  test("drops a non-lowercase 512-hex hll", () => {
     const lower = `cd${"00".repeat(255)}`;
     const msg = parseRelayMessage(
       JSON.stringify(["COUNT", "c1", { count: 9, hll: lower.toUpperCase() }]),
     );
-    expect(msg).toStrictEqual(["COUNT", "c1", { count: 9, hll: lower }]);
-    expect(countPayload(msg).hll).toBe(lower);
+    expect(msg).toStrictEqual(["COUNT", "c1", { count: 9 }]);
+    expect(countPayload(msg).hll).toBeUndefined();
   });
 
   test("rejects counts that are not non-negative safe integers", () => {

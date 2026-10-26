@@ -7,9 +7,9 @@ import { EventBuilder } from "../core/builder.ts";
 import { EventValidationError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
-import { formatEventAddress, parseEventAddress, Tag } from "../core/tag.ts";
+import { formatEventAddress, parseEventAddress, parseEventAddressInput, Tag } from "../core/tag.ts";
 import type { Mutable } from "../core/util.ts";
-import { isHex32 } from "../core/util.ts";
+import { isHex32, lowerAscii } from "../core/util.ts";
 import type { AddressPointer, EventPointer, ProfilePointer } from "./nip19.ts";
 
 /** Parsed NIP-10 thread references from an event's `e`/`q`/`p` tags. */
@@ -32,8 +32,8 @@ type QuoteInput = string | EventPointer | AddressPointer;
 function eTagAuthor(tag: ReadonlyArray<string>): string | undefined {
   // NIP-10 5-tuple pubkey is index 4; NIP-01 4-tuple pubkey is index 3.
   for (const author of [tag[4], tag[3]]) {
-    if (author !== undefined && isHex32(author.toLowerCase())) {
-      return author.toLowerCase();
+    if (author !== undefined && isHex32(author)) {
+      return author;
     }
   }
   return undefined;
@@ -41,11 +41,11 @@ function eTagAuthor(tag: ReadonlyArray<string>): string | undefined {
 
 function eventPointerFromETag(tag: ReadonlyArray<string>): EventPointer | undefined {
   const id = tag.at(1);
-  if (tag[0] !== "e" || id === undefined || !isHex32(id.toLowerCase())) {
+  if (tag[0] !== "e" || id === undefined || !isHex32(id)) {
     return undefined;
   }
   const pointer: Mutable<EventPointer> = {
-    id: id.toLowerCase(),
+    id,
     relays: tag[2] !== undefined && tag[2] !== "" ? [tag[2]] : [],
   };
   const author = eTagAuthor(tag);
@@ -61,11 +61,11 @@ function quoteFromQTag(tag: ReadonlyArray<string>): EventPointer | AddressPointe
     return undefined;
   }
   const relays = tag[2] !== undefined && tag[2] !== "" ? [tag[2]] : [];
-  if (isHex32(value.toLowerCase())) {
-    const pointer: Mutable<EventPointer> = { id: value.toLowerCase(), relays };
+  if (isHex32(value)) {
+    const pointer: Mutable<EventPointer> = { id: value, relays };
     const author = tag.at(3);
-    if (author !== undefined && isHex32(author.toLowerCase())) {
-      pointer.author = author.toLowerCase();
+    if (author !== undefined && isHex32(author)) {
+      pointer.author = author;
     }
     return pointer;
   }
@@ -86,21 +86,21 @@ type BuiltQuote = { tag: Tag; author?: string | undefined; relay?: string | unde
 
 function quoteToTag(quote: QuoteInput): BuiltQuote | undefined {
   if (typeof quote === "string") {
-    if (isHex32(quote.toLowerCase())) {
-      return { tag: ["q", quote.toLowerCase()] };
+    if (isHex32(lowerAscii(quote))) {
+      return { tag: ["q", lowerAscii(quote)] };
     }
-    const addr = parseEventAddress(quote);
+    const addr = parseEventAddressInput(quote);
     if (!addr) {
       return undefined;
     }
     return { tag: ["q", formatEventAddress(addr.kind, addr.pubkey, addr.identifier)] };
   }
   if ("id" in quote) {
-    const id = quote.id.toLowerCase();
+    const id = lowerAscii(quote.id);
     const relay = quote.relays?.[0];
     const author =
-      quote.author !== undefined && isHex32(quote.author.toLowerCase())
-        ? quote.author.toLowerCase()
+      quote.author !== undefined && isHex32(lowerAscii(quote.author))
+        ? lowerAscii(quote.author)
         : undefined;
     let tag: Tag;
     if (author === undefined) {
@@ -141,7 +141,7 @@ export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
     }
 
     const eValue = tag.at(1);
-    if (tag[0] === "e" && eValue !== undefined && isHex32(eValue.toLowerCase())) {
+    if (tag[0] === "e" && eValue !== undefined && isHex32(eValue)) {
       const pointer = eventPointerFromETag(tag);
       if (pointer === undefined) {
         continue;
@@ -157,7 +157,7 @@ export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
         continue;
       }
       // Preferred markers are root/reply only. A hex32 at index 3 is NIP-01 pubkey, not a marker.
-      if (marker !== undefined && marker !== "" && !isHex32(marker.toLowerCase())) {
+      if (marker !== undefined && marker !== "" && !isHex32(marker)) {
         mentions.push(pointer);
         continue;
       }
@@ -181,9 +181,9 @@ export function parseThreadTags(event: Pick<Event, "tags">): ThreadReferences {
     }
 
     const pValue = tag.at(1);
-    if (tag[0] === "p" && pValue !== undefined && isHex32(pValue.toLowerCase())) {
+    if (tag[0] === "p" && pValue !== undefined && isHex32(pValue)) {
       profiles.push({
-        pubkey: pValue.toLowerCase(),
+        pubkey: pValue,
         relays: tag[2] !== undefined && tag[2] !== "" ? [tag[2]] : [],
       });
     }
@@ -242,7 +242,7 @@ export function buildReplyTags(opts: ReplyTagsOptions): Tag[] {
   assertKind1Parent(opts.parent);
   const thread = parseThreadTags(opts.parent);
   const root = thread.root ?? { id: opts.parent.id, relays: [], author: opts.parent.pubkey };
-  const parentIsRoot = root.id.toLowerCase() === opts.parent.id.toLowerCase();
+  const parentIsRoot = lowerAscii(root.id) === lowerAscii(opts.parent.id);
 
   const tags: Tag[] = [];
   const rootRelay = root.relays?.[0] ?? opts.relayHint ?? "";
@@ -255,7 +255,7 @@ export function buildReplyTags(opts: ReplyTagsOptions): Tag[] {
   // Ensure root + parent authors are p-tagged.
   const pSeen = new Set<string>();
   const addP = (pk: string, relay?: string) => {
-    const key = pk.toLowerCase();
+    const key = lowerAscii(pk);
     if (pSeen.has(key)) {
       return;
     }

@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "capability": "nip11.codec",
+  "source": {
+    "kind": "generated",
+    "generator": "@qntx/nostr",
+    "version": "0.14.0"
+  },
+  "url": [
+    {
+      "name": "wss to https",
+      "input": "wss://a.example/",
+      "out": "https://a.example/"
+    },
+    {
+      "name": "ws to http",
+      "input": "ws://a.example/",
+      "out": "http://a.example/"
+    },
+    {
+      "name": "ws port and path with query",
+      "input": "ws://a.example:8080/x?y=1",
+      "out": "http://a.example:8080/x?y=1"
+    },
+    {
+      "name": "wss nested path",
+      "input": "wss://a.example/relay/v2?x=1",
+      "out": "https://a.example/relay/v2?x=1"
+    }
+  ],
+  "document": [
+    {
+      "name": "non-object",
+      "json": "42",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "array is not an object",
+      "json": "[1,2]",
+      "out": {
+        "err": true
+      }
+    },
+    {
+      "name": "all string fields",
+      "json": "{\"name\":\"Test Relay\",\"description\":\"a relay\",\"banner\":\"https://x.example/b.png\",\"icon\":\"https://x.example/i.png\",\"contact\":\"admin@x.example\",\"software\":\"https://x.example/sw\",\"version\":\"1.0.0\",\"payments_url\":\"https://x.example/pay\",\"terms_of_service\":\"https://x.example/tos\"}",
+      "out": {
+        "name": "Test Relay",
+        "description": "a relay",
+        "banner": "https://x.example/b.png",
+        "icon": "https://x.example/i.png",
+        "contact": "admin@x.example",
+        "software": "https://x.example/sw",
+        "version": "1.0.0",
+        "payments_url": "https://x.example/pay",
+        "terms_of_service": "https://x.example/tos"
+      }
+    },
+    {
+      "name": "wrong-typed strings dropped",
+      "json": "{\"name\":42,\"description\":true,\"banner\":[\"x\"],\"icon\":{\"url\":\"x\"},\"contact\":null,\"software\":1.5,\"version\":[\"1\"],\"payments_url\":7,\"terms_of_service\":false}",
+      "out": {}
+    },
+    {
+      "name": "supported_nips filters non-integers and negatives",
+      "json": "{\"supported_nips\":[1,\"2\",2.5,-3,4,null,true]}",
+      "out": {
+        "supported_nips": [
+          1,
+          4
+        ]
+      }
+    },
+    {
+      "name": "supported_nips not an array dropped",
+      "json": "{\"supported_nips\":11}",
+      "out": {}
+    },
+    {
+      "name": "supported_nips empty kept",
+      "json": "{\"supported_nips\":[]}",
+      "out": {
+        "supported_nips": []
+      }
+    },
+    {
+      "name": "limitation: every number and boolean",
+      "json": "{\"limitation\":{\"max_message_length\":65536,\"max_subscriptions\":20,\"max_limit\":5000,\"max_subid_length\":64,\"max_event_tags\":2000,\"max_content_length\":70000,\"min_pow_difficulty\":30,\"created_at_lower_limit\":31536000,\"created_at_upper_limit\":3,\"default_limit\":500,\"auth_required\":true,\"payment_required\":false,\"restricted_writes\":true}}",
+      "out": {
+        "limitation": {
+          "max_message_length": 65536,
+          "max_subscriptions": 20,
+          "max_limit": 5000,
+          "max_subid_length": 64,
+          "max_event_tags": 2000,
+          "max_content_length": 70000,
+          "min_pow_difficulty": 30,
+          "created_at_lower_limit": 31536000,
+          "created_at_upper_limit": 3,
+          "default_limit": 500,
+          "auth_required": true,
+          "payment_required": false,
+          "restricted_writes": true
+        }
+      }
+    },
+    {
+      "name": "limitation: wrong-typed entries dropped",
+      "json": "{\"limitation\":{\"max_message_length\":\"65536\",\"max_subscriptions\":-1,\"max_limit\":2.5,\"max_subid_length\":null,\"max_event_tags\":true,\"max_content_length\":70000,\"min_pow_difficulty\":\"30\",\"created_at_lower_limit\":[],\"created_at_upper_limit\":3,\"default_limit\":{},\"auth_required\":\"yes\",\"payment_required\":false,\"restricted_writes\":1}}",
+      "out": {
+        "limitation": {
+          "max_content_length": 70000,
+          "created_at_upper_limit": 3,
+          "payment_required": false
+        }
+      }
+    },
+    {
+      "name": "all-invalid limitation dropped",
+      "json": "{\"limitation\":{\"max_limit\":\"x\",\"auth_required\":\"y\",\"bogus\":1}}",
+      "out": {}
+    },
+    {
+      "name": "empty limitation dropped",
+      "json": "{\"limitation\":{}}",
+      "out": {}
+    },
+    {
+      "name": "non-object limitation dropped",
+      "json": "{\"limitation\":7}",
+      "out": {}
+    },
+    {
+      "name": "pubkey and self kept when 64-hex",
+      "json": "{\"pubkey\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"self\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc\"}",
+      "out": {
+        "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "self": "2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a5cdc"
+      }
+    },
+    {
+      "name": "uppercase pubkey folds to lowercase",
+      "json": "{\"pubkey\":\"3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D\"}",
+      "out": {}
+    },
+    {
+      "name": "non-hex pubkey dropped",
+      "json": "{\"pubkey\":\"not-hex\",\"self\":\"2c7cc62a697ea3a7826521f3fd34f0cb273693cbe5e9310f35449f43622a\"}",
+      "out": {}
+    },
+    {
+      "name": "non-string pubkey dropped",
+      "json": "{\"pubkey\":42,\"self\":null}",
+      "out": {}
+    },
+    {
+      "name": "unknown keys ignored",
+      "json": "{\"names\":{\"a\":1},\"posting_policy\":\"x\"}",
+      "out": {}
+    }
+  ]
+}

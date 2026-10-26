@@ -14,7 +14,15 @@ import type { Event, EventTemplate } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import type { Mutable } from "../core/util.ts";
-import { assertHex32, bytesToHex, isRecord, nowSeconds, utf8Encoder } from "../core/util.ts";
+import {
+  assertHex32,
+  bytesToHex,
+  isHex32,
+  isRecord,
+  nowSeconds,
+  utf8Encoder,
+  trimAscii,
+} from "../core/util.ts";
 import { fetchManual, requireGlobalFetch, sendManual } from "./http.ts";
 import type { ManualFetch } from "./http.ts";
 
@@ -58,11 +66,11 @@ export function getHashFromURL(url: string | URL): string | undefined {
   } catch {
     return undefined;
   }
-  const matches = path.match(/[0-9a-f]{64}/gi);
+  const matches = path.match(/[0-9a-f]{64}/g);
   if (matches === null || matches.length === 0) {
     return undefined;
   }
-  return matches.at(-1)?.toLowerCase();
+  return matches.at(-1);
 }
 
 export async function sha256Blob(data: Blob | ArrayBuffer | Uint8Array): Promise<string> {
@@ -110,7 +118,7 @@ function serverHostname(raw: string): string | undefined {
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return undefined;
     }
-    const hostname = url.hostname.toLowerCase();
+    const { hostname } = url;
     return hostname === "" ? undefined : hostname;
   } catch {
     return undefined;
@@ -129,7 +137,7 @@ export function createAuthTemplate(
   if (!AUTH_VERBS.has(verb)) {
     throw new BlossomError(`invalid blossom auth verb: ${verb}`);
   }
-  if (opts?.message !== undefined && opts.message.trim() === "") {
+  if (opts?.message !== undefined && trimAscii(opts.message) === "") {
     throw new BlossomError("blossom auth message must not be empty");
   }
   const expiration = opts?.expiration ?? nowSeconds() + AUTH_EXPIRATION_SECS;
@@ -461,7 +469,7 @@ function extensionFromHashUrl(url: string, hash: string): string {
   } catch {
     return "";
   }
-  const i = pathname.toLowerCase().lastIndexOf(hash);
+  const i = pathname.lastIndexOf(hash);
   if (i === -1) {
     return "";
   }
@@ -482,7 +490,7 @@ function blossomHttpError(method: string, url: string, res: ManualResponse): Blo
   } catch {
     reason = undefined;
   }
-  const detail = reason?.trim();
+  const detail = reason === undefined ? undefined : trimAscii(reason);
   return new BlossomError(
     detail === undefined || detail === ""
       ? `blossom ${method} ${url} failed (${res.status})`
@@ -560,7 +568,7 @@ async function readJson(res: ManualResponse): Promise<unknown> {
   }
 }
 
-function parseBlobDescriptor(json: unknown): BlobDescriptor {
+export function parseBlobDescriptor(json: unknown): BlobDescriptor {
   if (!isRecord(json)) {
     throw new BlossomError("invalid blob descriptor");
   }
@@ -568,10 +576,10 @@ function parseBlobDescriptor(json: unknown): BlobDescriptor {
   if (typeof raw["url"] !== "string" || !raw["url"]) {
     throw new BlossomError("blob descriptor missing url");
   }
-  if (typeof raw["sha256"] !== "string") {
+  if (typeof raw["sha256"] !== "string" || !isHex32(raw["sha256"])) {
     throw new BlossomError("blob descriptor missing sha256");
   }
-  const hash = assertHex32(raw["sha256"], "blob sha256");
+  const hash = raw["sha256"];
   if (typeof raw["size"] !== "number" || !Number.isInteger(raw["size"]) || raw["size"] < 0) {
     throw new BlossomError("blob descriptor missing size");
   }

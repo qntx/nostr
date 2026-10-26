@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.12.1",
+    "version": "0.14.0",
     "cross_check": null
   },
   "cases": [
@@ -45,7 +45,7 @@
           "ids": []
         }
       ],
-      "fingerprint": "[{\"ids\":[]}]"
+      "error": "FilterError"
     },
     {
       "filters": [

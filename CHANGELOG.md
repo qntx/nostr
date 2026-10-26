@@ -9,6 +9,39 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Added
+
+- `nk`: Blossom on `http::HttpClient` — `upload`/`check_upload`/`list`/`delete`/`mirror`/`blob_exists`/`get_blob` (BUD-01/02/04/06, hash-verified descriptors and blobs), NIP-B7 `heal_blob_url` and `upload_to_servers`.
+- `nk-core`: Blossom codecs — `BlobHash`, `Server`, `BlobDescriptor`, kind-24242 `Authorization`, `authorization_header` and the kind-10063 `ServerList`, verified by the new shared `vectors/blossom`.
+- `nk`: `http` feature — `http::HttpClient` (hyper-util + rustls/ring + webpki-roots, never follows redirects, whole-exchange timeout, response-size cap) with NIP-11 `relay_information` and NIP-05 `nip05_document`/`nip05_profile`/`verify_nip05`; `testing::MockHttp` and `MockRelay::set_information` under `test-util`.
+- `nk-core`: NIP-11 `RelayInformation`/`Limitation` and NIP-05 `Nip05Address`/`Nip05Document`/`Nip46Discovery` codecs, verified by the new shared `vectors/nip05` and `vectors/nip11`.
+- `nk`: NIP-46 `nip46::RemoteSigner` (`connect`/`attach`/`nostr_connect`, `auth_url` challenges, `switch_relays`, `logout`) implementing `NostrSigner`; `nk-core` gains `Method::{SwitchRelays, Logout}`, `ClientMetadata`, `Request::{connect, sign_event}` and `parse_switch_relays`.
+- `nk`: `client::Client` — `RelayPool` + gossip routing + an `EventStore` behind one handle, with NIP-77 `sync`/`sync_with` and NIP-17 private messages through any `NostrSigner`; `gossip::Gossip` NIP-65/10050 routing and `RelayPool::{fetch_routed, subscribe_routed}`; `RelayPool` multi-relay fan-out.
+- `nk`: NIP-77 `Relay::reconcile(filter, items) -> Reconciliation { have, need }` over the `negentropy` crate (60 000-byte frame limit, `NEG-ERR` → `Error::Refused`, `auth-required:` retries through the NIP-42 path).
+- `nk`: NIP-42 auth (`RelayOptions.signer`, one kind-22242 `AUTH` per challenge with one-shot request retry) and NIP-45 `Relay::count`.
+- `nk-core`: `NostrSigner` object-safe async signer trait (`public_key`/`sign_event` required, NIP-44/NIP-04 with `Unsupported` defaults), `Keys` implements it under `os-rng`; `EventBuilder::auth`.
+- `nk` (`crates/nk`) — the SDK crate: `Relay` (single-relay client with lazy connect, WebSocket ping liveness, and jittered exponential-backoff reconnect replaying open `REQ`s), `Subscription` (a `Stream` ended by `EOSE`/`CLOSED`/lag/`close()` and sending `CLOSE` on drop), `fetch`/`publish`/`status`/`close`, and `testing::MockRelay` behind `test-util`.
+- `nk-store` (`crates/nk-store`) — the synchronous `EventStore` trait (`put`/`put_many`/`get`/`query`/`count`/`negentropy_items`/`remove`/`clear` with `PutOutcome` semantics), `MemoryStore`, and `SqliteStore` behind the `sqlite` feature; a shared private `policy` module keeps insertion/deletion rules identical across backends, and the SQLite schema is byte-identical to the TS store so files are interchangeable.
+- `nk-core` (`crates/nk-core`) — the owned Rust implementation of the protocol: a `no_std + alloc`, platform-neutral, sans-IO leaf crate covering the core types and every NIP codec of the TypeScript surface; features gate optional dependencies only (`nip04`, `nip44`, `nip49`, `os-rng`, `clock`, `std`). One `#[non_exhaustive]` error enum per module, one RNG-taking function per operation, no third-party types in public APIs beyond `rand_core` traits and `serde` impls. Shared vectors and the seeded differential streams run on both languages with zero divergence; crates are versioned lockstep with the npm packages and published from release tags.
+
+### Removed
+
+- `crates/interop` and the rust-nostr divergence registry — the Rust implementation is now owned (`nk-core`), so the cross-library comparison harness is obsolete.
+
+### Changed
+
+- **BREAKING:** `@qntx/nostr` empty filter lists are rejected both on the wire and in developer-supplied `Filter` objects — `ids`/`authors`/`kinds`/`#x` may no longer be `[]`. `parseWireFilter` throws `MessageError`; `canonicalizeFilter`/`filterFingerprint`/`matchFilter`/`getFilterLimit`/`encodeClientMessage`/the event stores throw the new `FilterError`. The "empty set matches nothing" semantics are gone.
+- **BREAKING:** `nk-core` `Filter::{ids, authors, kinds, tag}` are now fallible — `Result<Self, filter::Error>` with `EmptyList { field: Field }` and `InvalidTagValue { letter }` (non-hex `#e`/`#p` caller values); wire deserialization rejects empty lists.
+- **BREAKING:** `@qntx/nostr` protocol text accepts lowercase hex only — uppercase hex in event tag values, wire filters (`REQ`/`COUNT`/`NEG-OPEN`), relay and client messages (`OK` ids, `NEG-*` hex), NIP-05 and NIP-11 documents, NIP-46 URIs and RPC results, and Blossom descriptors and blob URLs is now an invalid value, handled like any other invalid value of that field (the tag is skipped, the filter or message is rejected, the document field is dropped, the URI is rejected). Nothing lowercases protocol text. Typed API arguments (`assertHex32`-checked parameters, `Keys`/`PublicKey`, NIP-19 encoders, developer-supplied `Filter` objects, gossip lookups) are unchanged — they still accept any case and normalize once at the boundary.
+- `nk-core`: protocol-text codecs are strict — `PublicKey::from_wire_hex`/`EventId::from_wire_hex` (lowercase only) are the wire decoders used across event/tag/message/filter/NEG-77/NIP-05/NIP-11/NIP-46/Blossom parsing and `Coordinate::from_wire_str`; `from_hex`/`FromStr` stay case-insensitive for caller-supplied values.
+- **BREAKING:** `@qntx/nostr` canonicalization is now ASCII-only — whitespace trimming on protocol and caller tokens is ASCII whitespace (TAB, LF, FF, CR, SPACE) instead of JS `String.prototype.trim`/regex `\s`; case folding of protocol tokens and identifiers is ASCII (`lowerAscii`), so NIP-98 `Nostr` scheme whitespace and method compare, NIP-57 bolt11/lnurl, NIP-21 `nostr:`/`nsec1` prefixes, NIP-05 identifiers, and Blossom URI/hostname checks no longer accept Unicode whitespace or non-ASCII case variants. NIP-05 `names` keys must already match the lowercase local-part grammar `[a-z0-9._-]+`; any other key is skipped (no folding, so no collision or order dependence). NIP-51 mute words stay Unicode lowercase (natural-language text).
+- `nk-core`: the JS-whitespace class is kept only for NIP-27 — `trim_js` is removed and `is_js_whitespace` is scoped to nip27's URL-run stop set; NIP-05/NIP-46/Blossom/NIP-98 use `trim_ascii`/`is_ascii_whitespace`, and NIP-05 `names` keys are grammar-checked (`[a-z0-9._-]+`) with non-matching keys skipped instead of folded — the `Object.entries`-order `DocumentVisitor`/`OrderedEntries` machinery is replaced by a `serde_json::Value` parse.
+- **BREAKING:** `@qntx/nostr` `parseContent` follows the shared NIP-27 scanner rules — a hand-written tokenizer with no regex alternation, JS `\s`, or `iu` folding. Observable changes: URL runs stop at Unicode `White_Space` (U+0085 NEL now stops a run, U+FEFF no longer does — the reverse of before), and keyword/charset matching is ASCII-only so non-ASCII lookalikes like `noſtr:` or `lnbc1K…` no longer fold into tokens.
+- `nk-core`: the same scanner replaces the JS-emulating tokenizer — `fold` (U+212A/U+017F), `is_js_whitespace` and the invoice `\d+` backtracking are removed (`nips/util.rs` deleted); the invoice splits at the run's last `1`, and the hashtag run is maximal with a 1–42 length validation.
+
+- `@qntx/nostr`: NIP-11 `pubkey` and `self` are kept only as lowercase 64-hex public keys; other values are dropped like wrong-typed fields. `parseRelayInformation` is exported.
+- Vector cases whose input is non-canonical JSON (duplicate keys, non-integral number spellings, `-0`) now carry `"nonCanonicalJson": true`; Rust rejects those inputs while `JSON.parse` accepts them — the single permitted platform difference.
+
 ## [0.14.0] - 2026-10-15
 
 ### Changed

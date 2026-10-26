@@ -17,7 +17,7 @@
     "typecheck": "vp run -r typecheck && tsc --noEmit",
     "build": "vp run -r build",
     "test": "vp run -r test && vp test",
-    "test:parity": "bun packages/nostr/scripts/parity/diff.ts --seed 42 --count 2000 --out target/parity && cd crates/interop && INTEROP_DIFF_DIR=target/parity cargo test --test diff -- --ignored",
+    "test:parity": "bun packages/nostr/scripts/parity/diff.ts --seed 42 --count 2000 --out target/parity && NK_DIFF_DIR=$PWD/target/parity cargo test -p nk-core --all-features -- --ignored diff && bun packages/nostr/scripts/parity/sqlite.ts write target/sqlite-parity && NK_SQLITE_DIR=$PWD/target/sqlite-parity cargo test -p nk-store --features sqlite --test it -- --ignored sqlite_interop && bun packages/nostr/scripts/parity/sqlite.ts read target/sqlite-parity",
     "release": "bumpp",
     "prepare": "vp config"
   },

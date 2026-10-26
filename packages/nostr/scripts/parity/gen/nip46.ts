@@ -4,7 +4,7 @@
 // Captures the TS NIP-46 URI codecs (`parseBunkerURL`/`toBunkerURL`,
 // `createNostrConnectURI`/`parseNostrConnectURI`) and RPC JSON codecs
 // (`encode`/`decode` `Nip46Request`/`Nip46Response`) as frozen vectors shared
-// by the TS test suite (tests/vectors/nip46.test.ts) and crates/interop.
+// by the TS test suite (tests/vectors/nip46.test.ts) and crates/nk-core.
 // All cases go through the real exported functions — nothing is
 // hand-computed.
 
@@ -220,6 +220,9 @@ bunkerParseCase(
 );
 bunkerParseCase("empty secret pair", `bunker://${PK}?secret=`);
 bunkerParseCase("whitespace-padded input", `  bunker://${PK}  `);
+bunkerParseCase("tab-padded input", `\tbunker://${PK}\n`);
+bunkerParseCase("NBSP does not trim", `\u00A0bunker://${PK}`);
+bunkerParseCase("U+FEFF does not trim", `\uFEFFbunker://${PK}`);
 bunkerParseCase("opaque-path fallback", `bunker:${PK}`);
 bunkerParseCase("nip-05 identifier", "alice@example.com");
 bunkerParseCase("non-bunker scheme", "https://bunker.example");

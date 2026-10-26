@@ -54,9 +54,7 @@ export function createListLoaders(replaceable: (kind: number) => ReplaceableLoad
         event,
         fresh,
         items: fromTags(event, (tag) =>
-          tag[0] === "p" && tag[1] !== undefined && isHex32(tag[1].toLowerCase())
-            ? tag[1].toLowerCase()
-            : undefined,
+          tag[0] === "p" && tag[1] !== undefined && isHex32(tag[1]) ? tag[1] : undefined,
         ),
       };
     },

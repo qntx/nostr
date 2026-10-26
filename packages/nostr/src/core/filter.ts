@@ -1,5 +1,7 @@
+import { FilterError } from "./error.ts";
 import type { Event } from "./event.ts";
 import { isAddressableKind, isReplaceableKind } from "./kind.ts";
+import { isHex32 } from "./util.ts";
 
 /**
  * NIP-01 filter object (immutable-friendly; callers may still pass plain objects). Filters are
@@ -47,35 +49,34 @@ const compiledFilters = new WeakMap<Filter, CompiledFilter>();
 export function filterTagConditions(
   filter: Filter,
 ): Array<{ name: string; values: ReadonlyArray<string> }> {
+  const canonical = canonicalizeFilter(filter);
   const conditions: Array<{ name: string; values: ReadonlyArray<string> }> = [];
-  for (const key of Object.keys(filter)) {
+  for (const key of Object.keys(canonical)) {
     if (!SINGLE_LETTER_TAG.test(key)) {
       continue;
     }
     const name = key.slice(1);
-    const values = filter[`#${name}`];
+    const values = canonical[`#${name}`];
     if (values === undefined) {
       continue;
     }
-    conditions.push({
-      name,
-      values: name === "e" || name === "p" ? values.map((v) => v.toLowerCase()) : values,
-    });
+    conditions.push({ name, values });
   }
   return conditions;
 }
 
 function compileFilter(filter: Filter): CompiledFilter {
+  const canonical = canonicalizeFilter(filter);
   return {
-    ids: filter.ids ? new Set(filter.ids.map((id) => id.toLowerCase())) : undefined,
-    kinds: filter.kinds ? new Set(filter.kinds) : undefined,
-    authors: filter.authors ? new Set(filter.authors.map((pk) => pk.toLowerCase())) : undefined,
-    tags: filterTagConditions(filter).map(({ name, values }) => ({
+    ids: canonical.ids ? new Set(canonical.ids) : undefined,
+    kinds: canonical.kinds ? new Set(canonical.kinds) : undefined,
+    authors: canonical.authors ? new Set(canonical.authors) : undefined,
+    tags: filterTagConditions(canonical).map(({ name, values }) => ({
       name,
       values: new Set(values),
     })),
-    since: filter.since,
-    until: filter.until,
+    since: canonical.since,
+    until: canonical.until,
   };
 }
 
@@ -131,32 +132,22 @@ export function matchFilters(filters: ReadonlyArray<Filter>, event: Event): bool
  * unbounded.
  */
 export function getFilterLimit(filter: Filter): number {
-  if (filter.ids && filter.ids.length === 0) {
-    return 0;
-  }
-  if (filter.kinds && filter.kinds.length === 0) {
-    return 0;
-  }
-  if (filter.authors && filter.authors.length === 0) {
-    return 0;
-  }
-
+  const f = canonicalizeFilter(filter);
   let limit = Number.POSITIVE_INFINITY;
-  if (filter.ids) {
-    limit = Math.min(limit, new Set(filter.ids.map((id) => id.toLowerCase())).size);
+  if (f.ids) {
+    limit = Math.min(limit, new Set(f.ids).size);
   }
-  if (filter.limit !== undefined) {
-    limit = Math.min(limit, filter.limit);
+  if (f.limit !== undefined) {
+    limit = Math.min(limit, f.limit);
   }
 
-  if (filter.kinds && filter.authors) {
-    const kinds = new Set(filter.kinds);
+  if (f.kinds && f.authors) {
+    const kinds = new Set(f.kinds);
     const allReplaceable = [...kinds].every((k) => isReplaceableKind(k) || isAddressableKind(k));
     if (allReplaceable) {
-      const dTags = filter["#d"];
-      const perAuthor = dTags && dTags.length > 0 ? new Set(dTags).size : 1;
-      const authors = new Set(filter.authors.map((pk) => pk.toLowerCase())).size;
-      limit = Math.min(limit, authors * kinds.size * perAuthor);
+      const dTags = f["#d"];
+      const perAuthor = dTags === undefined ? 1 : new Set(dTags).size;
+      limit = Math.min(limit, f.authors.length * kinds.size * perAuthor);
     }
   }
 
@@ -169,9 +160,11 @@ const HEX_LIST_KEYS = new Set(["ids", "authors", "#e", "#p"]);
 const KNOWN_FILTER_KEYS = new Set(["ids", "authors", "kinds", "since", "until", "limit", "search"]);
 
 /**
- * Lowercase hex lists, sort and dedupe every array, and keep only the NIP-01 known fields plus
- * single-letter `#` keys — unknown keys and multi-letter `#` keys are dropped. Omits undefined so
- * `[]` stays distinct from missing.
+ * The caller-input normalizer shared by `matchFilter`, the stores, `encodeClientMessage`,
+ * `canonicalizeFilter` and `filterFingerprint`: known fields kept, hex lists lowercased, every list
+ * sorted and deduplicated — then validated. Throws {@link FilterError} when any list is empty or
+ * when an `ids`/`authors`/`#e`/`#p` value is not 64-hex (the caller-input hex profile: any case in,
+ * lowercase out).
  */
 export function canonicalizeFilter(filter: Filter): Filter {
   const raw = filter as Record<string, unknown>;
@@ -185,13 +178,19 @@ export function canonicalizeFilter(filter: Filter): Filter {
       continue;
     }
     const value = raw[key];
-    // omit undefined so a missing key is not `[]` / null
     if (value === undefined) {
       continue;
     }
     if (Array.isArray(value)) {
+      if (value.length === 0) {
+        throw new FilterError(`filter ${key} must not be empty`);
+      }
       if (HEX_LIST_KEYS.has(key)) {
-        out[key] = [...new Set(value.map((v) => String(v).toLowerCase()))].sort();
+        const list = [...new Set(value.map((v) => String(v).toLowerCase()))].sort();
+        if (!list.every((v) => isHex32(v))) {
+          throw new FilterError(`filter ${key} values must be 64-char hex`);
+        }
+        out[key] = list;
       } else if (key === "kinds") {
         out[key] = [...new Set(value.map(Number))].sort((a, b) => a - b);
       } else {
@@ -211,8 +210,8 @@ export function canonicalizeFilters(filters: ReadonlyArray<Filter>): Filter[] {
 }
 
 /**
- * Canonical identity for live REQ coalescing. Relays treat a missing list key as unconstrained and
- * `[]` as match-nothing.
+ * Canonical identity for live REQ coalescing. Filters carry no empty list fields —
+ * `canonicalizeFilter` rejects them.
  */
 export function filterFingerprint(filters: ReadonlyArray<Filter>): string {
   const parts = filters.map((filter) => JSON.stringify(canonicalizeFilter(filter)));

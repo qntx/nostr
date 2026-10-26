@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.12.1",
+    "version": "0.14.0",
     "cross_check": null
   },
   "cases": [
@@ -15,43 +15,50 @@
       "raw": "[\"REQ\",\"sub1\",{\"kinds\":[1]},{\"#e\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"authors\":[\"90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23\"]}]"
     },
     {
-      "raw": "[\"REQ\",\"sub\",{\"foo\":1,\"ids\":[]}]",
-      "encoded": "[\"REQ\",\"sub\",{\"ids\":[]}]"
+      "raw": "[\"REQ\",\"sub\",{\"foo\":1,\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]",
+      "encoded": "[\"REQ\",\"sub\",{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]"
     },
     {
       "raw": "[\"REQ\",\"sub2\",{\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]}]"
     },
     {
-      "raw": "[\"REQ\",\"s\",{\"ids\":[\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"],\"#e\":[\"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"],\"#custom\":[\"x\"],\"junk\":1}]",
-      "encoded": "[\"REQ\",\"s\",{\"#e\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"ids\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]"
+      "raw": "[\"REQ\",\"s\",{\"#custom\":[\"x\"],\"junk\":1,\"#e\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]}]",
+      "encoded": "[\"REQ\",\"s\",{\"#e\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]}]"
     },
     {
       "raw": "[\"REQ\",\"s\",{\"kinds\":[9],\"kinds\":[1],\"limit\":1e2}]",
-      "encoded": "[\"REQ\",\"s\",{\"kinds\":[1],\"limit\":100}]"
+      "encoded": "[\"REQ\",\"s\",{\"kinds\":[1],\"limit\":100}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"since\":\"x\",\"since\":5}]",
-      "encoded": "[\"REQ\",\"s\",{\"since\":5}]"
+      "encoded": "[\"REQ\",\"s\",{\"since\":5}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"kinds\":[{}],\"kinds\":[7]}]",
-      "encoded": "[\"REQ\",\"s\",{\"kinds\":[7]}]"
+      "encoded": "[\"REQ\",\"s\",{\"kinds\":[7]}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"ids\":[123],\"ids\":[\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"]}]",
-      "encoded": "[\"REQ\",\"s\",{\"ids\":[\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"]}]"
+      "encoded": "[\"REQ\",\"s\",{\"ids\":[\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"]}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"limit\":null,\"limit\":3}]",
-      "encoded": "[\"REQ\",\"s\",{\"limit\":3}]"
+      "encoded": "[\"REQ\",\"s\",{\"limit\":3}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"since\":1e3,\"until\":2.0,\"limit\":-0}]",
-      "encoded": "[\"REQ\",\"s\",{\"limit\":0,\"since\":1000,\"until\":2}]"
+      "encoded": "[\"REQ\",\"s\",{\"limit\":0,\"since\":1000,\"until\":2}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"until\":9007199254740991.0}]",
-      "encoded": "[\"REQ\",\"s\",{\"until\":9007199254740991}]"
+      "encoded": "[\"REQ\",\"s\",{\"until\":9007199254740991}]",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"CLOSE\",\"sub1\"]"
@@ -69,15 +76,7 @@
       "raw": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[1,2]},\"aabb\"]"
     },
     {
-      "raw": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[1]},\"AABB\"]",
-      "encoded": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[1]},\"aabb\"]"
-    },
-    {
       "raw": "[\"NEG-MSG\",\"sub\",\"deadbeef\"]"
-    },
-    {
-      "raw": "[\"NEG-MSG\",\"sub\",\"FF00\"]",
-      "encoded": "[\"NEG-MSG\",\"sub\",\"ff00\"]"
     },
     {
       "raw": "[\"NEG-CLOSE\",\"sub\"]"
@@ -118,6 +117,38 @@
     },
     {
       "raw": "[\"REQ\",\"sub\",null]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"ids\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"authors\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"kinds\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"#t\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"#e\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"sub\",{\"foo\":1,\"ids\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"kinds\":[]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[]},\"aabb\"]",
       "error": "MessageError"
     },
     {
@@ -182,7 +213,8 @@
     },
     {
       "raw": "[\"REQ\",\"s\",{\"kinds\":[1e10]}]",
-      "error": "MessageError"
+      "error": "MessageError",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"search\":1}]",
@@ -246,11 +278,13 @@
     },
     {
       "raw": "[\"REQ\",\"s\",{\"since\":5,\"since\":\"x\"}]",
-      "error": "MessageError"
+      "error": "MessageError",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"REQ\",\"s\",{\"kinds\":[7],\"kinds\":\"x\"}]",
-      "error": "MessageError"
+      "error": "MessageError",
+      "nonCanonicalJson": true
     },
     {
       "raw": "[\"COUNT\",\"s\",{\"authors\":[1]}]",
@@ -258,6 +292,26 @@
     },
     {
       "raw": "[\"NEG-OPEN\",\"s\",{\"limit\":\"x\"},\"aabb\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"ids\":[\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"#e\":[\"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"REQ\",\"s\",{\"authors\":[\"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\"]}]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-OPEN\",\"sub\",{\"kinds\":[1]},\"AABB\"]",
+      "error": "MessageError"
+    },
+    {
+      "raw": "[\"NEG-MSG\",\"sub\",\"FF00\"]",
       "error": "MessageError"
     },
     {

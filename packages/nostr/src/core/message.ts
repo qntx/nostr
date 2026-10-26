@@ -69,7 +69,7 @@ export type CountResult = {
 
 const HLL_BYTES = 256; // 512 hex chars (NIP-45; hex only, not base64)
 const HLL_HEX_LEN = HLL_BYTES * 2;
-const HEX_RE = /^[0-9a-fA-F]+$/;
+const HEX_RE = /^[0-9a-f]+$/;
 
 /**
  * Register-wise max of NIP-45 HyperLogLog sketches. Output is always lowercase 512 hex. Empty input
@@ -78,7 +78,7 @@ const HEX_RE = /^[0-9a-fA-F]+$/;
 export function mergeCountHll(hexes: ReadonlyArray<string>): string {
   const merged = new Uint8Array(HLL_BYTES);
   for (const hex of hexes) {
-    if (hex.length !== HLL_HEX_LEN || !HEX_RE.test(hex)) {
+    if (hex.length !== HLL_HEX_LEN || !/^[0-9a-f]+$/i.test(hex)) {
       throw new MessageError("invalid NIP-45 HLL sketch: expected 512-char hex");
     }
     const bytes = hexToBytes(hex);
@@ -178,14 +178,14 @@ export function parseClientMessage(raw: string): ClientMessage {
         "NEG-OPEN",
         assertSubscriptionId(items[1]),
         parseWireFilter(items[2], "NEG-OPEN"),
-        items[3].toLowerCase(),
+        items[3],
       ];
 
     case "NEG-MSG":
       if (items.length !== 3 || typeof items[1] !== "string" || !isNegHex(items[2])) {
         throw new MessageError("invalid NEG-MSG client message");
       }
-      return ["NEG-MSG", assertSubscriptionId(items[1]), items[2].toLowerCase()];
+      return ["NEG-MSG", assertSubscriptionId(items[1]), items[2]];
 
     case "NEG-CLOSE":
       if (items.length !== 2 || typeof items[1] !== "string") {
@@ -281,7 +281,7 @@ export function parseRelayMessage(raw: string): RelayMessage {
       if (items.length !== 3 || typeof items[1] !== "string" || !isNegHex(items[2])) {
         throw new MessageError("invalid NEG-MSG relay message");
       }
-      return ["NEG-MSG", assertSubscriptionId(items[1]), items[2].toLowerCase()];
+      return ["NEG-MSG", assertSubscriptionId(items[1]), items[2]];
 
     case "NEG-ERR":
       if (items.length !== 3 || typeof items[1] !== "string" || typeof items[2] !== "string") {
@@ -298,19 +298,18 @@ function parseCountHll(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length !== HLL_HEX_LEN || !HEX_RE.test(value)) {
     return undefined;
   }
-  return value.toLowerCase();
+  return value;
 }
 
-const HEX64_RE = /^[0-9a-fA-F]{64}$/;
 const HEX64_LOWER_RE = /^[0-9a-f]{64}$/;
 
 /**
  * Validates a wire filter per NIP-01: `ids`/`authors` are 64-hex arrays (normalized lowercase),
  * `kinds` are integers in 0..=65535, `since`/`until`/`limit` non-negative integers, `search` a
- * string, and `#<single letter>` arrays of strings (`#e`/`#p` lowercased). Multi-letter `#` keys
- * and unknown non-`#` keys are dropped; wrong types throw {@link MessageError}. Duplicate keys and
- * integer spellings (`1e3`, `1.0`, `-0`) need no handling: `JSON.parse` already applied last-wins
- * and normalized the numbers before this runs.
+ * string, and `#<single letter>` arrays of strings (`#e`/`#p` lowercased). No list may be empty.
+ * Multi-letter `#` keys and unknown non-`#` keys are dropped; wrong types throw
+ * {@link MessageError}. Duplicate keys and integer spellings (`1e3`, `1.0`, `-0`) need no handling:
+ * `JSON.parse` already applied last-wins and normalized the numbers before this runs.
  */
 function parseWireFilter(value: unknown, kind: string): Filter {
   if (!isRecord(value)) {
@@ -323,21 +322,30 @@ function parseWireFilter(value: unknown, kind: string): Filter {
       if (!/^#[a-zA-Z]$/.test(key)) {
         continue;
       }
-      if (!Array.isArray(v) || !v.every((x): x is string => typeof x === "string")) {
-        throw fail();
-      }
-      out[`#${key.slice(1)}`] = key === "#e" || key === "#p" ? v.map((x) => x.toLowerCase()) : v;
-    } else if (key === "ids" || key === "authors") {
       if (
         !Array.isArray(v) ||
-        !v.every((x): x is string => typeof x === "string" && HEX64_RE.test(x))
+        v.length === 0 ||
+        !v.every((x): x is string => typeof x === "string")
       ) {
         throw fail();
       }
-      out[key] = v.map((x) => x.toLowerCase());
+      if ((key === "#e" || key === "#p") && !v.every((x): x is string => HEX64_LOWER_RE.test(x))) {
+        throw fail();
+      }
+      out[`#${key.slice(1)}`] = v;
+    } else if (key === "ids" || key === "authors") {
+      if (
+        !Array.isArray(v) ||
+        v.length === 0 ||
+        !v.every((x): x is string => typeof x === "string" && HEX64_LOWER_RE.test(x))
+      ) {
+        throw fail();
+      }
+      out[key] = v;
     } else if (key === "kinds") {
       if (
         !Array.isArray(v) ||
+        v.length === 0 ||
         !v.every(
           (x): x is number =>
             typeof x === "number" && Number.isSafeInteger(x) && x >= 0 && x <= 65535,

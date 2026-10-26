@@ -1,0 +1,58 @@
+[package]
+name                   = "nk"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+homepage.workspace     = true
+repository.workspace   = true
+keywords.workspace     = true
+categories             = ["network-programming"]
+readme                 = "README.md"
+description            = "Nostr SDK: relays, clients, and signing on top of nk-core"
+documentation          = "https://docs.rs/nk"
+include                = ["src/**/*", "Cargo.toml", "README.md", "LICENSE-*"]
+
+[lints]
+workspace = true
+
+[[test]]
+name              = "it"
+required-features = ["test-util"]
+
+[features]
+sqlite    = ["nk-store/sqlite"]
+test-util = ["hyper/server", "hyper/http1", "hyper-util/server", "hyper-util/tokio", "dep:http-body-util", "tokio/net", "tokio/io-util", "tokio/rt-multi-thread"]
+http      = ["hyper/client", "hyper/http1", "hyper-util/client-legacy", "hyper-util/http1", "hyper-util/tokio", "dep:http-body-util", "dep:hyper-rustls", "dep:rustls", "dep:webpki-roots"]
+
+[dependencies]
+hashlink     = { workspace = true }
+nk-core      = { workspace = true, features = ["std", "clock", "os-rng", "nip44"] }
+tokio        = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+yawc         = { workspace = true }
+futures-util = { workspace = true }
+faster-hex   = { workspace = true }
+negentropy   = { workspace = true }
+tokio-util   = { workspace = true }
+tracing      = { workspace = true }
+thiserror    = { workspace = true }
+url          = { workspace = true }
+
+nk-store = { workspace = true }
+
+# test-util only
+hyper          = { workspace = true, optional = true }
+hyper-util     = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
+hyper-rustls   = { workspace = true, optional = true }
+rustls         = { workspace = true, optional = true }
+webpki-roots   = { workspace = true, optional = true }
+
+[dev-dependencies]
+nk           = { path = ".", features = ["test-util"] }
+nk-core      = { workspace = true, features = ["std", "clock", "os-rng", "nip44"] }
+nk-store     = { workspace = true }
+base64ct     = { workspace = true }
+futures-util = { workspace = true }
+tokio        = { workspace = true, features = ["rt-multi-thread", "test-util"] }

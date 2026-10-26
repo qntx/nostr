@@ -657,11 +657,12 @@ describe("validateZapReceipt", () => {
       amount: 1_000_000,
       extraTags: [["P", provider.publicKey.toUpperCase()]],
     });
+    // Uppercase tag value is invalid protocol text — no fold.
     expect(
       validateZapReceipt(receiptFor(provider, mixedCase.request, mixedCase.json), {
         nostrPubkey: provider.publicKey,
       }).valid,
-    ).toBe(true);
+    ).toBe(false);
 
     const wrong = signedZapRequest({
       amount: 1_000_000,
@@ -822,8 +823,7 @@ describe("validateZapReceipt", () => {
     const mixedHexResult = validateZapReceipt(mixedHexReceipt, {
       nostrPubkey: provider.publicKey,
     });
-    expect(mixedHexResult.valid).toBe(true);
-    expect("reason" in mixedHexResult).toBe(false);
+    expect(mixedHexResult.valid).toBe(false);
   });
 
   test("E: receipt P is the zap sender, not request tag P", () => {
@@ -838,7 +838,7 @@ describe("validateZapReceipt", () => {
     const mixedCase = receiptFor(provider, request, json, {
       extraTags: [["P", request.pubkey.toUpperCase()]],
     });
-    expect(validateZapReceipt(mixedCase, { nostrPubkey: provider.publicKey }).valid).toBe(true);
+    expect(validateZapReceipt(mixedCase, { nostrPubkey: provider.publicKey }).valid).toBe(false);
 
     const both = signedZapRequest({
       amount: 1_000_000,

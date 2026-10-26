@@ -32,8 +32,8 @@ export function planDeletion(
   const seenCoords = new Set<string>();
 
   for (const tag of deletion.tags) {
-    if (tag[0] === "e" && tag[1] !== undefined && isHex32(tag[1].toLowerCase())) {
-      const id = tag[1].toLowerCase();
+    const [, id] = tag;
+    if (tag[0] === "e" && id !== undefined && isHex32(id)) {
       if (seenIds.has(id)) {
         continue;
       }

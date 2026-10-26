@@ -5,7 +5,13 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { EventBuilder } from "../../src/core/builder.ts";
 import type { ProfileMetadata } from "../../src/core/builder.ts";
-import { EventValidationError, HexError, MessageError, UrlError } from "../../src/core/error.ts";
+import {
+  EventValidationError,
+  FilterError,
+  HexError,
+  MessageError,
+  UrlError,
+} from "../../src/core/error.ts";
 import {
   serializeEvent,
   getEventHash,
@@ -69,14 +75,19 @@ const eventValidateCases = readVector<{
   parsed?: string;
   error?: string;
 }>("event-validate.json");
-const matchFilterCases = readVector<{ filter: Filter; event: Event; matches: boolean }>(
-  "filter-match.json",
+const matchFilterCases = readVector<{
+  filter: Filter;
+  event: Event;
+  matches?: boolean;
+  error?: string;
+}>("filter-match.json");
+const filterLimitCases = readVector<{ filter: Filter; limit?: number | null; error?: string }>(
+  "filter-limit.json",
 );
-const filterLimitCases = readVector<{ filter: Filter; limit: number | null }>("filter-limit.json");
-const canonicalizeCases = readVector<{ input: Filter; canonicalJson: string }>(
+const canonicalizeCases = readVector<{ input: Filter; canonicalJson?: string; error?: string }>(
   "filter-canonicalize.json",
 );
-const fingerprintCases = readVector<{ filters: Filter[]; fingerprint: string }>(
+const fingerprintCases = readVector<{ filters: Filter[]; fingerprint?: string; error?: string }>(
   "filter-fingerprint.json",
 );
 const clientMessageCases = readVector<{ raw: string; encoded?: string; error?: string }>(
@@ -243,10 +254,19 @@ function runBuilderCase(c: BuilderCase): EventBuilder {
 
 // Derived vectors kept out of the test bodies: `??`, `||` and ternaries inside
 // `test` callbacks are rejected by the no-conditional-in-test lint.
-const filterLimits = filterLimitCases.map((c) => ({
-  filter: c.filter,
-  limit: c.limit ?? Number.POSITIVE_INFINITY,
-}));
+const filterLimits = filterLimitCases
+  .filter((c) => c.error === undefined)
+  .map((c) => ({
+    filter: c.filter,
+    limit: c.limit ?? Number.POSITIVE_INFINITY,
+  }));
+const filterErrors = filterLimitCases.filter((c) => c.error !== undefined);
+const matchValid = matchFilterCases.filter((c) => c.error === undefined);
+const matchInvalid = matchFilterCases.filter((c) => c.error !== undefined);
+const canonicalizeValid = canonicalizeCases.filter((c) => c.error === undefined);
+const canonicalizeInvalid = canonicalizeCases.filter((c) => c.error !== undefined);
+const fingerprintValid = fingerprintCases.filter((c) => c.error === undefined);
+const fingerprintInvalid = fingerprintCases.filter((c) => c.error !== undefined);
 const clientMessages = clientMessageCases
   .filter((c) => c.error === undefined)
   .map((c) => ({ raw: c.raw, expected: c.encoded ?? c.raw }));
@@ -310,8 +330,11 @@ describe("vectors/core", () => {
   });
 
   test("filter match", () => {
-    for (const c of matchFilterCases) {
+    for (const c of matchValid) {
       expect(matchFilter(c.filter, c.event)).toBe(c.matches);
+    }
+    for (const c of matchInvalid) {
+      expect(() => matchFilter(c.filter, c.event)).toThrow(FilterError);
     }
   });
 
@@ -319,14 +342,23 @@ describe("vectors/core", () => {
     for (const c of filterLimits) {
       expect(getFilterLimit(c.filter)).toBe(c.limit);
     }
+    for (const c of filterErrors) {
+      expect(() => getFilterLimit(c.filter)).toThrow(FilterError);
+    }
   });
 
   test("filter canonicalize and fingerprint", () => {
-    for (const c of canonicalizeCases) {
+    for (const c of canonicalizeValid) {
       expect(JSON.stringify(canonicalizeFilter(c.input))).toBe(c.canonicalJson);
     }
-    for (const c of fingerprintCases) {
+    for (const c of canonicalizeInvalid) {
+      expect(() => canonicalizeFilter(c.input)).toThrow(FilterError);
+    }
+    for (const c of fingerprintValid) {
       expect(filterFingerprint(c.filters)).toBe(c.fingerprint);
+    }
+    for (const c of fingerprintInvalid) {
+      expect(() => filterFingerprint(c.filters)).toThrow(FilterError);
     }
   });
 

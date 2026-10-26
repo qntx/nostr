@@ -14,6 +14,7 @@ import {
   hexToBytes,
   utf8Decoder,
   utf8Encoder,
+  lowerAscii,
 } from "../core/util.ts";
 
 const minPlaintextSize = 0x0001;
@@ -39,7 +40,7 @@ export function getConversationKey(privkeyA: Uint8Array, pubkeyB: string): Uint8
   assertSecretKeyBytes(privkeyA);
   assertHex32(pubkeyB, "public key");
   const sharedX = secp256k1
-    .getSharedSecret(privkeyA, hexToBytes(`02${pubkeyB.toLowerCase()}`))
+    .getSharedSecret(privkeyA, hexToBytes(`02${lowerAscii(pubkeyB)}`))
     .subarray(1, 33);
   return getConversationKeyFromSharedSecret(sharedX);
 }

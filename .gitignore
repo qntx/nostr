@@ -33,3 +33,6 @@ packages/nostr-wasm/src/nostr_wasm.wasm
 # nostr-native: generated host-test vectors header and Android CMake scratch
 packages/nostr-native/tests/host/vectors.generated.h
 packages/nostr-native/android/.cxx
+/fuzz/artifacts/
+/fuzz/corpus/
+/fuzz/coverage/

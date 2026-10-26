@@ -4,6 +4,7 @@ import {
   EventBuilder,
   Keys,
   KeysSigner,
+  FilterError,
   MessageError,
   Pool,
   Relay,
@@ -1052,16 +1053,16 @@ describe("Relay", () => {
     expect(MockWebSocket.instances).toHaveLength(0);
   });
 
-  test("subscribe match-all and empty-ids filters are legal", async () => {
+  test("subscribe match-all is legal; empty-ids filter is rejected", async () => {
     const relay = await Relay.connect("wss://empty-ids.example", {
       websocketImplementation: MockWebSocketCtor,
     });
     const a = relay.subscribe([{}]);
-    const b = relay.subscribe([{ ids: [] }]);
+    // Empty list fields are invalid — the caller-filter normalizer throws.
+    expect(() => relay.subscribe([{ ids: [] }])).toThrow(FilterError);
     const reqs = sentMessages(MockWebSocket.last()).filter((m) => m[0] === "REQ");
-    expect(reqs).toHaveLength(2);
+    expect(reqs).toHaveLength(1);
     a.close();
-    b.close();
     relay.close();
   });
 
@@ -2923,9 +2924,10 @@ describe("live REQ coalescing", () => {
     const full = relay.subscribe([{ authors: [pkA, pkB] }]);
     const subset = relay.subscribe([{ authors: [pkA] }]);
     const missing = relay.subscribe([{ kinds: [1] }]);
-    const empty = relay.subscribe([{ kinds: [1], authors: [] }]);
-    expect(new Set([full.id, subset.id, missing.id, empty.id]).size).toBe(4);
-    expect(framesOf(MockWebSocket.last(), "REQ")).toHaveLength(4);
+    // `authors: []` is invalid — a list field may not be empty.
+    expect(() => relay.subscribe([{ kinds: [1], authors: [] }])).toThrow(FilterError);
+    expect(new Set([full.id, subset.id, missing.id]).size).toBe(3);
+    expect(framesOf(MockWebSocket.last(), "REQ")).toHaveLength(3);
     relay.close();
   });
 

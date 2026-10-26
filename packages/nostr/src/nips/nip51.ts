@@ -10,7 +10,13 @@ import { EventValidationError } from "../core/error.ts";
 import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import { firstTagValue, getDTag, isTag, Tag } from "../core/tag.ts";
-import { assertHex32, containsLoneSurrogate, isHex32, normalizeRelayUrls } from "../core/util.ts";
+import {
+  assertHex32,
+  containsLoneSurrogate,
+  isHex32,
+  normalizeRelayUrls,
+  lowerAscii,
+} from "../core/util.ts";
 
 /**
  * Structural crypto used by NIP-51 private tags. Satisfied by NostrSigner when
@@ -80,7 +86,7 @@ function isRelaySetAddress(value: string): boolean {
   }
   const pubkey = value.slice(kindSep + 1, pkSep);
   const d = value.slice(pkSep + 1);
-  return isHex32(pubkey.toLowerCase()) && d.length > 0;
+  return isHex32(pubkey) && d.length > 0;
 }
 
 /** Parse kind:10000 mute list public tags (`p` / `e` / `t` / `word`). */
@@ -94,13 +100,13 @@ export function parseMuteList(event: Pick<Event, "kind" | "tags">): MuteItem[] {
     }
     switch (tag[0]) {
       case "p":
-        if (isHex32(value.toLowerCase())) {
-          items.push({ type: "pubkey", value: value.toLowerCase() });
+        if (isHex32(value)) {
+          items.push({ type: "pubkey", value });
         }
         break;
       case "e":
-        if (isHex32(value.toLowerCase())) {
-          items.push({ type: "event", value: value.toLowerCase() });
+        if (isHex32(value)) {
+          items.push({ type: "event", value });
         }
         break;
       case "t":
@@ -108,6 +114,8 @@ export function parseMuteList(event: Pick<Event, "kind" | "tags">): MuteItem[] {
         items.push({ type: "hashtag", value });
         break;
       case "word":
+        // Natural-language text keeps Unicode lowercase — shared
+        // SpecialCasing, not a JS accident.
         items.push({ type: "word", value: value.toLowerCase() });
         break;
       default:
@@ -162,7 +170,7 @@ export async function decryptPrivateTags(
     return [];
   }
   const self = await crypto.getPublicKey();
-  if (self.toLowerCase() !== event.pubkey.toLowerCase()) {
+  if (lowerAscii(self) !== event.pubkey) {
     throw new EventValidationError("NIP-51 private content is only for the author");
   }
   const plaintext = await crypto.nip44Decrypt(self, event.content);
@@ -200,10 +208,10 @@ export function parsePinList(event: Pick<Event, "kind" | "tags">): string[] {
   const ids: string[] = [];
   for (const tag of event.tags) {
     const value = tag.at(1);
-    if (tag[0] !== "e" || value === undefined || !isHex32(value.toLowerCase())) {
+    if (tag[0] !== "e" || value === undefined || !isHex32(value)) {
       continue;
     }
-    ids.push(value.toLowerCase());
+    ids.push(value);
   }
   return ids;
 }
@@ -231,8 +239,8 @@ export function parseBookmarkList(event: Pick<Event, "kind" | "tags">): {
       continue;
     }
     if (tag[0] === "e") {
-      if (isHex32(value.toLowerCase())) {
-        e.push(value.toLowerCase());
+      if (isHex32(value)) {
+        e.push(value);
       }
     } else if (tag[0] === "a") {
       a.push(value);
@@ -333,10 +341,10 @@ export function parseFollowPack(event: Pick<Event, "kind" | "tags">): {
   const pubkeys: string[] = [];
   for (const tag of event.tags) {
     const value = tag.at(1);
-    if (tag[0] !== "p" || value === undefined || !isHex32(value.toLowerCase())) {
+    if (tag[0] !== "p" || value === undefined || !isHex32(value)) {
       continue;
     }
-    pubkeys.push(value.toLowerCase());
+    pubkeys.push(value);
   }
   return { d: identifier(event.tags), pubkeys };
 }

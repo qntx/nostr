@@ -1,0 +1,59 @@
+[package]
+name         = "nk-fuzz"
+version      = "0.0.0"
+publish      = false
+edition      = "2024"
+rust-version = "1.99"
+license      = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nk-core       = { path = "../crates/nk-core", features = ["nip44"] }
+
+# Standalone cargo-fuzz workspace: excluded from the root workspace.
+[workspace]
+
+[[bin]]
+name = "event_json"
+path = "fuzz_targets/event_json.rs"
+test = false
+doc  = false
+
+[[bin]]
+name = "client_message"
+path = "fuzz_targets/client_message.rs"
+test = false
+doc  = false
+
+[[bin]]
+name = "relay_message"
+path = "fuzz_targets/relay_message.rs"
+test = false
+doc  = false
+
+[[bin]]
+name = "filter_json"
+path = "fuzz_targets/filter_json.rs"
+test = false
+doc  = false
+
+[[bin]]
+name = "nip19_decode"
+path = "fuzz_targets/nip19_decode.rs"
+test = false
+doc  = false
+
+[[bin]]
+name = "nip44_decrypt"
+path = "fuzz_targets/nip44_decrypt.rs"
+test = false
+doc  = false
+
+[[bin]]
+name = "nip27_tokenize"
+path = "fuzz_targets/nip27_tokenize.rs"
+test = false
+doc  = false

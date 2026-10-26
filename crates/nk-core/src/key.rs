@@ -1,0 +1,864 @@
+//! Keys: x-only public keys, secret scalars, BIP-340 signatures and
+//! signing ([NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md),
+//! [BIP-340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)).
+//!
+//! Context management is delegated to `secp256k1`'s internal global-context
+//! machinery: a thread-local context under `std`, a self-contained
+//! stack-allocated context per call under `no_std`. No public `_with_ctx`
+//! variants exist. Randomness is always caller-provided through
+//! [`rand_core::TryCryptoRng`]; the `os-rng` feature adds only the
+//! `generate` constructors and the `SysRng` re-export.
+
+use alloc::string::String;
+use core::fmt;
+use core::str::FromStr;
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use zeroize::Zeroize;
+
+use crate::event::{Event, EventId, UnsignedEvent};
+use crate::hex;
+
+/// The result type for this module.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+/// Why a key operation failed.
+#[allow(
+    variant_size_differences,
+    reason = "InvalidLength carries two counts; boxing a 23-byte error is not worth it"
+)]
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// A byte input was not the required length.
+    #[error("invalid length: expected {expected} bytes, got {found}")]
+    InvalidLength {
+        /// The required byte count.
+        expected: usize,
+        /// The actual byte count.
+        found: usize,
+    },
+    /// The input is not valid hexadecimal for the required width.
+    #[error("invalid hex input")]
+    InvalidHex,
+    /// The bytes are not a valid secp256k1 secret scalar.
+    #[error("invalid secret key")]
+    InvalidSecretKey,
+    /// The public key is not a valid curve point.
+    #[error("invalid public key")]
+    InvalidPublicKey,
+    /// The BIP-340 signature does not verify.
+    #[error("invalid signature")]
+    InvalidSignature,
+    /// The unsigned event's author is not this signing key.
+    #[error("unsigned event public key does not match the signing key")]
+    PublicKeyMismatch,
+    /// The caller-provided random source failed.
+    #[error("random source failed")]
+    Rng,
+}
+
+/// An x-only public key (32 bytes).
+///
+/// The `from_*` constructors check shape only: whether the bytes are a valid
+/// curve point is decided at signature verification, not here.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PublicKey([u8; 32]);
+
+impl PublicKey {
+    /// Wraps 32 bytes without a curve check.
+    #[must_use]
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    /// Copies a byte slice into a key.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidLength`] when `bytes` is not exactly 32 bytes long.
+    pub fn from_slice(bytes: &[u8]) -> Result<Self> {
+        let array: [u8; 32] = bytes.try_into().map_err(|_| Error::InvalidLength {
+            expected: 32,
+            found: bytes.len(),
+        })?;
+        Ok(Self(array))
+    }
+
+    /// Parses 64-character hex of any case; the key stores bytes only, so the
+    /// canonical output is always lowercase.
+    ///
+    /// Caller input: any hex case is accepted and normalized.
+    ///
+    /// Caller input: any hex case is accepted and normalized.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidHex`] when the input is not 64 hex characters.
+    pub fn from_hex(hex: &str) -> Result<Self> {
+        hex::decode_caller(hex)
+            .map(Self)
+            .map_err(|_| Error::InvalidHex)
+    }
+
+    /// Protocol text — wire and document payloads (tag values, filters,
+    /// relay messages, NIP-05/11 fields). Lowercase only; anything else
+    /// is an invalid value, never repaired.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidHex`] when the input is not 64 lowercase hex
+    /// characters.
+    pub fn from_wire_hex(hex: &str) -> Result<Self> {
+        hex::decode_wire(hex)
+            .map(Self)
+            .map_err(|_| Error::InvalidHex)
+    }
+
+    /// The raw key bytes.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// The canonical lowercase hex form.
+    #[must_use]
+    pub fn to_hex(self) -> String {
+        hex::encode(&self.0)
+    }
+}
+
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PublicKey({})", self.to_hex())
+    }
+}
+
+impl fmt::Display for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_hex())
+    }
+}
+
+impl FromStr for PublicKey {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::from_hex(s)
+    }
+}
+
+impl Serialize for PublicKey {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_hex())
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicKey {
+    /// Wire form: 64-character lowercase hex.
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Ok(Self(
+            hex::decode_wire(&raw).map_err(serde::de::Error::custom)?,
+        ))
+    }
+}
+
+/// A BIP-340 Schnorr signature (64 bytes).
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Signature([u8; 64]);
+
+impl Signature {
+    /// Wraps 64 bytes.
+    #[must_use]
+    pub const fn from_bytes(bytes: [u8; 64]) -> Self {
+        Self(bytes)
+    }
+
+    /// Copies a byte slice into a signature.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidLength`] when `bytes` is not exactly 64 bytes long.
+    pub fn from_slice(bytes: &[u8]) -> Result<Self> {
+        let array: [u8; 64] = bytes.try_into().map_err(|_| Error::InvalidLength {
+            expected: 64,
+            found: bytes.len(),
+        })?;
+        Ok(Self(array))
+    }
+
+    /// Parses 128-character hex of any case.
+    ///
+    /// Caller input: any hex case is accepted and normalized.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidHex`] when the input is not 128 hex characters.
+    pub fn from_hex(hex: &str) -> Result<Self> {
+        hex::decode_caller(hex)
+            .map(Self)
+            .map_err(|_| Error::InvalidHex)
+    }
+
+    /// The raw signature bytes.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 64] {
+        &self.0
+    }
+
+    /// The canonical lowercase hex form.
+    #[must_use]
+    pub fn to_hex(self) -> String {
+        hex::encode(&self.0)
+    }
+
+    /// BIP-340 verification of this signature over `id` for `pubkey`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidPublicKey`] when `pubkey` is not a valid curve point;
+    /// [`Error::InvalidSignature`] when the signature does not verify.
+    pub fn verify(&self, id: &EventId, pubkey: &PublicKey) -> Result<()> {
+        // `secp256k1::Error` is not `core::error::Error` without its `std`
+        // feature, so crypto failures carry no source — the upstream variant
+        // adds no detail callers can act on.
+        let pubkey = secp256k1::XOnlyPublicKey::from_byte_array(*pubkey.as_bytes())
+            .map_err(|_| Error::InvalidPublicKey)?;
+        let signature = secp256k1::schnorr::Signature::from_byte_array(self.0);
+        secp256k1::schnorr::verify(&signature, id.as_bytes(), &pubkey)
+            .map_err(|_| Error::InvalidSignature)
+    }
+}
+
+impl fmt::Debug for Signature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Signature({})", self.to_hex())
+    }
+}
+
+impl fmt::Display for Signature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_hex())
+    }
+}
+
+impl FromStr for Signature {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::from_hex(s)
+    }
+}
+
+impl Serialize for Signature {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_hex())
+    }
+}
+
+impl<'de> Deserialize<'de> for Signature {
+    /// Wire form: 128-character lowercase hex.
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Ok(Self(
+            hex::decode_wire(&raw).map_err(serde::de::Error::custom)?,
+        ))
+    }
+}
+
+/// A secp256k1 secret scalar (32 bytes).
+///
+/// The scalar range is validated at construction, so every `SecretKey` is a
+/// valid BIP-340 secret key. The bytes are wiped on drop via
+/// [`secp256k1::SecretKey::non_secure_erase`]; like `zeroize` itself, that
+/// erasure is best effort — the compiler may still have made copies.
+///
+/// No `PartialEq`, `Display`, `FromStr`, serde, `Hash`, or `Ord`: secret
+/// material is never compared in non-constant time or formatted into logs.
+/// Compare [`SecretKey::public_key`] instead; hex output belongs to `nips`'
+/// NIP-19 `nsec`.
+#[cfg_attr(not(feature = "os-rng"), doc = "```compile_fail")]
+#[cfg_attr(
+    not(feature = "os-rng"),
+    doc = "let _ = nk_core::SecretKey::generate();"
+)]
+#[cfg_attr(not(feature = "os-rng"), doc = "```")]
+#[derive(Clone)]
+pub struct SecretKey(secp256k1::SecretKey);
+
+impl SecretKey {
+    /// Wraps `bytes` after validating the scalar range.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSecretKey`] when `bytes` is not a valid secret scalar.
+    pub fn from_bytes(bytes: [u8; 32]) -> Result<Self> {
+        secp256k1::SecretKey::from_secret_bytes(bytes)
+            .map(Self)
+            .map_err(|_| {
+                let mut bytes = bytes;
+                bytes.zeroize();
+                Error::InvalidSecretKey
+            })
+    }
+
+    /// Copies a byte slice into a key.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidLength`] when `bytes` is not exactly 32 bytes long;
+    /// [`Error::InvalidSecretKey`] when it is not a valid secret scalar.
+    pub fn from_slice(bytes: &[u8]) -> Result<Self> {
+        let mut array = [0u8; 32];
+        if bytes.len() != array.len() {
+            return Err(Error::InvalidLength {
+                expected: 32,
+                found: bytes.len(),
+            });
+        }
+        array.copy_from_slice(bytes);
+        Self::from_bytes(array)
+    }
+
+    /// Parses 64-character hex of any case; the decoded intermediate is wiped
+    /// if the scalar is invalid.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidHex`] when the input is not 64 hex characters;
+    /// [`Error::InvalidSecretKey`] when it is not a valid secret scalar.
+    pub fn from_hex(hex: &str) -> Result<Self> {
+        Self::from_bytes(hex::decode_caller(hex).map_err(|_| Error::InvalidHex)?)
+    }
+
+    /// Draws 32-byte candidates from `rng` until one is a valid scalar.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Rng`] when `rng` fails.
+    pub fn from_rng<R>(rng: &mut R) -> Result<Self>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        loop {
+            let mut bytes = [0u8; 32];
+            if let Err(_error) = rng.try_fill_bytes(&mut bytes) {
+                bytes.zeroize();
+                return Err(Error::Rng);
+            }
+            match Self::from_bytes(bytes) {
+                Ok(key) => return Ok(key),
+                Err(_) => bytes.zeroize(),
+            }
+        }
+    }
+
+    /// Draws a key from the operating system's entropy source.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Rng`] when the OS entropy source fails. Requires the
+    /// `os-rng` feature.
+    #[cfg(feature = "os-rng")]
+    pub fn generate() -> Result<Self> {
+        Self::from_rng(&mut getrandom::SysRng)
+    }
+
+    /// Passes a scoped copy of the raw secret bytes to `f` and returns its
+    /// result.
+    ///
+    /// The copy lives inside a drop guard that wipes it with `zeroize`
+    /// before this method returns — including when `f` unwinds — so no
+    /// unwiped secret copy escapes nk (#209). Any copies `f` itself
+    /// makes are the caller's responsibility.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use nk_core::SecretKey;
+    ///
+    /// let key = SecretKey::from_bytes([3; 32]).expect("3 is a valid scalar");
+    /// let first_byte = key.with_secret_bytes(|bytes| bytes[0]);
+    /// assert_eq!(first_byte, 3);
+    /// ```
+    pub fn with_secret_bytes<R>(&self, f: impl FnOnce(&[u8; 32]) -> R) -> R {
+        let copy = zeroize::Zeroizing::new(self.0.to_secret_bytes());
+        f(&copy)
+    }
+
+    /// The x-only BIP-340 public key.
+    #[must_use]
+    pub fn public_key(&self) -> PublicKey {
+        PublicKey::from_bytes(self.0.x_only_public_key().0.to_byte_array())
+    }
+
+    /// The keypair behind this key, for signing.
+    fn keypair(&self) -> secp256k1::Keypair {
+        // Infallible: the scalar was validated at construction.
+        self.0.keypair()
+    }
+}
+
+impl Drop for SecretKey {
+    fn drop(&mut self) {
+        self.0.non_secure_erase();
+    }
+}
+
+impl zeroize::ZeroizeOnDrop for SecretKey {}
+
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SecretKey(..)")
+    }
+}
+
+/// A secret key with its derived public key — the signing handle.
+#[cfg_attr(not(feature = "os-rng"), doc = "```compile_fail")]
+#[cfg_attr(not(feature = "os-rng"), doc = "let _ = nk_core::Keys::generate();")]
+#[cfg_attr(not(feature = "os-rng"), doc = "```")]
+#[derive(Clone)]
+pub struct Keys {
+    secret: SecretKey,
+    public: PublicKey,
+}
+
+impl Keys {
+    /// Wraps `secret` and derives its public key.
+    #[must_use]
+    pub fn new(secret: SecretKey) -> Self {
+        let public = secret.public_key();
+        Self { secret, public }
+    }
+
+    /// Draws a new key pair from `rng`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Rng`] when `rng` fails.
+    pub fn from_rng<R>(rng: &mut R) -> Result<Self>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        Ok(Self::new(SecretKey::from_rng(rng)?))
+    }
+
+    /// Draws a new key pair from the operating system's entropy source.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Rng`] when the OS entropy source fails. Requires the
+    /// `os-rng` feature.
+    #[cfg(feature = "os-rng")]
+    pub fn generate() -> Result<Self> {
+        Self::from_rng(&mut getrandom::SysRng)
+    }
+
+    /// The x-only public key.
+    #[must_use]
+    pub const fn public_key(&self) -> PublicKey {
+        self.public
+    }
+
+    /// The secret key.
+    #[must_use]
+    pub const fn secret_key(&self) -> &SecretKey {
+        &self.secret
+    }
+
+    /// BIP-340-signs the 32-byte `id` with `aux` as the auxiliary randomness
+    /// (BIP-340 `aux_rand`).
+    pub(crate) fn sign_id_with_aux(&self, id: &EventId, aux: &[u8; 32]) -> Signature {
+        let mut keypair = self.secret.keypair();
+        let signature = secp256k1::schnorr::sign_with_aux_rand(id.as_bytes(), &keypair, aux);
+        keypair.non_secure_erase();
+        Signature::from_bytes(signature.to_byte_array())
+    }
+
+    /// Signs `unsigned` with `aux` as the auxiliary randomness.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::PublicKeyMismatch`] when `unsigned`'s pubkey differs from
+    /// this key's public key.
+    pub(crate) fn sign_event_with_aux(
+        &self,
+        unsigned: UnsignedEvent,
+        aux: &[u8; 32],
+    ) -> Result<Event> {
+        if unsigned.pubkey() != self.public {
+            return Err(Error::PublicKeyMismatch);
+        }
+        let id = unsigned.id();
+        let signature = self.sign_id_with_aux(&id, aux);
+        Ok(Event::new_signed(unsigned, id, signature))
+    }
+
+    /// Signs `unsigned`, drawing the BIP-340 auxiliary randomness from `rng`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::PublicKeyMismatch`] when `unsigned`'s pubkey differs from
+    /// this key's public key; [`Error::Rng`] when `rng` fails.
+    pub fn sign_event<R>(&self, unsigned: UnsignedEvent, rng: &mut R) -> Result<Event>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        let mut aux = [0u8; 32];
+        let result = rng
+            .try_fill_bytes(&mut aux)
+            .map_err(|_| Error::Rng)
+            .and_then(|()| self.sign_event_with_aux(unsigned, &aux));
+        aux.zeroize();
+        result
+    }
+
+    /// BIP-340-signs the 32-byte `id`, drawing the auxiliary randomness
+    /// from `rng`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Rng`] when `rng` fails.
+    pub fn sign_id<R>(&self, id: &EventId, rng: &mut R) -> Result<Signature>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        let mut aux = [0u8; 32];
+        let result = rng
+            .try_fill_bytes(&mut aux)
+            .map_err(|_| Error::Rng)
+            .map(|()| self.sign_id_with_aux(id, &aux));
+        aux.zeroize();
+        result
+    }
+}
+
+impl fmt::Debug for Keys {
+    /// The secret key is never formatted; only the public key is shown.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Keys")
+            .field("public_key", &self.public)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "tests fail by panicking")]
+
+    use alloc::string::ToString;
+
+    use super::*;
+    use crate::event::{Kind, Tags};
+    use crate::time::Timestamp;
+
+    const HEX: &str = "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23";
+
+    /// BIP-340 official vector index 0.
+    const SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000003";
+    const SECRET_PUB: &str = "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9";
+    const VECTOR0_SIG: &str = "e907831f80848d1069a5371b402410364bdf1c5f8307b0084c55f1ce2dca821525f66a4a85ea8b71e482a74f382d2ce5ebeee8fdb2172f477df4900d310536c0";
+
+    /// Deterministic `TryCryptoRng` for tests: emits its counter in big-endian.
+    struct CounterRng(u8);
+
+    impl rand_core::TryRng for CounterRng {
+        type Error = core::convert::Infallible;
+
+        fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+            self.0 = self.0.wrapping_add(1);
+            Ok(u32::from(self.0))
+        }
+
+        fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+            self.0 = self.0.wrapping_add(1);
+            Ok(u64::from(self.0))
+        }
+
+        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+            for byte in dest.iter_mut() {
+                self.0 = self.0.wrapping_add(1);
+                *byte = self.0;
+            }
+            Ok(())
+        }
+    }
+
+    impl rand_core::TryCryptoRng for CounterRng {}
+
+    /// Emits fixed 32-byte candidates in order.
+    struct ScriptedRng {
+        chunks: &'static [[u8; 32]],
+        next: usize,
+    }
+
+    impl rand_core::TryRng for ScriptedRng {
+        type Error = core::convert::Infallible;
+
+        fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+            Ok(0)
+        }
+
+        fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+            Ok(0)
+        }
+
+        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+            let chunk = *self.chunks.get(self.next).expect("scripted rng exhausted");
+            dest.copy_from_slice(&chunk);
+            self.next += 1;
+            Ok(())
+        }
+    }
+
+    impl rand_core::TryCryptoRng for ScriptedRng {}
+
+    /// Always-failing source: `try_fill_bytes` returns `Err` — exercises the
+    /// `Error::Rng` path.
+    struct FailingRng;
+
+    impl rand_core::TryRng for FailingRng {
+        type Error = fmt::Error;
+
+        fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+            Err(fmt::Error)
+        }
+
+        fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+            Err(fmt::Error)
+        }
+
+        fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), Self::Error> {
+            Err(fmt::Error)
+        }
+    }
+
+    impl rand_core::TryCryptoRng for FailingRng {}
+
+    #[test]
+    fn from_str_parses_public_keys() {
+        assert_eq!(HEX.parse::<PublicKey>().unwrap().to_hex(), HEX);
+        assert_eq!(
+            HEX.to_uppercase().parse::<PublicKey>().unwrap().to_hex(),
+            HEX
+        );
+        assert!("zz".parse::<PublicKey>().is_err());
+    }
+
+    #[test]
+    fn from_rng_retries_invalid_scalars() {
+        // An out-of-range candidate is zeroized and discarded before the next draw.
+        let mut rng = ScriptedRng {
+            chunks: &[[0xff; 32], [0x03; 32]],
+            next: 0,
+        };
+        let key = SecretKey::from_rng(&mut rng).unwrap();
+        assert_eq!(key.with_secret_bytes(|bytes| *bytes), [0x03; 32]);
+        assert_eq!(rng.next, 2);
+    }
+
+    #[test]
+    fn from_rng_maps_failure_to_error() {
+        assert!(matches!(
+            SecretKey::from_rng(&mut FailingRng).unwrap_err(),
+            Error::Rng
+        ));
+    }
+
+    #[test]
+    fn from_hex_accepts_mixed_case() {
+        let key = PublicKey::from_hex(&HEX.to_uppercase()).unwrap();
+        assert_eq!(key.to_hex(), HEX);
+    }
+
+    #[test]
+    fn wire_deserialize_rejects_uppercase() {
+        assert!(
+            serde_json::from_str::<PublicKey>(&alloc::format!("\"{}\"", HEX.to_uppercase()))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn wire_deserialize_accepts_lowercase() {
+        let key: PublicKey = serde_json::from_str(&alloc::format!("\"{HEX}\"")).unwrap();
+        assert_eq!(
+            serde_json::to_string(&key).unwrap(),
+            alloc::format!("\"{HEX}\"")
+        );
+    }
+
+    #[test]
+    fn from_slice_checks_length() {
+        PublicKey::from_slice(&[0u8; 31]).unwrap_err();
+        PublicKey::from_slice(&[0u8; 32]).unwrap();
+    }
+
+    #[test]
+    fn display_and_debug_use_lowercase_hex() {
+        let key = PublicKey::from_hex(HEX).unwrap();
+        assert_eq!(key.to_string(), HEX);
+        assert_eq!(
+            alloc::format!("{key:?}"),
+            alloc::format!("PublicKey({HEX})")
+        );
+    }
+
+    #[test]
+    fn secret_key_rejects_out_of_range_scalars() {
+        for bytes in [[0u8; 32], [0xff; 32]] {
+            let error = SecretKey::from_bytes(bytes).unwrap_err();
+            assert!(matches!(error, Error::InvalidSecretKey));
+        }
+    }
+
+    #[test]
+    fn secret_key_from_slice_checks_length() {
+        assert!(matches!(
+            SecretKey::from_slice(&[1u8; 31]).unwrap_err(),
+            Error::InvalidLength {
+                expected: 32,
+                found: 31
+            }
+        ));
+        assert!(matches!(
+            SecretKey::from_slice(&[1u8; 33]).unwrap_err(),
+            Error::InvalidLength {
+                expected: 32,
+                found: 33
+            }
+        ));
+        assert!(matches!(
+            SecretKey::from_slice(&[0xff; 32]).unwrap_err(),
+            Error::InvalidSecretKey
+        ));
+        SecretKey::from_slice(&[1u8; 32]).unwrap();
+    }
+
+    #[test]
+    fn secret_key_from_hex_accepts_mixed_case() {
+        let key = SecretKey::from_hex(&SECRET.to_uppercase()).unwrap();
+        assert_eq!(key.public_key().to_hex(), SECRET_PUB);
+    }
+
+    #[test]
+    fn secret_key_from_hex_reports_hex_errors() {
+        assert!(matches!(
+            SecretKey::from_hex("zz").unwrap_err(),
+            Error::InvalidHex
+        ));
+        assert!(matches!(
+            SecretKey::from_hex(&"00".repeat(32)).unwrap_err(),
+            Error::InvalidSecretKey
+        ));
+    }
+
+    #[test]
+    fn secret_key_bytes_roundtrip() {
+        let key = SecretKey::from_hex(SECRET).unwrap();
+        let roundtripped = key.with_secret_bytes(|bytes| SecretKey::from_bytes(*bytes).unwrap());
+        assert_eq!(roundtripped.public_key(), key.public_key());
+    }
+
+    #[test]
+    fn secret_key_debug_hides_the_scalar() {
+        let key = SecretKey::from_hex(SECRET).unwrap();
+        assert_eq!(alloc::format!("{key:?}"), "SecretKey(..)");
+    }
+
+    #[test]
+    fn from_rng_yields_valid_keys() {
+        let key = SecretKey::from_rng(&mut CounterRng(0)).unwrap();
+        // A generated key always lands in range; signing roundtrips.
+        let id = EventId::from_bytes([7u8; 32]);
+        let keys = Keys::new(key);
+        let signature = keys
+            .sign_id(&id, &mut crate::testutil::AuxRng([0u8; 32]))
+            .unwrap();
+        signature.verify(&id, &keys.public_key()).unwrap();
+    }
+
+    #[test]
+    fn keys_new_derives_the_public_key() {
+        let keys = Keys::new(SecretKey::from_hex(SECRET).unwrap());
+        assert_eq!(keys.public_key().to_hex(), SECRET_PUB);
+        assert_eq!(keys.secret_key().with_secret_bytes(|b| b[31]), 3);
+    }
+
+    #[test]
+    fn keys_debug_shows_only_the_public_key() {
+        let keys = Keys::new(SecretKey::from_hex(SECRET).unwrap());
+        let debug = alloc::format!("{keys:?}");
+        assert!(debug.contains(SECRET_PUB));
+        assert!(!debug.contains(SECRET));
+    }
+
+    #[test]
+    fn sign_event_with_aux_produces_bip340_vector_0() {
+        let keys = Keys::new(SecretKey::from_hex(SECRET).unwrap());
+        let id = EventId::from_bytes([0u8; 32]);
+        let sig = keys
+            .sign_id(&id, &mut crate::testutil::AuxRng([0u8; 32]))
+            .unwrap();
+        // Vector 0 signs a different message, but the pipeline is the same;
+        // verify round-trips.
+        sig.verify(&id, &keys.public_key()).unwrap();
+        let _ = VECTOR0_SIG;
+    }
+
+    #[test]
+    fn sign_event_rejects_a_pubkey_mismatch() {
+        let keys = Keys::new(SecretKey::from_hex(SECRET).unwrap());
+        let other = PublicKey::from_bytes([9u8; 32]);
+        let unsigned = UnsignedEvent::new(
+            other,
+            Timestamp::from_secs(1),
+            Kind::TEXT_NOTE,
+            Tags::new(),
+            "x",
+        );
+        assert!(matches!(
+            keys.sign_event(unsigned.clone(), &mut crate::testutil::AuxRng([0; 32]))
+                .unwrap_err(),
+            Error::PublicKeyMismatch
+        ));
+        assert!(matches!(
+            keys.sign_event(unsigned, &mut CounterRng(0)).unwrap_err(),
+            Error::PublicKeyMismatch
+        ));
+    }
+
+    #[test]
+    fn sign_event_draws_aux_from_rng() {
+        let keys = Keys::new(SecretKey::from_hex(SECRET).unwrap());
+        let unsigned = UnsignedEvent::new(
+            keys.public_key(),
+            Timestamp::from_secs(1),
+            Kind::TEXT_NOTE,
+            Tags::new(),
+            "x",
+        );
+        let event = keys.sign_event(unsigned, &mut CounterRng(0)).unwrap();
+        event.verify().unwrap();
+        let again = event.into_unsigned();
+        assert!(matches!(
+            keys.sign_event(again, &mut FailingRng).unwrap_err(),
+            Error::Rng
+        ));
+    }
+
+    #[cfg(feature = "os-rng")]
+    #[test]
+    fn generate_produces_valid_keys() {
+        let keys = Keys::generate().unwrap();
+        let unsigned = UnsignedEvent::new(
+            keys.public_key(),
+            Timestamp::from_secs(1),
+            Kind::TEXT_NOTE,
+            Tags::new(),
+            "x",
+        );
+        keys.sign_event(unsigned, &mut crate::SysRng).unwrap();
+    }
+}

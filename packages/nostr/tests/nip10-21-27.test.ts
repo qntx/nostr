@@ -134,7 +134,7 @@ describe("nip10", () => {
     expect(thread.mentions).toStrictEqual([]);
   });
 
-  test("parseThreadTags NIP-01 e 4-tuple is positional with author", () => {
+  test("parseThreadTags NIP-01 e 4-tuple skips an uppercase author", () => {
     const parentId = "a1".repeat(32);
     const author = keysB.publicKey;
     const event = signedNote(keysA, "nip01 e", [
@@ -142,12 +142,10 @@ describe("nip10", () => {
     ]);
 
     const thread = parseThreadTags(event);
-    expect(thread.root?.id).toBe(parentId);
-    expect(thread.reply?.id).toBe(parentId);
-    expect(thread.root?.author).toBe(author);
-    expect(thread.reply?.author).toBe(author);
-    expect(thread.root?.relays).toStrictEqual(["wss://relay.example"]);
-    expect(thread.mentions).toStrictEqual([]);
+    // The uppercase author is dropped; the id still parses as a mention.
+    expect(thread.root).toBeUndefined();
+    expect(thread.reply).toBeUndefined();
+    expect(thread.mentions).toStrictEqual([{ id: parentId, relays: ["wss://relay.example"] }]);
   });
 
   test("parseThreadTags unknown marker does not fill positional root/reply", () => {
@@ -194,24 +192,17 @@ describe("nip10", () => {
       parent: { ...child, id: child.id.toUpperCase(), pubkey: child.pubkey.toUpperCase() },
       relayHint: "wss://parent.example",
     });
-    expect(tagWith(nested, "e", parent.id, "wss://root.example", "root")).toStrictEqual([
-      "e",
-      parent.id,
-      "wss://root.example",
-      "root",
-      parent.pubkey,
-    ]);
-    expect(tagWith(nested, "e", child.id, "wss://parent.example", "reply")).toStrictEqual([
+    // The parent's uppercase tag values are protocol text — skipped, so the
+    // child is treated as a root; its caller-passed id/pubkey still normalize.
+    expect(tagWith(nested, "e", parent.id, "wss://root.example", "root")).toBeUndefined();
+    expect(tagWith(nested, "e", child.id, "wss://parent.example", "root")).toStrictEqual([
       "e",
       child.id,
       "wss://parent.example",
-      "reply",
+      "root",
       child.pubkey,
     ]);
-    expect(nested.filter((t) => t[0] === "p")).toStrictEqual([
-      ["p", parent.pubkey, "wss://root.example"],
-      ["p", child.pubkey, "wss://parent.example"],
-    ]);
+    expect(nested.filter((t) => t[0] === "p")).toStrictEqual([["p", child.pubkey]]);
   });
 
   test("buildReplyTags mixed-case parent id matching root does not emit reply e", () => {
@@ -296,7 +287,7 @@ describe("nip10", () => {
     expect(hasTagWith(kind1.currentTags, "e", id, "", "root")).toBe(true);
   });
 
-  test("parseThreadTags hex q author is lowercased", () => {
+  test("parseThreadTags hex q author rejects uppercase", () => {
     const quoteId = "55".repeat(32);
     const author = keysA.publicKey;
     const event = signedNote(keysB, "q author", [
@@ -309,9 +300,8 @@ describe("nip10", () => {
     expect(quote).toStrictEqual({
       id: quoteId,
       relays: ["wss://quote.example"],
-      author,
     });
-    expect(quoteAuthor(quote)).toBe(author);
+    expect(quoteAuthor(quote)).toBeUndefined();
   });
 
   test("parseThreadTags address q becomes AddressPointer", () => {
@@ -324,16 +314,20 @@ describe("nip10", () => {
     ]);
 
     const thread = parseThreadTags(event);
-    expect(thread.quotes).toHaveLength(1);
-    expect(thread.quotes[0]).toStrictEqual({
+    // Uppercase coordinate pubkey is invalid protocol text — the q tag is
+    // skipped entirely.
+    expect(thread.quotes).toHaveLength(0);
+    const lower = signedNote(keysB, "q addr", [["q", `30023:${pk}:${ident}`, relay, other]]);
+    const lowerThread = parseThreadTags(lower);
+    expect(lowerThread.quotes[0]).toStrictEqual({
       identifier: ident,
       pubkey: pk,
       kind: 30023,
       relays: [relay],
     });
-    expect("id" in thread.quotes[0]!).toBe(false);
-    expect(thread.quotes[0]).not.toHaveProperty("author");
-    expect(thread.quotes[0]).not.toMatchObject({ pubkey: other });
+    expect("id" in lowerThread.quotes[0]!).toBe(false);
+    expect(lowerThread.quotes[0]).not.toHaveProperty("author");
+    expect(lowerThread.quotes[0]).not.toMatchObject({ pubkey: other });
   });
 
   test("parseThreadTags skips invalid q tags", () => {

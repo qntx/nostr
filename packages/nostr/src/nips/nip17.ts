@@ -10,7 +10,7 @@ import type { Event } from "../core/event.ts";
 import { Kind } from "../core/kind.ts";
 import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
-import { assertHex32, normalizeRelayUrls } from "../core/util.ts";
+import { assertHex32, normalizeRelayUrls, lowerAscii } from "../core/util.ts";
 import { createGiftWrap, createRumor, createSeal } from "./nip59.ts";
 import type { Nip59Crypto, Rumor, WrapOptions } from "./nip59.ts";
 
@@ -126,12 +126,12 @@ export function buildChatMessageRumor(
 }
 
 function wrapTargets(sender: string, recipients: ReadonlyArray<Recipient>): Recipient[] {
-  const senderPk = sender.toLowerCase();
-  const self = recipients.find((r) => r.pubkey.toLowerCase() === senderPk);
+  const senderPk = lowerAscii(sender);
+  const self = recipients.find((r) => lowerAscii(r.pubkey) === senderPk);
   const out: Recipient[] = [{ pubkey: senderPk, relayHint: self?.relayHint }];
   const seen = new Set<string>([senderPk]);
   for (const recipient of recipients) {
-    const pk = recipient.pubkey.toLowerCase();
+    const pk = lowerAscii(recipient.pubkey);
     if (seen.has(pk)) {
       continue;
     }

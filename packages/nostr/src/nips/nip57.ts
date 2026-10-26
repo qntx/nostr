@@ -14,7 +14,7 @@ import type { Event, EventTemplate } from "../core/event.ts";
 import { isAddressableKind, Kind } from "../core/kind.ts";
 import { eventAddress, firstTagValue, getDTag, parseEventAddress, Tag } from "../core/tag.ts";
 import type { Mutable } from "../core/util.ts";
-import { hexToBytes, nowSeconds, utf8Encoder } from "../core/util.ts";
+import { hexToBytes, nowSeconds, utf8Encoder, lowerAscii } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
 
 export type ProfileZapRequest = {
@@ -178,9 +178,9 @@ function countTags(tags: ReadonlyArray<Tag>, name: string): number {
 }
 
 function hasHexTagValue(tags: ReadonlyArray<Tag>, name: string, value: string): boolean {
-  const needle = value.toLowerCase();
+  const needle = lowerAscii(value);
   for (const tag of tags) {
-    if (tag[0] === name && tag[1] !== undefined && tag[1].toLowerCase() === needle) {
+    if (tag[0] === name && tag[1] !== undefined && tag[1] === needle) {
       return true;
     }
   }
@@ -234,7 +234,7 @@ function wordsToInt(words: ReadonlyArray<number>): number {
 export function parseBolt11(pr: string): Bolt11Fields | undefined {
   try {
     // Invoices exceed bech32's default 90-char limit.
-    const { prefix, words } = bech32.decode(pr.toLowerCase(), false);
+    const { prefix, words } = bech32.decode(lowerAscii(pr), false);
     if (!prefix.startsWith("ln")) {
       return undefined;
     }
@@ -341,7 +341,7 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
     if (receipt.kind !== Kind.Zap || !verifyEvent(receipt)) {
       return fail("invalid receipt");
     }
-    if (receipt.pubkey.toLowerCase() !== ctx.nostrPubkey.toLowerCase()) {
+    if (receipt.pubkey !== lowerAscii(ctx.nostrPubkey)) {
       return fail("pubkey mismatch");
     }
 
@@ -381,7 +381,7 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
     }
     if (requestPCount === 1) {
       const requestP = firstTagValue(request.tags, "P");
-      if (requestP === undefined || requestP.toLowerCase() !== receipt.pubkey.toLowerCase()) {
+      if (requestP === undefined || requestP !== receipt.pubkey) {
         return fail("request P mismatch");
       }
     }
@@ -413,7 +413,7 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
     if (
       requestLnurl !== undefined &&
       ctx.lnurl !== undefined &&
-      requestLnurl.toLowerCase() !== ctx.lnurl.toLowerCase()
+      lowerAscii(requestLnurl) !== lowerAscii(ctx.lnurl)
     ) {
       return fail("lnurl mismatch");
     }
@@ -453,7 +453,7 @@ export function validateZapReceipt(receipt: Event, ctx: ZapReceiptContext): ZapR
       if (tag[0] !== "P") {
         continue;
       }
-      if (tag[1] === undefined || tag[1].toLowerCase() !== request.pubkey.toLowerCase()) {
+      if (tag[1] === undefined || tag[1] !== lowerAscii(request.pubkey)) {
         return fail("receipt P mismatch");
       }
     }

@@ -77,11 +77,9 @@ describe("nip05 parse", () => {
         [PK.toUpperCase()]: ["wss://a.example", "wss://b.example"],
       },
     });
-    expect(doc.names["bob"]).toBe(PK);
-    expect(lookupFromDocument(doc, { local: "bob", domain: "example.com" })).toStrictEqual({
-      pubkey: PK,
-      relays: ["wss://a.example", "wss://b.example"],
-    });
+    // Uppercase hex values/keys are invalid protocol text — dropped.
+    expect(doc.names["bob"]).toBeUndefined();
+    expect(lookupFromDocument(doc, { local: "bob", domain: "example.com" })).toBeUndefined();
     expect(lookupFromDocument(doc, { local: "_", domain: "example.com" })).toStrictEqual({
       pubkey: PK2,
     });

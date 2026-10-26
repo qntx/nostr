@@ -2,9 +2,16 @@
  * NIP-27: Text Note References. Tokenizes note content into text, `nostr:` references, URLs, media,
  * relays, hashtags, custom emoji, and Lightning invoices.
  *
+ * The tokenizer is a hand-written scanner — one left-to-right walk over Unicode scalar values. At
+ * position `i` the first rule whose shape matches decides; a candidate that fails validation makes
+ * `i` text and the scan resumes at the next scalar (no later rule is tried at `i`). Keywords
+ * compare ASCII case-insensitively; there is no Unicode case folding and no regex backtracking.
+ * `crates/nk-core/src/nips/nip27.rs` implements the same rules line for line.
+ *
  * @see https://github.com/nostr-protocol/nips/blob/master/27.md
  */
 import type { Event } from "../core/event.ts";
+import { lowerAscii } from "../core/util.ts";
 import { decode } from "./nip19.ts";
 import type { AddressPointer, EventPointer, ProfilePointer } from "./nip19.ts";
 
@@ -39,62 +46,294 @@ export type ParseContentOptions = {
   imeta?: ReadonlyMap<string, string> | undefined;
 };
 
-// Bech32 data charset ([02-9ac-hj-np-z], both ASCII cases) and the NIP-19 entity prefixes.
-const BECH32_CHARS = "02-9AC-HJ-NP-Zac-hj-np-z";
+// Per-scalar character classes — each test takes exactly one code point.
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+const TAG_CHAR = /[\p{L}\p{M}\p{N}_]/u;
+const WHITE_SPACE = /\p{White_Space}/u;
+
+/** ASCII lowercase of one code point (`A`-`Z` → `a`-`z`; everything else unchanged). */
+function foldAscii(c: string): string {
+  return c >= "A" && c <= "Z" ? c.toLowerCase() : c;
+}
+
+/** `0`, `2`–`9`, `a c-h j-n p-z`, both ASCII cases — the bech32 data charset. */
+function isBech32Char(c: string): boolean {
+  const l = foldAscii(c);
+  return (
+    (l >= "0" && l <= "9" && l !== "1") ||
+    (l >= "a" && l <= "z" && l !== "b" && l !== "i" && l !== "o")
+  );
+}
+
+/** `[A-Za-z0-9_-]` — the emoji shortcode charset. */
+function isEmojiChar(c: string): boolean {
+  return (
+    (c >= "a" && c <= "z") ||
+    (c >= "A" && c <= "Z") ||
+    (c >= "0" && c <= "9") ||
+    c === "_" ||
+    c === "-"
+  );
+}
+
+function isTagChar(c: string): boolean {
+  return TAG_CHAR.test(c);
+}
+
+function isWordChar(c: string): boolean {
+  return WORD_CHAR.test(c);
+}
+
+/** URL-run stops: Unicode White_Space plus `<>`, `"`, CJK punctuation and full-width forms. */
+function isUrlStop(c: string): boolean {
+  if (WHITE_SPACE.test(c) || c === "<" || c === ">" || c === '"') {
+    return true;
+  }
+  const cp = c.codePointAt(0);
+  return cp !== undefined && ((cp >= 0x3000 && cp <= 0x303f) || (cp >= 0xff00 && cp <= 0xffef));
+}
 
 /**
- * Pair every letter of an ASCII literal into a case class (`[Nn]…`) so keywords match
- * case-insensitively for ASCII only. The regex `i` flag cannot be used here: under `u` it also
- * folds U+017F (ſ)→s and U+212A (K)→k, which would let `noſtr:` or `lnbc1K…` slip through.
+ * ASCII-insensitive literal match at the start of `rest` — the keyword form (`nostr:`,
+ * `lightning:`, `http`…). Returns the matched length in UTF-16 units, or `undefined`. Literals are
+ * ASCII, so the length equals the literal's length.
  */
-const asciiCi = (word: string): string =>
-  word.replaceAll(/[a-zA-Z]/g, (c) => `[${c.toLowerCase()}${c.toUpperCase()}]`);
+function litAt(rest: string, lit: string): number | undefined {
+  if (rest.length < lit.length) {
+    return undefined;
+  }
+  for (let i = 0; i < lit.length; i++) {
+    if (foldAscii(rest[i] ?? "") !== lit[i]) {
+      return undefined;
+    }
+  }
+  return lit.length;
+}
 
-const NIP19_PREFIX = asciiCi("(?:npub|nprofile|note|nevent|naddr|nsec)1");
-const NIP19_BARE_PREFIX = asciiCi("(?:npub|nprofile|note|nevent|naddr)1");
+/** UTF-16 length of the maximal bech32-charset run at the start of `rest` (may be 0). */
+function bech32Run(rest: string): number {
+  let n = 0;
+  for (const c of rest) {
+    if (!isBech32Char(c)) {
+      break;
+    }
+    n += c.length;
+  }
+  return n;
+}
 
-// A URL run ends at whitespace, angle brackets, double quotes, CJK punctuation
-// (U+3000–U+303F), or full-width forms (U+FF00–U+FFEF).
-const URL_RUN = `[^\\s<>"\\u3000-\\u303f\\uff00-\\uffef]+`;
+/** `1` then a non-empty bech32-charset run — the entity/invoice separator and data. */
+function sepThenData(rest: string, at: number): number | undefined {
+  if (rest[at] !== "1") {
+    return undefined;
+  }
+  const run = bech32Run(rest.slice(at + 1));
+  return run > 0 ? at + 1 + run : undefined;
+}
 
-// Rule order matters: at every position the first matching alternative wins.
-const SCAN_BODY = [
-  // 1. nostr: URIs carry a NIP-19 entity.
-  `(?<nostr>${asciiCi("nostr:")}${NIP19_PREFIX}[${BECH32_CHARS}]+)`,
-  // 2./3. http(s) and ws(s) URLs share the same boundary rules.
-  `(?<url>${asciiCi("https")}?://${URL_RUN})`,
-  `(?<relay>${asciiCi("wss")}?://${URL_RUN})`,
-  // 4. BOLT11 invoices, with an optional lightning: URI prefix. The HRP may carry an amount
-  // (`lnbc10u1…` = ln + currency + amount + multiplier + the `1` separator).
-  `(?<invoice>(?:${asciiCi("lightning:")})?${asciiCi("ln")}(?:${asciiCi("bcrt")}|${asciiCi("tbs")}|${asciiCi("bc")}|${asciiCi("tb")})(?:\\d+[munpMUNP]?)?1[${BECH32_CHARS}]+)`,
-  // 5. Hashtags: Unicode letters/marks/numbers and underscore, at most 42 code points.
-  `(?<hashtag>#[\\p{L}\\p{M}\\p{N}_]{1,42})`,
-  // 6. Custom emoji shortcodes (validated against the event's emoji tags). NIP-30 allows
-  // alphanumerics, hyphens, and underscores.
-  `(?<emoji>:[A-Za-z0-9_-]+:)`,
-].join("|");
+const NIP19_PREFIXES = ["npub", "nprofile", "note", "nevent", "naddr", "nsec"] as const;
+const BARE_PREFIXES = ["npub", "nprofile", "note", "nevent", "naddr"] as const;
 
-const SCAN = new RegExp(SCAN_BODY, "gu");
-// 7. Bare NIP-19 entities — legacy rendering support, opt-in only.
-const SCAN_LEGACY = new RegExp(
-  `${SCAN_BODY}|(?<bare>${NIP19_BARE_PREFIX}[${BECH32_CHARS}]+)`,
-  "gu",
-);
+/** `nostr:` + NIP-19 prefix + `1` + charset. Returns `[codeStart, end]` — code start skips `nostr:`. */
+function nostrAt(rest: string): [number, number] | undefined {
+  const codeStart = litAt(rest, "nostr:");
+  if (codeStart === undefined) {
+    return undefined;
+  }
+  let at = codeStart;
+  let prefixLen: number | undefined;
+  for (const p of NIP19_PREFIXES) {
+    prefixLen = litAt(rest.slice(at), p);
+    if (prefixLen !== undefined) {
+      break;
+    }
+  }
+  if (prefixLen === undefined) {
+    return undefined;
+  }
+  at += prefixLen;
+  const end = sepThenData(rest, at);
+  return end === undefined ? undefined : [codeStart, end];
+}
 
-// The character before `#` must be absent or a non-tag character.
-const TAG_CHAR = /[\p{L}\p{M}\p{N}_]/u;
-// Invoice and bare-bech32 tokens must not be glued to a letter or digit.
-const WORD_CHAR = /[\p{L}\p{N}]/u;
+/** `http(s)://` / `ws(s)://` + URL run. Returns the raw match end. */
+function urlAt(rest: string, ws: boolean): number | undefined {
+  const base = ws ? "ws" : "http";
+  let at = litAt(rest, base);
+  if (at === undefined) {
+    return undefined;
+  }
+  // `s?` — optional second s, ASCII-only.
+  const s = rest[at];
+  if (s !== undefined && foldAscii(s) === "s") {
+    at += 1;
+  }
+  const sep = litAt(rest.slice(at), "://");
+  if (sep === undefined) {
+    return undefined;
+  }
+  at += sep;
+  let run = 0;
+  for (const c of rest.slice(at)) {
+    if (isUrlStop(c)) {
+      break;
+    }
+    run += c.length;
+  }
+  return run > 0 ? at + run : undefined;
+}
+
+const INVOICE_CURRENCIES = ["bcrt", "tbs", "bc", "tb"] as const;
+
+/**
+ * `(lightning:)?ln(bcrt|tbs|bc|tb)` + a maximal `BECH32 ∪ {1}` run, then split at the run's last
+ * `1`: the amount before it is empty or `\d+` plus at most one of `munp` (ASCII either case), and
+ * the data after it is non-empty. Returns `[prefixLen, end]`.
+ */
+function invoiceAt(rest: string): [number, number] | undefined {
+  const prefix = litAt(rest, "lightning:") ?? 0;
+  const ln = litAt(rest.slice(prefix), "ln");
+  if (ln === undefined) {
+    return undefined;
+  }
+  let at = prefix + ln;
+  let currency: number | undefined;
+  for (const cur of INVOICE_CURRENCIES) {
+    currency = litAt(rest.slice(at), cur);
+    if (currency !== undefined) {
+      break;
+    }
+  }
+  if (currency === undefined) {
+    return undefined;
+  }
+  at += currency;
+  // The maximal run may contain `1`s — the LAST `1` is the bech32 separator.
+  let runEnd = at;
+  let lastSep = -1;
+  for (const c of rest.slice(at)) {
+    if (c === "1") {
+      lastSep = runEnd;
+      runEnd += 1;
+      continue;
+    }
+    if (!isBech32Char(c)) {
+      break;
+    }
+    runEnd += c.length;
+  }
+  if (lastSep === -1) {
+    return undefined;
+  }
+  const data = rest.slice(lastSep + 1, runEnd);
+  if (data.length === 0) {
+    return undefined;
+  }
+  const amount = rest.slice(at, lastSep);
+  if (amount.length > 0) {
+    let i = 0;
+    for (const c of amount) {
+      if (c < "0" || c > "9") {
+        break;
+      }
+      i += c.length;
+    }
+    const tail = amount.slice(i);
+    if (i === 0 || tail.length > 1 || (tail.length === 1 && !"munpMUNP".includes(tail))) {
+      return undefined;
+    }
+  }
+  return [prefix, runEnd];
+}
+
+/** `#` + a maximal `TAG` run — returns the run end (the 1–42 length cap is a validation). */
+function hashtagAt(rest: string): [number, number] | undefined {
+  if (!rest.startsWith("#")) {
+    return undefined;
+  }
+  let end = 1;
+  let count = 0;
+  for (const c of rest.slice(1)) {
+    if (!isTagChar(c)) {
+      break;
+    }
+    count += 1;
+    end += c.length;
+  }
+  return count === 0 ? undefined : [end, count];
+}
+
+/** `:[A-Za-z0-9_-]+:` — a shortcode candidate (membership checked at validation). */
+function emojiAt(rest: string): number | undefined {
+  if (!rest.startsWith(":")) {
+    return undefined;
+  }
+  let run = 0;
+  for (const c of rest.slice(1)) {
+    if (!isEmojiChar(c)) {
+      break;
+    }
+    run += c.length;
+  }
+  if (run === 0) {
+    return undefined;
+  }
+  return rest[1 + run] === ":" ? 1 + run + 1 : undefined;
+}
+
+/** `npub|nprofile|note|nevent|naddr` + `1` + charset — the legacy bare rule. */
+function bareAt(rest: string): number | undefined {
+  for (const p of BARE_PREFIXES) {
+    const len = litAt(rest, p);
+    if (len !== undefined) {
+      return sepThenData(rest, len);
+    }
+  }
+  return undefined;
+}
+
+type Token =
+  | { kind: "nostr"; codeStart: number }
+  | { kind: "hashtag"; count: number }
+  | { kind: "url" | "relay" | "emoji" | "bare" }
+  | { kind: "invoice"; prefixLen: number };
+
+/** First shape match at `pos`, in rule order. Returns the token and the raw match end. */
+function candidateAt(rest: string, legacy: boolean): [Token, number] | undefined {
+  const nostr = nostrAt(rest);
+  if (nostr !== undefined) {
+    return [{ kind: "nostr", codeStart: nostr[0] }, nostr[1]];
+  }
+  const url = urlAt(rest, false);
+  if (url !== undefined) {
+    return [{ kind: "url" }, url];
+  }
+  const relay = urlAt(rest, true);
+  if (relay !== undefined) {
+    return [{ kind: "relay" }, relay];
+  }
+  const invoice = invoiceAt(rest);
+  if (invoice !== undefined) {
+    return [{ kind: "invoice", prefixLen: invoice[0] }, invoice[1]];
+  }
+  const hashtag = hashtagAt(rest);
+  if (hashtag !== undefined) {
+    return [{ kind: "hashtag", count: hashtag[1] }, hashtag[0]];
+  }
+  const emoji = emojiAt(rest);
+  if (emoji !== undefined) {
+    return [{ kind: "emoji" }, emoji];
+  }
+  if (legacy) {
+    const bare = bareAt(rest);
+    if (bare !== undefined) {
+      return [{ kind: "bare" }, bare];
+    }
+  }
+  return undefined;
+}
 
 const TRAILING_URL_CHARS = new Set([".", ",", ";", ":", "!", "?", "'"]);
-
-const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp", "avif", "svg"]);
-const VIDEO_EXT = new Set(["mp4", "webm", "mov", "m4v", "m3u8"]);
-const AUDIO_EXT = new Set(["mp3", "m4a", "ogg", "oga", "opus", "wav", "flac", "aac"]);
-
-function isChar(cp: number | undefined, re: RegExp): boolean {
-  return cp !== undefined && re.test(String.fromCodePoint(cp));
-}
 
 /** Drop trailing sentence punctuation and closers that have no opener inside the URL. */
 function trimUrlTail(raw: string): string {
@@ -136,6 +375,10 @@ function mimeMedia(mime: string | undefined): MediaType | undefined {
   return base === "image" || base === "video" || base === "audio" ? base : undefined;
 }
 
+const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp", "avif", "svg"]);
+const VIDEO_EXT = new Set(["mp4", "webm", "mov", "m4v", "m3u8"]);
+const AUDIO_EXT = new Set(["mp3", "m4a", "ogg", "oga", "opus", "wav", "flac", "aac"]);
+
 function extMedia(pathname: string): MediaType | undefined {
   const dot = pathname.lastIndexOf(".");
   if (dot === -1) {
@@ -151,11 +394,15 @@ function extMedia(pathname: string): MediaType | undefined {
   return AUDIO_EXT.has(ext) ? "audio" : undefined;
 }
 
+type UrlBlock =
+  | { readonly type: "url" | "relay"; readonly url: string }
+  | { readonly type: "image" | "video" | "audio"; readonly url: string };
+
 function urlBlock(
   raw: string,
   relay: boolean,
   imeta: ReadonlyMap<string, string> | undefined,
-): ContentBlock | undefined {
+): UrlBlock | undefined {
   const url = trimUrlTail(raw);
   let parsed: URL;
   try {
@@ -198,10 +445,28 @@ function referenceFor(code: string, bare: boolean): ContentBlock | undefined {
   return { type: "reference", pointer, bare };
 }
 
+function scalarAt(text: string, utf16: number): string | undefined {
+  const cp = text.codePointAt(utf16);
+  return cp === undefined ? undefined : String.fromCodePoint(cp);
+}
+
+/** The scalar value immediately before `pos` (astral-safe). */
+function scalarBefore(text: string, pos: number): string | undefined {
+  if (pos <= 0) {
+    return undefined;
+  }
+  // An astral scalar starting at `pos - 2` is a surrogate pair ending exactly at `pos`.
+  const pair = pos >= 2 ? text.codePointAt(pos - 2) : undefined;
+  if (pair !== undefined && pair > 0xffff) {
+    return String.fromCodePoint(pair);
+  }
+  return scalarAt(text, pos - 1);
+}
+
 /**
  * Parse note content (or a full event, to pick up `emoji` tags) into ordered blocks. One
- * left-to-right scan; at every position the rules fire in the alternation order above. Adjacent
- * text merges and no empty text blocks are emitted.
+ * left-to-right scan over Unicode scalar values; adjacent text merges and no empty text blocks are
+ * emitted.
  */
 export function parseContent(
   content: string | Pick<Event, "content" | "tags">,
@@ -226,10 +491,8 @@ export function parseContent(
     text = content.content;
   }
 
-  const scan = opts?.legacyBech32 === true ? SCAN_LEGACY : SCAN;
-  scan.lastIndex = 0;
-
   const blocks: ContentBlock[] = [];
+  const legacy = opts?.legacyBech32 === true;
   let textStart = 0;
   const flushText = (end: number): void => {
     if (end > textStart) {
@@ -237,63 +500,81 @@ export function parseContent(
     }
   };
 
-  for (let m = scan.exec(text); m !== null; m = scan.exec(text)) {
-    const start = m.index;
-    const [token] = m;
-    const end = start + token.length;
-    const g = m.groups;
-    let block: ContentBlock | undefined;
-
-    if (g?.["nostr"] !== undefined) {
-      block = referenceFor(token.slice("nostr:".length), false);
-    } else if (g?.["url"] !== undefined) {
-      block = urlBlock(token, false, opts?.imeta);
-    } else if (g?.["relay"] !== undefined) {
-      block = urlBlock(token, true, undefined);
-    } else if (g?.["invoice"] !== undefined) {
-      const prev = start === 0 ? undefined : text.codePointAt(start - 1);
-      if (!isChar(prev, WORD_CHAR) && !isChar(text.codePointAt(end), WORD_CHAR)) {
-        const invoice = token.toLowerCase().startsWith("lightning:")
-          ? token.slice("lightning:".length)
-          : token;
-        block = { type: "invoice", bolt11: invoice.toLowerCase() };
-      }
-    } else if (g?.["hashtag"] !== undefined) {
-      const prev = start === 0 ? undefined : text.codePointAt(start - 1);
-      // A tag char right after the match means the {1,42} cap truncated a longer
-      // run; the whole run is text, not a hashtag plus remainder.
-      if (!isChar(prev, TAG_CHAR) && !isChar(text.codePointAt(end), TAG_CHAR)) {
-        block = { type: "hashtag", value: token.slice(1) };
-      }
-    } else if (g?.["emoji"] !== undefined) {
-      const url = emojis.get(token.slice(1, -1));
-      if (url !== undefined) {
-        block = { type: "emoji", shortcode: token.slice(1, -1), url };
-      }
-    } else if (g?.["bare"] !== undefined) {
-      const prev = start === 0 ? undefined : text.codePointAt(start - 1);
-      if (!isChar(prev, WORD_CHAR) && !isChar(text.codePointAt(end), WORD_CHAR)) {
-        block = referenceFor(token, true);
-      }
-    }
-
-    if (block === undefined) {
-      // The candidate is plain text; resume scanning one code unit later so any token inside
-      // its span can still match.
-      scan.lastIndex = start + 1;
+  let pos = 0;
+  while (pos < text.length) {
+    const rest = text.slice(pos);
+    const candidate = candidateAt(rest, legacy);
+    if (candidate === undefined) {
+      const c = scalarAt(text, pos);
+      pos += c === undefined ? 1 : c.length;
       continue;
     }
-    flushText(start);
+    const [token, endRel] = candidate;
+    const end = pos + endRel;
+    const prevScalar = scalarBefore(text, pos);
+    const next = scalarAt(text, end);
+
+    let outcome: [ContentBlock, number] | undefined;
+    switch (token.kind) {
+      case "nostr": {
+        const block = referenceFor(rest.slice(token.codeStart, endRel), false);
+        outcome = block === undefined ? undefined : [block, end];
+        break;
+      }
+      case "url": {
+        const block = urlBlock(rest.slice(0, endRel), false, opts?.imeta);
+        outcome = block === undefined ? undefined : [block, pos + block.url.length];
+        break;
+      }
+      case "relay": {
+        const block = urlBlock(rest.slice(0, endRel), true, undefined);
+        outcome = block === undefined ? undefined : [block, pos + block.url.length];
+        break;
+      }
+      case "invoice": {
+        const glued =
+          (prevScalar !== undefined && isWordChar(prevScalar)) ||
+          (next !== undefined && isWordChar(next));
+        outcome = glued
+          ? undefined
+          : [{ type: "invoice", bolt11: lowerAscii(rest.slice(token.prefixLen, endRel)) }, end];
+        break;
+      }
+      case "hashtag": {
+        const invalid = token.count > 42 || (prevScalar !== undefined && isTagChar(prevScalar));
+        outcome = invalid ? undefined : [{ type: "hashtag", value: rest.slice(1, endRel) }, end];
+        break;
+      }
+      case "emoji": {
+        const shortcode = rest.slice(1, endRel - 1);
+        const url = emojis.get(shortcode);
+        outcome = url === undefined ? undefined : [{ type: "emoji", shortcode, url }, end];
+        break;
+      }
+      case "bare":
+        if (
+          (prevScalar !== undefined && isWordChar(prevScalar)) ||
+          (next !== undefined && isWordChar(next))
+        ) {
+          outcome = undefined;
+        } else {
+          const block = referenceFor(rest.slice(0, endRel), true);
+          outcome = block === undefined ? undefined : [block, end];
+        }
+        break;
+    }
+
+    if (outcome === undefined) {
+      // Shape matched but validation failed — `pos` is text, resume at the next scalar.
+      const c = scalarAt(text, pos);
+      pos += c === undefined ? 1 : c.length;
+      continue;
+    }
+    const [block, nextTextStart] = outcome;
+    flushText(pos);
     blocks.push(block);
-    // URL-family blocks may end before the regex run once trailing punctuation is trimmed.
-    textStart =
-      block.type === "url" ||
-      block.type === "relay" ||
-      block.type === "image" ||
-      block.type === "video" ||
-      block.type === "audio"
-        ? start + block.url.length
-        : end;
+    textStart = nextTextStart;
+    pos = end;
   }
 
   flushText(text.length);

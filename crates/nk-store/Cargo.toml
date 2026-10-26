@@ -1,0 +1,39 @@
+[package]
+name                   = "nk-store"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+homepage.workspace     = true
+repository.workspace   = true
+keywords.workspace     = true
+categories             = ["database", "network-programming"]
+readme                 = "README.md"
+description            = "Synchronous event stores for the nostr protocol"
+documentation          = "https://docs.rs/nk-store"
+include                = ["src/**/*", "Cargo.toml", "README.md", "LICENSE-*"]
+
+[lints]
+workspace = true
+
+[[bench]]
+name    = "memory"
+harness = false
+
+[features]
+sqlite = ["dep:rusqlite", "dep:serde_json"]
+
+[dependencies]
+nk-core    = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, optional = true }
+thiserror  = { workspace = true }
+rusqlite   = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion  = { workspace = true, features = ["html_reports"] }
+serde_json = { workspace = true }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

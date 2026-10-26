@@ -3,12 +3,12 @@
 // `bun packages/nostr/scripts/parity/gen/all.ts` (or this file alone).
 // Captures the TS NIP-98 `getToken`/`unpackEventFromToken`/`validateAuthEvent`
 // semantics as frozen vectors shared by the TS test suite
-// (tests/vectors/nip98.test.ts) and crates/interop.
+// (tests/vectors/nip98.test.ts) and crates/nk-core.
 //
 // Events are signed deterministically: a fixed secret key plus a fixed BIP-340
-// auxiliary rand passed to `signEvent`, so rust-nostr's
-// `Keys::sign_schnorr_with_aux_rand` (crates/interop/tests/nip98.rs)
-// reproduces `id`/`sig` byte-for-byte. `getToken` serializes in the canonical
+// auxiliary rand passed to `signEvent`, so nk-core's deterministic-AUX
+// test RNG (crates/nk-core/src/testutil.rs) reproduces `id`/`sig`
+// byte-for-byte. `getToken` serializes in the canonical
 // wire order (id, pubkey, created_at, kind, tags, content, sig), so its output
 // is the token both languages produce.
 
@@ -194,8 +194,9 @@ unpackCases.push(
   { token: `nostr\t${goodToken}`, event: goodEvent },
   { token: `NOSTR  ${goodToken}`, event: goodEvent },
   { token: `nOsTr\n${goodToken}`, event: goodEvent },
-  // U+FEFF is JS regex `\s` → the scheme still strips.
-  { token: `nostr\u{FEFF}${goodToken}`, event: goodEvent },
+  // U+FEFF is not ASCII whitespace → the scheme does not strip, and the
+  // stray char makes the base64 invalid.
+  { token: `nostr\u{FEFF}${goodToken}`, error: "invalid token encoding" },
   // Missing `=` padding is accepted (the spec example is unpadded).
   { token: padToken.replace(/=+$/, ""), event: padded.event },
   { token: "", error: "missing token" },

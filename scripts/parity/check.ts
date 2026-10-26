@@ -6,6 +6,9 @@ type JsonObject = Record<string, unknown>;
 
 const ENTRY_KEYS = new Set(["id", "ts", "vectors", "rust", "rustNote"]);
 
+/** Capabilities that exist only on the TypeScript side. */
+const TS_ONLY = new Set(["wasm.backend"]);
+
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -65,25 +68,22 @@ export function checkParity(
       errors.push(`${label}: ts.tests must list at least one test file`);
     }
 
-    // `rust` is either null (capability is not exercised against rust-nostr,
-    // `rustNote` explains why) or `{ api, tests }` where `api` names the
-    // rust-nostr path used (free text, not a file) and `tests` lists the
-    // runner files under crates/interop.
+    // `rust` is `{ tests }` — the nk-core test files (tests/it/*.rs or the
+    // src/ files holding in-crate vector tests) that run this capability's
+    // vectors — or `null` for a TS-only capability (`rustNote` explains why).
     const rustValue = cap["rust"];
     const { rustNote } = cap;
     const rust: { tests: string[] } = { tests: [] };
     if (rustValue === null || rustValue === undefined) {
-      if (typeof rustNote !== "string" || rustNote === "") {
+      if (!TS_ONLY.has(id)) {
+        errors.push(`${label}: rust is null but only TS-only capabilities may skip Rust tests`);
+      } else if (typeof rustNote !== "string" || rustNote === "") {
         errors.push(`${label}: rust is null but rustNote is missing or empty`);
       }
     } else if (isRecord(rustValue)) {
-      const { api } = rustValue;
-      if (typeof api !== "string" || api === "") {
-        errors.push(`${label}: rust.api must be a non-empty string naming the rust-nostr path`);
-      }
       rust.tests = asStrings(rustValue["tests"]);
       if (rust.tests.length === 0) {
-        errors.push(`${label}: rust.tests must list at least one runner file`);
+        errors.push(`${label}: rust.tests must list at least one test file`);
       }
       if (rustNote !== undefined) {
         errors.push(`${label}: rustNote is only allowed when rust is null`);

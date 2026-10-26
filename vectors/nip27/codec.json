@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.12.1"
+    "version": "0.14.0"
   },
   "cases": [
     {
@@ -580,11 +580,21 @@
       "out": [
         {
           "type": "url",
+          "url": "https://a.b/x﻿y"
+        }
+      ]
+    },
+    {
+      "name": "url stops at U+0085 NEL",
+      "content": "https://a.b/xy",
+      "out": [
+        {
+          "type": "url",
           "url": "https://a.b/x"
         },
         {
           "type": "text",
-          "text": "﻿y"
+          "text": "y"
         }
       ]
     },
@@ -783,6 +793,56 @@
         {
           "type": "invoice",
           "bolt11": "lnbc10m1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice amount micro",
+      "content": "lnbc10u1xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc10u1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice amount nano",
+      "content": "lnbc2500n1xyz",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbc2500n1xyz"
+        }
+      ]
+    },
+    {
+      "name": "invoice second separator in run is text",
+      "content": "lnbc1x1y",
+      "out": [
+        {
+          "type": "text",
+          "text": "lnbc1x1y"
+        }
+      ]
+    },
+    {
+      "name": "invoice bcrt beats bc",
+      "content": "lnbcrt1x",
+      "out": [
+        {
+          "type": "invoice",
+          "bolt11": "lnbcrt1x"
+        }
+      ]
+    },
+    {
+      "name": "invoice bc before rt is text",
+      "content": "lnbc1rt1x",
+      "out": [
+        {
+          "type": "text",
+          "text": "lnbc1rt1x"
         }
       ]
     },

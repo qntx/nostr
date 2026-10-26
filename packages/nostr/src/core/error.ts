@@ -37,3 +37,8 @@ export class CryptoError extends NostrError {
 export class MessageError extends NostrError {
   override name = "MessageError";
 }
+
+/** Caller-supplied filter failure — an empty list field or non-hex `ids`/`authors`/`#e`/`#p`. */
+export class FilterError extends NostrError {
+  override name = "FilterError";
+}

@@ -83,8 +83,9 @@ describe("getHashFromURL", () => {
     expect(getHashFromURL(`http://media.example.com/documents/b1/67/${HASH}.png`)).toBe(HASH);
   });
 
-  test("lowercases mixed-case hex; null when none", () => {
-    expect(getHashFromURL(`https://cdn.example.com/${HASH.toUpperCase()}.bin`)).toBe(HASH);
+  test("rejects mixed-case hex; null when none", () => {
+    expect(getHashFromURL(`https://cdn.example.com/${HASH.toUpperCase()}.bin`)).toBeUndefined();
+    expect(getHashFromURL(`https://cdn.example.com/${HASH}.bin`)).toBe(HASH);
     expect(getHashFromURL("https://cdn.example.com/media/photo.png")).toBeUndefined();
   });
 

@@ -9,6 +9,7 @@ export {
 export {
   CryptoError,
   EventValidationError,
+  FilterError,
   HexError,
   MessageError,
   NostrError,
@@ -25,6 +26,8 @@ export {
   normalizeRelayUrls,
   normalizeURL,
   randomBytes,
+  trimAscii,
+  lowerAscii,
 } from "./util.ts";
 
 export {

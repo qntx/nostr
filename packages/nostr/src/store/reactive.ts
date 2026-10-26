@@ -3,7 +3,7 @@ import { Emitter } from "../core/emitter.ts";
 import { itemCompare } from "../core/event.ts";
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
-import { filterFingerprint, matchFilters } from "../core/filter.ts";
+import { canonicalizeFilter, filterFingerprint, matchFilters } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
 import { invokeSafely, reportError } from "../core/report.ts";
 import { formatEventAddress, eventAddress, parseEventAddress } from "../core/tag.ts";
@@ -466,13 +466,14 @@ export class ReactiveEventStore {
   }
 
   /**
-   * Kind buckets a query watch belongs to (deduped across filters), or undefined when any filter
-   * lacks a non-empty `kinds` and so can match every kind.
+   * Kind buckets a query watch belongs to (deduped across filters), or undefined when any filter is
+   * `kinds`-unconstrained and so can match every kind.
    */
   #queryKinds(watch: WatchHandle): Set<number> | undefined {
     const kinds = new Set<number>();
-    for (const filter of watch.filters ?? []) {
-      if (filter.kinds === undefined || filter.kinds.length === 0) {
+    for (const raw of watch.filters ?? []) {
+      const filter = canonicalizeFilter(raw);
+      if (filter.kinds === undefined) {
         return undefined;
       }
       for (const kind of filter.kinds) {

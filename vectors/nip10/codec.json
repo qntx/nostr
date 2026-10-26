@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.12.1"
+    "version": "0.14.0"
   },
   "parse": [
     {
@@ -314,34 +314,11 @@
         ]
       ],
       "out": {
-        "root": {
-          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "relays": [
-            "wss://relay.example",
-            "wss://author.example"
-          ],
-          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
-          "kind": null
-        },
-        "reply": {
-          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "relays": [
-            "wss://relay.example",
-            "wss://author.example"
-          ],
-          "author": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
-          "kind": null
-        },
+        "root": null,
+        "reply": null,
         "mentions": [],
         "quotes": [],
-        "profiles": [
-          {
-            "pubkey": "166bf3765ebd1fc55decfe395beff2ea3b2a4e0a8946e7eb578512b555737c99",
-            "relays": [
-              "wss://author.example"
-            ]
-          }
-        ]
+        "profiles": []
       }
     },
     {
@@ -694,15 +671,7 @@
         "root": null,
         "reply": null,
         "mentions": [],
-        "quotes": [
-          {
-            "type": "event",
-            "id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-            "relays": [],
-            "author": "dfff72a9aea65b809f9ad9a44705e4291340dba0bd4f682f237390310cc653a2",
-            "kind": null
-          }
-        ],
+        "quotes": [],
         "profiles": []
       }
     },
@@ -852,7 +821,13 @@
           42
         ]
       ],
-      "err": "TypeError",
+      "out": {
+        "root": null,
+        "reply": null,
+        "mentions": [],
+        "quotes": [],
+        "profiles": []
+      },
       "rust": false
     }
   ],

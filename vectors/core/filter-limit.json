@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.12.1",
+    "version": "0.14.0",
     "cross_check": null
   },
   "cases": [
@@ -16,19 +16,19 @@
       "filter": {
         "ids": []
       },
-      "limit": 0
+      "error": "FilterError"
     },
     {
       "filter": {
         "kinds": []
       },
-      "limit": 0
+      "error": "FilterError"
     },
     {
       "filter": {
         "authors": []
       },
-      "limit": 0
+      "error": "FilterError"
     },
     {
       "filter": {
@@ -134,7 +134,7 @@
       "filter": {
         "#d": []
       },
-      "limit": null
+      "error": "FilterError"
     },
     {
       "filter": {

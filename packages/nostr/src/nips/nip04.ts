@@ -12,12 +12,13 @@ import {
   hexToBytes,
   utf8Decoder,
   utf8Encoder,
+  lowerAscii,
 } from "../core/util.ts";
 
 function normalizeSharedSecret(privkey: Uint8Array, pubkey: string): Uint8Array {
   assertHex32(pubkey, "public key");
   try {
-    const key = secp256k1.getSharedSecret(privkey, hexToBytes(`02${pubkey.toLowerCase()}`));
+    const key = secp256k1.getSharedSecret(privkey, hexToBytes(`02${lowerAscii(pubkey)}`));
     return key.slice(1, 33);
   } catch (error) {
     throw new CryptoError("invalid NIP-04 public key", { cause: error });

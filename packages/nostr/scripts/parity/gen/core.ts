@@ -2,8 +2,8 @@
 // Generates vectors/core/*.json — run with
 // `bun packages/nostr/scripts/parity/gen/core.ts`.
 // Captures the TS core's wire output as frozen vectors shared by the TS test
-// suite (tests/vectors/core.test.ts) and replayed against rust-nostr by
-// crates/interop.
+// suite (tests/vectors/core.test.ts) and replayed against nk-core by
+// crates/nk-core's vector tests.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -50,6 +50,7 @@ import {
   normalizeURL,
   utf8Encoder,
 } from "../../../src/core/util.ts";
+import { isNonCanonicalJson } from "../non-canonical.ts";
 
 const PK = "90a80db6eb294b9eab0b4e8ddfa3efe7263458ce2d07566df4e6c58868feef23";
 const SK = "0000000000000000000000000000000000000000000000000000000000000003";
@@ -69,6 +70,23 @@ const version =
     : "0.0.0";
 
 function emit(capability: string, file: string, cases: unknown, crossCheck?: string): void {
+  // Tag every case whose raw JSON input uses a form `JSON.parse` accepts
+  // but strict parsers must reject, so vector consumers can pin the
+  // platform rule instead of guessing it from the text.
+  if (Array.isArray(cases)) {
+    for (const c of cases) {
+      const item: unknown = c;
+      if (
+        typeof item === "object" &&
+        item !== null &&
+        "raw" in item &&
+        typeof item.raw === "string" &&
+        isNonCanonicalJson(item.raw)
+      ) {
+        Object.assign(item, { nonCanonicalJson: true });
+      }
+    }
+  }
   const doc = {
     schema: 1,
     capability,
@@ -401,53 +419,57 @@ const evD = canonEvent({
   sig: "c".repeat(128),
 });
 
-const matchFilterCases: Array<{ filter: Filter; event: Event; matches: boolean }> = [
-  { filter: { ids: ["a".repeat(64)] }, event: evA, matches: true },
-  { filter: { ids: ["A".repeat(64)] }, event: evA, matches: true },
-  { filter: { ids: ["b".repeat(64)] }, event: evA, matches: false },
-  { filter: { ids: [] }, event: evA, matches: false },
-  { filter: { authors: [PK.toUpperCase()] }, event: evA, matches: true },
-  { filter: { authors: ["f".repeat(64)] }, event: evA, matches: false },
-  { filter: { authors: [] }, event: evA, matches: false },
-  { filter: { kinds: [1, 7] }, event: evA, matches: true },
-  { filter: { kinds: [6] }, event: evA, matches: false },
-  { filter: { since: 1000 }, event: evA, matches: true },
-  { filter: { since: 1001 }, event: evA, matches: false },
-  { filter: { until: 1000 }, event: evA, matches: true },
-  { filter: { until: 999 }, event: evA, matches: false },
-  { filter: { "#e": ["b".repeat(64)] }, event: evA, matches: true },
-  { filter: { "#e": ["B".repeat(64)] }, event: evA, matches: true },
-  { filter: { "#e": ["c".repeat(64)] }, event: evA, matches: false },
-  { filter: { "#p": [PK] }, event: evA, matches: true },
-  { filter: { "#p": [PK.toUpperCase()] }, event: evA, matches: true },
-  { filter: { "#t": ["nostr"] }, event: evA, matches: true },
-  { filter: { "#t": ["NOSTR"] }, event: evA, matches: false },
-  // Multi-letter # keys are outside NIP-01 and ignored entirely.
-  { filter: { "#custom": ["v1"] }, event: evB, matches: true },
-  { filter: { "#custom": ["v2"] }, event: evB, matches: true },
-  { filter: { "#d": ["post"] }, event: evB, matches: true },
-  { filter: { "#a": [`30023:${PK}:post`] }, event: evB, matches: true },
-  { filter: { "#missing": ["x"] }, event: evA, matches: true },
-  { filter: { "#1": ["x"] }, event: evA, matches: true },
-  { filter: { "#e": ["b".repeat(64)] }, event: evC, matches: true },
-  { filter: { "#p": [PK] }, event: evC, matches: true },
-  { filter: { "#A": ["x"] }, event: evD, matches: true },
-  { filter: { "#a": ["x"] }, event: evD, matches: false },
-  { filter: { "#a": ["y"] }, event: evD, matches: true },
-  { filter: { since: 2000, until: 2000 }, event: evB, matches: true },
-  { filter: { ids: ["a".repeat(64), "A".repeat(64)] }, event: evA, matches: true },
-  { filter: {}, event: evA, matches: true },
-  {
-    filter: { kinds: [1], authors: [PK], since: 500, until: 1500, "#e": ["b".repeat(64)] },
-    event: evA,
-    matches: true,
-  },
-  {
-    filter: { kinds: [1], "#e": ["b".repeat(64)], "#t": ["other"] },
-    event: evA,
-    matches: false,
-  },
-];
+const matchFilterCases: Array<{ filter: Filter; event: Event; matches?: boolean; error?: string }> =
+  [
+    { filter: { ids: ["a".repeat(64)] }, event: evA, matches: true },
+    { filter: { ids: ["A".repeat(64)] }, event: evA, matches: true },
+    { filter: { ids: ["b".repeat(64)] }, event: evA, matches: false },
+    { filter: { ids: [] }, event: evA, error: "FilterError" },
+    { filter: { authors: [PK.toUpperCase()] }, event: evA, matches: true },
+    { filter: { authors: ["f".repeat(64)] }, event: evA, matches: false },
+    { filter: { authors: [] }, event: evA, error: "FilterError" },
+    { filter: { kinds: [] }, event: evA, error: "FilterError" },
+    { filter: { "#t": [] }, event: evA, error: "FilterError" },
+    { filter: { "#e": ["zz"] }, event: evA, error: "FilterError" },
+    { filter: { kinds: [1, 7] }, event: evA, matches: true },
+    { filter: { kinds: [6] }, event: evA, matches: false },
+    { filter: { since: 1000 }, event: evA, matches: true },
+    { filter: { since: 1001 }, event: evA, matches: false },
+    { filter: { until: 1000 }, event: evA, matches: true },
+    { filter: { until: 999 }, event: evA, matches: false },
+    { filter: { "#e": ["b".repeat(64)] }, event: evA, matches: true },
+    { filter: { "#e": ["B".repeat(64)] }, event: evA, matches: true },
+    { filter: { "#e": ["c".repeat(64)] }, event: evA, matches: false },
+    { filter: { "#p": [PK] }, event: evA, matches: true },
+    { filter: { "#p": [PK.toUpperCase()] }, event: evA, matches: true },
+    { filter: { "#t": ["nostr"] }, event: evA, matches: true },
+    { filter: { "#t": ["NOSTR"] }, event: evA, matches: false },
+    // Multi-letter # keys are outside NIP-01 and ignored entirely.
+    { filter: { "#custom": ["v1"] }, event: evB, matches: true },
+    { filter: { "#custom": ["v2"] }, event: evB, matches: true },
+    { filter: { "#d": ["post"] }, event: evB, matches: true },
+    { filter: { "#a": [`30023:${PK}:post`] }, event: evB, matches: true },
+    { filter: { "#missing": ["x"] }, event: evA, matches: true },
+    { filter: { "#1": ["x"] }, event: evA, matches: true },
+    { filter: { "#e": ["b".repeat(64)] }, event: evC, matches: true },
+    { filter: { "#p": [PK] }, event: evC, matches: true },
+    { filter: { "#A": ["x"] }, event: evD, matches: true },
+    { filter: { "#a": ["x"] }, event: evD, matches: false },
+    { filter: { "#a": ["y"] }, event: evD, matches: true },
+    { filter: { since: 2000, until: 2000 }, event: evB, matches: true },
+    { filter: { ids: ["a".repeat(64), "A".repeat(64)] }, event: evA, matches: true },
+    { filter: {}, event: evA, matches: true },
+    {
+      filter: { kinds: [1], authors: [PK], since: 500, until: 1500, "#e": ["b".repeat(64)] },
+      event: evA,
+      matches: true,
+    },
+    {
+      filter: { kinds: [1], "#e": ["b".repeat(64)], "#t": ["other"] },
+      event: evA,
+      matches: false,
+    },
+  ];
 
 const filterLimitInputs: Filter[] = [
   {},
@@ -469,10 +491,13 @@ const filterLimitInputs: Filter[] = [
   { kinds: [30023], authors: [PK], "#d": ["a", "a"] },
   { ids: ["a".repeat(64), "a".repeat(64)], limit: 10 },
 ];
-const filterLimitCases = filterLimitInputs.map((filter) => ({
-  filter,
-  limit: getFilterLimit(filter),
-}));
+const filterLimitCases = filterLimitInputs.map((filter) => {
+  try {
+    return { filter, limit: getFilterLimit(filter) };
+  } catch (error) {
+    return { filter, error: error instanceof Error ? error.constructor.name : "Error" };
+  }
+});
 
 // Unknown non-# keys and multi-letter # keys are dropped on canonicalization
 // in both languages, so vector inputs may carry them.
@@ -492,10 +517,13 @@ const canonicalizeInputs = [
   { limit: 0, search: "s", since: 2, until: 9 },
   { kinds: [1], zzz: 1, custom: ["b", "a"] },
 ];
-const canonicalizeCases = canonicalizeInputs.map((input) => ({
-  input,
-  canonicalJson: JSON.stringify(canonicalizeFilter(input as Filter)),
-}));
+const canonicalizeCases = canonicalizeInputs.map((input) => {
+  try {
+    return { input, canonicalJson: JSON.stringify(canonicalizeFilter(input)) };
+  } catch (error) {
+    return { input, error: error instanceof Error ? error.constructor.name : "Error" };
+  }
+});
 
 const fingerprintInputs: Filter[][] = [
   [{ kinds: [1] }],
@@ -510,10 +538,13 @@ const fingerprintInputs: Filter[][] = [
   [{ kinds: [1], "#custom": ["x"] }],
   [{ ids: ["A".repeat(64), "a".repeat(64)] }],
 ];
-const fingerprintCases = fingerprintInputs.map((filters) => ({
-  filters,
-  fingerprint: filterFingerprint(filters),
-}));
+const fingerprintCases = fingerprintInputs.map((filters) => {
+  try {
+    return { filters, fingerprint: filterFingerprint(filters) };
+  } catch (error) {
+    return { filters, error: error instanceof Error ? error.constructor.name : "Error" };
+  }
+});
 
 // Canonical wire messages: encode(parse(raw)) === raw unless `encoded` differs.
 const evMsg = encodeClientMessage(["EVENT", baseEvent]);
@@ -530,8 +561,8 @@ const clientMessages = [
   },
   {
     // encodeClientMessage canonicalizes; parse drops the unknown non-# key.
-    raw: '["REQ","sub",{"foo":1,"ids":[]}]',
-    encoded: '["REQ","sub",{"ids":[]}]',
+    raw: `["REQ","sub",{"foo":1,"ids":["${"a".repeat(64)}"]}]`,
+    encoded: `["REQ","sub",{"ids":["${"a".repeat(64)}"]}]`,
   },
   {
     raw: encodeClientMessage([
@@ -541,9 +572,9 @@ const clientMessages = [
     ]),
   },
   {
-    // Wire parse lowercases ids/#e and drops multi-letter # keys and unknowns.
-    raw: `["REQ","s",{"ids":["${"A".repeat(64)}"],"#e":["${"B".repeat(64)}"],"#custom":["x"],"junk":1}]`,
-    encoded: `["REQ","s",{"#e":["${"b".repeat(64)}"],"ids":["${"a".repeat(64)}"]}]`,
+    // Multi-letter # keys and unknown non-# keys are dropped on the wire.
+    raw: `["REQ","s",{"#custom":["x"],"junk":1,"#e":["${"b".repeat(64)}"]}]`,
+    encoded: `["REQ","s",{"#e":["${"b".repeat(64)}"]}]`,
   },
   {
     // Duplicate keys: last wins; integer spellings serialize as plain integers.
@@ -583,12 +614,7 @@ const clientMessages = [
   {
     raw: encodeClientMessage(["NEG-OPEN", "sub", { kinds: [2, 1], "#custom": ["x"] }, "aabb"]),
   },
-  {
-    raw: '["NEG-OPEN","sub",{"kinds":[1]},"AABB"]',
-    encoded: '["NEG-OPEN","sub",{"kinds":[1]},"aabb"]',
-  },
   { raw: encodeClientMessage(["NEG-MSG", "sub", "deadbeef"]) },
-  { raw: '["NEG-MSG","sub","FF00"]', encoded: '["NEG-MSG","sub","ff00"]' },
   { raw: encodeClientMessage(["NEG-CLOSE", "sub"]) },
   // Subscription id boundary: 64 scalar values accepted (incl. astral), 65 rejected.
   { raw: encodeClientMessage(["CLOSE", "a".repeat(64)]) },
@@ -611,13 +637,12 @@ const relayMessages = [
       { count: 7, approximate: true, hll: "ab".repeat(256) },
     ]),
   },
-  // COUNT with uppercase hll normalizes to lowercase on parse.
+  // COUNT with an uppercase hll drops the field — invalid protocol text.
   {
     raw: `["COUNT","s",{"count":3,"hll":"${"AB".repeat(256)}"}]`,
-    encoded: encodeRelayMessage(["COUNT", "s", { count: 3, hll: "ab".repeat(256) }]),
+    encoded: encodeRelayMessage(["COUNT", "s", { count: 3 }]),
   },
   { raw: encodeRelayMessage(["NEG-MSG", "sub", "deadbeef"]) },
-  { raw: '["NEG-MSG","sub","AABB"]', encoded: '["NEG-MSG","sub","aabb"]' },
   { raw: encodeRelayMessage(["NEG-ERR", "sub", "error: something"]) },
   // COUNT accepts the max safe integer; non-bool approximate and invalid hll are ignored.
   { raw: encodeRelayMessage(["COUNT", "s", { count: 9007199254740991 }]) },
@@ -648,6 +673,14 @@ const invalidClientMessages = [
   '["REQ",1,{"kinds":[1]}]',
   '["REQ","sub",42]',
   '["REQ","sub",null]',
+  '["REQ","s",{"ids":[]}]',
+  '["REQ","s",{"authors":[]}]',
+  '["REQ","s",{"kinds":[]}]',
+  '["REQ","s",{"#t":[]}]',
+  '["REQ","s",{"#e":[]}]',
+  '["REQ","sub",{"foo":1,"ids":[]}]',
+  '["COUNT","s",{"kinds":[]}]',
+  '["NEG-OPEN","sub",{"kinds":[]},"aabb"]',
   `["REQ","s",{"ids":["${"z".repeat(64)}"]}]`,
   '["REQ","s",{"ids":[123]}]',
   `["REQ","s",{"ids":"${"a".repeat(64)}"}]`,
@@ -685,6 +718,12 @@ const invalidClientMessages = [
   '["REQ","s",{"kinds":[7],"kinds":"x"}]',
   '["COUNT","s",{"authors":[1]}]',
   '["NEG-OPEN","s",{"limit":"x"},"aabb"]',
+  // Uppercase hex is invalid protocol text.
+  `["REQ","s",{"ids":["${"A".repeat(64)}"]}]`,
+  `["REQ","s",{"#e":["${"B".repeat(64)}"]}]`,
+  `["REQ","s",{"authors":["${"C".repeat(64)}"]}]`,
+  '["NEG-OPEN","sub",{"kinds":[1]},"AABB"]',
+  '["NEG-MSG","sub","FF00"]',
   '["EVENT"]',
   '["EVENT",{}]',
   `["EVENT",${JSON.stringify(baseEvent)},{}]`,
@@ -881,11 +920,12 @@ emit("core.event.validate", "event-validate.json", [
 emit(
   "core.filter.match",
   "filter-match.json",
-  matchFilterCases.map((c) => ({
-    filter: c.filter,
-    event: c.event,
-    matches: matchFilter(c.filter, c.event),
-  })),
+  matchFilterCases.map((c) => {
+    if (c.error !== undefined) {
+      return { filter: c.filter, event: c.event, error: c.error };
+    }
+    return { filter: c.filter, event: c.event, matches: matchFilter(c.filter, c.event) };
+  }),
 );
 emit("core.filter.limit", "filter-limit.json", filterLimitCases);
 emit("core.filter.canonicalize", "filter-canonicalize.json", canonicalizeCases);

@@ -30,6 +30,7 @@ import {
   getFilterLimit,
   matchFilter,
   EventValidationError,
+  FilterError,
   matchFilters,
   parseClientMessage,
   parseEventAddress,
@@ -396,24 +397,29 @@ describe("filter", () => {
   });
 
   test("matchFilter compares #e/#p tag values verbatim, lowercasing only the filter side", () => {
+    const eid = "abcd".repeat(16);
+    const pk = "90ab".repeat(16);
     const tagged = {
       ...base,
       tags: [
-        ["e", "ABCD1234"],
-        ["p", "90ABCDEF"],
+        ["e", eid.toUpperCase()],
+        ["p", pk.toUpperCase()],
         ["t", "MixedCaseTag"],
       ],
     };
     // Filter values are caller input and canonicalize to lowercase; the event's tag value is
     // compared literally like a relay would — an uppercase tag value never matches.
-    expect(matchFilter({ "#e": ["abcd1234"] }, tagged)).toBe(false);
-    expect(matchFilter({ "#p": ["90abcdef"] }, tagged)).toBe(false);
-    expect(matchFilter({ "#p": ["90ABCDEF"] }, tagged)).toBe(false);
+    expect(matchFilter({ "#e": [eid] }, tagged)).toBe(false);
+    expect(matchFilter({ "#p": [pk] }, tagged)).toBe(false);
+    expect(matchFilter({ "#p": [pk.toUpperCase()] }, tagged)).toBe(false);
     // Non-hex tag names stay verbatim on both sides.
     expect(matchFilter({ "#t": ["mixedcasetag"] }, tagged)).toBe(false);
     expect(matchFilter({ "#t": ["MixedCaseTag"] }, tagged)).toBe(true);
-    const lower = { ...base, tags: [["e", "abcd1234"]] };
-    expect(matchFilter({ "#e": ["ABCD1234"] }, lower)).toBe(true);
+    const lower = { ...base, tags: [["e", eid]] };
+    expect(matchFilter({ "#e": [eid.toUpperCase()] }, lower)).toBe(true);
+    // `#e`/`#p` caller values must be 64-hex; non-hex throws FilterError.
+    expect(() => matchFilter({ "#e": ["abcd1234"] }, lower)).toThrow(FilterError);
+    expect(() => matchFilter({ "#e": [] }, lower)).toThrow(FilterError);
   });
 
   test("matchFilters is OR across filters", () => {
@@ -466,12 +472,9 @@ describe("filter", () => {
       filterFingerprint([{ kinds: [1] }]),
     );
     expect(filterFingerprint([{ search: "x" }])).not.toBe(filterFingerprint([{ search: "X" }]));
-    expect(filterFingerprint([{ kinds: [1] }])).not.toBe(
-      filterFingerprint([{ kinds: [1], authors: [] }]),
-    );
-    expect(filterFingerprint([{ kinds: [1] }])).not.toBe(
-      filterFingerprint([{ kinds: [1], "#t": [] }]),
-    );
+    // Empty list fields are invalid — the normalizer throws.
+    expect(() => filterFingerprint([{ kinds: [1], authors: [] }])).toThrow(FilterError);
+    expect(() => filterFingerprint([{ kinds: [1], "#t": [] }])).toThrow(FilterError);
     expect(filterFingerprint([{ kinds: [1] }])).not.toBe(filterFingerprint([{ kinds: [1, 2] }]));
   });
 
@@ -497,10 +500,11 @@ describe("filter", () => {
     expect(out["#t"]).toStrictEqual(["a", "b"]);
     expect(canonicalizeFilter({ "#t": ["Nostr"] })["#t"]).toStrictEqual(["Nostr"]);
     expect("since" in canonicalizeFilter(withUndef)).toBe(false);
-    expect(canonicalizeFilter({ kinds: [1], authors: [] })).toStrictEqual({
-      authors: [],
-      kinds: [1],
-    });
+    // Empty list fields are invalid — the normalizer throws.
+    expect(() => canonicalizeFilter({ kinds: [1], authors: [] })).toThrow(FilterError);
+    expect(() => canonicalizeFilter({ ids: [] })).toThrow(FilterError);
+    expect(() => canonicalizeFilter({ "#e": [] })).toThrow(FilterError);
+    expect(() => canonicalizeFilter({ "#e": ["zz"] })).toThrow(FilterError);
     expect(canonicalizeFilter({ kinds: [1] })).toStrictEqual({ kinds: [1] });
     expect(filter.authors).toStrictEqual([pkB.toUpperCase(), pkA]);
     expect(filter.kinds).toStrictEqual([2, 1]);
@@ -617,16 +621,15 @@ describe("messages", () => {
     ]);
   });
 
-  test("parseClientMessage validates and normalizes wire filters", () => {
+  test("parseClientMessage validates wire filters", () => {
     const id = "ab".repeat(32);
     const parsed = parseClientMessage(
-      JSON.stringify([
-        "REQ",
-        "s",
-        { ids: [id.toUpperCase()], "#e": [id.toUpperCase()], "#custom": ["x"], junk: 1 },
-      ]),
+      JSON.stringify(["REQ", "s", { ids: [id], "#e": [id], "#custom": ["x"], junk: 1 }]),
     );
     expect(parsed).toStrictEqual(["REQ", "s", { "#e": [id], ids: [id] }]);
+    expect(() =>
+      parseClientMessage(JSON.stringify(["REQ", "s", { ids: [id.toUpperCase()] }])),
+    ).toThrow(MessageError);
     expect(() => parseClientMessage(JSON.stringify(["REQ", "s", { kinds: [65536] }]))).toThrow(
       MessageError,
     );
