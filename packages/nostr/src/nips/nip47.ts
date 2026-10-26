@@ -6,7 +6,7 @@ import { verifyEvent } from "../core/verifier.ts";
 /**
  * NIP-47 Nostr Wallet Connect, client side only: parse a `nostr+walletconnect://` URI, read a
  * wallet's info event, and send NIP-44-encrypted requests / validate + decrypt responses. The
- * wallet-service side (decodeRequest, encodeResponse, notifications) is out of scope — WD-066.
+ * wallet-service side (request decoding, responses, notifications) is not implemented.
  */
 export const NWC_INFO_KIND = 13194;
 export const NWC_REQUEST_KIND = 23194;
