@@ -1,6 +1,6 @@
 {
   "name": "@qntx/nostr-native",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Native libsecp256k1 (Nitro) verification and signing backend for @qntx/nostr on React Native",
   "keywords": [
     "bip340",
@@ -61,7 +61,7 @@
     "@arethetypeswrong/cli": "0.18.5",
     "@noble/curves": "2.4.0",
     "@noble/hashes": "2.4.0",
-    "@qntx/nostr": "0.14.0",
+    "@qntx/nostr": "0.15.0",
     "@qntx/tsconfig": "1.0.1",
     "@types/node": "26.6.5",
     "nitrogen": "0.37.1",
@@ -71,7 +71,7 @@
     "vite-plus": "1.2.0"
   },
   "peerDependencies": {
-    "@qntx/nostr": "^0.14.0",
+    "@qntx/nostr": "^0.15.0",
     "react-native": "*",
     "react-native-nitro-modules": "^0.37.1"
   },

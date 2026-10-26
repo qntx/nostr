@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-26
+
 ### Added
 
 - `NostrBackend` (`@qntx/nostr` `core/key.ts`): the injected signing/verification/ECDH backend — `publicKey`, `sign`, `verifySerialized`, `ecdhX` — with `nobleBackend` as the default implementation. Injection points: `Keys.generate`/`Keys.fromSecretKey(…, backend?)`, `KeysSigner({ backend? })` (NIP-04 shared secrets and NIP-44 conversation keys go through `backend.ecdhX`; the conversation-key cache and `dispose()` zeroing are unchanged), `nip04.encryptToPubkey`/`decryptFromPubkey`, `nip44.getConversationKey`, and `createEventVerifier(backend)`; `nip59.unwrap` accepts `{ verify? }` defaulting to `verifyEvent`.
