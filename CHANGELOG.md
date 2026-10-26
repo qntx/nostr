@@ -17,19 +17,6 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 - `nostr-native`: `HybridNostrNative::ecdhX` via the Nitro spec, making the native adapter a full `NostrBackend`. `nostr_native.h` is now the stable public C interface: `NOSTR_NATIVE_ABI_VERSION 2`, `nostr_native_abi_version()`, and `nostr_native_ecdh_x` (1/0, documented argument lengths, caller-wipes secret inputs, existing global context).
 - `NostrSigner.unwrapGiftWraps?(events)` — optional batch DM unwrapping (`nips/nip59`): `KeysSigner` implements it by unwrapping each event, so one corrupt wrap yields an `Error` entry and the batch continues; `client.dm` uses it in batches of 50 when present and falls back to per-event unwrap otherwise, with identical results and ordering.
 - `nips/nip47` — the Nostr Wallet Connect **client** (`@qntx/nostr/nips/nip47`): `parseConnectionUri` (`nostr+walletconnect://`, `wss://` relays, `ws://localhost` allowed), `parseInfoEvent` (kind 13194, `encryption`/`extensions` tags), `encodeRequest`/`decodeResponse` (kinds 23194/23195, NIP-44 only, full response validation), typed request/result/error unions, and `NwcError`. nk-core mirrors the surface in `nips::nip47` (`parse_connection_uri`, `parse_info_event`, `decode_response_payload`, always compiled) and both sides run the shared `vectors/nip47.json`. A cross-test exercises our client against `@getalby/sdk`'s `NWCWalletService` over the in-memory relay for `get_info`, `get_balance`, `pay_invoice` and an error arm.
-
-### Removed
-
-- **BREAKING:** `SigningBackend` and `SerializedEventVerifier` are deleted without aliases — implement `NostrBackend` instead (`verifySerialized` replaces the standalone serialized verifier).
-
-### Changed
-
-- **BREAKING:** `nostr-wasm` ABI bumped to 4 (`nostr_ecdh_x` added); a wasm built for ABI 3 is rejected by `NOSTR_ABI_VERSION` checking.
-- **BREAKING:** `nostr_native.h` ABI bumped to 2 (`nostr_native_abi_version()`, `nostr_native_ecdh_x`); consumers should call `nostr_native_abi_version()` before dispatch.
-- `nostr-wasm` publishes the committed reproducible wasm — the publish job packs the committed artifact after a reproducibility rebuild-and-diff gate instead of rebuilding on the release runner, so the published module always matches `NOSTR_WASM_INTEGRITY`.
-
-### Added
-
 - `nk`: Blossom on `http::HttpClient` — `upload`/`check_upload`/`list`/`delete`/`mirror`/`blob_exists`/`get_blob` (BUD-01/02/04/06, hash-verified descriptors and blobs), NIP-B7 `heal_blob_url` and `upload_to_servers`.
 - `nk-core`: Blossom codecs — `BlobHash`, `Server`, `BlobDescriptor`, kind-24242 `Authorization`, `authorization_header` and the kind-10063 `ServerList`, verified by the new shared `vectors/blossom`.
 - `nk`: `http` feature — `http::HttpClient` (hyper-util + rustls/ring + webpki-roots, never follows redirects, whole-exchange timeout, response-size cap) with NIP-11 `relay_information` and NIP-05 `nip05_document`/`nip05_profile`/`verify_nip05`; `testing::MockHttp` and `MockRelay::set_information` under `test-util`.
@@ -45,10 +32,14 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Removed
 
+- **BREAKING:** `SigningBackend` and `SerializedEventVerifier` are deleted without aliases — implement `NostrBackend` instead (`verifySerialized` replaces the standalone serialized verifier).
 - `crates/interop` and the rust-nostr divergence registry — the Rust implementation is now owned (`nk-core`), so the cross-library comparison harness is obsolete.
 
 ### Changed
 
+- **BREAKING:** `nostr-wasm` ABI bumped to 4 (`nostr_ecdh_x` added); a wasm built for ABI 3 is rejected by `NOSTR_ABI_VERSION` checking.
+- **BREAKING:** `nostr_native.h` ABI bumped to 2 (`nostr_native_abi_version()`, `nostr_native_ecdh_x`); consumers should call `nostr_native_abi_version()` before dispatch.
+- `nostr-wasm` publishes the committed reproducible wasm — the publish job packs the committed artifact after a reproducibility rebuild-and-diff gate instead of rebuilding on the release runner, so the published module always matches `NOSTR_WASM_INTEGRITY`.
 - **BREAKING:** `@qntx/nostr` empty filter lists are rejected both on the wire and in developer-supplied `Filter` objects — `ids`/`authors`/`kinds`/`#x` may no longer be `[]`. `parseWireFilter` throws `MessageError`; `canonicalizeFilter`/`filterFingerprint`/`matchFilter`/`getFilterLimit`/`encodeClientMessage`/the event stores throw the new `FilterError`. The "empty set matches nothing" semantics are gone.
 - **BREAKING:** `nk-core` `Filter::{ids, authors, kinds, tag}` are now fallible — `Result<Self, filter::Error>` with `EmptyList { field: Field }` and `InvalidTagValue { letter }` (non-hex `#e`/`#p` caller values); wire deserialization rejects empty lists.
 - **BREAKING:** `@qntx/nostr` protocol text accepts lowercase hex only — uppercase hex in event tag values, wire filters (`REQ`/`COUNT`/`NEG-OPEN`), relay and client messages (`OK` ids, `NEG-*` hex), NIP-05 and NIP-11 documents, NIP-46 URIs and RPC results, and Blossom descriptors and blob URLs is now an invalid value, handled like any other invalid value of that field (the tag is skipped, the filter or message is rejected, the document field is dropped, the URI is rejected). Nothing lowercases protocol text. Typed API arguments (`assertHex32`-checked parameters, `Keys`/`PublicKey`, NIP-19 encoders, developer-supplied `Filter` objects, gossip lookups) are unchanged — they still accept any case and normalize once at the boundary.
