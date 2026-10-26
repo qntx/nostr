@@ -9,4 +9,4 @@
  * The constant only guards fetch-time delivery — callers that want SRI enforcement must fetch
  * with `integrity` and pass `module`.
  */
-export const NOSTR_WASM_INTEGRITY = "sha256-U35sfOfQiY3cwnVyhStF4kNI7uMn9FBRRJbXn7DbpPg=";
+export const NOSTR_WASM_INTEGRITY = "sha256-p9Cj0Klb81RjKSm5EUX28CKmoXHhZqFRrdks6Pq5ejQ=";

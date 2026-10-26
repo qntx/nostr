@@ -39,7 +39,9 @@ jobs:
       scripts-directory: .
 
   # nostr_wasm.wasm and its SRI integrity hash are committed artifacts: rebuild
-  # and diff so the checked-in bytes always come from the pinned toolchain.
+  # inside the pinned linux/amd64 image and diff, so the checked-in bytes always
+  # come from the pinned toolchain (scripts/Dockerfile — same model as
+  # @qntx/spark-wasm).
   wasm-artifacts:
     runs-on: ubuntu-latest
     permissions:
@@ -51,9 +53,13 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       - run: bun install --frozen-lockfile
       - run: bun run --cwd packages/nostr-wasm build:wasm
-        env:
-          CC_wasm32_unknown_unknown: clang
-      - run: git diff --exit-code packages/nostr-wasm/src/integrity.ts
+      - run: git diff --exit-code packages/nostr-wasm/src/nostr_wasm.wasm
+          packages/nostr-wasm/src/integrity.ts
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nostr-wasm-rebuild
+          path: packages/nostr-wasm/src/nostr_wasm.wasm
 
   rust:
     uses: qntx/workflows/.github/workflows/ci-rust.yml@v2

@@ -38,6 +38,7 @@ if ! "${cc_wasm}" --target=wasm32-unknown-unknown -nostdlib -Wl,--version \
   exit 1
 fi
 
+root="$(cd "${pkg}/../.." && pwd)"
 out="${pkg}/src/nostr_wasm.wasm"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
@@ -47,6 +48,7 @@ trap 'rm -rf "${tmp}"' EXIT
 # includes vendor/secp256k1/src/secp256k1.c — the precomputed tables are separate TUs.
 "${cc_wasm}" \
   --target=wasm32-unknown-unknown \
+  -ffile-prefix-map="${root}=." \
   -O3 -flto -nostdlib -mbulk-memory \
   -I"${pkg}/c/include" \
   -I"${native}/cpp" \
