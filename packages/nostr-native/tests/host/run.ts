@@ -326,6 +326,7 @@ function checkSymbolNamespace(buildDir: string): void {
       "-O1",
       "-c",
       "-D_DEFAULT_SOURCE",
+      "-DENABLE_MODULE_ECDH",
       "-DENABLE_MODULE_EXTRAKEYS",
       "-DENABLE_MODULE_SCHNORRSIG",
       `-I${join(packageDir, "cpp")}`,
@@ -385,6 +386,7 @@ function main(): void {
       // glibc hides arc4random_buf and clock_gettime behind _DEFAULT_SOURCE
       // when compiling strict ISO C; both exist on every targeted glibc.
       "-D_DEFAULT_SOURCE",
+      "-DENABLE_MODULE_ECDH",
       "-DENABLE_MODULE_EXTRAKEYS",
       "-DENABLE_MODULE_SCHNORRSIG",
       "-DNOSTR_NATIVE_TEST",

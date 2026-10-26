@@ -68,9 +68,9 @@ impl SharedSecret {
     ///
     /// [`Error::Derive`] when `peer`'s bytes do not lift to a curve point.
     pub fn derive(secret: &SecretKey, peer: &PublicKey) -> Result<Self> {
-        ecdh::shared_secret_x(secret, peer)
+        ecdh::shared_x(secret, peer)
             .map(|x| Self(*x))
-            .ok_or(Error::Derive)
+            .map_err(|_| Error::Derive)
     }
 
     /// Wraps a raw ECDH x coordinate produced by an external key holder (TS

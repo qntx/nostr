@@ -51,6 +51,7 @@ trap 'rm -rf "${tmp}"' EXIT
   -I"${pkg}/c/include" \
   -I"${native}/cpp" \
   -I"${native}/vendor/secp256k1/include" \
+  -DENABLE_MODULE_ECDH=1 \
   -DENABLE_MODULE_EXTRAKEYS=1 \
   -DENABLE_MODULE_SCHNORRSIG=1 \
   -DUSE_FORCE_WIDEMUL_INT64=1 \

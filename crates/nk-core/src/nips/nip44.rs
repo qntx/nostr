@@ -147,9 +147,9 @@ impl ConversationKey {
     /// # Ok::<(), nk_core::nips::nip44::Error>(())
     /// ```
     pub fn derive(secret: &SecretKey, peer: &PublicKey) -> Result<Self> {
-        ecdh::shared_secret_x(secret, peer)
+        ecdh::shared_x(secret, peer)
             .map(|shared_x| Self::from_shared_secret(&shared_x))
-            .ok_or(Error::Derive)
+            .map_err(|_| Error::Derive)
     }
 
     /// HKDF-extracts a conversation key from a raw ECDH x coordinate (TS

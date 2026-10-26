@@ -25,7 +25,7 @@ Pod::Spec.new do |s|
   ]
 
   s.pod_target_xcconfig = {
-    "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) ENABLE_MODULE_EXTRAKEYS=1 ENABLE_MODULE_SCHNORRSIG=1",
+    "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) ENABLE_MODULE_ECDH=1 ENABLE_MODULE_EXTRAKEYS=1 ENABLE_MODULE_SCHNORRSIG=1",
   }
 
   load 'nitrogen/generated/ios/NostrNative+autolinking.rb'

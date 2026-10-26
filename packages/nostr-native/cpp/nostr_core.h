@@ -42,6 +42,13 @@ int nostr_core_sign(const nostr_native_secp256k1_context *ctx, const unsigned ch
 int nostr_core_public_key(const nostr_native_secp256k1_context *ctx,
                           const unsigned char seckey[32], unsigned char out_xonly[32]);
 
+/* Computes the ECDH shared point's x coordinate: `secp256k1_ecdh` with a hash function that
+ * copies the x coordinate only — the shared secret both NIP-04 (AES key) and NIP-44 (HKDF
+ * input) derive from. `pubkey_x` is lifted to an even-Y point as `0x02‖x`. Intermediates are
+ * wiped on every path. out32 gets the 32-byte x on NOSTR_CORE_OK. */
+int nostr_core_ecdh_x(const nostr_native_secp256k1_context *ctx, const unsigned char seckey[32],
+                      const unsigned char pubkey_x[32], unsigned char out32[32]);
+
 /* Secure wipe for platform layers that must clear caller-provided regions. */
 void nostr_core_wipe(void *ptr, size_t len);
 

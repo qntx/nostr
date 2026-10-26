@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 # Vendored libsecp256k1 modules needed by cpp/nostr_core.c (its single-TU include of
 # vendor/secp256k1/src/secp256k1.c reads these defines).
-add_definitions(-DENABLE_MODULE_EXTRAKEYS -DENABLE_MODULE_SCHNORRSIG)
+add_definitions(-DENABLE_MODULE_ECDH -DENABLE_MODULE_EXTRAKEYS -DENABLE_MODULE_SCHNORRSIG)
 
 # C glue + C++ hybrid. nostr_core.c itself includes the vendored secp256k1.c — the only
 # separately-compiled vendor sources are the two precomputed tables below.
