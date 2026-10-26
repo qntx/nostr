@@ -38,6 +38,23 @@ jobs:
       scripts: test:parity
       scripts-directory: .
 
+  # nostr_wasm.wasm and its SRI integrity hash are committed artifacts: rebuild
+  # and diff so the checked-in bytes always come from the pinned toolchain.
+  wasm-artifacts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd packages/nostr-wasm build:wasm
+        env:
+          CC_wasm32_unknown_unknown: clang
+      - run: git diff --exit-code packages/nostr-wasm/src/integrity.ts
+
   rust:
     uses: qntx/workflows/.github/workflows/ci-rust.yml@v2
     permissions:

@@ -48,7 +48,7 @@ static _Alignas(16) unsigned char ctx_mem[CTX_MEM_SIZE];
 static nostr_native_secp256k1_context *ctx;
 static int initialized;
 
-__attribute__((export_name("nostr_abi_version"))) int nostr_abi_version(void) { return 3; }
+__attribute__((export_name("nostr_abi_version"))) int nostr_abi_version(void) { return 4; }
 
 /* nostr_init(seed32): create the context once and (re)randomize it with the caller's 32 seed
  * bytes. The seed region is wiped on every path; a second call re-randomizes the same
@@ -151,6 +151,24 @@ __attribute__((export_name("nostr_public_key"))) int nostr_public_key(unsigned c
     return NOSTR_STATUS_INVALID_INPUT;
   }
   status = nostr_core_public_key(ctx, secret, out_pubkey);
+  nostr_core_wipe(secret, sizeof(secret));
+  return status;
+}
+
+/* Same caller-region secret wipe as nostr_sign/nostr_public_key: the shared secret x lands
+ * in the caller's out32 region. */
+__attribute__((export_name("nostr_ecdh_x"))) int nostr_ecdh_x(unsigned char *seckey,
+                                                             const unsigned char *pubkey_x,
+                                                             unsigned char *out32) {
+  unsigned char secret[32];
+  int status;
+  if (!initialized) {
+    return NOSTR_STATUS_INVALID_INPUT;
+  }
+  if (!take_secret(seckey, secret)) {
+    return NOSTR_STATUS_INVALID_INPUT;
+  }
+  status = nostr_core_ecdh_x(ctx, secret, pubkey_x, out32);
   nostr_core_wipe(secret, sizeof(secret));
   return status;
 }

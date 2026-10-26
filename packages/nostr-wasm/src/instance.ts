@@ -3,6 +3,7 @@ import type { NostrBackend, EventVerifier } from "@qntx/nostr/core";
 
 import {
   instantiateCryptoWasm,
+  wasmEcdhX,
   wasmPublicKey,
   wasmSign,
   wasmVerify,
@@ -16,8 +17,7 @@ export type LoadNostrWasmOptions = {
   module?: ArrayBuffer | ArrayBufferView | URL | undefined;
 };
 
-// ecdhX lands in T3 once the wasm build exports nostr_wasm_ecdh_x.
-export type NostrWasm = Omit<NostrBackend, "ecdhX"> & {
+export type NostrWasm = NostrBackend & {
   verify: (id: Uint8Array, pubkey: Uint8Array, sig: Uint8Array) => boolean;
   verifyEvent: EventVerifier;
 };
@@ -72,6 +72,16 @@ function bindExports(exports: CryptoWasmExports): NostrWasm {
           throw new CryptoError("wasm publicKey failed");
         }
         return pk;
+      }),
+    ecdhX: (seckey, publicKeyX) =>
+      runPoisoned(poison, () => {
+        requireByteLength(seckey, 32, "secret key");
+        requireByteLength(publicKeyX, 32, "public key");
+        const x = wasmEcdhX(exports, seckey, publicKeyX);
+        if (x.length !== 32) {
+          throw new CryptoError("wasm ecdhX failed");
+        }
+        return x;
       }),
   };
 }

@@ -81,4 +81,22 @@ br_size=""
 if command -v brotli >/dev/null; then
   br_size="$(brotli -cq 11 "${out}" | wc -c | tr -d ' ')"
 fi
-echo "nostr_wasm.wasm: $(wc -c <"${out}" | tr -d ' ') B raw, ${gz_size} B gzip${br_size:+, ${br_size} B brotli}"
+digest="$(openssl dgst -sha256 -binary "${out}" | openssl base64 -A)"
+# The emitted file must stay byte-identical to the committed integrity.ts —
+# CI rebuilds and fails on a diff.
+cat > "${pkg}/src/integrity.ts" <<EOF
+/*
+ * Subresource Integrity hash (\`sha256-<base64>\`) of the shipped \`nostr_wasm.wasm\`, regenerated
+ * whenever build:wasm runs. Pass it to \`fetch(url, { integrity })\` so the browser refuses to
+ * execute a tampered module:
+ *
+ *   const res = await fetch(wasmUrl, { integrity: NOSTR_WASM_INTEGRITY });
+ *   const wasm = await loadNostrWasm({ module: await res.arrayBuffer() });
+ *
+ * The constant only guards fetch-time delivery — callers that want SRI enforcement must fetch
+ * with \`integrity\` and pass \`module\`.
+ */
+export const NOSTR_WASM_INTEGRITY = "sha256-${digest}";
+EOF
+
+echo "nostr_wasm.wasm: $(wc -c <"${out}" | tr -d ' ') B raw, ${gz_size} B gzip${br_size:+, ${br_size} B brotli}, sha256-${digest}"

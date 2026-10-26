@@ -504,7 +504,8 @@
         "packages/nostr-wasm/tests/abi.test.ts",
         "packages/nostr-wasm/tests/verify.test.ts",
         "packages/nostr-wasm/tests/sign.test.ts",
-        "packages/nostr-wasm/tests/node-load.test.ts"
+        "packages/nostr-wasm/tests/node-load.test.ts",
+        "packages/nostr-wasm/tests/ecdh.test.ts"
       ]
     },
     "vectors": [
