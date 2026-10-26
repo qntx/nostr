@@ -183,7 +183,6 @@ pub fn parse_info_event(kind: u16, content: &str, tags: &[(String, String)]) -> 
     })
 }
 
-#[cfg(feature = "std")]
 /// A decoded response outcome: success carries the `result` object, failure the error code.
 ///
 /// Field validation checks method matching, result/error exclusivity, listed NIP-47 error
@@ -196,7 +195,6 @@ pub enum NwcOutcome {
     Err(String),
 }
 
-#[cfg(feature = "std")]
 fn is_msat(value: &serde_json::Value) -> bool {
     value
         .as_f64()
@@ -211,7 +209,6 @@ fn is_msat(value: &serde_json::Value) -> bool {
 ///
 /// # Errors
 /// [`Error::Response`] on any violation.
-#[cfg(feature = "std")]
 pub fn decode_response_payload(method: &str, json: &str) -> Result<NwcOutcome> {
     const CODES: &[&str] = &[
         "RATE_LIMITED",
