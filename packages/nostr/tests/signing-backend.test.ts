@@ -3,9 +3,10 @@ import { describe, expect, test, vi } from "vite-plus/test";
 
 import { CryptoError } from "../src/core/error.ts";
 import type { EventTemplate } from "../src/core/event.ts";
-import type { SigningBackend } from "../src/core/key.ts";
+import type { NostrBackend } from "../src/core/key.ts";
 import { bytesToHex, hexToBytes } from "../src/core/util.ts";
 import {
+  nobleBackend,
   EventBuilder,
   finalizeEvent,
   Keys,
@@ -37,7 +38,8 @@ function recordingBackend() {
       auxRand: Uint8Array;
     }>,
   };
-  const backend: SigningBackend = {
+  const backend: NostrBackend = {
+    ...nobleBackend,
     publicKey: (secretKey) => {
       calls.publicKey.push(secretKey);
       return schnorr.getPublicKey(secretKey);
@@ -50,7 +52,7 @@ function recordingBackend() {
   return { backend, calls };
 }
 
-describe("SigningBackend", () => {
+describe("NostrBackend", () => {
   test("Keys.fromSecretKey derives the public key through the backend once", () => {
     const { backend, calls } = recordingBackend();
     const sk = hexToBytes(SK_HEX);
@@ -118,7 +120,8 @@ describe("SigningBackend", () => {
   });
 
   test("a backend returning a wrong-length public key throws CryptoError", () => {
-    const backend: SigningBackend = {
+    const backend: NostrBackend = {
+      ...nobleBackend,
       publicKey: () => new Uint8Array(31),
       sign: () => new Uint8Array(64),
     };
@@ -127,7 +130,8 @@ describe("SigningBackend", () => {
   });
 
   test("a backend returning a wrong-length signature throws CryptoError", () => {
-    const backend: SigningBackend = {
+    const backend: NostrBackend = {
+      ...nobleBackend,
       publicKey: (sk) => schnorr.getPublicKey(sk),
       sign: () => new Uint8Array(63),
     };
@@ -137,7 +141,8 @@ describe("SigningBackend", () => {
 
   test("a throwing backend propagates the error", () => {
     const boom = new Error("backend exploded");
-    const backend: SigningBackend = {
+    const backend: NostrBackend = {
+      ...nobleBackend,
       publicKey: () => {
         throw boom;
       },
@@ -147,7 +152,8 @@ describe("SigningBackend", () => {
     };
     expect(() => Keys.fromSecretKey(SK_HEX, backend)).toThrow(boom);
 
-    const signingOnly: SigningBackend = {
+    const signingOnly: NostrBackend = {
+      ...nobleBackend,
       publicKey: (sk) => schnorr.getPublicKey(sk),
       sign: () => {
         throw boom;
@@ -212,6 +218,52 @@ describe("KeysSigner.dispose", () => {
     await signer.nip04Decrypt(peer, ciphertext);
     expect(encSpy.mock.calls[0]?.[1]).toStrictEqual(new Uint8Array(32));
     expect(decSpy.mock.calls[0]?.[1]).toStrictEqual(new Uint8Array(32));
+    signer.dispose();
+  });
+});
+
+describe("NostrBackend ecdhX routing", () => {
+  const PEER_SK = "0000000000000000000000000000000000000000000000000000000000000002";
+  const peer = bytesToHex(schnorr.getPublicKey(hexToBytes(PEER_SK)));
+
+  function countingBackend() {
+    let ecdhCalls = 0;
+    const backend: NostrBackend = {
+      ...nobleBackend,
+      ecdhX: (secretKey, publicKeyX) => {
+        ecdhCalls += 1;
+        return nobleBackend.ecdhX(secretKey, publicKeyX);
+      },
+    };
+    return { backend, count: () => ecdhCalls };
+  }
+
+  test("nip04 encryptToPubkey/decryptFromPubkey route through the injected backend", () => {
+    const { backend, count } = countingBackend();
+    const sk = hexToBytes(SK_HEX);
+    const ciphertext = nip04.encryptToPubkey("hi", sk, peer, backend);
+    expect(nip04.decryptFromPubkey(ciphertext, sk, peer, backend)).toBe("hi");
+    expect(count()).toBe(2);
+  });
+
+  test("nip44 getConversationKey routes through the injected backend", () => {
+    const { backend, count } = countingBackend();
+    const sk = hexToBytes(SK_HEX);
+    const viaBackend = nip44.getConversationKey(sk, peer, backend);
+    const viaNoble = nip44.getConversationKey(sk, peer);
+    expect(viaBackend).toStrictEqual(viaNoble);
+    expect(count()).toBe(1);
+  });
+
+  test("KeysSigner nip04/nip44 routes ecdh through its backend", async () => {
+    const { backend, count } = countingBackend();
+    const signer = new KeysSigner(SK_HEX, { backend });
+    await signer.nip04Encrypt(peer, "a");
+    await signer.nip04Decrypt(peer, await signer.nip04Encrypt(peer, "b"));
+    await signer.nip44Encrypt(peer, "c");
+    await signer.nip44Encrypt(peer, "d");
+    // 3 nip04 derivations + 1 cached nip44 conversation key.
+    expect(count()).toBe(4);
     signer.dispose();
   });
 });

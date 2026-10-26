@@ -84,15 +84,11 @@ export {
   toSecretKey,
   type PublicKey,
   type SecretKeyInput,
-  type SigningBackend,
+  type NostrBackend,
+  nobleBackend,
 } from "./key.ts";
 
-export {
-  createEventVerifier,
-  verifyEvent,
-  type EventVerifier,
-  type SerializedEventVerifier,
-} from "./verifier.ts";
+export { createEventVerifier, verifyEvent, type EventVerifier } from "./verifier.ts";
 
 export { EventBuilder, type ProfileMetadata } from "./builder.ts";
 

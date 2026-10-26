@@ -1,6 +1,5 @@
 import { chacha20 } from "@noble/ciphers/chacha.js";
 import { equalBytes } from "@noble/ciphers/utils.js";
-import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { extract as hkdf_extract, expand as hkdf_expand } from "@noble/hashes/hkdf.js";
 import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -8,6 +7,8 @@ import { concatBytes, randomBytes } from "@noble/hashes/utils.js";
 import { base64 } from "@scure/base";
 
 import { CryptoError } from "../core/error.ts";
+import { nobleBackend } from "../core/key.ts";
+import type { NostrBackend } from "../core/key.ts";
 import {
   assertHex32,
   assertSecretKeyBytes,
@@ -36,12 +37,14 @@ function assert32(bytes: Uint8Array, label: string): void {
   }
 }
 
-export function getConversationKey(privkeyA: Uint8Array, pubkeyB: string): Uint8Array {
+export function getConversationKey(
+  privkeyA: Uint8Array,
+  pubkeyB: string,
+  backend: NostrBackend = nobleBackend,
+): Uint8Array {
   assertSecretKeyBytes(privkeyA);
   assertHex32(pubkeyB, "public key");
-  const sharedX = secp256k1
-    .getSharedSecret(privkeyA, hexToBytes(`02${lowerAscii(pubkeyB)}`))
-    .subarray(1, 33);
+  const sharedX = backend.ecdhX(privkeyA, hexToBytes(lowerAscii(pubkeyB)));
   return getConversationKeyFromSharedSecret(sharedX);
 }
 

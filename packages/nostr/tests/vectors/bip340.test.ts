@@ -5,8 +5,8 @@ import { schnorr } from "@noble/curves/secp256k1.js";
 import { describe, expect, test } from "vite-plus/test";
 
 import { Keys } from "../../src/core/key.ts";
+import type { NostrBackend } from "../../src/core/key.ts";
 import { bytesToHex, hexToBytes } from "../../src/core/util.ts";
-import type { SerializedEventVerifier } from "../../src/core/verifier.ts";
 
 // Official BIP-340 test vectors; crates/interop asserts the same file in
 // Rust (crates/interop/tests/bip340.rs). Rows sign/verify an arbitrary 32-byte
@@ -64,7 +64,7 @@ const rows = allRows.filter((row) => row.message.length === 64);
 const skipped = allRows.length - rows.length;
 const signable = rows.filter((row) => row.secretKey !== "");
 
-const byteVerify: SerializedEventVerifier = (_serializedUtf8, id, pubkey, sig) => {
+const byteVerify: NostrBackend["verifySerialized"] = (_serializedUtf8, id, pubkey, sig) => {
   try {
     return schnorr.verify(sig, id, pubkey);
   } catch {

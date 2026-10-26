@@ -1,6 +1,6 @@
 import type { Event, UnsignedEvent } from "../core/event.ts";
-import type { SecretKeyInput } from "../core/key.ts";
-import { Keys, signEvent } from "../core/key.ts";
+import type { NostrBackend, SecretKeyInput } from "../core/key.ts";
+import { Keys, nobleBackend, signEvent } from "../core/key.ts";
 import * as nip04 from "../nips/nip04.ts";
 import * as nip44 from "../nips/nip44.ts";
 import { SignerDisposedError } from "./error.ts";
@@ -12,8 +12,11 @@ export class KeysSigner implements NostrSigner {
   readonly #convKeys = new Map<string, Uint8Array>();
   #disposed = false;
 
-  constructor(secretKey: SecretKeyInput | Keys) {
-    this.#keys = secretKey instanceof Keys ? secretKey : Keys.fromSecretKey(secretKey);
+  constructor(secretKey: SecretKeyInput | Keys, options?: { backend?: NostrBackend | undefined }) {
+    this.#keys =
+      secretKey instanceof Keys
+        ? secretKey
+        : Keys.fromSecretKey(secretKey, options?.backend ?? nobleBackend);
   }
 
   /**
@@ -44,7 +47,7 @@ export class KeysSigner implements NostrSigner {
     this.#assertUsable();
     const secret = this.#keys.secretKey.bytes;
     try {
-      return nip04.encryptToPubkey(plaintext, secret, peer);
+      return nip04.encryptToPubkey(plaintext, secret, peer, this.#keys.backend);
     } finally {
       secret.fill(0);
     }
@@ -54,7 +57,7 @@ export class KeysSigner implements NostrSigner {
     this.#assertUsable();
     const secret = this.#keys.secretKey.bytes;
     try {
-      return nip04.decryptFromPubkey(ciphertext, secret, peer);
+      return nip04.decryptFromPubkey(ciphertext, secret, peer, this.#keys.backend);
     } finally {
       secret.fill(0);
     }
@@ -66,7 +69,7 @@ export class KeysSigner implements NostrSigner {
     if (!key) {
       const secret = this.#keys.secretKey.bytes;
       try {
-        key = nip44.getConversationKey(secret, pk);
+        key = nip44.getConversationKey(secret, pk, this.#keys.backend);
       } finally {
         secret.fill(0);
       }

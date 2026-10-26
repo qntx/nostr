@@ -1,10 +1,11 @@
 /** NIP-04 legacy encrypted direct messages. Prefer NIP-44 for new applications. */
 import { cbc } from "@noble/ciphers/aes.js";
-import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 import { base64 } from "@scure/base";
 
 import { CryptoError } from "../core/error.ts";
+import { nobleBackend } from "../core/key.ts";
+import type { NostrBackend } from "../core/key.ts";
 import {
   assertByteLength,
   assertHex32,
@@ -15,14 +16,17 @@ import {
   lowerAscii,
 } from "../core/util.ts";
 
-function normalizeSharedSecret(privkey: Uint8Array, pubkey: string): Uint8Array {
+function normalizeSharedSecret(
+  privkey: Uint8Array,
+  pubkey: string,
+  backend: NostrBackend,
+): Uint8Array {
   assertHex32(pubkey, "public key");
-  try {
-    const key = secp256k1.getSharedSecret(privkey, hexToBytes(`02${lowerAscii(pubkey)}`));
-    return key.slice(1, 33);
-  } catch (error) {
-    throw new CryptoError("invalid NIP-04 public key", { cause: error });
+  const sharedX = backend.ecdhX(privkey, hexToBytes(lowerAscii(pubkey)));
+  if (sharedX.length !== 32) {
+    throw new CryptoError("invalid NIP-04 shared secret");
   }
+  return sharedX;
 }
 
 /**
@@ -56,9 +60,10 @@ export function encryptToPubkey(
   plaintext: string,
   secretKey: Uint8Array,
   peerPubkey: string,
+  backend: NostrBackend = nobleBackend,
 ): string {
   assertSecretKeyBytes(secretKey);
-  const sharedSecret = normalizeSharedSecret(secretKey, peerPubkey);
+  const sharedSecret = normalizeSharedSecret(secretKey, peerPubkey, backend);
   try {
     return encrypt(plaintext, sharedSecret);
   } finally {
@@ -71,10 +76,11 @@ export function decryptFromPubkey(
   payload: string,
   secretKey: Uint8Array,
   peerPubkey: string,
+  backend: NostrBackend = nobleBackend,
 ): string {
   assertSecretKeyBytes(secretKey);
   splitPayload(payload);
-  const sharedSecret = normalizeSharedSecret(secretKey, peerPubkey);
+  const sharedSecret = normalizeSharedSecret(secretKey, peerPubkey, backend);
   try {
     return decrypt(payload, sharedSecret);
   } finally {

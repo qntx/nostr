@@ -16,6 +16,7 @@ import type { Tag } from "../core/tag.ts";
 import { Tag as TagBuilder } from "../core/tag.ts";
 import { assertHex32, isRecord, nowSeconds, lowerAscii } from "../core/util.ts";
 import { verifyEvent } from "../core/verifier.ts";
+import type { EventVerifier } from "../core/verifier.ts";
 import { encrypt, getConversationKey } from "./nip44.ts";
 
 /** Unsigned event with a computed id. Never has `sig`. */
@@ -337,12 +338,17 @@ async function decryptLayer(
   }
 }
 
-export async function unwrap(crypto: Nip44Decryptor, giftWrap: Event): Promise<Rumor> {
+export async function unwrap(
+  crypto: Nip44Decryptor,
+  giftWrap: Event,
+  options?: { verify?: EventVerifier | undefined },
+): Promise<Rumor> {
   const decryptor = requireNip44Decryptor(crypto);
+  const verify = options?.verify ?? verifyEvent;
   if (!validateSignedEvent(giftWrap) || !isGiftWrapKind(giftWrap.kind)) {
     throw new Nip59Error("expected gift wrap");
   }
-  if (!verifyEvent(giftWrap)) {
+  if (!verify(giftWrap)) {
     throw new Nip59Error("gift wrap signature");
   }
 
@@ -360,7 +366,7 @@ export async function unwrap(crypto: Nip44Decryptor, giftWrap: Event): Promise<R
       throw new Nip59Error("seal tags must be empty");
     }
   }
-  if (!verifyEvent(sealRaw)) {
+  if (!verify(sealRaw)) {
     throw new Nip59Error("seal signature");
   }
 

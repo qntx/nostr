@@ -1,5 +1,5 @@
 import { CryptoError } from "@qntx/nostr/core";
-import type { SigningBackend, EventVerifier } from "@qntx/nostr/core";
+import type { NostrBackend, EventVerifier } from "@qntx/nostr/core";
 
 import {
   instantiateCryptoWasm,
@@ -16,14 +16,9 @@ export type LoadNostrWasmOptions = {
   module?: ArrayBuffer | ArrayBufferView | URL | undefined;
 };
 
-export type NostrWasm = SigningBackend & {
+// ecdhX lands in T3 once the wasm build exports nostr_wasm_ecdh_x.
+export type NostrWasm = Omit<NostrBackend, "ecdhX"> & {
   verify: (id: Uint8Array, pubkey: Uint8Array, sig: Uint8Array) => boolean;
-  verifySerialized: (
-    serializedUtf8: Uint8Array,
-    id: Uint8Array,
-    pubkey: Uint8Array,
-    sig: Uint8Array,
-  ) => boolean;
   verifyEvent: EventVerifier;
 };
 
