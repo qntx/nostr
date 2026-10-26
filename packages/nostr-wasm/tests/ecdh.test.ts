@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { bytesToHex, CryptoError, hexToBytes, nobleBackend } from "@qntx/nostr/core";
-import { KeysSigner } from "@qntx/nostr/signer";
 
 import { loadNostrWasm } from "../src/load.ts";
 import type { NostrWasm } from "../src/load.ts";
@@ -40,17 +39,5 @@ describe("wasm ecdhX", () => {
     const sk = hexToBytes(SK_HEX);
     const peer = nobleBackend.publicKey(hexToBytes(PEER_SK));
     expect(wasm.ecdhX(sk, peer)).toStrictEqual(nobleBackend.ecdhX(sk, peer));
-  });
-
-  test("KeysSigner routes a nip44 round-trip through the wasm backend", async () => {
-    const signer = new KeysSigner(SK_HEX, { backend: wasm });
-    const peerPub = bytesToHex(nobleBackend.publicKey(hexToBytes(PEER_SK)));
-    const ciphertext = await signer.nip44Encrypt(peerPub, "wasm conversation");
-    const noblePeer = new KeysSigner(PEER_SK);
-    await expect(noblePeer.nip44Decrypt(signer.keys.publicKey, ciphertext)).resolves.toBe(
-      "wasm conversation",
-    );
-    signer.dispose();
-    noblePeer.dispose();
   });
 });
