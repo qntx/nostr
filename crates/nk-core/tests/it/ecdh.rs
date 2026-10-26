@@ -18,10 +18,12 @@ struct Case {
 
 #[test]
 fn shared_x_matches_vectors() {
-    let text = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/ecdh.json"));
+    let text = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../vectors/ecdh.json"
+    ));
     let doc: serde_json::Value = serde_json::from_str(text).expect("ecdh.json must parse");
-    let cases: Vec<Case> =
-        serde_json::from_value(doc["cases"].clone()).expect("cases must decode");
+    let cases: Vec<Case> = serde_json::from_value(doc["cases"].clone()).expect("cases must decode");
 
     for case in &cases {
         let sec_bytes = crate::common::unhex_arr::<32>(&case.sec);
