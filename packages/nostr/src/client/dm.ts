@@ -162,8 +162,13 @@ export async function fetchPrivateMessages(
     }
   } else {
     for (let i = 0; i < events.length; i += 50) {
+      const chunk = events.slice(i, i + 50);
       // oxlint-disable-next-line eslint/no-await-in-loop -- chunks keep relay order
-      results.push(...(await crypto.unwrapGiftWraps(events.slice(i, i + 50))));
+      const unwrapped = await crypto.unwrapGiftWraps(chunk);
+      if (unwrapped.length !== chunk.length) {
+        throw new TypeError("unwrapGiftWraps must return one result per gift wrap");
+      }
+      results.push(...unwrapped);
     }
   }
   for (const [idx, wrap] of events.entries()) {

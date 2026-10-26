@@ -426,6 +426,47 @@ describe("Client NIP-17", () => {
     await bob.shutdown();
   });
 
+  test("fetchPrivateMessages rejects a batch unwrap that drops results", async () => {
+    const aliceKeys = Keys.fromSecretKey(ALICE_SK);
+    const bobKeys = Keys.fromSecretKey(BOB_SK);
+    seedLists(net, aliceKeys, bobKeys);
+
+    const alice = new KeysSigner(aliceKeys);
+    const gifts = await Promise.all(
+      [0, 1].map(async (i) =>
+        wrap(
+          alice,
+          bobKeys.publicKey,
+          createRumor(aliceKeys.publicKey, {
+            kind: Kind.PrivateDirectMessage,
+            content: `msg-${i}`,
+            tags: [["p", bobKeys.publicKey]],
+            created_at: 10 + i,
+          }),
+        ),
+      ),
+    );
+    net.relay(BOB_DM).seed(gifts);
+
+    const bobSigner = new KeysSigner(bobKeys);
+    const inner = bobSigner.unwrapGiftWraps.bind(bobSigner);
+    bobSigner.unwrapGiftWraps = async (events) => {
+      const results = await inner(events);
+      return results.slice(1);
+    };
+    const bob = new Client({
+      signer: bobSigner,
+      relays: [IDX],
+      websocketImplementation: net.websocketImplementation,
+      enableReconnect: false,
+    });
+    await bob.connect();
+
+    await expect(bob.fetchPrivateMessages({ timeoutMs: 2000 })).rejects.toThrow(TypeError);
+    bobSigner.dispose();
+    await bob.shutdown();
+  });
+
   test("fetchPrivateMessages falls back per-event when the signer lacks unwrapGiftWraps", async () => {
     const aliceKeys = Keys.fromSecretKey(ALICE_SK);
     const bobKeys = Keys.fromSecretKey(BOB_SK);
