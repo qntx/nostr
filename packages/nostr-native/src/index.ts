@@ -33,10 +33,10 @@ export const verifySerialized: NostrBackend["verifySerialized"] = (
   );
 
 /**
- * `NostrBackend` (without `ecdhX`, which lands in T4 with the native `ecdh_x` export) backed by
- * native libsecp256k1 — plug into `Keys.fromSecretKey(secretKey, signing)` or
- * `Keys.generate(signing)` so signing runs on the same randomized context as verification. Throws
- * on an invalid secret key or wrong-length input.
+ * `NostrBackend` backed by native libsecp256k1 — plug into `Keys.fromSecretKey(secretKey,
+ * signing)`, `Keys.generate(signing)`, `new KeysSigner(secretKey, { backend: signing })` or
+ * `createEventVerifier(signing)` so signing, ECDH and verification share one randomized context.
+ * Throws on an invalid secret key or wrong-length input.
  */
 export const signing: NostrBackend = {
   ecdhX: (secretKey, publicKeyX) =>
