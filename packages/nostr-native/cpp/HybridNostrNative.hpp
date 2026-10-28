@@ -17,6 +17,8 @@ public:
   std::shared_ptr<ArrayBuffer> sign(const std::shared_ptr<ArrayBuffer>& id,
                                     const std::shared_ptr<ArrayBuffer>& secretKey,
                                     const std::shared_ptr<ArrayBuffer>& auxRand) override;
+  std::shared_ptr<ArrayBuffer> ecdhX(const std::shared_ptr<ArrayBuffer>& secretKey,
+                                     const std::shared_ptr<ArrayBuffer>& publicKeyX) override;
 };
 
 } // namespace margelo::nitro::nostrnative
