@@ -11,9 +11,10 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ### Added
 
-- `@qntx/nostr-native` publishes the Android library as a prefab module (`NostrNative`),
-  so consuming CMake builds can `find_package(NostrNative)` and link `libNostrNative.so`
-  with its headers on the search path.
+- `@qntx/nostr-native` publishes the Android library as the prefab module `NostrNative`. A
+  consuming native module adds `implementation project(":<nostr-native project>")` and links
+  `<project>::NostrNative` after `find_package(<project> REQUIRED CONFIG)` — the prefab package
+  is named after the Gradle project, `qntx_nostr-native` under React Native autolinking.
 
 ### Changed
 
