@@ -1020,7 +1020,7 @@ checksum = "a3d66662cb5ca384d4991509755ed5a42dd8e31c4282bf881938e506fc3146ec"
 
 [[package]]
 name = "nk"
-version = "0.15.2"
+version = "0.15.3"
 dependencies = [
  "base64ct",
  "faster-hex",
@@ -1046,7 +1046,7 @@ dependencies = [
 
 [[package]]
 name = "nk-core"
-version = "0.15.2"
+version = "0.15.3"
 dependencies = [
  "aes",
  "base64ct",
@@ -1074,7 +1074,7 @@ dependencies = [
 
 [[package]]
 name = "nk-store"
-version = "0.15.2"
+version = "0.15.3"
 dependencies = [
  "criterion",
  "nk-core",
