@@ -9,6 +9,17 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Added
+
+- `@qntx/nostr-native` publishes the Android library as a prefab module (`NostrNative`),
+  so consuming CMake builds can `find_package(NostrNative)` and link `libNostrNative.so`
+  with its headers on the search path.
+
+### Changed
+
+- `@qntx/nostr-native`'s public C ABI header moved from `cpp/` to `include/` and is the
+  pod's declared public header (`nostr_native.h`); the C++ internals stay private.
+
 ## [0.15.1] - 2026-10-28
 
 ### Fixed

@@ -26,6 +26,7 @@ include(${CMAKE_SOURCE_DIR}/../nitrogen/generated/android/NostrNative+autolinkin
 
 include_directories(
         "../cpp"
+        "../include"
         "../vendor/secp256k1/include"
 )
 
