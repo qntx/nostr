@@ -25,6 +25,7 @@
     "cpp",
     "include",
     "android/build.gradle",
+    "android/fix-prefab.gradle",
     "android/CMakeLists.txt",
     "android/gradle.properties",
     "android/src",
