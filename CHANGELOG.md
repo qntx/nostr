@@ -9,6 +9,14 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Fixed
+
+- `@qntx/nostr-native`'s Android prefab publication could run before the native build and
+  ship a header-only package, so consuming CMake builds linked `libNostrNative.so` with
+  undefined `nostr_native_*` symbols; `fix-prefab.gradle` (ported from Nitro's, MIT) now
+  orders the publication after `externalNativeBuild` and regenerates consumers' prefab
+  configs.
+
 ## [0.15.2] - 2026-10-30
 
 ### Added
