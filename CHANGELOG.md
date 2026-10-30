@@ -9,6 +9,18 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Added
+
+- `@qntx/nostr-native` publishes the Android library as the prefab module `NostrNative`. A
+  consuming native module adds `implementation project(":<nostr-native project>")` and links
+  `<project>::NostrNative` after `find_package(<project> REQUIRED CONFIG)` — the prefab package
+  is named after the Gradle project, `qntx_nostr-native` under React Native autolinking.
+
+### Changed
+
+- `@qntx/nostr-native`'s public C ABI header moved from `cpp/` to `include/` and is the
+  pod's declared public header (`nostr_native.h`); the C++ internals stay private.
+
 ## [0.15.1] - 2026-10-28
 
 ### Fixed

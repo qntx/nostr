@@ -180,12 +180,7 @@
       "import": "./dist/testing.mjs",
       "default": "./dist/testing.mjs"
     },
-    "./package.json": "./package.json",
-    "./nips/nip47": {
-      "types": "./dist/nips/nip47.d.mts",
-      "import": "./dist/nips/nip47.mjs",
-      "default": "./dist/nips/nip47.mjs"
-    }
+    "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public"

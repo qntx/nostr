@@ -90,7 +90,16 @@ android {
 
   buildFeatures {
     buildConfig = true
+    // Consumes dependency prefabs (fbjni/ReactAndroid/Nitro) and publishes the
+    // built library itself so sibling packages can find_package(NostrNative).
     prefab = true
+    prefabPublishing = true
+  }
+
+  prefab {
+    NostrNative {
+      headers "../include"
+    }
   }
 
   buildTypes {

@@ -16,6 +16,9 @@ Pod::Spec.new do |s|
   s.source_files = [
     # Implementation (C core + C++ HybridObject)
     "cpp/**/*.{h,hpp,c,cpp}",
+    # The public C ABI — consumers resolve "nostr_native.h" through the pod's
+    # public headers; it is the only header exported to dependents.
+    "include/**/*.h",
     # Vendored libsecp256k1: headers plus the two precomputed-table TUs. secp256k1.c is
     # intentionally not here — cpp/nostr_core.c includes it as a single translation unit.
     "vendor/secp256k1/include/**/*.h",
@@ -23,6 +26,8 @@ Pod::Spec.new do |s|
     "vendor/secp256k1/src/precomputed_ecmult.c",
     "vendor/secp256k1/src/precomputed_ecmult_gen.c",
   ]
+
+  s.public_header_files = "include/nostr_native.h"
 
   s.pod_target_xcconfig = {
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) ENABLE_MODULE_ECDH=1 ENABLE_MODULE_EXTRAKEYS=1 ENABLE_MODULE_SCHNORRSIG=1",

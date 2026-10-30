@@ -23,6 +23,7 @@
   "files": [
     "dist",
     "cpp",
+    "include",
     "android/build.gradle",
     "android/CMakeLists.txt",
     "android/gradle.properties",
