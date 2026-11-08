@@ -9,6 +9,14 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING** `PoolOptions.trustedInsecureUrls` renamed to `trustedInsecureOrigins` and
+  `Pool.setTrustedInsecureUrls` to `setTrustedInsecureOrigins`: each entry is now reduced to its
+  `${protocol}//${host}` origin after normalization, so a trusted origin covers every relay URL on
+  it (e.g. `ws://127.0.0.1:7777` also trusts `ws://127.0.0.1:7777/r/<name>`); entries that fail to
+  normalize are skipped.
+
 ## [0.15.3] - 2026-10-30
 
 ### Fixed

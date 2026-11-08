@@ -23,6 +23,30 @@ export type InvalidEventPolicy = {
   cooldownMs: number;
 };
 
+/**
+ * Reduce a relay URL to its `${protocol}//${host}` origin after {@link normalizeURL}, so default
+ * ports drop and host casing is canonical. Uses the `protocol`/`host` getters only — some React
+ * Native URL shims lack `URL.origin`. Invalid input yields undefined and the caller skips it.
+ */
+function insecureOrigin(url: string): string | undefined {
+  try {
+    const p = new URL(normalizeURL(url));
+    return `${p.protocol}//${p.host}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The distinct origins of `entries`, skipping entries that fail to normalize. */
+function insecureOrigins(entries: ReadonlyArray<string>): Set<string> {
+  return new Set(
+    entries.flatMap((entry) => {
+      const origin = insecureOrigin(entry);
+      return origin === undefined ? [] : [origin];
+    }),
+  );
+}
+
 /** Pool-wide options applied to every managed relay. */
 export type PoolOptions = Omit<RelayOptions, "authSigner"> & {
   /**
@@ -34,7 +58,14 @@ export type PoolOptions = Omit<RelayOptions, "authSigner"> & {
     | undefined;
   /** When false (default), ensureRelay rejects isInsecureRelayUrl unless trusted. */
   allowInsecure?: boolean | undefined;
-  trustedInsecureUrls?: ReadonlyArray<string> | undefined;
+  /**
+   * `ws://` (or `http://`) origins trusted when `allowInsecure` is false. Each entry may be a relay
+   * URL or a bare origin — it is normalized and reduced to `${protocol}//${host}`, so a trusted
+   * origin covers every relay URL on it (`ws://127.0.0.1:7777` trusts
+   * `ws://127.0.0.1:7777/r/<name>`). Entries that fail to normalize are skipped, like
+   * {@link normalizeRelayUrls}.
+   */
+  trustedInsecureOrigins?: ReadonlyArray<string> | undefined;
   /** Close unused relays. Unset/0 = disabled. */
   idleTimeoutMs?: number | undefined;
   idleCleanupIntervalMs?: number | undefined;
@@ -129,7 +160,7 @@ export class Pool {
     const {
       automaticallyAuth,
       allowInsecure,
-      trustedInsecureUrls,
+      trustedInsecureOrigins,
       idleTimeoutMs,
       idleCleanupIntervalMs,
       maxRelays,
@@ -142,7 +173,7 @@ export class Pool {
     this.#maxRelays = maxRelays;
     this.#invalidEventPolicy = invalidEventPolicy;
     this.#allowInsecure = allowInsecure ?? false;
-    this.#trustedInsecure = new Set((trustedInsecureUrls ?? []).map(normalizeURL));
+    this.#trustedInsecure = insecureOrigins(trustedInsecureOrigins ?? []);
     this.#pinned = new Set((pinnedUrls ?? []).map(normalizeURL));
     this.#idleTimeoutMs = idleTimeoutMs ?? 0;
     if (this.#idleTimeoutMs > 0) {
@@ -166,8 +197,12 @@ export class Pool {
     this.#allowInsecure = allow;
   }
 
-  setTrustedInsecureUrls(urls: ReadonlyArray<string>): void {
-    this.#trustedInsecure = new Set(urls.map(normalizeURL));
+  /**
+   * Replace the trusted insecure origins; each entry is reduced to `${protocol}//${host}` like
+   * {@link PoolOptions.trustedInsecureOrigins} and invalid entries are skipped.
+   */
+  setTrustedInsecureOrigins(origins: ReadonlyArray<string>): void {
+    this.#trustedInsecure = insecureOrigins(origins);
   }
 
   setPinnedUrls(urls: ReadonlyArray<string>): void {
@@ -265,7 +300,8 @@ export class Pool {
     if (!isInsecureRelayUrl(url)) {
       return;
     }
-    if (this.#trustedInsecure.has(norm)) {
+    const origin = insecureOrigin(norm);
+    if (origin !== undefined && this.#trustedInsecure.has(origin)) {
       return;
     }
     throw new RelayConnectionError("insecure relay connection blocked", norm);

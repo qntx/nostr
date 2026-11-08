@@ -1552,13 +1552,91 @@ describe("alreadyHaveEvent / onEventSeen", () => {
 });
 
 describe("insecure URL policy", () => {
-  test("ws:// is rejected by default unless trusted", async () => {
+  test("ws:// is rejected by default unless its origin is trusted", async () => {
     const pool = new Pool({ websocketImplementation: MockWebSocketCtor });
     await expect(pool.ensureRelay("ws://evil.example")).rejects.toThrow(
       /insecure relay connection blocked/,
     );
-    pool.setTrustedInsecureUrls(["ws://evil.example"]);
+    pool.setTrustedInsecureOrigins(["ws://evil.example"]);
     const relay = await pool.ensureRelay("ws://evil.example");
+    expect(relay.connected).toBe(true);
+    pool.close();
+  });
+
+  test("a trusted origin covers every path on it", async () => {
+    const pool = new Pool({
+      websocketImplementation: MockWebSocketCtor,
+      trustedInsecureOrigins: ["ws://127.0.0.1:7777"],
+    });
+    const relay = await pool.ensureRelay("ws://127.0.0.1:7777/r/algo");
+    expect(relay.connected).toBe(true);
+    pool.close();
+  });
+
+  test("trusting the relay URL itself also trusts its paths", async () => {
+    const pool = new Pool({
+      websocketImplementation: MockWebSocketCtor,
+      trustedInsecureOrigins: ["ws://127.0.0.1:7777/"],
+    });
+    const relay = await pool.ensureRelay("ws://127.0.0.1:7777/r/algo");
+    expect(relay.connected).toBe(true);
+    pool.close();
+  });
+
+  test("a different port or host on ws:// stays rejected", async () => {
+    const pool = new Pool({
+      websocketImplementation: MockWebSocketCtor,
+      trustedInsecureOrigins: ["ws://127.0.0.1:7777"],
+    });
+    await expect(pool.ensureRelay("ws://127.0.0.1:8888/r/algo")).rejects.toThrow(
+      /insecure relay connection blocked/,
+    );
+    await expect(pool.ensureRelay("ws://10.0.0.1:7777/r/algo")).rejects.toThrow(
+      /insecure relay connection blocked/,
+    );
+    pool.close();
+  });
+
+  test("an entry carrying a path still trusts the whole origin", async () => {
+    const pool = new Pool({
+      websocketImplementation: MockWebSocketCtor,
+      trustedInsecureOrigins: ["ws://h.example:1/x"],
+    });
+    const relay = await pool.ensureRelay("ws://h.example:1/y");
+    expect(relay.connected).toBe(true);
+    pool.close();
+  });
+
+  test("default-port entries normalize to the same origin", async () => {
+    const pool = new Pool({
+      websocketImplementation: MockWebSocketCtor,
+      trustedInsecureOrigins: ["ws://h.example:80"],
+    });
+    const relay = await pool.ensureRelay("ws://h.example/r/a");
+    expect(relay.connected).toBe(true);
+    pool.close();
+  });
+
+  test("setTrustedInsecureOrigins replaces the set", async () => {
+    const pool = new Pool({
+      websocketImplementation: MockWebSocketCtor,
+      trustedInsecureOrigins: ["ws://a.example"],
+    });
+    pool.setTrustedInsecureOrigins(["ws://b.example"]);
+    await expect(pool.ensureRelay("ws://a.example")).rejects.toThrow(
+      /insecure relay connection blocked/,
+    );
+    const relay = await pool.ensureRelay("ws://b.example");
+    expect(relay.connected).toBe(true);
+    pool.close();
+  });
+
+  test("invalid trusted entries are skipped without throwing", async () => {
+    const pool = new Pool({
+      websocketImplementation: MockWebSocketCtor,
+      trustedInsecureOrigins: ["not a url", "ws://ok.example"],
+    });
+    const relay = await pool.ensureRelay("ws://ok.example");
     expect(relay.connected).toBe(true);
     pool.close();
   });

@@ -449,7 +449,7 @@ describe("serveFakeRelay over real ws", () => {
         signer: new KeysSigner(keys),
         relays: [served.url],
         websocketImplementation: globalThis.WebSocket,
-        trustedInsecureUrls: [served.url],
+        trustedInsecureOrigins: [served.url],
         enableReconnect: false,
       });
       await client.connect();
