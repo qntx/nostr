@@ -9,6 +9,11 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-11-08
+
+Trust insecure relays by origin, so a dev relay that serves several virtual relays under one
+host and port needs one entry.
+
 ### Changed
 
 - **BREAKING** `PoolOptions.trustedInsecureUrls` renamed to `trustedInsecureOrigins` and
