@@ -10,6 +10,11 @@ export type ManualFetchInit = {
   body?: Blob | FormData | string | null;
   signal?: AbortSignal | undefined;
   /**
+   * Request-body upload progress as `(sent, total)` byte counts. Adapters that can observe it call
+   * it; the global `fetch` cannot and ignores it.
+   */
+  onUploadProgress?: ((sent: number, total: number) => void) | undefined;
+  /**
    * Always `"manual"`: NIP-05, NIP-11 and Blossom responses must never be followed through
    * redirects. Adapters must forward this to their underlying fetch implementation.
    */
@@ -36,9 +41,15 @@ export function requireGlobalFetch(missing: () => Error): ManualFetch {
   }
   const fetchImpl = globalThis.fetch.bind(globalThis);
   // RequestInit.signal is AbortSignal | null and rejects explicit undefined under
-  // exactOptionalPropertyTypes; normalize it for the real fetch.
-  return async (url, init) =>
-    fetchImpl(url, init === undefined ? init : { ...init, signal: init.signal ?? null });
+  // exactOptionalPropertyTypes; normalize it for the real fetch. The real fetch
+  // cannot observe request-body progress, so onUploadProgress is stripped.
+  return async (url, init) => {
+    if (init === undefined) {
+      return fetchImpl(url, init);
+    }
+    const { onUploadProgress: _progress, ...rest } = init;
+    return fetchImpl(url, { ...rest, signal: init.signal ?? null });
+  };
 }
 
 /** Always sets redirect:manual. Shared by fetchManual and headStatus. */

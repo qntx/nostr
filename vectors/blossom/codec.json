@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.14.0"
+    "version": "0.15.4"
   },
   "hash_from_url": [
     {
@@ -568,6 +568,66 @@
       "json": "[1,2]",
       "out": {
         "err": true
+      }
+    },
+    {
+      "name": "nip94 kept",
+      "json": "{\"url\":\"https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":42,\"type\":\"image/png\",\"nip94\":[[\"m\",\"image/png\"],[\"dim\",\"800x600\"],[\"size\",\"42\"]]}",
+      "out": {
+        "url": "https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 42,
+        "type": "image/png",
+        "nip94": [
+          [
+            "m",
+            "image/png"
+          ],
+          [
+            "dim",
+            "800x600"
+          ],
+          [
+            "size",
+            "42"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "nip94 not an array dropped",
+      "json": "{\"url\":\"https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1,\"nip94\":\"image/png\"}",
+      "out": {
+        "url": "https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 1
+      }
+    },
+    {
+      "name": "nip94 non-array element dropped",
+      "json": "{\"url\":\"https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1,\"nip94\":[[\"m\",\"image/png\"],5]}",
+      "out": {
+        "url": "https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 1
+      }
+    },
+    {
+      "name": "nip94 non-string element dropped",
+      "json": "{\"url\":\"https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1,\"nip94\":[[\"m\",1]]}",
+      "out": {
+        "url": "https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 1
+      }
+    },
+    {
+      "name": "nip94 empty element dropped",
+      "json": "{\"url\":\"https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"sha256\":\"3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d\",\"size\":1,\"nip94\":[[]]}",
+      "out": {
+        "url": "https://cdn.example.com/3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "sha256": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        "size": 1
       }
     }
   ]

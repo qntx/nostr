@@ -290,5 +290,17 @@ fn blossom_descriptor() {
             out.get("uploaded").and_then(Value::as_u64),
             "{name}"
         );
+        let expected_nip94: Option<Vec<Vec<String>>> = out
+            .get("nip94")
+            .map(|v| serde_json::from_value(v.clone()).unwrap());
+        assert_eq!(
+            desc.nip94.as_ref().map(|tags| {
+                tags.iter()
+                    .map(|tag| tag.as_slice().to_vec())
+                    .collect::<Vec<_>>()
+            }),
+            expected_nip94,
+            "{name}"
+        );
     }
 }

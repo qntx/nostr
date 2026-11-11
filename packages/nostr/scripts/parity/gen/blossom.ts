@@ -277,6 +277,41 @@ descriptorCase("negative uploaded dropped", {
   uploaded: -5,
 });
 descriptorCase("non-object", [1, 2]);
+descriptorCase("nip94 kept", {
+  url: `https://cdn.example.com/${PK}`,
+  sha256: PK,
+  size: 42,
+  type: "image/png",
+  nip94: [
+    ["m", "image/png"],
+    ["dim", "800x600"],
+    ["size", "42"],
+  ],
+});
+descriptorCase("nip94 not an array dropped", {
+  url: `https://cdn.example.com/${PK}`,
+  sha256: PK,
+  size: 1,
+  nip94: "image/png",
+});
+descriptorCase("nip94 non-array element dropped", {
+  url: `https://cdn.example.com/${PK}`,
+  sha256: PK,
+  size: 1,
+  nip94: [["m", "image/png"], 5],
+});
+descriptorCase("nip94 non-string element dropped", {
+  url: `https://cdn.example.com/${PK}`,
+  sha256: PK,
+  size: 1,
+  nip94: [["m", 1]],
+});
+descriptorCase("nip94 empty element dropped", {
+  url: `https://cdn.example.com/${PK}`,
+  sha256: PK,
+  size: 1,
+  nip94: [[]],
+});
 
 mkdirSync(vectors, { recursive: true });
 const doc = {
