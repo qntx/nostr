@@ -18,6 +18,11 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
   and `SqliteEventStore` implement it, as do nk-store's `MemoryStore` and `SqliteStore`
   (`first_seen_at`); the sqlite interop fixture asserts identical values across languages.
   `ReactiveEventStore` does not expose it — hydration is not a first-seen. (#296)
+- `ReactiveEventStore.watchSeenOn(id)`: a `Watch<ReadonlyArray<string>>` of the relay urls an
+  event was seen on, cached per lowercased id like `watchEvent` and pinning nothing. The seen-on
+  lists are now copy-on-write, so a snapshot keeps its reference until the list changes; adding a
+  sighting, `maxSeenOnEntries` eviction and `clear()` notify the affected watches on the batched
+  microtask flush. (#297)
 
 ### Changed
 
