@@ -23,6 +23,11 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
   lists are now copy-on-write, so a snapshot keeps its reference until the list changes; adding a
   sighting, `maxSeenOnEntries` eviction and `clear()` notify the affected watches on the batched
   microtask flush. (#297)
+- `MinePowOptions.onProgress`: a `PowProgress` callback fired once per `yieldEvery` hashes,
+  immediately before each yield, carrying the total hash count (across `created_at` rebuilds) and
+  the best proof-of-work seen so far. A throwing callback is reported via `reportError` and never
+  aborts mining; aborting from inside the callback rejects the mine with the abort reason. The
+  nonce sequence and results are unchanged — bit-identical to mining without the callback. (#298)
 
 ### Changed
 

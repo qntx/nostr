@@ -8,15 +8,26 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { abortReason } from "../core/abort.ts";
 import { NostrError } from "../core/error.ts";
 import type { UnsignedEvent } from "../core/event.ts";
+import { invokeSafely } from "../core/report.ts";
 import { bytesToHex, isHex32, nowSeconds, utf8Encoder, lowerAscii } from "../core/util.ts";
 
 export class Nip13Error extends NostrError {
   override name = "Nip13Error";
 }
 
+/** Mining progress reported to {@link MinePowOptions.onProgress}. */
+export type PowProgress = {
+  /** Total hashes tried so far, counting across `created_at` rebuilds. */
+  readonly hashes: number;
+  /** Highest proof-of-work seen so far. */
+  readonly bestPow: number;
+};
+
 export type MinePowOptions = {
   /** Yield to the event loop after this many hashes. Default 1000. */
   yieldEvery?: number | undefined;
+  /** Called once per `yieldEvery` hashes, immediately before each yield. */
+  onProgress?: ((progress: PowProgress) => void) | undefined;
   signal?: AbortSignal | undefined;
 };
 
@@ -63,6 +74,7 @@ export async function minePow(
 ): Promise<UnsignedEvent & { id: string }> {
   const signal = opts?.signal;
   const yieldEvery = Math.max(1, opts?.yieldEvery ?? 1000);
+  const onProgress = opts?.onProgress;
 
   const nonce: [string, string, string] = ["nonce", "0", String(difficulty)];
   const mined = {
@@ -96,13 +108,19 @@ export async function minePow(
   };
   rebuild();
 
-  let count = 0;
-  let iterations = 0;
-
-  while (true) {
+  const checkAborted = (): void => {
     if (signal?.aborted === true) {
       throw abortReason(signal);
     }
+  };
+
+  let count = 0;
+  let iterations = 0;
+  let hashes = 0;
+  let bestPow = 0;
+
+  while (true) {
+    checkAborted();
 
     const now = nowSeconds();
     if (now !== mined.created_at) {
@@ -120,17 +138,31 @@ export async function minePow(
     buf.set(tail, pos);
     pos += tail.length;
     const hash = sha256(buf.subarray(0, pos));
-    if (getPow(hash) >= difficulty) {
+    const pow = getPow(hash);
+    hashes++;
+    if (pow > bestPow) {
+      bestPow = pow;
+    }
+    if (pow >= difficulty) {
       return { ...mined, id: bytesToHex(hash) };
     }
 
     iterations++;
     if (iterations >= yieldEvery) {
       iterations = 0;
+      if (onProgress !== undefined) {
+        const progress: PowProgress = { hashes, bestPow };
+        invokeSafely(() => {
+          onProgress(progress);
+        });
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- the yield is part of each mining round
       await new Promise<void>((resolve) => {
         setTimeout(resolve);
       });
+      // An abort delivered inside onProgress or during the yield must surface
+      // before the next hash.
+      checkAborted();
     }
   }
 }
