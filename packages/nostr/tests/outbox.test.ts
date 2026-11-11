@@ -197,6 +197,7 @@ function trackingStore(
       return inner.putMany(events);
     },
     get: async (id) => inner.get(id),
+    firstSeenAt: async (id) => inner.firstSeenAt(id),
     query: () => {
       throw new Error("query should not be called");
     },

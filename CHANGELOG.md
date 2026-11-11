@@ -9,6 +9,24 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Added
+
+- `EventStore.firstSeenAt(id)`: the Unix-second wall-clock time at which the store physically
+  inserted the stored event, or `undefined` when the id is not stored. A `duplicate` put keeps
+  the original value; replacement, NIP-09 deletion, `remove` and `clear` drop it with the event,
+  and a stored kind-5 deletion event carries its own. `MemoryEventStore`, `IndexedDbEventStore`
+  and `SqliteEventStore` implement it, as do nk-store's `MemoryStore` and `SqliteStore`
+  (`first_seen_at`); the sqlite interop fixture asserts identical values across languages.
+  `ReactiveEventStore` does not expose it — hydration is not a first-seen. (#296)
+
+### Changed
+
+- **BREAKING:** `EventStore` gains the required `firstSeenAt` member — every implementation and
+  stub must provide it. `IndexedDbEventStore` databases are recreated at schema version 6 (new
+  `first_seen` object store) and `SqliteEventStore`/nk-store `SqliteStore` databases at
+  `user_version` 3 (new `events.first_seen` column): the stores are caches of relay data, so an
+  older database is dropped and recreated, not migrated. (#296)
+
 ## [0.15.4] - 2026-11-08
 
 Trust insecure relays by origin, so a dev relay that serves several virtual relays under one

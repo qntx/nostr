@@ -541,8 +541,8 @@ impl SqliteStore {
         let tags_json = serde_json::to_string(event.tags())
             .map_err(|_| Error::Corrupt("event.tags serialize"))?;
         tx.prepare_cached(
-            "INSERT INTO events (id, pubkey, kind, created_at, content, tags, sig, address) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO events (id, pubkey, kind, created_at, content, tags, sig, address, first_seen) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .map_err(backend)?
         .execute(params_from_iter([
@@ -554,6 +554,7 @@ impl SqliteStore {
             Value::from(tags_json),
             Value::from(event.sig().to_hex()),
             policy::coordinate_of(event).map_or(Value::Null, |c| Value::from(c.to_string())),
+            Value::from(ts_to_i64(Timestamp::now())),
         ]))
         .map_err(backend)?;
         for tag in event.tags() {
@@ -765,6 +766,23 @@ impl EventStore for SqliteStore {
                 let (eid, pk, kind, ca, content, tags, sig) = row.map_err(backend)?;
                 decode_event_row(&eid, &pk, kind, ca, &content, &tags, &sig).map(Some)
             },
+        )
+    }
+
+    fn first_seen_at(&self, id: &EventId) -> Result<Option<Timestamp>> {
+        let conn = self
+            .conn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut stmt = conn
+            .prepare_cached("SELECT first_seen FROM events WHERE id = ?")
+            .map_err(backend)?;
+        let mut rows = stmt
+            .query_map([id.to_hex()], |row| row.get::<_, i64>(0))
+            .map_err(backend)?;
+        rows.next().map_or_else(
+            || Ok(None),
+            |row| row.map(|v| Some(ts_from_i64(v))).map_err(backend),
         )
     }
 

@@ -32,6 +32,12 @@ export type EventStore = {
    */
   putMany: (events: ReadonlyArray<Event>) => Promise<PutResult[]>;
   get: (id: string) => Promise<Event | undefined>;
+  /**
+   * Unix seconds at which this store physically inserted the stored event; `undefined` when the id
+   * is not stored. A `duplicate` put keeps the original value; replacement, NIP-09 deletion,
+   * `remove` and `clear` drop it with the event.
+   */
+  firstSeenAt: (id: string) => Promise<number | undefined>;
   query: (filters: ReadonlyArray<Filter>) => Promise<Event[]>;
   /** Unique events matching `filters` (same cardinality as {@link query}). */
   count: (filters: ReadonlyArray<Filter>) => Promise<number>;

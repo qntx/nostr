@@ -144,7 +144,7 @@ describe("SqliteEventStore", () => {
     const { driver, store } = await openStore();
     try {
       const rows = await driver.all<{ user_version: number }>("PRAGMA user_version");
-      expect(rows[0]?.user_version).toBe(2);
+      expect(rows[0]?.user_version).toBe(3);
       await expect(store.put(note(alice(), "x", 1))).resolves.toBe("accepted");
     } finally {
       driver.close();
@@ -168,7 +168,7 @@ describe("SqliteEventStore", () => {
       await expect(reopened.put(stale)).resolves.toBe("accepted");
       await expect(reopened.get(stale.id)).resolves.toBeDefined();
       const rows = await driver.all<{ user_version: number }>("PRAGMA user_version");
-      expect(rows[0]?.user_version).toBe(2);
+      expect(rows[0]?.user_version).toBe(3);
     } finally {
       driver.close();
     }

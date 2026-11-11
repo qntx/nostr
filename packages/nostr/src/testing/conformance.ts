@@ -1,5 +1,6 @@
 import { EventBuilder, Keys } from "../core/index.ts";
 import type { Event } from "../core/index.ts";
+import { nowSeconds } from "../core/util.ts";
 import type { EventStore } from "../storage/types.ts";
 
 export { type Filter } from "../core/filter.ts";
@@ -151,6 +152,54 @@ export const eventStoreConformanceCases: ReadonlyArray<EventStoreConformanceCase
       eq(await store.query([{ kinds: [30001], authors: [alice().publicKey] }]), [], "none left");
       const after = addressable(alice(), 30001, "z", "after", 3);
       eq(await store.put(after), "accepted", "events newer than the deletion are kept");
+    },
+  },
+  {
+    name: "firstSeenAt records the insert time and a duplicate keeps it",
+    async run(store) {
+      const e = note(alice(), "hello", 1);
+      eq(await store.firstSeenAt(e.id), undefined, "unknown id");
+      const before = nowSeconds();
+      eq(await store.put(e), "accepted", "first put");
+      const after = nowSeconds();
+      const seen = await store.firstSeenAt(e.id);
+      if (seen === undefined || seen < before || seen > after) {
+        fail(`firstSeenAt: expected a value in [${before}, ${after}], got ${String(seen)}`);
+      }
+      eq(await store.put(e), "duplicate", "duplicate put");
+      eq(await store.firstSeenAt(e.id), seen, "duplicate keeps the original value");
+      eq(await store.firstSeenAt(e.id.toUpperCase()), seen, "uppercase id lookup");
+    },
+  },
+  {
+    name: "firstSeenAt drops with the event on replace, deletion, remove and clear",
+    async run(store) {
+      const older = replaceable(alice(), 0, "old", 1);
+      const newer = replaceable(alice(), 0, "new", 2);
+      await store.put(older);
+      if ((await store.firstSeenAt(older.id)) === undefined) {
+        fail("firstSeenAt: stored replaceable has none");
+      }
+      eq(await store.put(newer), "replaced", "newer replaces");
+      eq(await store.firstSeenAt(older.id), undefined, "replaced id drops");
+      if ((await store.firstSeenAt(newer.id)) === undefined) {
+        fail("firstSeenAt: replacement has none");
+      }
+      const target = note(bob(), "target", 1);
+      await store.put(target);
+      const del = EventBuilder.deletion([target.id]).createdAt(3).signWithKeys(bob());
+      eq(await store.put(del), "deleted", "kind 5 accepted");
+      eq(await store.firstSeenAt(target.id), undefined, "deleted target drops");
+      if ((await store.firstSeenAt(del.id)) === undefined) {
+        fail("firstSeenAt: stored deletion event has none");
+      }
+      const kept = note(alice(), "kept", 5);
+      await store.put(kept);
+      eq(await store.remove([kept.id]), 1, "remove count");
+      eq(await store.firstSeenAt(kept.id), undefined, "removed id drops");
+      await store.clear();
+      eq(await store.firstSeenAt(newer.id), undefined, "clear drops replacement");
+      eq(await store.firstSeenAt(del.id), undefined, "clear drops deletion");
     },
   },
   {

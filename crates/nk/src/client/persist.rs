@@ -118,7 +118,7 @@ async fn run(store: Arc<dyn EventStore>, mut rx: mpsc::Receiver<Msg>) {
 )]
 mod tests {
     use nk_core::rand_core::UnwrapErr;
-    use nk_core::{EventBuilder, EventId, Filter, Keys, SecretKey};
+    use nk_core::{EventBuilder, EventId, Filter, Keys, SecretKey, Timestamp};
     use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
     use super::*;
@@ -154,6 +154,10 @@ mod tests {
 
         fn get(&self, id: &EventId) -> nk_store::Result<Option<Event>> {
             self.inner.get(id)
+        }
+
+        fn first_seen_at(&self, id: &EventId) -> nk_store::Result<Option<Timestamp>> {
+            self.inner.first_seen_at(id)
         }
 
         fn query(&self, filters: &[Filter]) -> nk_store::Result<Vec<Event>> {

@@ -148,6 +148,7 @@ function trackingStore(inner = new MemoryEventStore()): {
       return out;
     },
     get: async (id) => inner.get(id),
+    firstSeenAt: async (id) => inner.firstSeenAt(id),
     query: async (filters) => inner.query(filters),
     count: async (filters) => inner.count(filters),
     negentropyItems: async (filter) => inner.negentropyItems(filter),

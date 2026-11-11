@@ -1,11 +1,20 @@
 import type { Event } from "../core/event.ts";
 import type { Filter } from "../core/filter.ts";
+import { nowSeconds } from "../core/util.ts";
 import { MemoryIndex } from "./memory-index.ts";
 import type { EventStore, NegentropyItem, OutboxBound, PutResult } from "./types.ts";
 
 /** In-memory event store: async {@link EventStore} facade over the synchronous {@link MemoryIndex}. */
 export class MemoryEventStore implements EventStore {
-  readonly #index = new MemoryIndex();
+  readonly #firstSeen = new Map<string, number>();
+  readonly #index = new MemoryIndex({
+    onInsert: (event) => {
+      this.#firstSeen.set(event.id, nowSeconds());
+    },
+    onRemove: (event) => {
+      this.#firstSeen.delete(event.id);
+    },
+  });
 
   async put(raw: Event): Promise<PutResult> {
     return this.#index.put(raw);
@@ -23,6 +32,10 @@ export class MemoryEventStore implements EventStore {
 
   async get(id: string): Promise<Event | undefined> {
     return this.#index.get(id);
+  }
+
+  async firstSeenAt(id: string): Promise<number | undefined> {
+    return this.#firstSeen.get(id.toLowerCase());
   }
 
   async query(filters: ReadonlyArray<Filter>): Promise<Event[]> {

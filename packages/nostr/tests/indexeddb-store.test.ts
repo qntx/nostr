@@ -217,6 +217,7 @@ describe("IndexedDbEventStore", () => {
       "tag_refs",
       "addresses",
       "tombstones",
+      "first_seen",
     ]);
     await expect(store.get(note.id)).resolves.toBeUndefined();
     await expect(store.query([{ "#e": [EID] }])).resolves.toStrictEqual([]);
@@ -230,6 +231,7 @@ describe("IndexedDbEventStore", () => {
       "tag_refs",
       "addresses",
       "tombstones",
+      "first_seen",
     ]);
     await expect(store.get(meta.id)).resolves.toBeUndefined();
     store.close();
@@ -811,6 +813,7 @@ describe("IndexedDbEventStore", () => {
       "tag_refs",
       "addresses",
       "tombstones",
+      "first_seen",
     ]);
     const got18 = await store.query([{ kinds: [1] }]);
     expect(got18.map((e) => e.created_at)).toStrictEqual([3, 2, 1]);
