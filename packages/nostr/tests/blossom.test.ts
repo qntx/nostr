@@ -1,11 +1,12 @@
 import { base64, base64urlnopad } from "@scure/base";
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 
 import { utf8Encoder } from "../src/core/util.ts";
 import { EventValidationError, HexError, Kind, Keys, finalizeEvent } from "../src/index.ts";
 import type { Event } from "../src/index.ts";
 import {
   BlossomError,
+  BlossomUploadError,
   blobExists,
   blossomServerListEventBuilder,
   checkUpload,
@@ -18,6 +19,7 @@ import {
   healBlobUrl,
   listBlobs,
   mirrorBlob,
+  parseBlobDescriptor,
   parseBlossomServerList,
   sha256Blob,
   upload,
@@ -39,6 +41,18 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 type MockResponse = Response | Error | DOMException;
+
+type FetchCall = { input: string; method: string | undefined };
+
+/// A fetch stub that records each request and answers from a "METHOD url" route table;
+/// anything unlisted throws.
+function routedFetch(calls: FetchCall[], routes: Record<string, MockResponse>): BlossomFetch {
+  return async (input, init) => {
+    await Promise.resolve();
+    calls.push({ input, method: init?.method });
+    return pickResponse(routes, `${init?.method} ${input}`);
+  };
+}
 
 function pickResponse(
   responses: Record<string, MockResponse>,
@@ -214,6 +228,23 @@ describe("auth", () => {
     expect(event.tags).toContainEqual(["server", "cdn.example.com"]);
     expect(event.tags).toContainEqual(["server", "cdn2.example"]);
   });
+
+  test("createUploadAuth with a supplied sha256 never reads the blob", async () => {
+    class UnreadableBlob extends Blob {
+      override async arrayBuffer(): Promise<ArrayBuffer> {
+        return Promise.reject(new Error("must not hash"));
+      }
+    }
+    const event = await createUploadAuth(
+      async (t) => {
+        await Promise.resolve();
+        return signAuth(t);
+      },
+      new UnreadableBlob(["abc"]),
+      { sha256: ABC_SHA256 },
+    );
+    expect(event.tags).toContainEqual(["x", ABC_SHA256]);
+  });
 });
 
 describe("http", () => {
@@ -245,6 +276,40 @@ describe("http", () => {
     const headers = seen?.init?.headers;
     expect(headers?.["Authorization"]).toBe(encodeAuthorizationHeader(auth));
     expect(headers?.["X-SHA-256"]).toBe(ABC_SHA256);
+  });
+
+  test("onProgress reaches the adapter as onUploadProgress; the global fetch never sees it", async () => {
+    const file = new Blob(["abc"]);
+    const auth = signAuth(createAuthTemplate("upload", { sha256: ABC_SHA256 }));
+    const desc: BlobDescriptor = {
+      url: `https://a.example/${ABC_SHA256}`,
+      sha256: ABC_SHA256,
+      size: 3,
+    };
+    const onProgress = vi.fn();
+    let captured: Parameters<BlossomFetch>[1];
+    const fetchImpl: BlossomFetch = async (_input, init) => {
+      await Promise.resolve();
+      captured = init;
+      return jsonResponse(desc, 201);
+    };
+    await upload("https://a.example", file, auth, { fetch: fetchImpl, onProgress });
+    expect(captured?.onUploadProgress).toBe(onProgress);
+
+    const prev = globalThis.fetch;
+    const globalInits: Array<RequestInit | undefined> = [];
+    globalThis.fetch = async (_input, init) => {
+      globalInits.push(init);
+      return Promise.resolve(jsonResponse(desc, 201));
+    };
+    try {
+      await upload("https://a.example", file, auth, { onProgress });
+    } finally {
+      globalThis.fetch = prev;
+    }
+    expect(globalInits).toHaveLength(1);
+    expect(globalInits[0]).not.toHaveProperty("onUploadProgress");
+    expect(onProgress).not.toHaveBeenCalled();
   });
 
   test("upload/checkUpload accept a precomputed sha256 and never read the blob", async () => {
@@ -382,7 +447,7 @@ describe("http", () => {
     ).rejects.toThrow(BlossomError);
   });
 
-  test("checkUpload HEAD /upload", async () => {
+  test("checkUpload HEAD /upload → accepted", async () => {
     const file = new Blob(["abc"], { type: "text/plain" });
     const auth = await createUploadAuth(async (t) => {
       await Promise.resolve();
@@ -399,7 +464,34 @@ describe("http", () => {
       expect(headers?.["X-Content-Type"]).toBe(file.type);
       return new Response(null, { status: 200 });
     };
-    await checkUpload("https://cdn.example.com/", file, auth, { fetch: fetchImpl });
+    await expect(
+      checkUpload("https://cdn.example.com/", file, auth, { fetch: fetchImpl }),
+    ).resolves.toBe("accepted");
+  });
+
+  test("checkUpload 404/405/501 → unsupported; 401/413 throw BlossomError", async () => {
+    const file = new Blob(["abc"]);
+    const auth = signAuth(createAuthTemplate("upload", { sha256: ABC_SHA256 }));
+    for (const status of [404, 405, 501]) {
+      const fetchImpl: BlossomFetch = async () => {
+        await Promise.resolve();
+        return new Response(null, { status });
+      };
+      // oxlint-disable-next-line eslint/no-await-in-loop -- each status is probed in turn
+      await expect(
+        checkUpload("https://cdn.example.com", file, auth, { fetch: fetchImpl }),
+      ).resolves.toBe("unsupported");
+    }
+    for (const status of [401, 413]) {
+      const fetchImpl: BlossomFetch = async () => {
+        await Promise.resolve();
+        return new Response(null, { status });
+      };
+      // oxlint-disable-next-line eslint/no-await-in-loop -- each status is probed in turn
+      await expect(
+        checkUpload("https://cdn.example.com", file, auth, { fetch: fetchImpl }),
+      ).rejects.toMatchObject({ name: "BlossomError", status });
+    }
   });
 
   test("listBlobs GET /list/<pubkey>; omit Authorization when auth is undefined", async () => {
@@ -830,6 +922,44 @@ describe("healBlobUrl", () => {
   });
 });
 
+describe("nip94 descriptor field", () => {
+  const base = { url: `https://cdn.example.com/${ABC_SHA256}`, sha256: ABC_SHA256, size: 3 };
+
+  test("a valid nip94 array is kept and copied", () => {
+    const tags = [
+      ["m", "image/png"],
+      ["dim", "800x600"],
+      ["size", "42", "extra"],
+    ];
+    const desc = parseBlobDescriptor({ ...base, nip94: tags });
+    expect(desc.nip94).toStrictEqual(tags);
+    // the descriptor holds copies — mutating the input JSON leaves it unchanged
+    tags[0]!.push("mutated");
+    expect(desc.nip94).toStrictEqual([
+      ["m", "image/png"],
+      ["dim", "800x600"],
+      ["size", "42", "extra"],
+    ]);
+  });
+
+  test("malformed nip94 variants are omitted and the descriptor still parses", () => {
+    const malformed: unknown[] = [
+      "x",
+      42,
+      { m: "image/png" },
+      [["m"], 5],
+      [["m", 1]],
+      [[]],
+      [["m"], "not-a-tag"],
+    ];
+    for (const nip94 of malformed) {
+      const desc = parseBlobDescriptor({ ...base, nip94 });
+      expect(desc.url).toBe(base.url);
+      expect(desc.nip94).toBeUndefined();
+    }
+  });
+});
+
 describe("uploadToServers", () => {
   test("empty servers throws", async () => {
     const file = new Blob(["abc"]);
@@ -870,11 +1000,11 @@ describe("uploadToServers", () => {
       uploadToServers(["https://a.example", "https://b.example"], file, auth, {
         fetch: fetchImpl,
       }),
-    ).resolves.toStrictEqual(desc);
+    ).resolves.toStrictEqual({ descriptor: desc, server: "https://a.example", failures: [] });
     expect(seen).toStrictEqual(["https://a.example/upload"]);
   });
 
-  test("first failure then next success", async () => {
+  test("first failure then next success reports the failure", async () => {
     const file = new Blob(["abc"]);
     const auth = await createUploadAuth(async (t) => {
       await Promise.resolve();
@@ -898,15 +1028,18 @@ describe("uploadToServers", () => {
         jsonResponse(desc, 201),
       );
     };
-    await expect(
-      uploadToServers(["https://a.example", "https://b.example"], file, auth, {
-        fetch: fetchImpl,
-      }),
-    ).resolves.toStrictEqual(desc);
+    const result = await uploadToServers(["https://a.example", "https://b.example"], file, auth, {
+      fetch: fetchImpl,
+    });
+    expect(result.descriptor).toStrictEqual(desc);
+    expect(result.server).toBe("https://b.example");
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]?.server).toBe("https://a.example");
+    expect(result.failures[0]?.error).toMatchObject({ name: "BlossomError", status: 500 });
     expect(seen).toStrictEqual(["https://a.example/upload", "https://b.example/upload"]);
   });
 
-  test("all fail throws last BlossomError", async () => {
+  test("all fail throws BlossomUploadError with every failure and the last status", async () => {
     const file = new Blob(["abc"]);
     const auth = await createUploadAuth(async (t) => {
       await Promise.resolve();
@@ -921,9 +1054,121 @@ describe("uploadToServers", () => {
         jsonResponse({}, 503),
       );
     };
-    await expect(
+    const error = await captureError(
       uploadToServers(["https://a.example", "https://b.example"], file, auth, { fetch: fetchImpl }),
-    ).rejects.toMatchObject({ name: "BlossomError", status: 503 });
+    );
+    expect(error).toBeInstanceOf(BlossomUploadError);
+    const uploadError = error as BlossomUploadError;
+    expect(uploadError).toMatchObject({ name: "BlossomUploadError", status: 503 });
+    expect(uploadError.failures.map((f) => f.server)).toStrictEqual([
+      "https://a.example",
+      "https://b.example",
+    ]);
+    expect(uploadError.failures.map((f) => f.error.status)).toStrictEqual([500, 503]);
+    expect(uploadError.failures.every((f) => f.error instanceof BlossomError)).toBe(true);
+  });
+
+  test("preflight below the threshold skips the HEAD", async () => {
+    const file = new Blob(["abc"]);
+    const auth = signAuth(createAuthTemplate("upload", { sha256: ABC_SHA256 }));
+    const desc: BlobDescriptor = {
+      url: `https://a.example/${ABC_SHA256}`,
+      sha256: ABC_SHA256,
+      size: 3,
+    };
+    const calls: FetchCall[] = [];
+    const fetchImpl = routedFetch(calls, {
+      "PUT https://a.example/upload": jsonResponse(desc, 201),
+    });
+    const result = await uploadToServers(["https://a.example"], file, auth, {
+      fetch: fetchImpl,
+      preflight: { minBytes: 1000 },
+    });
+    expect(result.server).toBe("https://a.example");
+    expect(calls).toStrictEqual([{ input: "https://a.example/upload", method: "PUT" }]);
+  });
+
+  test("preflight at the threshold HEADs before the PUT; unsupported still PUTs", async () => {
+    const file = new Blob(["abc"]);
+    const auth = signAuth(createAuthTemplate("upload", { sha256: ABC_SHA256 }));
+    const desc: BlobDescriptor = {
+      url: `https://a.example/${ABC_SHA256}`,
+      sha256: ABC_SHA256,
+      size: 3,
+    };
+    const calls: FetchCall[] = [];
+    const fetchImpl = routedFetch(calls, {
+      "HEAD https://a.example/upload": new Response(null, { status: 404 }),
+      "PUT https://a.example/upload": jsonResponse(desc, 201),
+    });
+    const result = await uploadToServers(["https://a.example"], file, auth, {
+      fetch: fetchImpl,
+      preflight: { minBytes: 3 },
+    });
+    expect(result.descriptor).toStrictEqual(desc);
+    expect(calls).toStrictEqual([
+      { input: "https://a.example/upload", method: "HEAD" },
+      { input: "https://a.example/upload", method: "PUT" },
+    ]);
+  });
+
+  test("preflight 413 skips the server without PUTting it", async () => {
+    const file = new Blob(["abc"]);
+    const auth = signAuth(createAuthTemplate("upload", { sha256: ABC_SHA256 }));
+    const desc: BlobDescriptor = {
+      url: `https://b.example/${ABC_SHA256}`,
+      sha256: ABC_SHA256,
+      size: 3,
+    };
+    const calls: FetchCall[] = [];
+    const fetchImpl = routedFetch(calls, {
+      "HEAD https://a.example/upload": new Response(null, { status: 413 }),
+      "HEAD https://b.example/upload": new Response(null, { status: 200 }),
+      "PUT https://b.example/upload": jsonResponse(desc, 201),
+    });
+    const result = await uploadToServers(["https://a.example", "https://b.example"], file, auth, {
+      fetch: fetchImpl,
+      preflight: { minBytes: 1 },
+    });
+    expect(result.server).toBe("https://b.example");
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]?.server).toBe("https://a.example");
+    expect(result.failures[0]?.error).toMatchObject({ status: 413 });
+    expect(calls).toStrictEqual([
+      { input: "https://a.example/upload", method: "HEAD" },
+      { input: "https://b.example/upload", method: "HEAD" },
+      { input: "https://b.example/upload", method: "PUT" },
+    ]);
+  });
+
+  test("the blob is hashed once across preflight and retries", async () => {
+    class CountedBlob extends Blob {
+      reads = 0;
+      override async arrayBuffer(): Promise<ArrayBuffer> {
+        this.reads++;
+        return super.arrayBuffer();
+      }
+    }
+    const file = new CountedBlob(["abc"]);
+    const auth = signAuth(createAuthTemplate("upload", { sha256: ABC_SHA256 }));
+    const desc: BlobDescriptor = {
+      url: `https://b.example/${ABC_SHA256}`,
+      sha256: ABC_SHA256,
+      size: 3,
+    };
+    const calls: FetchCall[] = [];
+    const fetchImpl = routedFetch(calls, {
+      "HEAD https://a.example/upload": new Response(null, { status: 200 }),
+      "PUT https://a.example/upload": jsonResponse({}, 500),
+      "HEAD https://b.example/upload": new Response(null, { status: 200 }),
+      "PUT https://b.example/upload": jsonResponse(desc, 201),
+    });
+    const result = await uploadToServers(["https://a.example", "https://b.example"], file, auth, {
+      fetch: fetchImpl,
+      preflight: { minBytes: 1 },
+    });
+    expect(result.server).toBe("https://b.example");
+    expect(file.reads).toBe(1);
   });
 
   test("AbortError aborts the loop", async () => {
@@ -943,5 +1188,28 @@ describe("uploadToServers", () => {
       uploadToServers(["https://a.example", "https://b.example"], file, auth, { fetch: fetchImpl }),
     ).rejects.toBe(aborted);
     expect(seen).toStrictEqual(["https://a.example/upload"]);
+  });
+
+  test("AbortError inside a preflight rethrows", async () => {
+    const file = new Blob(["abc"]);
+    const auth = signAuth(createAuthTemplate("upload", { sha256: ABC_SHA256 }));
+    const aborted = abortError();
+    const calls: FetchCall[] = [];
+    const fetchImpl = routedFetch(calls, {
+      "HEAD https://a.example/upload": new Response(null, { status: 200 }),
+      "PUT https://a.example/upload": jsonResponse({}, 500),
+      "HEAD https://b.example/upload": aborted,
+    });
+    await expect(
+      uploadToServers(["https://a.example", "https://b.example", "https://c.example"], file, auth, {
+        fetch: fetchImpl,
+        preflight: { minBytes: 1 },
+      }),
+    ).rejects.toBe(aborted);
+    expect(calls).toStrictEqual([
+      { input: "https://a.example/upload", method: "HEAD" },
+      { input: "https://a.example/upload", method: "PUT" },
+      { input: "https://b.example/upload", method: "HEAD" },
+    ]);
   });
 });

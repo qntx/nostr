@@ -1,11 +1,12 @@
 // oxlint-disable unicorn/prefer-add-event-listener -- the *Like driver interfaces model only the `on*` handler surface
 import type { Event } from "../core/event.ts";
-import { isRecord } from "../core/util.ts";
+import { isRecord, nowSeconds } from "../core/util.ts";
 import type { DeletionPlan, DeletionState } from "./deletion.ts";
 import { StorageError } from "./error.ts";
-import { ADDRESSES, EVENTS, TAG_REFS, TOMBSTONES } from "./idb-types.ts";
+import { ADDRESSES, EVENTS, FIRST_SEEN, TAG_REFS, TOMBSTONES } from "./idb-types.ts";
 import type {
   AddressRow,
+  FirstSeenRow,
   IDBCursorDirectionLike,
   IDBCursorLike,
   IDBKeyRangeLike,
@@ -96,6 +97,7 @@ export function deleteStoredEvent(
     tx.objectStore(ADDRESSES).delete(addressRow.address);
   }
   tx.objectStore(EVENTS).delete(event.id);
+  tx.objectStore(FIRST_SEEN).delete(event.id);
 }
 
 export function persistPlanTombstones(
@@ -166,6 +168,12 @@ export function tombstonesToPlan(rows: unknown[]): DeletionPlan {
   return { removeIds, pendingIds, coordinates };
 }
 
+function insertStoredEvent(tx: IDBTransactionLike, event: Event): void {
+  tx.objectStore(EVENTS).put(event);
+  writeTagRefs(tx.objectStore(TAG_REFS), event);
+  tx.objectStore(FIRST_SEEN).put({ id: event.id, at: nowSeconds() } satisfies FirstSeenRow);
+}
+
 export function applyPutIndexedDb(
   tx: IDBTransactionLike,
   s: {
@@ -174,8 +182,6 @@ export function applyPutIndexedDb(
   },
   d: PutDecision,
 ): PutResult {
-  const events = tx.objectStore(EVENTS);
-  const tagRefs = tx.objectStore(TAG_REFS);
   const addresses = tx.objectStore(ADDRESSES);
   const tombstones = tx.objectStore(TOMBSTONES);
   if (d.action === "skip") {
@@ -195,12 +201,10 @@ export function applyPutIndexedDb(
     for (const id of d.coordIds) {
       s.deletion.ids.add(id);
     }
-    events.put(d.event);
-    writeTagRefs(tagRefs, d.event);
+    insertStoredEvent(tx, d.event);
     return "deleted";
   }
-  events.put(d.event);
-  writeTagRefs(tagRefs, d.event);
+  insertStoredEvent(tx, d.event);
   if (d.address !== undefined) {
     addresses.put({
       address: d.address,

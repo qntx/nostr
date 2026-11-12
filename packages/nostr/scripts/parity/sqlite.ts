@@ -1,14 +1,16 @@
 // Cross-language SQLite round trip (plan §4.3): `write <dir>` writes a
 // deterministic fixture set plus its query results; `read <dir>` opens the
-// database nk-store wrote and asserts the same results.
+// database nk-store wrote and asserts the same results. `firstSeen` values
+// are wall-clock, so each writing side records its own `*-results.json`.
 //
 //   bun packages/nostr/scripts/parity/sqlite.ts write <dir>   # → events.json, ts.db, ts-results.json
 //   NK_SQLITE_DIR=<dir> cargo test -p nk-store --features sqlite --test it -- --ignored sqlite_interop
-//   bun packages/nostr/scripts/parity/sqlite.ts read <dir>    # opens rust.db, asserts ts-results.json
+//   bun packages/nostr/scripts/parity/sqlite.ts read <dir>    # opens rust.db, asserts rust-results.json
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { isRecord } from "../../src/core/util.ts";
 import { EventBuilder, Keys, SqliteEventStore } from "../../src/index.ts";
 import type { Event, Filter, SqlDriver, SqlValue } from "../../src/index.ts";
 
@@ -116,7 +118,7 @@ function resultFilters(): Array<{ name: string; filter: Filter }> {
   ];
 }
 
-async function collect(store: SqliteEventStore): Promise<unknown> {
+async function collect(store: SqliteEventStore, ids: ReadonlyArray<string>): Promise<unknown> {
   const queries: Record<string, string[]> = {};
   const counts: Record<string, number> = {};
   for (const { name, filter } of resultFilters()) {
@@ -131,7 +133,13 @@ async function collect(store: SqliteEventStore): Promise<unknown> {
     id: item.id,
     created_at: item.created_at,
   }));
-  return { queries, counts, negentropy };
+  // oxlint-disable-next-line typescript/no-restricted-types -- a JSON null marks a missing first_seen
+  const firstSeen: Array<{ id: string; at: number | null }> = [];
+  for (const id of ids) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- results are collected sequentially like sqlite.ts
+    firstSeen.push({ id, at: (await store.firstSeenAt(id)) ?? null });
+  }
+  return { queries, counts, negentropy, firstSeen };
 }
 
 async function write(dir: string): Promise<void> {
@@ -144,22 +152,50 @@ async function write(dir: string): Promise<void> {
   const events = fixtures();
   await store.putMany(events);
   writeFileSync(join(dir, "events.json"), JSON.stringify(events));
-  writeFileSync(join(dir, "ts-results.json"), JSON.stringify(await collect(store)));
+  writeFileSync(
+    join(dir, "ts-results.json"),
+    JSON.stringify(
+      await collect(
+        store,
+        events.map((e) => e.id),
+      ),
+    ),
+  );
   driver.close();
+}
+
+/** Recursively sorts object keys — serde_json serializes maps sorted, JS in insertion order. */
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .toSorted()
+        .map((key) => [key, canonicalize(value[key])]),
+    );
+  }
+  return value;
 }
 
 async function read(dir: string): Promise<void> {
   const driver = await fileDriver(join(dir, "rust.db"));
   const store = await SqliteEventStore.open(driver);
-  const expected = JSON.parse(readFileSync(join(dir, "ts-results.json"), "utf8")) as unknown;
-  const actual = await collect(store);
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- events.json is written by write()
+  const events = JSON.parse(readFileSync(join(dir, "events.json"), "utf8")) as Event[];
+  const expected = JSON.parse(readFileSync(join(dir, "rust-results.json"), "utf8")) as unknown;
+  const actual = await collect(
+    store,
+    events.map((e) => e.id),
+  );
   driver.close();
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  if (JSON.stringify(canonicalize(actual)) !== JSON.stringify(canonicalize(expected))) {
     throw new Error(
       `sqlite interop mismatch\nexpected: ${JSON.stringify(expected)}\nactual:   ${JSON.stringify(actual)}`,
     );
   }
-  console.log(`sqlite interop: rust.db matches ts-results.json`);
+  console.log(`sqlite interop: rust.db matches rust-results.json`);
 }
 
 const [command, dir] = process.argv.slice(2);

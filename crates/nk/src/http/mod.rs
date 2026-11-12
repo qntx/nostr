@@ -11,6 +11,8 @@ mod blossom;
 mod nip05;
 mod nip11;
 
+pub use blossom::{Preflight, ServerUpload, UploadFailure};
+
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -79,6 +81,12 @@ pub enum Error {
     /// A server list or a multi-server call was given no servers.
     #[error("no blossom servers")]
     NoServers,
+    /// Every server in a multi-server call failed.
+    #[error("every blossom server failed")]
+    UploadsFailed {
+        /// Per-server failures, in order.
+        failures: Vec<UploadFailure>,
+    },
 }
 
 /// [`HttpClient`] tuning. `#[non_exhaustive]` — construct via

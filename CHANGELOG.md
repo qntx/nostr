@@ -9,6 +9,58 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Added
+
+- `EventStore.firstSeenAt(id)`: the Unix-second wall-clock time at which the store physically
+  inserted the stored event, or `undefined` when the id is not stored. A `duplicate` put keeps
+  the original value; replacement, NIP-09 deletion, `remove` and `clear` drop it with the event,
+  and a stored kind-5 deletion event carries its own. `MemoryEventStore`, `IndexedDbEventStore`
+  and `SqliteEventStore` implement it, as do nk-store's `MemoryStore` and `SqliteStore`
+  (`first_seen_at`); the sqlite interop fixture asserts identical values across languages.
+  `ReactiveEventStore` does not expose it — hydration is not a first-seen. (#296)
+- `ReactiveEventStore.watchSeenOn(id)`: a `Watch<ReadonlyArray<string>>` of the relay urls an
+  event was seen on, cached per lowercased id like `watchEvent` and pinning nothing. The seen-on
+  lists are now copy-on-write, so a snapshot keeps its reference until the list changes; adding a
+  sighting, `maxSeenOnEntries` eviction and `clear()` notify the affected watches on the batched
+  microtask flush. (#297)
+- `MinePowOptions.onProgress`: a `PowProgress` callback fired once per `yieldEvery` hashes,
+  immediately before each yield, carrying the total hash count (across `created_at` rebuilds) and
+  the best proof-of-work seen so far. A throwing callback is reported via `reportError` and never
+  aborts mining; aborting from inside the callback rejects the mine with the abort reason. The
+  nonce sequence and results are unchanged — bit-identical to mining without the callback. (#298)
+- `ManualFetchInit.onUploadProgress`: a `(sent, total)` hook fetch adapters that can observe
+  request-body progress may call; the global `fetch` cannot, so `requireGlobalFetch` strips it.
+  `upload` and `uploadToServers` accept `onProgress` and forward it. (#299)
+- `BlobDescriptor.nip94`: the BUD-08 NIP-94 file-metadata tags, kept only when the value is an
+  array whose every element is a non-empty array of strings — anything else is omitted while the
+  descriptor still parses. nk-core's `BlobDescriptor` mirrors it with the same rule, and the
+  shared vectors cover kept and dropped shapes. (#299)
+- `createUploadAuth`, `upload` and `checkUpload` accept an optional `sha256`: a supplied hash is
+  reused instead of re-hashing the `Blob`, so `uploadToServers` hashes the file at most once
+  across its preflights and retries. (#299)
+- `checkUpload` preflights a server with `HEAD /upload` and returns `"accepted"` for any 2xx or
+  `"unsupported"` when the server has no BUD-06 route (404, 405, 501 — PUT anyway); any other
+  status throws a `BlossomError` carrying the `X-Reason`. nk's `check_upload` returns the same
+  verdict as `Preflight`. (#299)
+- `uploadToServers` reports its outcome as a `ServerUpload` — the descriptor, the winning server
+  and the ordered `UploadFailure`s before it — and accepts `preflight: { minBytes }` to
+  `checkUpload` each server first when the file is large enough. When every server fails it
+  throws a `BlossomUploadError` carrying every failure, with `status` taken from the last one;
+  nk's `upload_to_servers` reports the same through `ServerUpload`/`Error::UploadsFailed`. (#299)
+
+### Changed
+
+- **BREAKING:** `EventStore` gains the required `firstSeenAt` member — every implementation and
+  stub must provide it. `IndexedDbEventStore` databases are recreated at schema version 6 (new
+  `first_seen` object store) and `SqliteEventStore`/nk-store `SqliteStore` databases at
+  `user_version` 3 (new `events.first_seen` column): the stores are caches of relay data, so an
+  older database is dropped and recreated, not migrated. (#296)
+- **BREAKING:** `uploadToServers` resolves `ServerUpload` instead of the bare `BlobDescriptor`,
+  and throws `BlossomUploadError` instead of the last error when every server fails. `checkUpload`
+  returns `"accepted" | "unsupported"` instead of `void`. nk mirrors both: `check_upload` returns
+  `Preflight`, `upload_to_servers` returns `ServerUpload`, and all-fail is the new
+  `Error::UploadsFailed` carrying every server's failure. (#299)
+
 ## [0.15.4] - 2026-11-08
 
 Trust insecure relays by origin, so a dev relay that serves several virtual relays under one

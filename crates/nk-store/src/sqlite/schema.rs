@@ -3,7 +3,7 @@
 
 /// Bump on any schema change: a database whose `user_version` does not match
 /// is dropped and recreated, not migrated (the store caches relay data).
-pub(crate) const SCHEMA_VERSION: i64 = 2;
+pub(crate) const SCHEMA_VERSION: i64 = 3;
 
 pub(crate) const SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS events (
@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS events (
   content TEXT NOT NULL,
   tags TEXT NOT NULL,
   sig TEXT NOT NULL,
-  address TEXT
+  address TEXT,
+  first_seen INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS events_address
   ON events(address) WHERE address IS NOT NULL;

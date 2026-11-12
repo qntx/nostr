@@ -457,6 +457,120 @@ describe("ReactiveEventStore watches", () => {
   });
 });
 
+describe("ReactiveEventStore watchSeenOn", () => {
+  test("snapshot starts empty and tracks the first relay sighting", async () => {
+    const store = new ReactiveEventStore();
+    const e = note("a", 1);
+    const watch = store.watchSeenOn(e.id);
+    expect(watch.getSnapshot()).toStrictEqual([]);
+    const onChange = vi.fn();
+    watch.subscribe(onChange);
+    store.add(e, "wss://a");
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(watch.getSnapshot()).toStrictEqual([normalizeURL("wss://a")]);
+  });
+
+  test("an unchanged list keeps the reference and stays silent", async () => {
+    const store = new ReactiveEventStore();
+    const e = note("a", 1);
+    store.add(e, "wss://a");
+    const watch = store.watchSeenOn(e.id);
+    const onChange = vi.fn();
+    watch.subscribe(onChange);
+    const before = watch.getSnapshot();
+    store.add(e, "wss://a"); // duplicate sighting, list unchanged
+    store.markSeen(e.id, "wss://a");
+    await flush();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(watch.getSnapshot()).toBe(before);
+    store.markSeen(e.id, "wss://b");
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(watch.getSnapshot()).toStrictEqual([normalizeURL("wss://a"), normalizeURL("wss://b")]);
+  });
+
+  test("the per-id cap batches into one notification", async () => {
+    const store = new ReactiveEventStore();
+    const e = note("a", 1);
+    store.add(e);
+    const watch = store.watchSeenOn(e.id);
+    const onChange = vi.fn();
+    watch.subscribe(onChange);
+    for (let i = 0; i < 20; i++) {
+      store.markSeen(e.id, `wss://r${i}`);
+    }
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const snapshot = watch.getSnapshot();
+    expect(snapshot).toHaveLength(16);
+    expect(snapshot[15]).toBe(normalizeURL("wss://r15"));
+  });
+
+  test("maxSeenOnEntries eviction notifies the trimmed id", async () => {
+    const store = new ReactiveEventStore({ maxSeenOnEntries: 2 });
+    const a = note("a", 1);
+    const b = note("b", 2);
+    const c = note("c", 3);
+    store.add(a, "wss://a");
+    store.add(b, "wss://b");
+    const watch = store.watchSeenOn(a.id);
+    const onChange = vi.fn();
+    watch.subscribe(onChange);
+    store.add(c, "wss://c");
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(watch.getSnapshot()).toStrictEqual([]);
+    expect(store.seenOn(a.id)).toStrictEqual([]);
+  });
+
+  test("clear notifies and empties the snapshot", async () => {
+    const store = new ReactiveEventStore();
+    const e = note("a", 1);
+    store.add(e, "wss://a");
+    const watch = store.watchSeenOn(e.id);
+    const onChange = vi.fn();
+    watch.subscribe(onChange);
+    store.clear();
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(watch.getSnapshot()).toStrictEqual([]);
+  });
+
+  test("a seen-on watch pins nothing: its event stays evictable", () => {
+    const store = new ReactiveEventStore({ maxEvents: 2 });
+    const a = note("a", 1);
+    store.add(a, "wss://a");
+    const watch = store.watchSeenOn(a.id);
+    watch.subscribe(() => {});
+    watch.getSnapshot();
+    store.add(note("b", 2));
+    store.add(note("c", 3));
+    expect(store.get(a.id)).toBeUndefined();
+    expect(store.size).toBe(2);
+    // The seen-on record is store metadata; it survives event eviction.
+    expect(watch.getSnapshot()).toStrictEqual([normalizeURL("wss://a")]);
+  });
+
+  test("watchSeenOn caches per lowercased id", () => {
+    const store = new ReactiveEventStore();
+    const a = note("a", 1);
+    const b = note("b", 2);
+    expect(store.watchSeenOn(a.id)).toBe(store.watchSeenOn(a.id.toUpperCase()));
+    expect(store.watchSeenOn(a.id)).not.toBe(store.watchSeenOn(b.id));
+  });
+
+  test("unsubscribed getSnapshot sees markSeen changes", () => {
+    const store = new ReactiveEventStore();
+    const e = note("a", 1);
+    store.add(e);
+    const watch = store.watchSeenOn(e.id);
+    expect(watch.getSnapshot()).toStrictEqual([]);
+    store.markSeen(e.id, "wss://a");
+    expect(watch.getSnapshot()).toStrictEqual([normalizeURL("wss://a")]);
+  });
+});
+
 describe("ReactiveEventStore LRU", () => {
   test("evicts oldest beyond maxEvents; watched survive, replaceable winners leave watermarks", () => {
     const store = new ReactiveEventStore({ maxEvents: 5 });

@@ -52,6 +52,7 @@ const delegatingStore = (
   put: async (event) => inner.put(event),
   putMany: async (events) => inner.putMany(events),
   get: async (id) => inner.get(id),
+  firstSeenAt: async (id) => inner.firstSeenAt(id),
   query: async (filters) => inner.query(filters),
   count: async (filters) => inner.count(filters),
   negentropyItems: async (filter) => inner.negentropyItems(filter),
@@ -73,6 +74,10 @@ function stubStore(overrides: Partial<EventStore> = {}): EventStore {
       return events.map(() => "accepted");
     },
     get: async () => {
+      await Promise.resolve();
+      return undefined;
+    },
+    firstSeenAt: async () => {
       await Promise.resolve();
       return undefined;
     },
@@ -203,6 +208,7 @@ describe("Client storage + observe", () => {
       put: async (event) => inner.put(event),
       putMany: async (events) => inner.putMany(events),
       get: async (id) => inner.get(id),
+      firstSeenAt: async (id) => inner.firstSeenAt(id),
       query: () => {
         queryCalls += 1;
         throw new Error("query boom");

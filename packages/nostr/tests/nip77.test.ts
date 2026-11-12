@@ -64,6 +64,7 @@ function wrapEventStore(
     put: async (event) => inner.put(event),
     putMany: overrides.putMany ?? (async (events) => inner.putMany(events)),
     get: overrides.get ?? (async (id) => inner.get(id)),
+    firstSeenAt: async (id) => inner.firstSeenAt(id),
     query: overrides.query ?? (async (filters) => inner.query(filters)),
     count: async (filters) => inner.count(filters),
     negentropyItems: async (filter) => inner.negentropyItems(filter),
@@ -760,6 +761,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         return out;
       },
       get: async (id) => inner.get(id),
+      firstSeenAt: async (id) => inner.firstSeenAt(id),
       query: () => {
         throw new Error("query should not be called");
       },
@@ -805,6 +807,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         return Promise.reject(new Error("disk full"));
       },
       get: async () => Promise.resolve(undefined),
+      firstSeenAt: async () => Promise.resolve(undefined),
       query: async (_filters: ReadonlyArray<Filter>) => Promise.resolve([]),
       count: async () => Promise.resolve(0),
       negentropyItems: async () => Promise.resolve([]),
@@ -847,6 +850,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         return Promise.reject(new Error("disk full"));
       },
       get: async () => Promise.resolve(undefined),
+      firstSeenAt: async () => Promise.resolve(undefined),
       query: async (_filters: ReadonlyArray<Filter>) => Promise.resolve([]),
       count: async () => Promise.resolve(0),
       negentropyItems: async () => Promise.resolve([]),
@@ -983,6 +987,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         return out;
       },
       get: async (id) => inner.get(id),
+      firstSeenAt: async (id) => inner.firstSeenAt(id),
       query: async (filters) => inner.query(filters),
       count: async (filters) => inner.count(filters),
       negentropyItems: async (filter) => inner.negentropyItems(filter),
@@ -1035,6 +1040,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         return out;
       },
       get: async (id) => inner.get(id),
+      firstSeenAt: async (id) => inner.firstSeenAt(id),
       query: async (filters) => inner.query(filters),
       count: async (filters) => inner.count(filters),
       negentropyItems: async (filter) => inner.negentropyItems(filter),
@@ -1087,6 +1093,7 @@ describe("Relay.negReconcile + Client.sync", () => {
         return out;
       },
       get: async (id) => inner.get(id),
+      firstSeenAt: async (id) => inner.firstSeenAt(id),
       query: async (filters) => inner.query(filters),
       count: async (filters) => inner.count(filters),
       negentropyItems: async (filter) => inner.negentropyItems(filter),
@@ -1129,6 +1136,7 @@ describe("Relay.negReconcile + Client.sync", () => {
       put: async () => Promise.resolve<PutResult>("rejected"),
       putMany: async (events) => Promise.resolve(events.map((): PutResult => "rejected")),
       get: async () => Promise.resolve(undefined),
+      firstSeenAt: async () => Promise.resolve(undefined),
       query: async () => Promise.resolve([]),
       count: async () => Promise.resolve(0),
       negentropyItems: async () => Promise.resolve([]),

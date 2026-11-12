@@ -9,6 +9,44 @@ use nk_core::nips::blossom::{BlobDescriptor, BlobHash, Server, authorization_hea
 
 use super::{Error, HttpClient, Response, Result, utf8};
 
+/// BUD-06 statuses meaning the server has no preflight route.
+const PREFLIGHT_UNSUPPORTED: [u16; 3] = [404, 405, 501];
+
+/// A BUD-06 preflight verdict — [`HttpClient::check_upload`]'s
+/// answer.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Preflight {
+    /// 2xx — the server accepted the upload metadata.
+    Accepted,
+    /// The server has no preflight route; PUT anyway.
+    Unsupported,
+}
+
+/// A server's failed attempt inside
+/// [`HttpClient::upload_to_servers`], in order.
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct UploadFailure {
+    /// The server that failed.
+    pub server: Server,
+    /// Why it failed.
+    pub error: Error,
+}
+
+/// [`HttpClient::upload_to_servers`]' result: the winning upload
+/// plus every earlier failure.
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct ServerUpload {
+    /// The returned blob descriptor.
+    pub descriptor: BlobDescriptor,
+    /// The server that accepted the upload.
+    pub server: Server,
+    /// Failures from the servers tried before `server`, in order.
+    pub failures: Vec<UploadFailure>,
+}
+
 impl HttpClient {
     /// `PUT {server}/upload`. The descriptor's hash must equal the
     /// SHA-256 of `data` — a server lying about the stored blob is a
@@ -64,19 +102,21 @@ impl HttpClient {
     }
 
     /// BUD-06 preflight: `HEAD {server}/upload` carrying the blob's
-    /// hash and size — no body is sent.
+    /// hash and size — no body is sent. A 404/405/501 means the
+    /// server has no preflight route ([`Preflight::Unsupported`]),
+    /// not a refusal.
     ///
     /// # Errors
     ///
-    /// [`Error::Status`] outside 2xx (with `X-Reason` when sent);
-    /// the transport errors of `send`.
+    /// [`Error::Status`] outside 2xx and the `unsupported` set (with
+    /// `X-Reason` when sent); the transport errors of `send`.
     pub async fn check_upload(
         &self,
         server: &Server,
         data: &[u8],
         content_type: Option<&str>,
         auth: &Event,
-    ) -> Result<()> {
+    ) -> Result<Preflight> {
         let mut headers = vec![
             ("Authorization", authorization_header(auth)),
             ("X-SHA-256", BlobHash::of(data).to_string()),
@@ -85,14 +125,22 @@ impl HttpClient {
         if let Some(ct) = content_type.filter(|ct| !ct.is_empty()) {
             headers.push(("X-Content-Type", String::from(ct)));
         }
-        self.exchange(
-            hyper::Method::HEAD,
-            &server.endpoint("/upload"),
-            &headers,
-            None,
-        )
-        .await?;
-        Ok(())
+        let refs: Vec<(&str, &str)> = headers.iter().map(|(n, v)| (*n, v.as_str())).collect();
+        let Response { status, reason, .. } = self
+            .send(
+                hyper::Method::HEAD,
+                &server.endpoint("/upload"),
+                &refs,
+                None,
+            )
+            .await?;
+        if PREFLIGHT_UNSUPPORTED.contains(&status) {
+            return Ok(Preflight::Unsupported);
+        }
+        if (200..300).contains(&status) {
+            return Ok(Preflight::Accepted);
+        }
+        Err(Error::Status { status, reason })
     }
 
     /// `GET {server}/list/{pubkey}` — every item must parse (TS
@@ -235,36 +283,47 @@ impl HttpClient {
         String::from(url)
     }
 
-    /// `PUT /upload` to each server in order until one succeeds — the
-    /// last error when all fail. `data` is hashed and copied once.
+    /// `PUT /upload` to each server in order until one succeeds.
+    /// `data` is hashed and copied once; the result reports the
+    /// winning server and the failures before it.
     ///
     /// # Errors
     ///
-    /// [`Error::NoServers`] on an empty list; the last
-    /// [`Self::upload`] error when every server fails.
+    /// [`Error::NoServers`] on an empty list;
+    /// [`Error::UploadsFailed`] carrying every server's error when
+    /// all fail.
     pub async fn upload_to_servers(
         &self,
         servers: &[Server],
         data: Vec<u8>,
         content_type: Option<&str>,
         auth: &Event,
-    ) -> Result<BlobDescriptor> {
+    ) -> Result<ServerUpload> {
         if servers.is_empty() {
             return Err(Error::NoServers);
         }
         let hash = BlobHash::of(&data);
         let data = Bytes::from(data);
-        let mut last = None;
+        let mut failures = Vec::new();
         for server in servers {
             match self
                 .upload_bytes(server, data.clone(), &hash, content_type, auth)
                 .await
             {
-                Ok(desc) => return Ok(desc),
-                Err(e) => last = Some(e),
+                Ok(descriptor) => {
+                    return Ok(ServerUpload {
+                        descriptor,
+                        server: server.clone(),
+                        failures,
+                    });
+                }
+                Err(error) => failures.push(UploadFailure {
+                    server: server.clone(),
+                    error,
+                }),
             }
         }
-        Err(last.unwrap_or(Error::NoServers))
+        Err(Error::UploadsFailed { failures })
     }
 
     /// One exchange whose only accepted statuses are 2xx — anything

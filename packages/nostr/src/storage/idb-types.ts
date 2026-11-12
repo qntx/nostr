@@ -4,7 +4,8 @@ export const TAG_REFS = "tag_refs";
 export const ADDRESSES = "addresses";
 export const TOMBSTONES = "tombstones";
 export const OUTBOX_BOUNDS = "outbox_bounds";
-export const WRITE_STORES: string[] = [EVENTS, TAG_REFS, ADDRESSES, TOMBSTONES];
+export const FIRST_SEEN = "first_seen";
+export const WRITE_STORES: string[] = [EVENTS, TAG_REFS, ADDRESSES, TOMBSTONES, FIRST_SEEN];
 
 export type IDBCursorDirectionLike = "next" | "prev";
 
@@ -105,4 +106,9 @@ export type OutboxBoundRow = {
   readonly key: string;
   readonly oldest: number;
   readonly newest: number;
+};
+
+export type FirstSeenRow = {
+  readonly id: string;
+  readonly at: number;
 };

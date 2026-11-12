@@ -32,6 +32,21 @@ export type BlobDescriptor = {
   readonly size: number;
   readonly type?: string | undefined;
   readonly uploaded?: number | undefined;
+  /** BUD-08: NIP-94 file-metadata tags echoed by the server. */
+  readonly nip94?: ReadonlyArray<Tag> | undefined;
+};
+
+/** A server's failed attempt inside {@link uploadToServers}, in order. */
+export type UploadFailure = {
+  readonly server: string;
+  readonly error: BlossomError;
+};
+
+/** {@link uploadToServers}' result: the winning upload plus every earlier failure. */
+export type ServerUpload = {
+  readonly descriptor: BlobDescriptor;
+  readonly server: string;
+  readonly failures: ReadonlyArray<UploadFailure>;
 };
 
 export type BlossomFetch = ManualFetch;
@@ -51,10 +66,22 @@ export class BlossomError extends NostrError {
   override name = "BlossomError";
   readonly status?: number | undefined;
 
-  constructor(message: string, options?: ErrorOptions & { status?: number }) {
+  constructor(message: string, options?: ErrorOptions & { status?: number | undefined }) {
     const { status, ...rest } = options ?? {};
     super(message, rest);
     this.status = status;
+  }
+}
+
+/** Every server in {@link uploadToServers} failed: carries each attempt's error in order. */
+export class BlossomUploadError extends BlossomError {
+  override name = "BlossomUploadError";
+  readonly failures: ReadonlyArray<UploadFailure>;
+
+  constructor(failures: ReadonlyArray<UploadFailure>) {
+    const last = failures.at(-1)?.error;
+    super(last?.message ?? "blossom upload failed", { status: last?.status });
+    this.failures = failures;
   }
 }
 
@@ -169,20 +196,27 @@ export async function createUploadAuth(
   sign: BlossomSign,
   file: Blob,
   opts?: {
+    sha256?: string | undefined;
     message?: string | undefined;
     expiration?: number | undefined;
     servers?: ReadonlyArray<string> | undefined;
   },
 ): Promise<Event> {
-  const hash = await sha256Blob(file);
-  return sign(createAuthTemplate("upload", { sha256: hash, ...opts }));
+  const hash = opts?.sha256 ?? (await sha256Blob(file));
+  return sign(createAuthTemplate("upload", { ...opts, sha256: hash }));
 }
 
 export async function upload(
   server: string,
   file: Blob,
   auth: Event,
-  opts?: { fetch?: BlossomFetch; signal?: AbortSignal; sha256?: string | undefined },
+  opts?: {
+    fetch?: BlossomFetch | undefined;
+    signal?: AbortSignal | undefined;
+    sha256?: string | undefined;
+    /** Request-body progress, forwarded to fetch adapters that support it. */
+    onProgress?: ((sent: number, total: number) => void) | undefined;
+  },
 ): Promise<BlobDescriptor> {
   const hash =
     opts?.sha256 === undefined ? await sha256Blob(file) : assertHex32(opts.sha256, "blob sha256");
@@ -198,6 +232,7 @@ export async function upload(
     headers,
     body: file,
     signal: opts?.signal,
+    onUploadProgress: opts?.onProgress,
   });
   return requireDescriptorHash(parseBlobDescriptor(await readJson(res)), hash);
 }
@@ -263,13 +298,23 @@ export async function mirrorBlob(
   return requireDescriptorHash(parseBlobDescriptor(await readJson(res)), hash);
 }
 
-/** BUD-06 preflight. Does not PUT the body. */
+/** BUD-06 statuses meaning the server has no preflight route. */
+const PREFLIGHT_UNSUPPORTED: ReadonlySet<number> = new Set([404, 405, 501]);
+
+/**
+ * BUD-06 preflight. Does not PUT the body. 2xx → `"accepted"`; a 404/405/501 route absence →
+ * `"unsupported"`; any other status throws BlossomError.
+ */
 export async function checkUpload(
   server: string,
   file: Blob,
   auth: Event,
-  opts?: { fetch?: BlossomFetch; signal?: AbortSignal; sha256?: string | undefined },
-): Promise<void> {
+  opts?: {
+    fetch?: BlossomFetch | undefined;
+    signal?: AbortSignal | undefined;
+    sha256?: string | undefined;
+  },
+): Promise<"accepted" | "unsupported"> {
   const hash =
     opts?.sha256 === undefined ? await sha256Blob(file) : assertHex32(opts.sha256, "blob sha256");
   const headers: Record<string, string> = {
@@ -280,11 +325,19 @@ export async function checkUpload(
   if (file.type) {
     headers["X-Content-Type"] = file.type;
   }
-  await blossomRequest(opts?.fetch, blossomUrl(server, "/upload"), {
+  const url = blossomUrl(server, "/upload");
+  const res = await blossomFetch(opts?.fetch, url, {
     method: "HEAD",
     headers,
     signal: opts?.signal,
   });
+  if (res.ok) {
+    return "accepted";
+  }
+  if (PREFLIGHT_UNSUPPORTED.has(res.status)) {
+    return "unsupported";
+  }
+  throw blossomHttpError("HEAD", url, res);
 }
 
 /**
@@ -366,34 +419,66 @@ export async function healBlobUrl(
   return url;
 }
 
-/** PUT /upload to each server in order until one descriptor succeeds. */
+/**
+ * PUT /upload to each server in order until one descriptor succeeds. The hash is computed once
+ * (`opts.sha256` or `sha256Blob`) and sent to every server. When `preflight` is set and the file is
+ * at least `preflight.minBytes`, each server is HEADed first — a thrown BlossomError records a
+ * failure and skips it. Every server failing throws {@link BlossomUploadError}.
+ */
 export async function uploadToServers(
   servers: ReadonlyArray<string>,
   file: Blob,
   auth: Event,
-  opts?: { fetch?: BlossomFetch; signal?: AbortSignal },
-): Promise<BlobDescriptor> {
+  opts?: {
+    fetch?: BlossomFetch | undefined;
+    signal?: AbortSignal | undefined;
+    sha256?: string | undefined;
+    /** BUD-06 preflight threshold: files of at least `minBytes` are HEADed before the PUT. */
+    preflight?: { readonly minBytes: number } | undefined;
+    /** Request-body progress, forwarded to fetch adapters that support it. */
+    onProgress?: ((sent: number, total: number) => void) | undefined;
+  },
+): Promise<ServerUpload> {
   if (servers.length === 0) {
     throw new BlossomError("no servers");
   }
-  let last: BlossomError | undefined;
+  const hash =
+    opts?.sha256 === undefined ? await sha256Blob(file) : assertHex32(opts.sha256, "blob sha256");
+  const failures: UploadFailure[] = [];
   for (const server of servers) {
     try {
+      if (opts?.preflight !== undefined && file.size >= opts.preflight.minBytes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- each server is preflighted before its PUT
+        await checkUpload(server, file, auth, {
+          fetch: opts.fetch,
+          signal: opts.signal,
+          sha256: hash,
+        });
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- tries servers sequentially until one succeeds
-      return await upload(server, file, auth, opts);
+      const descriptor = await upload(server, file, auth, {
+        fetch: opts?.fetch,
+        signal: opts?.signal,
+        sha256: hash,
+        onProgress: opts?.onProgress,
+      });
+      return { descriptor, server, failures };
     } catch (error) {
       if (isAbortError(error)) {
         throw error;
       }
-      last =
-        error instanceof BlossomError
-          ? error
-          : new BlossomError("blossom upload failed", {
-              cause: error,
-            });
+      failures.push({
+        server,
+        error:
+          error instanceof BlossomError
+            ? error
+            : new BlossomError("blossom upload failed", {
+                cause: error,
+              }),
+      });
     }
   }
-  throw last ?? new BlossomError("no servers");
+  throw new BlossomUploadError(failures);
 }
 
 export function blossomServerListEventBuilder(servers: ReadonlyArray<string>): EventBuilder {
@@ -507,6 +592,7 @@ async function blossomFetch(
     headers?: Record<string, string>;
     body?: Blob | string;
     signal?: AbortSignal | undefined;
+    onUploadProgress?: ((sent: number, total: number) => void) | undefined;
   },
 ): Promise<ManualResponse> {
   return fetchManual(
@@ -548,6 +634,7 @@ async function blossomRequest(
     headers?: Record<string, string>;
     body?: Blob | string;
     signal?: AbortSignal | undefined;
+    onUploadProgress?: ((sent: number, total: number) => void) | undefined;
   },
 ): Promise<ManualResponse> {
   const res = await blossomFetch(fetchImpl, url, init);
@@ -594,7 +681,32 @@ export function parseBlobDescriptor(json: unknown): BlobDescriptor {
   ) {
     desc.uploaded = raw["uploaded"];
   }
+  const nip94 = parseNip94Tags(raw["nip94"]);
+  if (nip94 !== undefined) {
+    desc.nip94 = nip94;
+  }
   return desc;
+}
+
+/** BUD-08: the value is kept only when every element is a non-empty array of strings. */
+function parseNip94Tags(value: unknown): Tag[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const tags: Tag[] = [];
+  for (const element of value) {
+    if (!isTagShape(element)) {
+      return undefined;
+    }
+    tags.push([...element]);
+  }
+  return tags;
+}
+
+function isTagShape(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === "string")
+  );
 }
 
 function requireDescriptorHash(desc: BlobDescriptor, expected: string): BlobDescriptor {

@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use nk::client::{Client, ClientOptions};
-use nk::http::{Error, HttpClient, HttpOptions};
+use nk::http::{Error, HttpClient, HttpOptions, Preflight};
 use nk::testing::{MockHttp, MockResponse};
 use nk_core::nips::blossom::{AuthVerb, Authorization, BlobDescriptor, BlobHash, Server};
 use nk_core::rand_core::UnwrapErr;
@@ -113,10 +113,11 @@ async fn check_upload_sends_preflight_headers() {
     let mut http = MockHttp::start().await.unwrap();
     let server = server(&http);
     http.route("HEAD", "/upload", MockResponse::new(200));
-    client()
+    let verdict = client()
         .check_upload(&server, DATA, Some("image/png"), &auth(None))
         .await
         .unwrap();
+    assert_eq!(verdict, Preflight::Accepted);
     let request = http.next_request().await.unwrap();
     assert_eq!(request.method, "HEAD");
     assert_eq!(
@@ -125,6 +126,26 @@ async fn check_upload_sends_preflight_headers() {
     );
     assert_eq!(header(&request, "x-content-length"), DATA.len().to_string());
     assert_eq!(header(&request, "x-content-type"), "image/png");
+}
+
+#[tokio::test]
+async fn check_upload_maps_statuses() {
+    let http = MockHttp::start().await.unwrap();
+    let server = server(&http);
+    for status in [404u16, 405, 501] {
+        http.route("HEAD", "/upload", MockResponse::new(status));
+        let verdict = client()
+            .check_upload(&server, DATA, None, &auth(None))
+            .await
+            .unwrap();
+        assert_eq!(verdict, Preflight::Unsupported, "{status}");
+    }
+    http.route("HEAD", "/upload", MockResponse::new(413));
+    let err = client()
+        .check_upload(&server, DATA, None, &auth(None))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::Status { status: 413, .. }), "{err:?}");
 }
 
 #[tokio::test]
@@ -292,17 +313,51 @@ async fn upload_to_servers_falls_back() {
         MockResponse::new(200).body(descriptor(&hash, "https://b/")),
     );
     let auth = auth(None);
-    let desc = client()
+    let result = client()
         .upload_to_servers(&[server(&a), server(&b)], DATA.to_vec(), None, &auth)
         .await
         .unwrap();
-    assert_eq!(desc.sha256, hash);
+    assert_eq!(result.descriptor.sha256, hash);
+    assert_eq!(result.server, server(&b));
+    assert_eq!(result.failures.len(), 1);
+    assert_eq!(result.failures[0].server, server(&a));
+    assert!(
+        matches!(result.failures[0].error, Error::Status { status: 500, .. }),
+        "{:?}",
+        result.failures[0].error
+    );
 
     let err = client()
         .upload_to_servers(&[], DATA.to_vec(), None, &auth)
         .await
         .unwrap_err();
     assert!(matches!(err, Error::NoServers), "{err:?}");
+}
+
+#[tokio::test]
+async fn upload_to_servers_reports_every_failure() {
+    let a = MockHttp::start().await.unwrap();
+    let b = MockHttp::start().await.unwrap();
+    a.route("PUT", "/upload", MockResponse::new(500));
+    b.route("PUT", "/upload", MockResponse::new(503));
+    let err = client()
+        .upload_to_servers(&[server(&a), server(&b)], DATA.to_vec(), None, &auth(None))
+        .await
+        .unwrap_err();
+    let Error::UploadsFailed { failures } = &err else {
+        panic!("expected UploadsFailed, got {err:?}");
+    };
+    assert_eq!(failures.len(), 2);
+    assert_eq!(failures[0].server, server(&a));
+    assert_eq!(failures[1].server, server(&b));
+    assert!(matches!(
+        failures[0].error,
+        Error::Status { status: 500, .. }
+    ));
+    assert!(matches!(
+        failures[1].error,
+        Error::Status { status: 503, .. }
+    ));
 }
 
 #[tokio::test]

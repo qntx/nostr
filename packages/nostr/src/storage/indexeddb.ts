@@ -22,6 +22,7 @@ import { openDb } from "./idb-schema.ts";
 import {
   ADDRESSES,
   EVENTS,
+  FIRST_SEEN,
   OUTBOX_BOUNDS,
   TAG_REFS,
   TOMBSTONES,
@@ -29,6 +30,7 @@ import {
 } from "./idb-types.ts";
 import type {
   AddressRow,
+  FirstSeenRow,
   IDBCursorDirectionLike,
   IDBDatabaseLike,
   IDBFactoryLike,
@@ -339,6 +341,17 @@ export class IndexedDbEventStore implements EventStore {
     const event = await reqOf<Event | undefined>(tx.objectStore(EVENTS).get(key));
     await done;
     return event;
+  }
+
+  async firstSeenAt(id: string): Promise<number | undefined> {
+    const db = await this.#ensure();
+    const tx = db.transaction(FIRST_SEEN, "readonly");
+    const done = txDone(tx);
+    const row = await reqOf<FirstSeenRow | undefined>(
+      tx.objectStore(FIRST_SEEN).get(id.toLowerCase()),
+    );
+    await done;
+    return row?.at;
   }
 
   async query(filters: ReadonlyArray<Filter>): Promise<Event[]> {

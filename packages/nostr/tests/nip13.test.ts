@@ -1,10 +1,12 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { describe, expect, test } from "vite-plus/test";
+import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { bytesToHex, utf8Encoder } from "../src/core/util.ts";
 import { getEventHash, hexToBytes, serializeEvent } from "../src/index.ts";
 import type { UnsignedEvent } from "../src/index.ts";
+import type { PowProgress } from "../src/nips/nip13.ts";
 import { getPow, minePow, Nip13Error } from "../src/nips/nip13.ts";
+import { stubReportError } from "./helpers/report-error.ts";
 
 const NIP13_EXAMPLE_ID = "000006d8c378af1779d2feebc7603a125d99eca0ccf1085959b307f64e5dd358";
 
@@ -76,5 +78,95 @@ describe("nip13 minePow", () => {
     const reason = new Error("user cancelled");
     controller.abort(reason);
     await expect(minePow(UNSIGNED, 32, { signal: controller.signal })).rejects.toBe(reason);
+  });
+});
+
+describe("nip13 minePow onProgress", () => {
+  // vectors/nip13/codec.json mine case: at `now` 1700000042 the UNSIGNED event
+  // hits difficulty 12 at nonce 4431. Faking only Date keeps the yield's
+  // setTimeout real while pinning the nonce sequence.
+  const VECTOR_NOW = 1700000042;
+  const VECTOR_ID = "000da6e4441d53ac600a03a7ddbd3fd83ef90df32038ce5d6f6dfa69b6147370";
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const pinNow = (): void => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(VECTOR_NOW * 1000);
+  };
+
+  test("reports strictly increasing hash counts and non-decreasing best pow", async () => {
+    pinNow();
+    const calls: PowProgress[] = [];
+    const mined = await minePow(UNSIGNED, 12, {
+      yieldEvery: 50,
+      onProgress: (p) => {
+        calls.push(p);
+      },
+    });
+    expect(mined.id).toBe(VECTOR_ID);
+    // The winner lands at hash 4431; callbacks fire at every 50 losing hashes.
+    expect(calls.map((p) => p.hashes)).toStrictEqual(
+      Array.from({ length: 88 }, (_, i) => (i + 1) * 50),
+    );
+    for (const p of calls) {
+      expect(p.bestPow).toBeLessThan(12);
+    }
+    for (let i = 1; i < calls.length; i++) {
+      expect(calls[i]!.bestPow).toBeGreaterThanOrEqual(calls[i - 1]!.bestPow);
+    }
+  });
+
+  test("the mined result is identical with and without onProgress", async () => {
+    pinNow();
+    const calls: PowProgress[] = [];
+    const withProgress = await minePow(UNSIGNED, 12, {
+      yieldEvery: 50,
+      onProgress: (p) => {
+        calls.push(p);
+      },
+    });
+    const withoutProgress = await minePow(UNSIGNED, 12);
+    expect(withProgress).toStrictEqual(withoutProgress);
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
+  test("a throwing onProgress is reported and does not change the result", async () => {
+    pinNow();
+    const { reported, restore } = stubReportError();
+    const boom = new Error("boom");
+    try {
+      const mined = await minePow(UNSIGNED, 12, {
+        yieldEvery: 50,
+        onProgress: () => {
+          throw boom;
+        },
+      });
+      expect(mined.id).toBe(VECTOR_ID);
+      expect(reported.length).toBeGreaterThan(0);
+      expect(reported.every((e) => e === boom)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  test("aborting inside onProgress rejects with the abort reason", async () => {
+    pinNow();
+    const controller = new AbortController();
+    const reason = new Error("stop mining");
+    let calls = 0;
+    await expect(
+      minePow(UNSIGNED, 12, {
+        yieldEvery: 50,
+        signal: controller.signal,
+        onProgress: () => {
+          calls++;
+          controller.abort(reason);
+        },
+      }),
+    ).rejects.toBe(reason);
+    expect(calls).toBe(1);
   });
 });

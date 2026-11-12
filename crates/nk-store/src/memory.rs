@@ -40,6 +40,8 @@ struct Body {
     by_tag: HashMap<(u8, Box<str>), Bucket>,
     /// `coordinate → id` of the current addressable winner.
     replaceable: HashMap<Coordinate, EventId>,
+    /// Physical-insert wall time per stored id — `first_seen_at`.
+    first_seen: HashMap<EventId, Timestamp>,
     deletion: DeletionState,
 }
 
@@ -65,6 +67,7 @@ impl Body {
     /// Inserts `event` into `events` and every bucket.
     fn index_insert(&mut self, event: Event) {
         let id = event.id();
+        self.first_seen.insert(id, Timestamp::now());
         let key = (Reverse(event.created_at()), id);
         let shared = Arc::new(event);
         self.events.insert(id, Arc::clone(&shared));
@@ -98,6 +101,7 @@ impl Body {
         let Some(shared) = self.events.remove(id) else {
             return false;
         };
+        self.first_seen.remove(id);
         let key = (Reverse(shared.created_at()), *id);
         self.all.remove(&key);
         if let Some(bucket) = self.by_pubkey.get_mut(&shared.pubkey()) {
@@ -339,6 +343,11 @@ impl EventStore for MemoryStore {
             return Ok(None);
         }
         Ok(body.events.get(id).map(|e| (**e).clone()))
+    }
+
+    fn first_seen_at(&self, id: &EventId) -> Result<Option<Timestamp>> {
+        let body = read(self.body.read());
+        Ok(body.first_seen.get(id).copied())
     }
 
     fn query(&self, filters: &[Filter]) -> Result<Vec<Event>> {

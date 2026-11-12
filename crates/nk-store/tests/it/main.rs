@@ -36,7 +36,7 @@
 
 mod common;
 
-use nk_core::{Event, EventId, Filter, Kind, SingleLetterTag, Tag};
+use nk_core::{Event, EventId, Filter, Kind, SingleLetterTag, Tag, Timestamp};
 #[cfg(feature = "sqlite")]
 use nk_store::SqliteStore;
 use nk_store::{EventStore, MemoryStore, PutOutcome};
@@ -204,6 +204,53 @@ fn conformance(store: &impl EventStore) {
     assert_eq!(store.put(&after).ok(), Some(PutOutcome::Accepted));
     store.clear().unwrap_or_else(|e| panic!("{e}"));
 
+    // "firstSeenAt records the insert time and a duplicate keeps it"
+    let e = note(&alice(), "hello", 1, vec![]);
+    assert_eq!(store.first_seen_at(&e.id()).ok(), Some(None), "unknown id");
+    let before = Timestamp::now();
+    assert_eq!(store.put(&e).ok(), Some(PutOutcome::Accepted));
+    let after = Timestamp::now();
+    let seen = store
+        .first_seen_at(&e.id())
+        .unwrap_or_else(|e| panic!("{e}"))
+        .unwrap_or_else(|| panic!("first_seen_at: stored event has none"));
+    assert!(
+        seen >= before && seen <= after,
+        "first_seen_at {seen} outside [{before}, {after}]",
+    );
+    assert_eq!(store.put(&e).ok(), Some(PutOutcome::Duplicate));
+    assert_eq!(store.first_seen_at(&e.id()).ok(), Some(Some(seen)));
+    store.clear().unwrap_or_else(|e| panic!("{e}"));
+
+    // "firstSeenAt drops with the event on replace, deletion, remove and clear"
+    let older = replaceable(&alice(), 0, "old", 1);
+    let newer = replaceable(&alice(), 0, "new", 2);
+    store.put(&older).unwrap_or_else(|e| panic!("{e}"));
+    assert_ne!(store.first_seen_at(&older.id()).ok(), Some(None));
+    assert_eq!(store.put(&newer).ok(), Some(PutOutcome::Replaced));
+    assert_eq!(store.first_seen_at(&older.id()).ok(), Some(None));
+    assert_ne!(store.first_seen_at(&newer.id()).ok(), Some(None));
+    let target = note(&bob(), "target", 1, vec![]);
+    store.put(&target).unwrap_or_else(|e| panic!("{e}"));
+    let del = deletion(
+        &bob(),
+        vec![DeletionTarget::Event {
+            id: target.id(),
+            kind: None,
+        }],
+        3,
+    );
+    assert_eq!(store.put(&del).ok(), Some(PutOutcome::Deleted));
+    assert_eq!(store.first_seen_at(&target.id()).ok(), Some(None));
+    assert_ne!(store.first_seen_at(&del.id()).ok(), Some(None));
+    let kept = note(&alice(), "kept", 5, vec![]);
+    store.put(&kept).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(store.remove(&[kept.id()]).ok(), Some(1));
+    assert_eq!(store.first_seen_at(&kept.id()).ok(), Some(None));
+    store.clear().unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(store.first_seen_at(&newer.id()).ok(), Some(None));
+    assert_eq!(store.first_seen_at(&del.id()).ok(), Some(None));
+
     // "query orders newest first and applies limit"
     let a = note(&alice(), "a", 1, vec![]);
     let b = note(&alice(), "b", 3, vec![]);
@@ -263,13 +310,13 @@ fn conformance(store: &impl EventStore) {
     );
     assert_eq!(
         ids(&store
-            .query(&[kind_filter(1).since(nk_core::Timestamp::from_secs(2))])
+            .query(&[kind_filter(1).since(Timestamp::from_secs(2))])
             .unwrap_or_else(|e| panic!("{e}"))),
         vec![plain.id(), tagged.id()],
     );
     assert_eq!(
         ids(&store
-            .query(&[kind_filter(1).until(nk_core::Timestamp::from_secs(2))])
+            .query(&[kind_filter(1).until(Timestamp::from_secs(2))])
             .unwrap_or_else(|e| panic!("{e}"))),
         vec![tagged.id(), target.id()],
     );
@@ -559,11 +606,67 @@ fn replaceable_tie_breaks_by_id() {
     assert_eq!(store.get(&low.id()).ok(), Some(Some(low.clone())));
 }
 
+/// The result set `packages/nostr/scripts/parity/sqlite.ts collect`
+/// produces: query/count/negentropy results plus each fixture id's
+/// `first_seen_at` (`null` when the event is not stored — `firstSeen`
+/// values are wall-clock, so each writing side records its own
+/// `*-results.json`).
+#[cfg(feature = "sqlite")]
+fn collect_interop(
+    store: &SqliteStore,
+    alice_pk: &str,
+    target_id: &str,
+    fixture_ids: &[EventId],
+) -> serde_json::Value {
+    let alice_filter = |k: u16| {
+        Filter::new()
+            .kinds([Kind::new(k)])
+            .expect("filter")
+            .authors([nk_core::PublicKey::from_hex(alice_pk).unwrap_or_else(|e| panic!("{e}"))])
+            .expect("filter")
+    };
+    serde_json::json!({
+        "queries": {
+            "all kind 1": ids(&store.query(&[kind_filter(1)]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
+            "alice kind 1": ids(&store.query(&[alice_filter(1)]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
+            "e-tag": ids(&store.query(&[tag_filter('e', vec![target_id.to_owned()])]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
+            "since": ids(&store.query(&[kind_filter(1).since(Timestamp::from_secs(3))]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
+            "limit": ids(&store.query(&[kind_filter(1).limit(1)]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
+        },
+        "counts": {
+            "all kind 1": store.count(&[kind_filter(1)]).unwrap_or_else(|e| panic!("{e}")),
+            "alice kind 1": store.count(&[alice_filter(1)]).unwrap_or_else(|e| panic!("{e}")),
+            "e-tag": store.count(&[tag_filter('e', vec![target_id.to_owned()])]).unwrap_or_else(|e| panic!("{e}")),
+            "since": store.count(&[kind_filter(1).since(Timestamp::from_secs(3))]).unwrap_or_else(|e| panic!("{e}")),
+            "limit": store.count(&[kind_filter(1).limit(1)]).unwrap_or_else(|e| panic!("{e}")),
+        },
+        "negentropy": store
+            .negentropy_items(&kind_filter(1))
+            .unwrap_or_else(|e| panic!("{e}"))
+            .iter()
+            .map(|i| serde_json::json!({"id": i.id.to_hex(), "created_at": i.created_at.as_secs()}))
+            .collect::<Vec<_>>(),
+        "firstSeen": fixture_ids
+            .iter()
+            .map(|id| {
+                serde_json::json!({
+                    "id": id.to_hex(),
+                    "at": store
+                        .first_seen_at(id)
+                        .unwrap_or_else(|e| panic!("{e}"))
+                        .map(Timestamp::as_secs),
+                })
+            })
+            .collect::<Vec<_>>(),
+    })
+}
+
 /// Cross-language SQLite round trip (plan §4.3): reads `<dir>/ts.db` —
 /// written by `packages/nostr/scripts/parity/sqlite.ts write` — and asserts
-/// the same query/count/negentropy results as `ts-results.json`, then writes
-/// `rust.db` by putting `events.json` in order for the TS side to read back.
-/// Run via `bun run test:parity` or with `NK_SQLITE_DIR` set.
+/// the same query/count/negentropy/firstSeen results as `ts-results.json`,
+/// then writes `rust.db` plus `rust-results.json` by putting `events.json`
+/// in order for the TS side to read back. Run via `bun run test:parity` or
+/// with `NK_SQLITE_DIR` set.
 #[cfg(feature = "sqlite")]
 #[test]
 #[ignore = "needs NK_SQLITE_DIR pointing at the generated fixture directory"]
@@ -589,38 +692,17 @@ fn sqlite_interop() {
         .as_str()
         .unwrap_or_else(|| panic!("id"))
         .to_string();
-    let alice_filter = |k: u16| {
-        Filter::new()
-            .kinds([Kind::new(k)])
-            .expect("filter")
-            .authors([nk_core::PublicKey::from_hex(&alice_pk).unwrap_or_else(|e| panic!("{e}"))])
-            .expect("filter")
-    };
+    let fixture_ids: Vec<EventId> = rows
+        .iter()
+        .map(|row| {
+            EventId::from_hex(row["id"].as_str().unwrap_or_else(|| panic!("id")))
+                .unwrap_or_else(|e| panic!("{e}"))
+        })
+        .collect();
 
     // Open the TS-written database and collect the same result set.
     let store = SqliteStore::open(dir.join("ts.db")).unwrap_or_else(|e| panic!("{e}"));
-    let results = serde_json::json!({
-        "queries": {
-            "all kind 1": ids(&store.query(&[kind_filter(1)]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
-            "alice kind 1": ids(&store.query(&[alice_filter(1)]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
-            "e-tag": ids(&store.query(&[tag_filter('e', vec![target_id.clone()])]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
-            "since": ids(&store.query(&[kind_filter(1).since(nk_core::Timestamp::from_secs(3))]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
-            "limit": ids(&store.query(&[kind_filter(1).limit(1)]).unwrap_or_else(|e| panic!("{e}"))).iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
-        },
-        "counts": {
-            "all kind 1": store.count(&[kind_filter(1)]).unwrap_or_else(|e| panic!("{e}")),
-            "alice kind 1": store.count(&[alice_filter(1)]).unwrap_or_else(|e| panic!("{e}")),
-            "e-tag": store.count(&[tag_filter('e', vec![target_id.clone()])]).unwrap_or_else(|e| panic!("{e}")),
-            "since": store.count(&[kind_filter(1).since(nk_core::Timestamp::from_secs(3))]).unwrap_or_else(|e| panic!("{e}")),
-            "limit": store.count(&[kind_filter(1).limit(1)]).unwrap_or_else(|e| panic!("{e}")),
-        },
-        "negentropy": store
-            .negentropy_items(&kind_filter(1))
-            .unwrap_or_else(|e| panic!("{e}"))
-            .iter()
-            .map(|i| serde_json::json!({"id": i.id.to_hex(), "created_at": i.created_at.as_secs()}))
-            .collect::<Vec<_>>(),
-    });
+    let results = collect_interop(&store, &alice_pk, &target_id, &fixture_ids);
     let expected: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(dir.join("ts-results.json")).unwrap_or_else(|e| panic!("{e}")),
     )
@@ -629,23 +711,26 @@ fn sqlite_interop() {
     drop(store);
 
     // Write rust.db by putting events.json in order.
-    let events: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(dir.join("events.json")).unwrap_or_else(|e| panic!("{e}")),
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
     for path in ["rust.db", "rust.db-wal", "rust.db-shm"] {
         let _ = std::fs::remove_file(dir.join(path));
     }
     let store = SqliteStore::open(dir.join("rust.db")).unwrap_or_else(|e| panic!("{e}"));
     let mut parsed = Vec::new();
-    for raw in events
-        .as_array()
-        .unwrap_or_else(|| panic!("events.json array"))
-    {
+    for raw in rows {
         parsed.push(
             Event::from_json(&serde_json::to_string(raw).unwrap_or_else(|e| panic!("{e}")))
                 .unwrap_or_else(|e| panic!("{e}")),
         );
     }
     store.put_many(&parsed).unwrap_or_else(|e| panic!("{e}"));
+    let rust_results = collect_interop(&store, &alice_pk, &target_id, &fixture_ids);
+    // Everything but the wall-clock firstSeen must match ts-results.json.
+    assert_eq!(rust_results["queries"], expected["queries"]);
+    assert_eq!(rust_results["counts"], expected["counts"]);
+    assert_eq!(rust_results["negentropy"], expected["negentropy"]);
+    std::fs::write(
+        dir.join("rust-results.json"),
+        serde_json::to_string(&rust_results).unwrap_or_else(|e| panic!("{e}")),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
 }

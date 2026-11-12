@@ -98,6 +98,16 @@ pub trait EventStore: Send + Sync {
     /// [`Error::Backend`] on a backend failure.
     fn get(&self, id: &EventId) -> Result<Option<Event>>;
 
+    /// Unix seconds at which this store physically inserted the stored
+    /// event; `None` when `id` is not stored. A duplicate `put` keeps the
+    /// original value; replacement, NIP-09 deletion, `remove` and `clear`
+    /// drop it with the event.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Backend`] on a backend failure.
+    fn first_seen_at(&self, id: &EventId) -> Result<Option<Timestamp>>;
+
     /// Returns the union of `filters`, deduplicated, newest first
     /// ([`Event::cmp_newest_first`]). Each filter's `limit` applies to that
     /// filter's own result set before the merge.

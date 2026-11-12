@@ -1,11 +1,11 @@
 // oxlint-disable unicorn/prefer-add-event-listener -- the *Like driver interfaces model only the `on*` handler surface
 import { StorageError } from "./error.ts";
-import { ADDRESSES, EVENTS, OUTBOX_BOUNDS, TAG_REFS, TOMBSTONES } from "./idb-types.ts";
+import { ADDRESSES, EVENTS, FIRST_SEEN, OUTBOX_BOUNDS, TAG_REFS, TOMBSTONES } from "./idb-types.ts";
 import type { IDBDatabaseLike, IDBFactoryLike } from "./idb-types.ts";
 
-export const IDB_VERSION = 5;
+export const IDB_VERSION = 6;
 
-const ALL_STORES = [EVENTS, TAG_REFS, ADDRESSES, TOMBSTONES, OUTBOX_BOUNDS];
+const ALL_STORES = [EVENTS, TAG_REFS, ADDRESSES, TOMBSTONES, OUTBOX_BOUNDS, FIRST_SEEN];
 
 function createSchema(db: IDBDatabaseLike): void {
   const events = db.createObjectStore(EVENTS, { keyPath: "id" });
@@ -21,6 +21,7 @@ function createSchema(db: IDBDatabaseLike): void {
   db.createObjectStore(ADDRESSES, { keyPath: "address" });
   db.createObjectStore(TOMBSTONES, { keyPath: "key" });
   db.createObjectStore(OUTBOX_BOUNDS, { keyPath: "key" });
+  db.createObjectStore(FIRST_SEEN, { keyPath: "id" });
 }
 
 export async function openDb(dbName: string): Promise<IDBDatabaseLike> {

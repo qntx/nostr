@@ -363,6 +363,9 @@ pub struct BlobDescriptor {
     pub mime_type: Option<String>,
     /// Upload time, when present.
     pub uploaded: Option<Timestamp>,
+    /// BUD-08: the NIP-94 file-metadata tags echoed by the server,
+    /// kept only when every element is a non-empty array of strings.
+    pub nip94: Option<Tags>,
 }
 
 impl BlobDescriptor {
@@ -424,14 +427,33 @@ impl BlobDescriptor {
             .get("uploaded")
             .and_then(Value::as_u64)
             .map(Timestamp::from_secs);
+        let nip94 = object.get("nip94").and_then(nip94_tags);
         Ok(Self {
             url: String::from(url),
             sha256,
             size,
             mime_type,
             uploaded,
+            nip94,
         })
     }
+}
+
+/// BUD-08 `nip94`: kept only when the value is an array whose every
+/// element is a non-empty array of strings — else dropped, matching
+/// TS `parseBlobDescriptor`.
+fn nip94_tags(value: &Value) -> Option<Tags> {
+    let array = value.as_array()?;
+    let mut tags = Vec::with_capacity(array.len());
+    for element in array {
+        let items: Option<Vec<String>> = element
+            .as_array()?
+            .iter()
+            .map(|v| v.as_str().map(String::from))
+            .collect();
+        tags.push(Tag::new(items?).ok()?);
+    }
+    Some(tags.into_iter().collect())
 }
 
 /// A parsed NIP-B7 kind `10063` server list — normalized `http(s)`

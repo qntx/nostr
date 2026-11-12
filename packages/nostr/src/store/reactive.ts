@@ -37,11 +37,14 @@ export type ReactiveEventStoreEventMap = {
 
 const SEEN_ON_PER_ID = 16;
 
+/** Shared snapshot for an id with no recorded relay sightings. */
+const NO_SEEN_ON: ReadonlyArray<string> = [];
+
 /** Notify passes per microtask; overflow reschedules so a writing subscriber cannot livelock. */
 const MAX_FLUSH_PASSES = 32;
 
 /** Category of a {@link Watch} subscription. */
-type WatchKind = "event" | "replaceable" | "query";
+type WatchKind = "event" | "replaceable" | "query" | "seenOn";
 
 /** Structural handle the store needs for invalidation; implemented by WatchImpl. */
 type WatchHandle = {
@@ -158,8 +161,9 @@ class WatchImpl<T> implements Watch<T>, WatchHandle {
 
 const EVENT_IDS = (e: Event | undefined): ReadonlyArray<string> => (e ? [e.id] : []);
 const LIST_IDS = (events: ReadonlyArray<Event>): ReadonlyArray<string> => events.map((e) => e.id);
+const NO_IDS = (): ReadonlyArray<string> => [];
 
-function sameRef(a: Event | undefined, b: Event | undefined): boolean {
+function sameRef<T>(a: T, b: T): boolean {
   return a === b;
 }
 
@@ -195,9 +199,11 @@ export class ReactiveEventStore {
 
   readonly #idWatches = new Map<string, Set<WatchHandle>>();
   readonly #addressWatches = new Map<string, Set<WatchHandle>>();
+  readonly #seenOnWatches = new Map<string, Set<WatchHandle>>();
   readonly #eventCache = new Map<string, WatchImpl<Event | undefined>>();
   readonly #addressCache = new Map<string, WatchImpl<Event | undefined>>();
   readonly #queryCache = new Map<string, WatchImpl<ReadonlyArray<Event>>>();
+  readonly #seenOnCache = new Map<string, WatchImpl<ReadonlyArray<string>>>();
   // Query watches indexed by filter kinds; a filter without kinds matches any kind.
   readonly #queryByKind = new Map<number, Set<WatchHandle>>();
   readonly #queryAnyKind = new Set<WatchHandle>();
@@ -282,7 +288,10 @@ export class ReactiveEventStore {
     return results;
   }
 
-  /** Record a relay sighting for an id already in the index. No notification. */
+  /**
+   * Record a relay sighting for an id already in the index. Notifies the id's seen-on watches when
+   * the list changes; event watches are unaffected.
+   */
   markSeen(id: string, relayUrl: string): boolean {
     const key = id.toLowerCase();
     if (this.#index.get(key) === undefined) {
@@ -349,7 +358,7 @@ export class ReactiveEventStore {
   }
 
   seenOn(id: string): ReadonlyArray<string> {
-    return this.#seenOn.get(id.toLowerCase()) ?? [];
+    return this.#seenOn.get(id.toLowerCase()) ?? NO_SEEN_ON;
   }
 
   get size(): number {
@@ -402,6 +411,23 @@ export class ReactiveEventStore {
     return watch;
   }
 
+  watchSeenOn(id: string): Watch<ReadonlyArray<string>> {
+    const key = id.toLowerCase();
+    let watch = this.#seenOnCache.get(key);
+    if (!watch) {
+      watch = new WatchImpl(
+        this.#watchHost,
+        "seenOn",
+        key,
+        () => this.seenOn(key),
+        sameRef,
+        NO_IDS,
+      );
+      this.#seenOnCache.set(key, watch);
+    }
+    return watch;
+  }
+
   /**
    * Listen for a store event. Multiple listeners per type are allowed and fire in registration
    * order; a throwing listener is reported and does not break the dispatch. Returns an unsubscribe
@@ -421,6 +447,9 @@ export class ReactiveEventStore {
         return;
       case "replaceable":
         addToSetMap(this.#addressWatches, watch.key, watch);
+        return;
+      case "seenOn":
+        addToSetMap(this.#seenOnWatches, watch.key, watch);
         return;
       case "query": {
         const kinds = this.#queryKinds(watch);
@@ -447,6 +476,12 @@ export class ReactiveEventStore {
         removeFromSetMap(this.#addressWatches, watch.key, watch);
         if (this.#addressCache.get(watch.key) === watch) {
           this.#addressCache.delete(watch.key);
+        }
+        return;
+      case "seenOn":
+        removeFromSetMap(this.#seenOnWatches, watch.key, watch);
+        if (this.#seenOnCache.get(watch.key) === watch) {
+          this.#seenOnCache.delete(watch.key);
         }
         return;
       case "query": {
@@ -497,15 +532,30 @@ export class ReactiveEventStore {
       // instead of throwing after the event was already indexed.
       return;
     }
-    let urls = this.#seenOn.get(id);
-    if (!urls) {
-      urls = [];
-      this.#seenOn.set(id, urls);
-    }
+    const urls = this.#seenOn.get(id) ?? [];
     if (!urls.includes(url) && urls.length < SEEN_ON_PER_ID) {
-      urls.push(url);
+      // Copy-on-write: a stored list keeps its identity until it changes.
+      this.#seenOn.set(id, [...urls, url]);
+      this.#version += 1;
+      this.#markSeenOnDirty(id);
     }
-    trimOldest(this.#seenOn, this.#maxSeenOnEntries);
+    let evicted = false;
+    trimOldest(this.#seenOn, this.#maxSeenOnEntries, (key) => {
+      evicted = true;
+      this.#markSeenOnDirty(key);
+    });
+    if (evicted) {
+      this.#version += 1;
+    }
+  }
+
+  #markSeenOnDirty(id: string): void {
+    const watches = this.#seenOnWatches.get(id);
+    if (watches) {
+      for (const watch of watches) {
+        this.#markDirty(watch);
+      }
+    }
   }
 
   #onInsert(event: Event): void {
@@ -600,6 +650,11 @@ export class ReactiveEventStore {
     }
     for (const watch of this.#queryAnyKind) {
       this.#markDirty(watch);
+    }
+    for (const watches of this.#seenOnWatches.values()) {
+      for (const watch of watches) {
+        this.#markDirty(watch);
+      }
     }
     this.#scheduleFlush();
   }

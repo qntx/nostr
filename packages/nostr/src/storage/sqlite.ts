@@ -6,6 +6,7 @@ import type { Filter } from "../core/filter.ts";
 import { Kind } from "../core/kind.ts";
 import { SerialQueue } from "../core/serial.ts";
 import { eventAddress, formatEventAddress, parseEventAddress } from "../core/tag.ts";
+import { nowSeconds } from "../core/util.ts";
 import { DeletionState } from "./deletion.ts";
 import type { DeletionPlan } from "./deletion.ts";
 import { toStorageError } from "./error.ts";
@@ -68,7 +69,7 @@ export type SqlDriver = {
 const IN_CHUNK = 500;
 // Bump on any schema change: a database whose user_version does not match is
 // dropped and recreated, not migrated (the stores are caches of relay data).
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS events (
@@ -79,7 +80,8 @@ CREATE TABLE IF NOT EXISTS events (
   content TEXT NOT NULL,
   tags TEXT NOT NULL,
   sig TEXT NOT NULL,
-  address TEXT
+  address TEXT,
+  first_seen INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS events_address
   ON events(address) WHERE address IS NOT NULL;
@@ -473,8 +475,8 @@ export class SqliteEventStore implements EventStore {
 
   async #insertEvent(tx: SqlDriver, event: Event): Promise<void> {
     await tx.run(
-      `INSERT INTO events (id, pubkey, kind, created_at, content, tags, sig, address)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO events (id, pubkey, kind, created_at, content, tags, sig, address, first_seen)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         event.id,
         event.pubkey,
@@ -484,6 +486,7 @@ export class SqliteEventStore implements EventStore {
         JSON.stringify(event.tags),
         event.sig,
         eventAddress(event) ?? null,
+        nowSeconds(),
       ],
     );
     for (const tag of event.tags) {
@@ -516,6 +519,18 @@ export class SqliteEventStore implements EventStore {
       );
       const row = rows.at(0);
       return row === undefined ? undefined : rowToEvent(row);
+    } catch (error) {
+      throw toStorageError(error);
+    }
+  }
+
+  async firstSeenAt(id: string): Promise<number | undefined> {
+    try {
+      const rows = await this.#driver.all<{ first_seen: number }>(
+        `SELECT first_seen FROM events WHERE id = ?`,
+        [id.toLowerCase()],
+      );
+      return rows.at(0)?.first_seen;
     } catch (error) {
       throw toStorageError(error);
     }
