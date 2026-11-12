@@ -9,6 +9,12 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-12
+
+Per-event first-seen times in every event store, live seen-on relay watches, NIP-13 mining
+progress, and Blossom uploads that report progress, preflight optionally and say which server
+won.
+
 ### Added
 
 - `EventStore.firstSeenAt(id)`: the Unix-second wall-clock time at which the store physically
@@ -556,7 +562,9 @@ host and port needs one entry.
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr/compare/v0.15.3...HEAD
+[Unreleased]: https://github.com/qntx/nostr/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/qntx/nostr/compare/v0.15.4...v0.16.0
+[0.15.4]: https://github.com/qntx/nostr/compare/v0.15.3...v0.15.4
 [0.15.3]: https://github.com/qntx/nostr/compare/v0.15.2...v0.15.3
 [0.15.2]: https://github.com/qntx/nostr/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/qntx/nostr/compare/v0.15.0...v0.15.1
