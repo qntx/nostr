@@ -5,7 +5,7 @@
     "": {
       "name": "@qntx/nostr-monorepo",
       "devDependencies": {
-        "@getalby/sdk": "8.1.1",
+        "@getalby/sdk": "9.0.0",
         "@qntx/oxfmt": "1.1.1",
         "@qntx/oxlint": "1.1.1",
         "@qntx/tsconfig": "1.0.1",
@@ -139,7 +139,7 @@
 
     "@getalby/lightning-tools": ["@getalby/lightning-tools@9.0.2", "", {}, "sha512-h58Bw8oQg9MXdGud5agfRnjGVY24Hzj8hCljdIEZyijXjfkVdSXet2Mpjc3lz/BpIdZz51uM8CXuwnXi0BOqFg=="],
 
-    "@getalby/sdk": ["@getalby/sdk@8.1.1", "", { "dependencies": { "@getalby/lightning-tools": "^9.0.2", "@webbtc/webln-types": "^3.0.0", "nostr-tools": "^2.23.3" } }, "sha512-2Y+5bpSkqlUAh5azEjJl1BZ7hp52Yxy/Gaa1esAXJw6D0UszbycKO1WViX2FWGjqq1gW/wmRNkXWdwgaUk9qrg=="],
+    "@getalby/sdk": ["@getalby/sdk@9.0.0", "", { "dependencies": { "@getalby/lightning-tools": "^9.0.2", "@webbtc/webln-types": "^3.0.0", "nostr-tools": "^2.23.3" } }, "sha512-lUepv1KWXVAuycHsl3qYMkgvwol1fgjjyPDKEfpeQ9soNN3nupf8YAX+mbldK+w+caGai3iXfykzFmT7kmSfBw=="],
 
     "@isaacs/ttlcache": ["@isaacs/ttlcache@1.4.1", "", {}, "sha512-RQgQ4uQ+pLbqXfOmieB91ejmLwvSgv9nLx6sT6sD83s7umBypgg+OIBOBbEUiJXrfpnp9j0mRhYYdzp9uqq3lA=="],
 
