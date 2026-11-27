@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-27
+
 ### Fixed
 
 - `parseRelayMessage`/`parseClientMessage` (TS) and `RelayMessage`/`ClientMessage::from_json`
@@ -597,7 +599,8 @@ host and port needs one entry.
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/qntx/nostr/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/qntx/nostr/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/qntx/nostr/compare/v0.15.4...v0.16.0
 [0.15.4]: https://github.com/qntx/nostr/compare/v0.15.3...v0.15.4
 [0.15.3]: https://github.com/qntx/nostr/compare/v0.15.2...v0.15.3
