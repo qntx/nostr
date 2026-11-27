@@ -6,8 +6,17 @@ import type { Closer, RelaySubscription, SubscribeOptions } from "./subscription
 
 /** How a one-shot {@link Relay.fetch} REQ ended. */
 export type RelayFetchEnd =
-  | { readonly type: "eose" }
-  | { readonly type: "closed"; readonly reason: string }
+  | {
+      readonly type: "eose";
+      /** NIP-67 EOSE completeness hints, only when the relay sent a well-formed array. */
+      readonly hints?: ReadonlyArray<string> | undefined;
+    }
+  | {
+      readonly type: "closed";
+      readonly reason: string;
+      /** The NIP-01 `<params>` of the CLOSED frame, only when the relay sent one. */
+      readonly params?: string | undefined;
+    }
   | { readonly type: "timeout" };
 
 /** `Relay.fetch` result: collected events plus the REQ's end reason. */
@@ -93,11 +102,11 @@ export async function fetchFilters(
           seen.add(event.id);
           events.push(event);
         },
-        onEose() {
-          end = { type: "eose" };
+        onEose(hints) {
+          end = hints === undefined ? { type: "eose" } : { type: "eose", hints };
           done();
         },
-        onClose(reason) {
+        onClose(reason, params) {
           // The Subscription's own abort listener may close it before ours runs;
           // an aborted signal still rejects the fetch with the signal's reason.
           if (settled) {
@@ -108,7 +117,8 @@ export async function fetchFilters(
             return;
           }
           // A remote CLOSED (or transport drop) still returns collected events.
-          end = { type: "closed", reason };
+          end =
+            params === undefined ? { type: "closed", reason } : { type: "closed", reason, params };
           done();
         },
       });

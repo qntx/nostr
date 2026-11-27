@@ -2,6 +2,7 @@
 
 use alloc::borrow::Cow;
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt;
 
 use serde::de::{Error as DeError, SeqAccess, Visitor};
@@ -9,8 +10,8 @@ use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::{
-    CountResult, Error, Result, SubscriptionId, end, event_item, parse_neg_hex, read_type,
-    string_item, sub_id,
+    CountResult, Error, Result, SubscriptionId, drain, event_item, optional_hints, optional_string,
+    parse_neg_hex, read_type, string_item, sub_id,
 };
 use crate::event::{Event, EventId, canonical};
 
@@ -25,7 +26,7 @@ pub enum RelayMessage<'a> {
         /// The signed event.
         event: Cow<'a, Event>,
     },
-    /// `["OK", <event id>, <accepted>, <message>]`.
+    /// `["OK", <event id>, <accepted>, <message>, <params>?]`.
     Ok {
         /// The acknowledged event id (64 lowercase hex on the wire).
         event_id: EventId,
@@ -33,15 +34,26 @@ pub enum RelayMessage<'a> {
         accepted: bool,
         /// The machine-readable prefix + human-readable detail.
         message: Cow<'a, str>,
+        /// The NIP-01 `<params>` string, when the relay sent one; its meaning
+        /// depends on the message prefix (`rate-limited:` → retry-after ms).
+        params: Option<Cow<'a, str>>,
     },
-    /// `["EOSE", <id>]` — end of stored events.
-    Eose(Cow<'a, SubscriptionId>),
-    /// `["CLOSED", <id>, <message>]` — subscription closed by the relay.
+    /// `["EOSE", <id>, <hints>?]` — end of stored events.
+    Eose {
+        /// Subscription id.
+        subscription_id: Cow<'a, SubscriptionId>,
+        /// NIP-67 EOSE completeness hints, when the relay sent an all-string array.
+        hints: Option<Vec<String>>,
+    },
+    /// `["CLOSED", <id>, <message>, <params>?]` — subscription closed by the relay.
     Closed {
         /// Subscription id.
         subscription_id: Cow<'a, SubscriptionId>,
         /// The machine-readable prefix + human-readable detail.
         message: Cow<'a, str>,
+        /// The NIP-01 `<params>` string, when the relay sent one; its meaning
+        /// depends on the message prefix (`rate-limited:` → retry-after ms).
+        params: Option<Cow<'a, str>>,
     },
     /// `["NOTICE", <message>]` — a free-form notice.
     Notice(Cow<'a, str>),
@@ -81,6 +93,16 @@ const fn bool_str(value: bool) -> &'static str {
     if value { "true" } else { "false" }
 }
 
+/// `,["a","b"]` — the optional NIP-67 hints array of an EOSE frame.
+fn push_hints(hints: &[String], out: &mut String) {
+    out.push_str(",[");
+    for (i, hint) in hints.iter().enumerate() {
+        out.push_str(if i == 0 { "" } else { "," });
+        canonical::push_json_string(hint, out);
+    }
+    out.push(']');
+}
+
 impl RelayMessage<'_> {
     /// The canonical NIP-01 JSON wire form.
     #[must_use]
@@ -101,6 +123,7 @@ impl RelayMessage<'_> {
                 event_id,
                 accepted,
                 message,
+                params,
             } => {
                 out.push_str("[\"OK\",\"");
                 canonical::push_hex(event_id.as_bytes(), &mut out);
@@ -108,21 +131,36 @@ impl RelayMessage<'_> {
                 out.push_str(bool_str(*accepted));
                 out.push(',');
                 canonical::push_json_string(message, &mut out);
+                if let Some(params) = params {
+                    out.push(',');
+                    canonical::push_json_string(params, &mut out);
+                }
                 out.push(']');
             }
-            Self::Eose(subscription_id) => {
+            Self::Eose {
+                subscription_id,
+                hints,
+            } => {
                 out.push_str("[\"EOSE\",");
                 canonical::push_json_string(subscription_id.as_str(), &mut out);
+                if let Some(hints) = hints {
+                    push_hints(hints, &mut out);
+                }
                 out.push(']');
             }
             Self::Closed {
                 subscription_id,
                 message,
+                params,
             } => {
                 out.push_str("[\"CLOSED\",");
                 canonical::push_json_string(subscription_id.as_str(), &mut out);
                 out.push(',');
                 canonical::push_json_string(message, &mut out);
+                if let Some(params) = params {
+                    out.push(',');
+                    canonical::push_json_string(params, &mut out);
+                }
                 out.push(']');
             }
             Self::Notice(message) => {
@@ -180,12 +218,18 @@ impl RelayMessage<'_> {
 
     /// Parses a relay → client JSON message.
     ///
+    /// Every type requires its minimum arity and its required elements'
+    /// types; spec-defined optional elements (NIP-01 `<params>` on OK/CLOSED,
+    /// NIP-67 hints on EOSE, the NIP-77 NEG-ERR 4th element which is tolerated
+    /// but not surfaced) are kept when well-typed and treated as absent when
+    /// mistyped — the same policy COUNT applies to a bad `approximate`/`hll`.
+    /// Any further trailing elements are ignored.
+    ///
     /// # Errors
     ///
-    /// The same errors as [`crate::message::ClientMessage::from_json`]
-    /// except [`Error::ObsoleteNegOpen`]. `OK` requires a 64-char lowercase
-    /// hex event id; `COUNT` ignores non-bool `approximate` and non-512-hex
-    /// `hll` instead of failing.
+    /// The same errors as [`crate::message::ClientMessage::from_json`].
+    /// `OK` requires a 64-char lowercase hex event id; `COUNT` ignores
+    /// non-bool `approximate` and non-512-hex `hll` instead of failing.
     pub fn from_json(raw: &str) -> Result<RelayMessage<'static>> {
         serde_json::from_str(raw).map_err(|e| Error::InvalidJson {
             source: crate::json::JsonError::from(e),
@@ -207,18 +251,28 @@ impl RelayMessage<'_> {
                 event_id,
                 accepted,
                 message,
+                params,
             } => RelayMessage::Ok {
                 event_id,
                 accepted,
                 message: Cow::Owned(message.into_owned()),
+                params: params.map(|p| Cow::Owned(p.into_owned())),
             },
-            Self::Eose(id) => RelayMessage::Eose(Cow::Owned(id.into_owned())),
+            Self::Eose {
+                subscription_id,
+                hints,
+            } => RelayMessage::Eose {
+                subscription_id: Cow::Owned(subscription_id.into_owned()),
+                hints,
+            },
             Self::Closed {
                 subscription_id,
                 message,
+                params,
             } => RelayMessage::Closed {
                 subscription_id: Cow::Owned(subscription_id.into_owned()),
                 message: Cow::Owned(message.into_owned()),
+                params: params.map(|p| Cow::Owned(p.into_owned())),
             },
             Self::Notice(message) => RelayMessage::Notice(Cow::Owned(message.into_owned())),
             Self::Auth { challenge } => RelayMessage::Auth {
@@ -269,28 +323,45 @@ impl Serialize for RelayMessage<'_> {
                 event_id,
                 accepted,
                 message,
+                params,
             } => {
-                let mut seq = serializer.serialize_seq(Some(4))?;
+                let mut seq =
+                    serializer.serialize_seq(Some(if params.is_some() { 5 } else { 4 }))?;
                 seq.serialize_element("OK")?;
                 seq.serialize_element(event_id)?;
                 seq.serialize_element(accepted)?;
                 seq.serialize_element(&**message)?;
+                if let Some(params) = params {
+                    seq.serialize_element(&**params)?;
+                }
                 seq.end()
             }
-            Self::Eose(subscription_id) => {
-                let mut seq = serializer.serialize_seq(Some(2))?;
+            Self::Eose {
+                subscription_id,
+                hints,
+            } => {
+                let mut seq =
+                    serializer.serialize_seq(Some(if hints.is_some() { 3 } else { 2 }))?;
                 seq.serialize_element("EOSE")?;
                 seq.serialize_element(&**subscription_id)?;
+                if let Some(hints) = hints {
+                    seq.serialize_element(hints)?;
+                }
                 seq.end()
             }
             Self::Closed {
                 subscription_id,
                 message,
+                params,
             } => {
-                let mut seq = serializer.serialize_seq(Some(3))?;
+                let mut seq =
+                    serializer.serialize_seq(Some(if params.is_some() { 4 } else { 3 }))?;
                 seq.serialize_element("CLOSED")?;
                 seq.serialize_element(&**subscription_id)?;
                 seq.serialize_element(&**message)?;
+                if let Some(params) = params {
+                    seq.serialize_element(&**params)?;
+                }
                 seq.end()
             }
             Self::Notice(message) => {
@@ -363,7 +434,7 @@ impl<'de> Deserialize<'de> for RelayMessage<'static> {
                     "EVENT" => {
                         let subscription_id = sub_id(&mut seq, ty)?;
                         let event = event_item(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(RelayMessage::Event {
                             subscription_id: Cow::Owned(subscription_id),
                             event: Cow::Owned(event),
@@ -377,35 +448,43 @@ impl<'de> Deserialize<'de> for RelayMessage<'static> {
                             .next_element::<bool>()?
                             .ok_or_else(|| DeError::custom(Error::InvalidMessage { ty }))?;
                         let message = string_item(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        let params = optional_string(&mut seq)?;
+                        drain(&mut seq)?;
                         Ok(RelayMessage::Ok {
                             event_id,
                             accepted,
                             message: Cow::Owned(message),
+                            params: params.map(Cow::Owned),
                         })
                     }
                     "EOSE" => {
                         let id = sub_id(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
-                        Ok(RelayMessage::Eose(Cow::Owned(id)))
+                        let hints = optional_hints(&mut seq)?;
+                        drain(&mut seq)?;
+                        Ok(RelayMessage::Eose {
+                            subscription_id: Cow::Owned(id),
+                            hints,
+                        })
                     }
                     "CLOSED" => {
                         let subscription_id = sub_id(&mut seq, ty)?;
                         let message = string_item(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        let params = optional_string(&mut seq)?;
+                        drain(&mut seq)?;
                         Ok(RelayMessage::Closed {
                             subscription_id: Cow::Owned(subscription_id),
                             message: Cow::Owned(message),
+                            params: params.map(Cow::Owned),
                         })
                     }
                     "NOTICE" => {
                         let message = string_item(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(RelayMessage::Notice(Cow::Owned(message)))
                     }
                     "AUTH" => {
                         let challenge = string_item(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(RelayMessage::Auth {
                             challenge: Cow::Owned(challenge),
                         })
@@ -415,7 +494,7 @@ impl<'de> Deserialize<'de> for RelayMessage<'static> {
                         let result = seq
                             .next_element::<CountResult>()?
                             .ok_or_else(|| DeError::custom(Error::InvalidMessage { ty }))?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(RelayMessage::Count {
                             subscription_id: Cow::Owned(subscription_id),
                             result,
@@ -425,16 +504,17 @@ impl<'de> Deserialize<'de> for RelayMessage<'static> {
                         let subscription_id = sub_id(&mut seq, ty)?;
                         let message =
                             parse_neg_hex(&string_item(&mut seq, ty)?).map_err(DeError::custom)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(RelayMessage::NegMsg {
                             subscription_id: Cow::Owned(subscription_id),
                             message: Cow::Owned(message),
                         })
                     }
                     "NEG-ERR" => {
+                        // NIP-77 allows an optional 4th element; tolerated, not surfaced.
                         let subscription_id = sub_id(&mut seq, ty)?;
                         let message = string_item(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(RelayMessage::NegErr {
                             subscription_id: Cow::Owned(subscription_id),
                             message: Cow::Owned(message),

@@ -5,6 +5,11 @@ import type { Event } from "../core/event.ts";
 export type PublishResult = {
   readonly ok: boolean;
   readonly message: string;
+  /**
+   * The NIP-01 `<params>` of the OK frame; its meaning depends on the message prefix
+   * (`rate-limited:` → retry-after ms as a decimal string). Present only when the relay sent one.
+   */
+  readonly params?: string | undefined;
 };
 
 export type OkWaiter = {
@@ -92,6 +97,7 @@ export class OkTracker {
     eventId: string,
     ok: boolean,
     message: string,
+    params: string | undefined,
     retry: (waiter: OkWaiter) => boolean,
   ): OkWaiter | undefined {
     const waiter = this.#entries.get(eventId);
@@ -99,7 +105,7 @@ export class OkTracker {
       return undefined;
     }
     if (!retry(waiter)) {
-      this.settle(waiter, { ok, message });
+      this.settle(waiter, params === undefined ? { ok, message } : { ok, message, params });
       return undefined;
     }
     return waiter;

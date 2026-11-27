@@ -10,6 +10,7 @@ import {
   Relay,
   RelayClosedError,
   RelayConnectionError,
+  RelayPublishError,
   RelayStatus,
   RelayTimeoutError,
   SUBSCRIPTION_ID_MAX_CHARS,
@@ -3897,5 +3898,189 @@ describe("filter-mismatched EVENTs", () => {
     expect(result.end).toStrictEqual({ type: "eose" });
     expect(verifyCalls).toBe(0);
     relay.close();
+  });
+});
+
+describe("relay message trailing elements", () => {
+  test("fetch resolves promptly on a NIP-67 EOSE hints frame and surfaces them", async () => {
+    const relay = await Relay.connect("wss://eose-hints.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const started = Date.now();
+    const fetchP = relay.fetch([{ kinds: [1] }], { timeoutMs: 5000 });
+    const ws = MockWebSocket.last();
+    const req = ws.lastSent() as [string, string];
+    ws.receive(JSON.stringify(["EOSE", req[1], ["finish"]]));
+    const result = await fetchP;
+    // The hinted EOSE ends the fetch — no waiting out the 5000 ms timeout.
+    expect(Date.now() - started).toBeLessThan(2500);
+    expect(result.end).toStrictEqual({ type: "eose", hints: ["finish"] });
+    relay.close();
+  });
+
+  test("fetch end is a bare eose on a plain EOSE frame", async () => {
+    const relay = await Relay.connect("wss://eose-plain.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const fetchP = relay.fetch([{ kinds: [1] }], { timeoutMs: 5000 });
+    const ws = MockWebSocket.last();
+    const req = ws.lastSent() as [string, string];
+    ws.receive(JSON.stringify(["EOSE", req[1]]));
+    const result = await fetchP;
+    expect(result.end).toStrictEqual({ type: "eose" });
+    relay.close();
+  });
+
+  test("CLOSED params reach fetch, stream, and count", async () => {
+    const relay = await Relay.connect("wss://closed-params.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const ws = MockWebSocket.last();
+
+    const fetchP = relay.fetch([{ kinds: [1] }], { timeoutMs: 5000 });
+    const req = ws.lastSent() as [string, string];
+    ws.receive(JSON.stringify(["CLOSED", req[1], "rate-limited: slow down", "1500"]));
+    const result = await fetchP;
+    expect(result.end).toStrictEqual({
+      type: "closed",
+      reason: "rate-limited: slow down",
+      params: "1500",
+    });
+
+    const stream = relay.stream([{ kinds: [1] }]);
+    const req2 = ws.lastSent() as [string, string];
+    const drain = (async (): Promise<void> => {
+      for await (const _event of stream) {
+        // drain until the relay ends it
+      }
+    })();
+    ws.receive(JSON.stringify(["CLOSED", req2[1], "rate-limited: slow down", "1500"]));
+    const streamErr = await captureError(drain);
+    expect(streamErr).toBeInstanceOf(RelayClosedError);
+    expect(errText(streamErr)).toContain("rate-limited: slow down");
+    expect((streamErr as RelayClosedError).params).toBe("1500");
+
+    const countP = relay.count([{ kinds: [1] }]);
+    const req3 = ws.lastSent() as [string, string];
+    ws.receive(JSON.stringify(["CLOSED", req3[1], "rate-limited: slow down", "1500"]));
+    const countErr = await captureError(countP);
+    expect(countErr).toBeInstanceOf(RelayClosedError);
+    expect((countErr as RelayClosedError).params).toBe("1500");
+
+    relay.close();
+  });
+
+  test("publish and Pool.publish surface OK params", async () => {
+    const relay = await Relay.connect("wss://ok-params.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const note = EventBuilder.textNote("p").createdAt(1).signWithKeys(Keys.fromSecretKey(SK));
+    const publishP = relay.publish(note);
+    const ws = MockWebSocket.last();
+    ws.receive(JSON.stringify(["OK", note.id, true, "", "1000"]));
+    await expect(publishP).resolves.toStrictEqual({ ok: true, message: "", params: "1000" });
+    relay.close();
+
+    const pool = new Pool();
+    const pooled = pool.publish(["wss://ok-params-pool.example"], note);
+    await waitUntil(() => MockWebSocket.instances.length > 0);
+    const pws = MockWebSocket.last();
+    await waitUntil(() => hasSent(pws, "EVENT"));
+    pws.receive(JSON.stringify(["OK", note.id, true, "", "2500"]));
+    const [result] = await pooled;
+    expect(result).toStrictEqual({
+      url: "wss://ok-params-pool.example/",
+      status: "ok",
+      message: "",
+      params: "2500",
+    });
+    pool.close();
+  });
+
+  test("Pool.publishAny carries OK params into the rejection", async () => {
+    const pool = new Pool();
+    const note = EventBuilder.textNote("p").createdAt(1).signWithKeys(Keys.fromSecretKey(SK));
+    const publishP = pool.publishAny(["wss://ok-params-any.example"], note);
+    await waitUntil(() => MockWebSocket.instances.length > 0);
+    const ws = MockWebSocket.last();
+    await waitUntil(() => hasSent(ws, "EVENT"));
+    ws.receive(JSON.stringify(["OK", note.id, false, "rate-limited: slow down", "1000"]));
+    const err = await captureError(publishP);
+    expect(err).toBeInstanceOf(AggregateError);
+    const inner = must((err as AggregateError).errors[0], "publishAny rejection");
+    expect(inner).toBeInstanceOf(RelayPublishError);
+    expect((inner as RelayPublishError).params).toBe("1000");
+    pool.close();
+  });
+
+  test("live subscribe: EOSE hints reach coalesced subscribers and CLOSED params reach onClose", async () => {
+    const relay = await Relay.connect("wss://live-extras.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const eoses: Array<ReadonlyArray<string> | undefined> = [];
+    const closes: Array<[string, string | undefined]> = [];
+    relay.subscribe([{ kinds: [1] }], {
+      onEose: (hints) => eoses.push(hints),
+      onClose: (reason, params) => closes.push([reason, params]),
+    });
+    relay.subscribe([{ kinds: [1] }], {
+      onEose: (hints) => eoses.push(hints),
+    });
+    const ws = MockWebSocket.last();
+    // Identical filters coalesce into one wire REQ.
+    const reqs = sentMessages(ws).filter((m) => m[0] === "REQ");
+    expect(reqs).toHaveLength(1);
+    const [, wireId] = reqs[0]!;
+    ws.receive(JSON.stringify(["EOSE", wireId, ["auth", "finish"]]));
+    expect(eoses).toStrictEqual([
+      ["auth", "finish"],
+      ["auth", "finish"],
+    ]);
+    ws.receive(JSON.stringify(["CLOSED", wireId, "rate-limited: slow down", "3000"]));
+    expect(closes).toStrictEqual([["rate-limited: slow down", "3000"]]);
+    relay.close();
+  });
+
+  test("malformed relay frames fire invalidmessage and settle nothing", async () => {
+    const relay = await Relay.connect("wss://bad-frames.example", {
+      websocketImplementation: MockWebSocketCtor,
+    });
+    const invalid: Array<{ raw: string; error: Error }> = [];
+    relay.on("invalidmessage", (payload) => invalid.push(payload));
+    const fetchP = relay.fetch([{ kinds: [1] }], { timeoutMs: 1000 });
+    const ws = MockWebSocket.last();
+    const req = ws.lastSent() as [string, string];
+    ws.receive(JSON.stringify(["EOSE", 42]));
+    expect(invalid).toHaveLength(1);
+    const first = must(invalid[0], "invalidmessage payload");
+    expect(first.raw).toBe('["EOSE",42]');
+    expect(first.error).toBeInstanceOf(MessageError);
+    // The dropped frame settled nothing — the fetch still completes on its own EOSE.
+    ws.receive(JSON.stringify(["EOSE", req[1]]));
+    const result = await fetchP;
+    expect(result.end).toStrictEqual({ type: "eose" });
+    relay.close();
+  });
+
+  test("Pool forwards invalidmessage with the normalized relay url", async () => {
+    const pool = new Pool();
+    const invalid: Array<{ url: string; raw: string; error: Error }> = [];
+    pool.on("invalidmessage", (payload) => invalid.push(payload));
+    const fetchP = pool.fetchEach(["wss://bad-frames.example"], [{ kinds: [1] }], {
+      timeoutMs: 1000,
+    });
+    await waitUntil(() => MockWebSocket.instances.length > 0);
+    const ws = MockWebSocket.last();
+    await waitUntil(() => hasSent(ws, "REQ"));
+    ws.receive(JSON.stringify(["EOSE", 42]));
+    expect(invalid).toHaveLength(1);
+    const first = must(invalid[0], "pool invalidmessage payload");
+    expect(first.url).toBe("wss://bad-frames.example/");
+    expect(first.error).toBeInstanceOf(MessageError);
+    const req = ws.lastSent() as [string, string];
+    ws.receive(JSON.stringify(["EOSE", req[1], ["finish"]]));
+    const [res] = await fetchP;
+    expect(res?.end).toStrictEqual({ type: "eose", hints: ["finish"] });
+    pool.close();
   });
 });

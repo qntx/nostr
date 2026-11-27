@@ -96,18 +96,48 @@ export type PoolEventMap = {
    * `until` the epoch-ms time the suspension lifts.
    */
   suspend: { readonly url: string; readonly until: number };
+  /**
+   * A socket frame that failed parseRelayMessage and was dropped: `url` is the normalized relay
+   * URL, `raw` the frame text, `error` the parse failure.
+   */
+  invalidmessage: { readonly url: string; readonly raw: string; readonly error: Error };
 };
 
 /** Per-relay publish outcome: the relay's OK verdict or a transport-level failure. */
 export type PoolPublishResult =
-  | { readonly url: string; readonly status: "ok"; readonly message: string }
-  | { readonly url: string; readonly status: "rejected"; readonly message: string }
+  | {
+      readonly url: string;
+      readonly status: "ok";
+      readonly message: string;
+      /** The NIP-01 `<params>` of the OK frame, only when the relay sent one. */
+      readonly params?: string | undefined;
+    }
+  | {
+      readonly url: string;
+      readonly status: "rejected";
+      readonly message: string;
+      /** The NIP-01 `<params>` of the OK frame, only when the relay sent one. */
+      readonly params?: string | undefined;
+    }
   | { readonly url: string; readonly status: "failed"; readonly error: Error };
 
 /** Multi-relay subscribe options: callbacks also receive the normalized relay URL. */
-export type PoolSubscribeOptions = Omit<SubscribeOptions, "onEvent" | "onEventSeen"> & {
+export type PoolSubscribeOptions = Omit<
+  SubscribeOptions,
+  "onEvent" | "onEventSeen" | "onEose" | "onClose"
+> & {
   onEvent?: ((event: Event, relayUrl: string) => void) | undefined;
   onEventSeen?: ((id: string, relayUrl: string) => void) | undefined;
+  /**
+   * Fired once when every participating relay EOSE'd. The pool's aggregate EOSE carries no
+   * per-relay NIP-67 hints.
+   */
+  onEose?: (() => void) | undefined;
+  /**
+   * Fired when the pool-level subscription ends. Aggregate closes carry no per-relay CLOSED
+   * `<params>`.
+   */
+  onClose?: ((reason: string) => void) | undefined;
 };
 
 /** Per-relay one-shot fetch outcome: collected events plus how its REQ ended. */
@@ -376,6 +406,9 @@ export class Pool {
       created.on("invalidevent", () => {
         this.#noteInvalidEvent(norm);
       });
+      created.on("invalidmessage", ({ raw, error }) => {
+        this.#events.emit("invalidmessage", { url: norm, raw, error });
+      });
       if (signFn) {
         created.on("auth", () => {
           void (async (): Promise<void> => {
@@ -548,9 +581,10 @@ export class Pool {
           });
           this.#touch(relay.url);
           const result = await relay.publish(event, { timeoutMs: opts?.timeoutMs });
-          return result.ok
-            ? { url, status: "ok", message: result.message }
-            : { url, status: "rejected", message: result.message };
+          const out = result.ok
+            ? { url, status: "ok" as const, message: result.message }
+            : { url, status: "rejected" as const, message: result.message };
+          return Object.assign(out, result.params === undefined ? {} : { params: result.params });
         } catch (error) {
           return { url, status: "failed", error: toError(error) };
         }
@@ -572,9 +606,10 @@ export class Pool {
         this.#touch(relay.url);
         const result = await relay.publish(event, { timeoutMs: opts?.timeoutMs });
         if (!result.ok) {
-          throw new RelayPublishError(result.message || "rejected", relay.url);
+          throw new RelayPublishError(result.message || "rejected", relay.url, result.params);
         }
-        return { url, status: "ok" as const, message: result.message };
+        const ok = { url, status: "ok" as const, message: result.message };
+        return Object.assign(ok, result.params === undefined ? {} : { params: result.params });
       }),
     );
   }

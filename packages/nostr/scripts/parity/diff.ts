@@ -364,6 +364,36 @@ function negHex({ bad = false } = {}): string {
   return randHex(2 * (int(32) + 1), { anyCase: chance(0.4) });
 }
 
+// Trailing elements beyond a message's defined arity are ignored by both
+// parsers; spec-defined optional slots (NIP-01 `<params>` on OK/CLOSED, NIP-67
+// EOSE hints, the NEG-ERR 4th element) keep well-typed values and treat
+// mistyped ones as absent.
+function junkTail(): string {
+  const items = Array.from({ length: int(2) + 1 }, () =>
+    pick([JSON.stringify(randString(12)), "7", "null", "{}", "true", `["x",${int(9)}]`]),
+  );
+  return `,${items.join(",")}`;
+}
+
+// A `<params>` slot value: usually a string, sometimes mistyped (dropped).
+function paramsTail(): string {
+  return `,${chance(0.6) ? JSON.stringify(randString(12)) : pick(["7", "null", "{}"])}`;
+}
+
+// A NIP-67 EOSE hints slot: well-formed all-string arrays (empty included) or
+// mistyped values that both parsers treat as absent.
+function hintsTail(): string {
+  return `,${pick([
+    `["${randString(6)}","${randString(6)}"]`,
+    '["finish"]',
+    "[]",
+    `["more",${int(9)}]`,
+    JSON.stringify(randString(8)),
+    "7",
+    "null",
+  ])}`;
+}
+
 // Each client/relay message is assembled as raw text so arity, key order,
 // number spellings, and corrupted items stay under generator control. Roughly
 // one in six messages is malformed on purpose — rejection is parity-checked.
@@ -381,11 +411,12 @@ function clientMessageText(): string {
     "BOGUS",
   ]);
   const id = JSON.stringify(subId());
+  const tail = chance(0.25) ? junkTail() : "";
   switch (label) {
     case "EVENT":
-      return `["EVENT",${eventJson({ corrupt: 0.12 })}]`;
+      return `["EVENT",${eventJson({ corrupt: 0.12 })}${tail}]`;
     case "AUTH":
-      return `["AUTH",${eventJson({ corrupt: 0.12 })}]`;
+      return `["AUTH",${eventJson({ corrupt: 0.12 })}${tail}]`;
     case "REQ":
     case "COUNT": {
       const filters = Array.from({ length: int(4) }, () =>
@@ -395,21 +426,21 @@ function clientMessageText(): string {
       return `["${label}",${head}${filters.length > 0 ? "," : ""}${filters.join(",")}]`;
     }
     case "CLOSE":
-      return `["CLOSE",${id}]`;
+      return `["CLOSE",${id}${tail}]`;
     case "NEG-OPEN": {
       if (chance(0.1)) {
-        // Obsolete 5-item form: both parsers reject it.
-        return `["NEG-OPEN",${id},${filterJson()},${JSON.stringify(negHex())},"legacy"]`;
+        // The real legacy form: element 3 is a hex length, not hex — both reject.
+        return `["NEG-OPEN",${id},${filterJson()},32,${JSON.stringify(negHex())}]`;
       }
       const hexPart = chance(0.15)
         ? JSON.stringify(negHex({ bad: true }))
         : JSON.stringify(negHex());
-      return `["NEG-OPEN",${id},${chance(0.1) ? "7" : filterJson()},${hexPart}]`;
+      return `["NEG-OPEN",${id},${chance(0.1) ? "7" : filterJson()},${hexPart}${tail}]`;
     }
     case "NEG-MSG":
-      return `["NEG-MSG",${id},${JSON.stringify(negHex({ bad: chance(0.15) }))}]`;
+      return `["NEG-MSG",${id},${JSON.stringify(negHex({ bad: chance(0.15) }))}${tail}]`;
     case "NEG-CLOSE":
-      return `["NEG-CLOSE",${id}]`;
+      return `["NEG-CLOSE",${id}${tail}]`;
     default:
       return pick([
         `["${label}"]`,
@@ -437,24 +468,30 @@ function relayMessageText(): string {
   ]);
   const id = JSON.stringify(subId());
   const message = JSON.stringify(randString(40));
+  const tail = chance(0.2) ? junkTail() : "";
   switch (label) {
     case "EVENT":
-      return `["EVENT",${id},${eventJson({ corrupt: 0.12 })}]`;
+      return `["EVENT",${id},${eventJson({ corrupt: 0.12 })}${tail}]`;
     case "OK": {
       const okId = chance(0.15)
         ? pick([randHex(64, { anyCase: true }), randHex(63), `${randHex(64)}z`])
         : randHex(64);
       const accepted = chance(0.15) ? '"yes"' : chance(0.5) ? "true" : "false";
-      return `["OK",${JSON.stringify(okId)},${accepted},${message}]`;
+      const params = chance(0.4) ? paramsTail() : "";
+      return `["OK",${JSON.stringify(okId)},${accepted},${message}${params}${tail}]`;
     }
-    case "EOSE":
-      return `["EOSE",${id}]`;
-    case "CLOSED":
-      return `["CLOSED",${id},${message}]`;
+    case "EOSE": {
+      const hints = chance(0.4) ? hintsTail() : "";
+      return `["EOSE",${id}${hints}${tail}]`;
+    }
+    case "CLOSED": {
+      const params = chance(0.4) ? paramsTail() : "";
+      return `["CLOSED",${id},${message}${params}${tail}]`;
+    }
     case "AUTH":
-      return `["AUTH",${message}]`;
+      return `["AUTH",${message}${tail}]`;
     case "NOTICE":
-      return `["NOTICE",${message}]`;
+      return `["NOTICE",${message}${tail}]`;
     case "COUNT": {
       const count = chance(0.2)
         ? pick(["-1", "9007199254740992", "3.5", '"5"', "null", "9007199254740993"])
@@ -472,14 +509,13 @@ function relayMessageText(): string {
       if (chance(0.15)) {
         parts.push(`"extra":${int(9)}`);
       }
-      return `["COUNT",${id},{${parts.join(",")}}]`;
+      return `["COUNT",${id},{${parts.join(",")}}${tail}]`;
     }
     case "NEG-MSG":
-      return `["NEG-MSG",${id},${JSON.stringify(negHex({ bad: chance(0.15) }))}]`;
-    case "NEG-ERR": {
-      const tail = chance(0.2) ? `,${JSON.stringify(randString(8))}` : "";
-      return `["NEG-ERR",${id},${message}${tail}]`;
-    }
+      return `["NEG-MSG",${id},${JSON.stringify(negHex({ bad: chance(0.15) }))}${tail}]`;
+    case "NEG-ERR":
+      // NIP-77's optional 4th element is tolerated but never surfaced.
+      return `["NEG-ERR",${id},${message}${chance(0.4) ? junkTail() : ""}]`;
     default:
       return pick([
         `["${label}",${id}]`,

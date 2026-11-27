@@ -94,6 +94,11 @@ export type RelayEventMap = {
    */
   invalidevent: undefined;
   /**
+   * Fired when a socket frame fails {@link parseRelayMessage} and is dropped: it matched no known
+   * relay message shape, so nothing it might have carried (EOSE, OK, CLOSED…) settles.
+   */
+  invalidmessage: { readonly raw: string; readonly error: Error };
+  /**
    * Fired once when the event verifier throws: the verifier is considered dead and every later
    * EVENT is dropped silently instead of letting the exception escape the socket listener.
    */
@@ -602,7 +607,8 @@ export class Relay {
     let msg;
     try {
       msg = parseRelayMessage(raw);
-    } catch {
+    } catch (error) {
+      this.#events.emit("invalidmessage", { raw, error: toError(error) });
       return;
     }
 
@@ -616,15 +622,15 @@ export class Relay {
         break;
       }
       case "EOSE": {
-        const [, subId] = msg;
+        const [, subId, hints] = msg;
         if (this.#ping.finishDummyPing(subId)) {
           return;
         }
-        this.#subscriptions.handleEose(subId);
+        this.#subscriptions.handleEose(subId, hints);
         break;
       }
       case "CLOSED": {
-        const [, subId, reason] = msg;
+        const [, subId, reason, params] = msg;
         if (this.#ping.finishDummyPing(subId)) {
           return;
         }
@@ -635,12 +641,12 @@ export class Relay {
             void this.#countRequests.authRetry(countWaiter, {
               ensureAuthed: this.#ensureAuthed,
               isOpen: () => this.#isOpen(),
-              failError: () => new RelayClosedError(reason || "COUNT closed", this.url),
+              failError: () => new RelayClosedError(reason || "COUNT closed", this.url, params),
               send: () => this.#send(["COUNT", subId, ...countWaiter.filters]),
             });
             return;
           }
-          countWaiter.reject(new RelayClosedError(reason || "COUNT closed", this.url));
+          countWaiter.reject(new RelayClosedError(reason || "COUNT closed", this.url, params));
           return;
         }
         const sub = this.#subscriptions.get(subId);
@@ -651,15 +657,16 @@ export class Relay {
           void this.#subscriptions.authRetry(sub, reason, this.#ensureAuthed);
           return;
         }
-        this.#subscriptions.drop(sub, reason);
+        this.#subscriptions.drop(sub, reason, params);
         break;
       }
       case "OK": {
-        const [, eventId, ok, message] = msg;
+        const [, eventId, ok, message, params] = msg;
         const waiter = this.#ok.handleOk(
           eventId,
           ok,
           message,
+          params,
           (w) =>
             !ok &&
             isAuthRequired(message) &&

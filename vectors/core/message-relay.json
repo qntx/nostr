@@ -4,7 +4,7 @@
   "source": {
     "kind": "generated",
     "generator": "@qntx/nostr",
-    "version": "0.14.0",
+    "version": "0.16.0",
     "cross_check": null
   },
   "cases": [
@@ -69,6 +69,93 @@
       "raw": "[\"EOSE\",\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"]"
     },
     {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",false,\"rate-limited: slow down\",\"1000\"]"
+    },
+    {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\",\"p\",\"x\"]",
+      "encoded": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\",\"p\"]"
+    },
+    {
+      "raw": "[\"EOSE\",\"s\",[\"finish\"]]"
+    },
+    {
+      "raw": "[\"EOSE\",\"s\",[\"auth\",\"finish\"]]"
+    },
+    {
+      "raw": "[\"EOSE\",\"s\",[]]"
+    },
+    {
+      "raw": "[\"CLOSED\",\"s\",\"rate-limited: slow down\",\"2500\"]"
+    },
+    {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\",1000]",
+      "encoded": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\"]"
+    },
+    {
+      "raw": "[\"EOSE\",\"s\",\"x\"]",
+      "encoded": "[\"EOSE\",\"s\"]"
+    },
+    {
+      "raw": "[\"EOSE\",\"s\",[\"more\",1]]",
+      "encoded": "[\"EOSE\",\"s\"]"
+    },
+    {
+      "raw": "[\"CLOSED\",\"s\",\"m\",5]",
+      "encoded": "[\"CLOSED\",\"s\",\"m\"]"
+    },
+    {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\",1e400]",
+      "encoded": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\"]"
+    },
+    {
+      "raw": "[\"EOSE\",\"s\",1e400]",
+      "encoded": "[\"EOSE\",\"s\"]"
+    },
+    {
+      "raw": "[\"EOSE\",\"s\",[\"more\",1e400]]",
+      "encoded": "[\"EOSE\",\"s\"]"
+    },
+    {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\",\"\\ud800\"]",
+      "encoded": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\"]"
+    },
+    {
+      "raw": "[\"EOSE\",\"s\",[\"finish\",\"\\ud800\"]]",
+      "encoded": "[\"EOSE\",\"s\"]"
+    },
+    {
+      "raw": "[\"EVENT\",\"s\",{\"id\":\"791e76a4715f1514309947f51c1d20a6f80698833ecc97b7b3a9c56cc3063113\",\"pubkey\":\"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",\"created_at\":1700000000,\"kind\":1,\"tags\":[[\"t\",\"hi\"]],\"content\":\"gm\",\"sig\":\"35931bdb21989c9049272418de0df733b0ebede3bcb45c54161511d8633cab516d6b25cd808ddb8cbba7600940678e3ba3fe655a830abbe631e640e9fc460ff1\"},\"x\"]",
+      "encoded": "[\"EVENT\",\"s\",{\"id\":\"791e76a4715f1514309947f51c1d20a6f80698833ecc97b7b3a9c56cc3063113\",\"pubkey\":\"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",\"created_at\":1700000000,\"kind\":1,\"tags\":[[\"t\",\"hi\"]],\"content\":\"gm\",\"sig\":\"35931bdb21989c9049272418de0df733b0ebede3bcb45c54161511d8633cab516d6b25cd808ddb8cbba7600940678e3ba3fe655a830abbe631e640e9fc460ff1\"}]"
+    },
+    {
+      "raw": "[\"NOTICE\",\"a\",\"b\"]",
+      "encoded": "[\"NOTICE\",\"a\"]"
+    },
+    {
+      "raw": "[\"AUTH\",\"c\",\"extra\"]",
+      "encoded": "[\"AUTH\",\"c\"]"
+    },
+    {
+      "raw": "[\"COUNT\",\"s\",{\"count\":3},\"x\"]",
+      "encoded": "[\"COUNT\",\"s\",{\"count\":3}]"
+    },
+    {
+      "raw": "[\"NEG-MSG\",\"s\",\"deadbeef\",\"x\"]",
+      "encoded": "[\"NEG-MSG\",\"s\",\"deadbeef\"]"
+    },
+    {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\",\"p\",1e400]",
+      "encoded": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,\"\",\"p\"]"
+    },
+    {
+      "raw": "[\"NEG-ERR\",\"s\",\"error\",\"extra\"]",
+      "encoded": "[\"NEG-ERR\",\"s\",\"error\"]"
+    },
+    {
+      "raw": "[\"NEG-ERR\",\"s\",\"error\",100000]",
+      "encoded": "[\"NEG-ERR\",\"s\",\"error\"]"
+    },
+    {
       "raw": "not json",
       "error": "MessageError"
     },
@@ -105,6 +192,10 @@
       "error": "MessageError"
     },
     {
+      "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"true\",\"\",\"1000\"]",
+      "error": "MessageError"
+    },
+    {
       "raw": "[\"OK\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,5]",
       "error": "MessageError"
     },
@@ -113,11 +204,11 @@
       "error": "MessageError"
     },
     {
-      "raw": "[\"EOSE\",\"s\",\"x\"]",
+      "raw": "[\"EOSE\",42]",
       "error": "MessageError"
     },
     {
-      "raw": "[\"EOSE\",42]",
+      "raw": "[\"EOSE\",42,[\"finish\"]]",
       "error": "MessageError"
     },
     {
@@ -129,11 +220,11 @@
       "error": "MessageError"
     },
     {
-      "raw": "[\"NOTICE\"]",
+      "raw": "[\"CLOSED\",\"s\",5,\"1000\"]",
       "error": "MessageError"
     },
     {
-      "raw": "[\"NOTICE\",\"a\",\"b\"]",
+      "raw": "[\"NOTICE\"]",
       "error": "MessageError"
     },
     {
@@ -194,10 +285,6 @@
     },
     {
       "raw": "[\"NEG-ERR\",\"s\",1]",
-      "error": "MessageError"
-    },
-    {
-      "raw": "[\"NEG-ERR\",\"s\",\"error\",\"extra\"]",
       "error": "MessageError"
     },
     {

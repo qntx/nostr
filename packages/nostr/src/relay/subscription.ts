@@ -8,8 +8,18 @@ import { RelayClosedError } from "./error.ts";
 
 export type SubscriptionHandlers = {
   onEvent?: ((event: Event) => void) | undefined;
-  onEose?: (() => void) | undefined;
-  onClose?: ((reason: string) => void) | undefined;
+  /**
+   * Fired when EOSE arrives. `hints` carries the relay's NIP-67 EOSE completeness hints only when
+   * it sent a well-formed array; undefined for a plain EOSE and for a synthesized `eoseTimeoutMs`
+   * EOSE.
+   */
+  onEose?: ((hints?: ReadonlyArray<string>) => void) | undefined;
+  /**
+   * Fired when the subscription ends. `params` carries the NIP-01 `<params>` of a relay-sent CLOSED
+   * frame (meaning depends on the prefix, `rate-limited:` → retry-after ms); undefined for local
+   * and transport closes.
+   */
+  onClose?: ((reason: string, params?: string) => void) | undefined;
   /** Skip verify + onEvent when true. Evaluated after parse, before verify. */
   alreadyHaveEvent?: ((id: string) => boolean) | undefined;
   /**
@@ -119,24 +129,24 @@ export class Subscription {
    * Local close: idempotent; clears the EOSE timer and abort listener, detaches via `onLocalClose`
    * (sends CLOSE / leaves the live group), then fires `onClose`.
    */
-  close(reason = "closed by client"): void {
+  close(reason = "closed by client", params?: string): void {
     if (this.#closed) {
       return;
     }
     this.#closed = true;
     this.#teardown();
     this.#onLocalClose(this);
-    invokeSafely(() => this.#handlers.onClose?.(reason));
+    invokeSafely(() => this.#handlers.onClose?.(reason, params));
   }
 
   /** Remote/transport termination: like {@link close} but `onLocalClose` is not called. */
-  end(reason: string): void {
+  end(reason: string, params?: string): void {
     if (this.#closed) {
       return;
     }
     this.#closed = true;
     this.#teardown();
-    invokeSafely(() => this.#handlers.onClose?.(reason));
+    invokeSafely(() => this.#handlers.onClose?.(reason, params));
   }
 
   #teardown(): void {
@@ -149,7 +159,7 @@ export class Subscription {
   }
 
   /** Mark EOSE: fires `onEose`, then closes when `closeOnEose`. No-op when closed or EOSE'd. */
-  markEose(): void {
+  markEose(hints?: ReadonlyArray<string>): void {
     if (this.#closed || this.#eosed) {
       return;
     }
@@ -158,7 +168,7 @@ export class Subscription {
       clearTimeout(this.#eoseTimer);
       this.#eoseTimer = undefined;
     }
-    invokeSafely(() => this.#handlers.onEose?.());
+    invokeSafely(() => this.#handlers.onEose?.(hints));
     if (this.closeOnEose) {
       this.close("eose");
     }
@@ -286,7 +296,7 @@ export function subscriptionToAsyncIterable(
       queue.push(event);
       notify();
     },
-    onClose(reason) {
+    onClose(reason, params) {
       // The Subscription's own abort listener fires before this wrapper's,
       // so a signal-driven close can surface here while localClose is still
       // false — it is still a local close, not a remote one.
@@ -294,7 +304,7 @@ export function subscriptionToAsyncIterable(
         localClose = true;
       }
       if (!localClose && reason) {
-        error = new RelayClosedError(reason);
+        error = new RelayClosedError(reason, undefined, params);
       }
       done = true;
       notify();

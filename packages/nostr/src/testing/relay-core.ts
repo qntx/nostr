@@ -447,13 +447,9 @@ export class FakeRelayCore implements FakeRelay {
         return;
       }
       case "NEG-OPEN": {
-        if (items.length === 5) {
-          this.#send(session, ["NEG-ERR", items[1], "error: obsolete 5-element NEG-OPEN"]);
-          return;
-        }
         const [, id, rawFilter, negMessage] = items;
         if (
-          items.length !== 4 ||
+          items.length < 4 ||
           typeof id !== "string" ||
           !isFilter(rawFilter) ||
           typeof negMessage !== "string"
@@ -482,7 +478,7 @@ export class FakeRelayCore implements FakeRelay {
       }
       case "NEG-MSG": {
         const [, id, negMessage] = items;
-        if (items.length !== 3 || typeof id !== "string" || typeof negMessage !== "string") {
+        if (items.length < 3 || typeof id !== "string" || typeof negMessage !== "string") {
           return;
         }
         const handle = session.negs.get(id);

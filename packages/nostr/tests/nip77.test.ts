@@ -212,9 +212,6 @@ describe("NIP-77 message codec", () => {
     expect(() =>
       parseClientMessage(JSON.stringify(["NEG-OPEN", "n1", { kinds: [1] }, 32, "61"])),
     ).toThrow(MessageError);
-    expect(() =>
-      parseClientMessage(JSON.stringify(["NEG-OPEN", "n1", { kinds: [1] }, 32, "61"])),
-    ).toThrow(/obsolete 5-element NEG-OPEN/);
   });
 
   test("parses NEG-MSG / NEG-CLOSE / NEG-ERR", () => {
@@ -239,14 +236,15 @@ describe("NIP-77 message codec", () => {
     ]);
   });
 
-  test("rejects NEG-ERR arity other than 3", () => {
+  test("rejects NEG-ERR arity below 3 and tolerates a 4th element", () => {
     expect(() => parseRelayMessage(JSON.stringify(["NEG-ERR", "n1"]))).toThrow(MessageError);
-    expect(() =>
+    // NIP-77's optional 4th element is tolerated, not surfaced.
+    expect(
       parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "blocked: too big", 100])),
-    ).toThrow(MessageError);
-    expect(() =>
+    ).toStrictEqual(["NEG-ERR", "n1", "blocked: too big"]);
+    expect(
       parseRelayMessage(JSON.stringify(["NEG-ERR", "n1", "blocked", 1, "extra"])),
-    ).toThrow(MessageError);
+    ).toStrictEqual(["NEG-ERR", "n1", "blocked"]);
     expect(() => parseRelayMessage(JSON.stringify(["NEG-ERR", 1, "blocked"]))).toThrow(
       MessageError,
     );

@@ -9,6 +9,41 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Fixed
+
+- `parseRelayMessage`/`parseClientMessage` (TS) and `RelayMessage`/`ClientMessage::from_json`
+  (nk-core) now require only each type's minimum arity: trailing elements are ignored, and the
+  spec-defined optional elements — NIP-01 `<params>` on OK/CLOSED, NIP-67 EOSE completeness hints, the
+  NIP-77 NEG-ERR 4th element (tolerated, not surfaced) — are kept when well-typed and treated as
+  absent when mistyped, the same policy COUNT already applied to a bad `approximate`/`hll`.
+  Conforming relay frames like `["EOSE",id,["finish"]]` and `["OK",id,ok,msg,"<params>"]`
+  previously failed the exact-length check, were silently dropped by `Relay.#onMessage` /
+  nk's driver, and left fetches, streams and publishes hanging until timeout.
+- A socket frame that fails `parseRelayMessage` now fires the new `invalidmessage` event on
+  `Relay` (`{ raw, error }`) and `Pool` (`{ url, raw, error }`) instead of vanishing; nk's driver
+  logs it via `debug!("dropped malformed relay message: {e}")`.
+
+### Added
+
+- `onEose` receives the relay's NIP-67 hints (`ReadonlyArray<string>`) when a well-formed array
+  was sent; `RelayFetchEnd` carries `hints` on `"eose"` and `params` on `"closed"`.
+- `PublishResult`/`PoolPublishResult` carry `params` from the OK frame; `onClose` and
+  `RelayFetchEnd`'s `"closed"` carry the CLOSED frame's `<params>`; `RelayClosedError` and
+  `RelayPublishError` expose them as `.params`. `Pool.publishAny` rejections keep the params on
+  the `RelayPublishError` inside the `AggregateError`.
+- nk-core `RelayMessage::Ok`/`Closed` carry `params: Option<Cow<str>>` and `RelayMessage::Eose`
+  `hints: Option<Vec<String>>`; `to_json`/serialization emit them when `Some`.
+
+### Changed
+
+- **BREAKING (nk-core):** `RelayMessage::Eose` is now a struct variant `{ subscription_id,
+  hints }` (was a tuple variant), `Ok`/`Closed` gain the `params` field, and
+  `Error::ObsoleteNegOpen` is removed — the real legacy `["NEG-OPEN",id,filter,32,hex]` form now
+  fails as `InvalidMessage` like any other mistyped element.
+- The TS legacy-NEG-OPEN `MessageError` no longer says "obsolete 5-element NEG-OPEN": it reports
+  the generic invalid-message error since the trailing-hex check rejects it like any other
+  mistyped element.
+
 ## [0.16.0] - 2026-11-12
 
 Per-event first-seen times in every event store, live seen-on relay watches, NIP-13 mining
