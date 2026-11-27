@@ -129,10 +129,7 @@ export class SqliteTestDriver implements SqlDriver {
       }
     });
     // oxlint-disable-next-line promise/prefer-await-to-then -- the tail chain is the serialization primitive
-    this.#txTail = task.then(
-      () => undefined,
-      () => undefined,
-    );
+    this.#txTail = task.then(() => undefined).catch(() => undefined);
     return task;
   }
 

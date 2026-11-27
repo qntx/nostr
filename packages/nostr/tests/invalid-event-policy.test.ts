@@ -125,10 +125,12 @@ describe("invalid-event policy", () => {
     net.relay(A).deliver(forged(3));
     await advance(20);
 
-    const failure = await pool.ensureRelay(A).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    let failure: unknown;
+    try {
+      await pool.ensureRelay(A);
+    } catch (error) {
+      failure = error;
+    }
     expect(failure).toBeInstanceOf(RelaySuspendedError);
     expect((failure as RelaySuspendedError).until).toBeGreaterThan(Date.now());
 

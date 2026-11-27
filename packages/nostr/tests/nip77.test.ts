@@ -1228,12 +1228,9 @@ describe("Negentropy session timeout", () => {
       enableReconnect: false,
     });
     await client.connect();
-    const syncErr = await client
-      .sync({ kinds: [1] }, { direction: SyncDirection.Down, timeoutMs: 80 })
-      .then(
-        () => null,
-        (error: unknown) => error,
-      );
+    const syncErr = await captureError(
+      client.sync({ kinds: [1] }, { direction: SyncDirection.Down, timeoutMs: 80 }),
+    );
     expect(syncErr).toBeInstanceOf(RelayTimeoutError);
     expect((syncErr as Error).message).toMatch(
       /negentropy timed out \(wss:\/\/silent-a\.example\/\)/,
