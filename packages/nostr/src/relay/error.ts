@@ -24,9 +24,13 @@ export class RelayPublishError extends RelayError {
    */
   readonly params: string | undefined;
 
-  constructor(message: string, url?: string, params?: string) {
-    super(message, url);
-    this.params = params;
+  constructor(
+    message: string,
+    url?: string,
+    options?: ErrorOptions & { readonly params?: string | undefined },
+  ) {
+    super(message, url, options);
+    this.params = options?.params;
   }
 }
 /** A subscription was closed by the relay (`CLOSED`) or the socket dropped. */
@@ -38,9 +42,13 @@ export class RelayClosedError extends RelayError {
    */
   readonly params: string | undefined;
 
-  constructor(message: string, url?: string, params?: string) {
-    super(message, url);
-    this.params = params;
+  constructor(
+    message: string,
+    url?: string,
+    options?: ErrorOptions & { readonly params?: string | undefined },
+  ) {
+    super(message, url, options);
+    this.params = options?.params;
   }
 }
 /** A relay operation exceeded its deadline. */

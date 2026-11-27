@@ -304,7 +304,7 @@ export function subscriptionToAsyncIterable(
         localClose = true;
       }
       if (!localClose && reason) {
-        error = new RelayClosedError(reason, undefined, params);
+        error = new RelayClosedError(reason, undefined, { params });
       }
       done = true;
       notify();

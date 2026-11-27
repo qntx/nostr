@@ -641,12 +641,12 @@ export class Relay {
             void this.#countRequests.authRetry(countWaiter, {
               ensureAuthed: this.#ensureAuthed,
               isOpen: () => this.#isOpen(),
-              failError: () => new RelayClosedError(reason || "COUNT closed", this.url, params),
+              failError: () => new RelayClosedError(reason || "COUNT closed", this.url, { params }),
               send: () => this.#send(["COUNT", subId, ...countWaiter.filters]),
             });
             return;
           }
-          countWaiter.reject(new RelayClosedError(reason || "COUNT closed", this.url, params));
+          countWaiter.reject(new RelayClosedError(reason || "COUNT closed", this.url, { params }));
           return;
         }
         const sub = this.#subscriptions.get(subId);

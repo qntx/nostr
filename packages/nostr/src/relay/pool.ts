@@ -606,7 +606,9 @@ export class Pool {
         this.#touch(relay.url);
         const result = await relay.publish(event, { timeoutMs: opts?.timeoutMs });
         if (!result.ok) {
-          throw new RelayPublishError(result.message || "rejected", relay.url, result.params);
+          throw new RelayPublishError(result.message || "rejected", relay.url, {
+            params: result.params,
+          });
         }
         const ok = { url, status: "ok" as const, message: result.message };
         return Object.assign(ok, result.params === undefined ? {} : { params: result.params });
