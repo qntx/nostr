@@ -70,7 +70,7 @@
     "publint": "0.3.25",
     "react-native-nitro-modules": "0.37.2",
     "typescript": "7.0.2",
-    "vite-plus": "1.5.0"
+    "vite-plus": "1.7.0"
   },
   "peerDependencies": {
     "@qntx/nostr": "^0.17.0",

@@ -212,9 +212,9 @@
     "buffer": "6.0.3",
     "publint": "0.3.25",
     "typescript": "7.0.2",
-    "vite-plus": "1.5.0",
+    "vite-plus": "1.7.0",
     "whatwg-url": "7.1.0",
-    "ws": "8.22.1"
+    "ws": "8.23.0"
   },
   "peerDependencies": {
     "ws": "^8.18.0"
