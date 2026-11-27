@@ -695,11 +695,15 @@ impl Session {
                 event_id,
                 accepted,
                 message,
+                ..
             } => self.on_ok(event_id, accepted, message.into_owned()),
-            RelayMessage::Eose(id) => self.on_eose(id.into_owned()),
+            RelayMessage::Eose {
+                subscription_id, ..
+            } => self.on_eose(subscription_id.into_owned()),
             RelayMessage::Closed {
                 subscription_id,
                 message,
+                ..
             } => {
                 self.refused_or_closed(subscription_id.into_owned(), message.into_owned(), |_| {
                     true
@@ -828,6 +832,55 @@ mod tests {
         // Gone — a second EOSE is unknown.
         s.handle(msg(&format!(r#"["EOSE","{}"]"#, id.as_str())));
         assert!(drain(&mut s).is_empty());
+    }
+
+    #[test]
+    fn fetch_eose_with_hints_sends_close_and_removes() {
+        let mut s = Session::new(false);
+        let id = sub_id();
+        s.open_fetch(&id, vec![Filter::new()]);
+        drop(drain(&mut s));
+        // NIP-67 hints: the frame still ends the fetch.
+        s.handle(msg(&format!(r#"["EOSE","{}",["finish"]]"#, id.as_str())));
+        let out = drain(&mut s);
+        assert!(matches!(
+            out.as_slice(),
+            [Out::Send(ClientMessage::Close(_)), Out::Eose(_)]
+        ));
+    }
+
+    #[test]
+    fn closed_with_params_closes_fetch_with_reason() {
+        let mut s = Session::new(false);
+        let id = sub_id();
+        s.open_fetch(&id, vec![Filter::new()]);
+        drop(drain(&mut s));
+        s.handle(msg(&format!(
+            r#"["CLOSED","{}","rate-limited: slow down","1500"]"#,
+            id.as_str()
+        )));
+        let out = drain(&mut s);
+        assert!(matches!(
+            out.as_slice(),
+            [Out::Closed { reason, .. }] if reason == "rate-limited: slow down"
+        ));
+    }
+
+    #[test]
+    fn ok_with_params_resolves_publish() {
+        let mut s = Session::new(false);
+        let ev = event("x", 1);
+        assert!(s.publish(ev.clone()));
+        drop(drain(&mut s));
+        s.handle(msg(&format!(
+            r#"["OK","{}",true,"saved","1000"]"#,
+            ev.id().to_hex()
+        )));
+        let out = drain(&mut s);
+        assert!(matches!(
+            out.as_slice(),
+            [Out::Published { accepted: true, .. }]
+        ));
     }
 
     #[test]

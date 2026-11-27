@@ -18,10 +18,38 @@ export class RelayConnectionError extends RelayError {
 /** A relay answered an EVENT with `ok: false`. */
 export class RelayPublishError extends RelayError {
   override name = "RelayPublishError";
+  /**
+   * The NIP-01 `<params>` of the OK frame; its meaning depends on the message prefix
+   * (`rate-limited:` → retry-after ms as a decimal string). Undefined when the relay sent none.
+   */
+  readonly params: string | undefined;
+
+  constructor(
+    message: string,
+    url?: string,
+    options?: ErrorOptions & { readonly params?: string | undefined },
+  ) {
+    super(message, url, options);
+    this.params = options?.params;
+  }
 }
 /** A subscription was closed by the relay (`CLOSED`) or the socket dropped. */
 export class RelayClosedError extends RelayError {
   override name = "RelayClosedError";
+  /**
+   * The NIP-01 `<params>` of the CLOSED frame; its meaning depends on the message prefix
+   * (`rate-limited:` → retry-after ms as a decimal string). Undefined when the relay sent none.
+   */
+  readonly params: string | undefined;
+
+  constructor(
+    message: string,
+    url?: string,
+    options?: ErrorOptions & { readonly params?: string | undefined },
+  ) {
+    super(message, url, options);
+    this.params = options?.params;
+  }
 }
 /** A relay operation exceeded its deadline. */
 export class RelayTimeoutError extends RelayError {

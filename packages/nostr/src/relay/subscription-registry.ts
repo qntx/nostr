@@ -89,29 +89,29 @@ export class SubscriptionRegistry {
     sub.deliver(event);
   }
 
-  handleEose(subId: SubscriptionId): void {
+  handleEose(subId: SubscriptionId, hints?: ReadonlyArray<string>): void {
     const sub = this.#subs.get(subId);
     if (!sub || sub.closed || sub.eosed) {
       return;
     }
     const group = this.#liveBySubId.get(subId);
     if (group) {
-      sub.markEose();
-      this.#deliverLiveEose(group);
+      sub.markEose(hints);
+      this.#deliverLiveEose(group, hints);
       return;
     }
-    sub.markEose();
+    sub.markEose(hints);
   }
 
   /** Remote/transport termination of a REQ (CLOSED, auth-retry failure). */
-  drop(sub: Subscription, reason: string): void {
+  drop(sub: Subscription, reason: string, params?: string): void {
     const group = this.#liveBySubId.get(sub.id);
     if (group) {
-      this.#endLiveGroup(group, { sendClose: false, reason });
+      this.#endLiveGroup(group, { sendClose: false, reason, params });
       return;
     }
     this.#subs.delete(sub.id);
-    sub.end(reason);
+    sub.end(reason, params);
   }
 
   /**
@@ -314,7 +314,10 @@ export class SubscriptionRegistry {
     this.#endLiveGroup(group, { sendClose: true, reason: "closed by client" });
   }
 
-  #endLiveGroup(group: LiveGroup, opts: { sendClose: boolean; reason: string }): void {
+  #endLiveGroup(
+    group: LiveGroup,
+    opts: { sendClose: boolean; reason: string; params?: string | undefined },
+  ): void {
     const { id } = group.sub;
     const remaining = [...group.attachments];
     group.attachments.clear();
@@ -330,7 +333,7 @@ export class SubscriptionRegistry {
     }
     for (const att of remaining) {
       invokeSafely(() => {
-        att.close(opts.reason);
+        att.close(opts.reason, opts.params);
       });
     }
   }
@@ -375,11 +378,11 @@ export class SubscriptionRegistry {
     }
   }
 
-  #deliverLiveEose(group: LiveGroup): void {
+  #deliverLiveEose(group: LiveGroup, hints?: ReadonlyArray<string>): void {
     // snapshot: a onEose handler may close its handle and detach mid-pass
     const attachments = [...group.attachments];
     for (const att of attachments) {
-      att.markEose();
+      att.markEose(hints);
     }
   }
 }

@@ -619,6 +619,16 @@ const clientMessages = [
   // Subscription id boundary: 64 scalar values accepted (incl. astral), 65 rejected.
   { raw: encodeClientMessage(["CLOSE", "a".repeat(64)]) },
   { raw: `["CLOSE","${"\u{1F600}".repeat(64)}"]` },
+  // Trailing elements beyond the defined arity are ignored.
+  { raw: `["EVENT",${JSON.stringify(baseEvent)},{}]`, encoded: evMsg },
+  { raw: `["AUTH",${JSON.stringify(baseEvent)},"x"]`, encoded: authMsg },
+  { raw: '["CLOSE","a","b"]', encoded: '["CLOSE","a"]' },
+  {
+    raw: '["NEG-OPEN","s",{"kinds":[1]},"aabb","extra"]',
+    encoded: '["NEG-OPEN","s",{"kinds":[1]},"aabb"]',
+  },
+  { raw: '["NEG-MSG","s","deadbeef","x"]', encoded: '["NEG-MSG","s","deadbeef"]' },
+  { raw: '["NEG-CLOSE","s","x"]', encoded: '["NEG-CLOSE","s"]' },
 ];
 
 const relayMessages = [
@@ -662,6 +672,50 @@ const relayMessages = [
   // Subscription id boundary on the relay direction (64 scalar values incl. astral).
   { raw: `["EOSE","${"a".repeat(64)}"]` },
   { raw: `["EOSE","${"\u{1F600}".repeat(64)}"]` },
+  // NIP-01 `<params>` on OK/CLOSED and NIP-67 EOSE hints surface when well-typed.
+  { raw: `["OK","${"a".repeat(64)}",false,"rate-limited: slow down","1000"]` },
+  {
+    raw: `["OK","${"a".repeat(64)}",true,"","p","x"]`,
+    encoded: `["OK","${"a".repeat(64)}",true,"","p"]`,
+  },
+  { raw: `["EOSE","s",["finish"]]` },
+  { raw: `["EOSE","s",["auth","finish"]]` },
+  { raw: `["EOSE","s",[]]` },
+  { raw: `["CLOSED","s","rate-limited: slow down","2500"]` },
+  // A mistyped optional element is treated as absent, like a bad COUNT hll.
+  { raw: `["OK","${"a".repeat(64)}",true,"",1000]`, encoded: `["OK","${"a".repeat(64)}",true,""]` },
+  { raw: '["EOSE","s","x"]', encoded: '["EOSE","s"]' },
+  { raw: '["EOSE","s",["more",1]]', encoded: '["EOSE","s"]' },
+  { raw: '["CLOSED","s","m",5]', encoded: '["CLOSED","s","m"]' },
+  // Unparseable optional elements read as absent too: `1e400` overflows f64
+  // and a lone-surrogate escape can't decode to a strict-JSON String.
+  {
+    raw: `["OK","${"a".repeat(64)}",true,"",1e400]`,
+    encoded: `["OK","${"a".repeat(64)}",true,""]`,
+  },
+  { raw: '["EOSE","s",1e400]', encoded: '["EOSE","s"]' },
+  { raw: '["EOSE","s",["more",1e400]]', encoded: '["EOSE","s"]' },
+  {
+    raw: `["OK","${"a".repeat(64)}",true,"","\\ud800"]`,
+    encoded: `["OK","${"a".repeat(64)}",true,""]`,
+  },
+  { raw: String.raw`["EOSE","s",["finish","\ud800"]]`, encoded: '["EOSE","s"]' },
+  // Trailing elements beyond the defined arity are ignored.
+  {
+    raw: `["EVENT","s",${JSON.stringify(baseEvent)},"x"]`,
+    encoded: encodeRelayMessage(["EVENT", "s", baseEvent]),
+  },
+  { raw: '["NOTICE","a","b"]', encoded: '["NOTICE","a"]' },
+  { raw: '["AUTH","c","extra"]', encoded: '["AUTH","c"]' },
+  { raw: '["COUNT","s",{"count":3},"x"]', encoded: '["COUNT","s",{"count":3}]' },
+  { raw: '["NEG-MSG","s","deadbeef","x"]', encoded: '["NEG-MSG","s","deadbeef"]' },
+  {
+    raw: `["OK","${"a".repeat(64)}",true,"","p",1e400]`,
+    encoded: `["OK","${"a".repeat(64)}",true,"","p"]`,
+  },
+  // NIP-77's optional NEG-ERR 4th element is tolerated, not surfaced.
+  { raw: '["NEG-ERR","s","error","extra"]', encoded: '["NEG-ERR","s","error"]' },
+  { raw: '["NEG-ERR","s","error",100000]', encoded: '["NEG-ERR","s","error"]' },
 ];
 
 const invalidClientMessages = [
@@ -726,14 +780,13 @@ const invalidClientMessages = [
   '["NEG-MSG","sub","FF00"]',
   '["EVENT"]',
   '["EVENT",{}]',
-  `["EVENT",${JSON.stringify(baseEvent)},{}]`,
   '["CLOSE"]',
-  '["CLOSE","a","b"]',
   '["AUTH",{}]',
   '["COUNT","s"]',
   '["COUNT","s",[]]',
   '["NEG-OPEN","s",{"kinds":[1]}]',
-  '["NEG-OPEN","s",{"kinds":[1]},"aabb","extra"]',
+  // The real legacy form: element 3 must be hex, not the filter-position number.
+  '["NEG-OPEN","s",{"kinds":[1]},32,"aabb"]',
   '["NEG-OPEN","s",{"kinds":[1]},"abc"]',
   '["NEG-OPEN","s",{"kinds":[1]},"zz"]',
   '["NEG-OPEN","s",42,"aabb"]',
@@ -744,7 +797,6 @@ const invalidClientMessages = [
   '["NEG-MSG","s",42]',
   '["CLOSE",42]',
   '["NEG-CLOSE"]',
-  '["NEG-CLOSE","s","x"]',
   '["UNKNOWN","s"]',
   '["REQ","",{"kinds":[1]}]',
   `["CLOSE","${"a".repeat(65)}"]`,
@@ -762,14 +814,15 @@ const invalidRelayMessages = [
   '["OK","id","true",""]',
   '["OK","id",true]',
   `["OK","${"a".repeat(64)}","yes",""]`,
+  `["OK","${"a".repeat(64)}","true","","1000"]`,
   `["OK","${"a".repeat(64)}",true,5]`,
   '["EOSE"]',
-  '["EOSE","s","x"]',
   '["EOSE",42]',
+  '["EOSE",42,["finish"]]',
   '["CLOSED","s"]',
   '["CLOSED","s",5]',
+  '["CLOSED","s",5,"1000"]',
   '["NOTICE"]',
-  '["NOTICE","a","b"]',
   '["NOTICE",42]',
   '["AUTH"]',
   '["AUTH",[1]]',
@@ -785,7 +838,6 @@ const invalidRelayMessages = [
   '["NEG-MSG","s",""]',
   '["NEG-ERR","s"]',
   '["NEG-ERR","s",1]',
-  '["NEG-ERR","s","error","extra"]',
   '["UNKNOWN","s"]',
   // Ruling 5: OK requires a 64-char lowercase hex event id.
   '["OK","id",true,""]',

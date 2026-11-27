@@ -19,9 +19,11 @@ pub use count::{CountResult, Hll};
 pub use relay::RelayMessage;
 pub use subscription::SubscriptionId;
 
+use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec::Vec;
 
-use serde::de::{Error as DeError, SeqAccess};
+use serde::de::{DeserializeOwned, Error as DeError, SeqAccess};
 
 use crate::json::JsonError;
 
@@ -73,9 +75,6 @@ pub enum Error {
     /// A NIP-45 sketch is not a 512-character hex string.
     #[error("invalid NIP-45 HLL sketch: expected 512-char hex")]
     InvalidHll,
-    /// The obsolete 5-element `NEG-OPEN` wire form.
-    #[error("obsolete 5-element NEG-OPEN; expected [NEG-OPEN, id, filter, hex]")]
-    ObsoleteNegOpen,
     /// A NIP-77 negentropy message is not non-empty even-length hex.
     #[error("invalid negentropy message: expected non-empty even-length hex")]
     InvalidNegMessage,
@@ -149,12 +148,41 @@ pub(crate) fn filter_item<'de, A: SeqAccess<'de>>(
         .ok_or_else(|| DeError::custom(Error::InvalidMessage { ty }))
 }
 
-/// Expects the seq to be exhausted.
-pub(crate) fn end<'de, A: SeqAccess<'de>>(seq: &mut A, ty: &'static str) -> Result<(), A::Error> {
-    if seq.next_element::<serde::de::IgnoredAny>()?.is_some() {
-        return Err(DeError::custom(Error::InvalidMessage { ty }));
-    }
+/// Drains the remaining seq elements: trailing elements beyond a message's
+/// defined arity are ignored (`serde_json` errors if a seq visitor leaves
+/// elements unread).
+pub(crate) fn drain<'de, A: SeqAccess<'de>>(seq: &mut A) -> Result<(), A::Error> {
+    while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
     Ok(())
+}
+
+/// Reads an optional element leniently: captures it as raw JSON, then parses
+/// the captured text as `T`. Any element that fails the `T` parse — mistyped,
+/// out of range, or a lone-surrogate escape — reads as `None` rather than
+/// failing the frame, the same lenience COUNT applies to a bad
+/// `approximate`/`hll`.
+fn optional_value<'de, A: SeqAccess<'de>, T: DeserializeOwned>(
+    seq: &mut A,
+) -> Result<Option<T>, A::Error> {
+    Ok(seq
+        .next_element::<Box<serde_json::value::RawValue>>()?
+        .and_then(|raw| serde_json::from_str::<T>(raw.get()).ok()))
+}
+
+/// Reads an optional `<params>` element (NIP-01 OK/CLOSED): `Some` when the
+/// element is a string, `None` when absent or any other JSON type.
+pub(crate) fn optional_string<'de, A: SeqAccess<'de>>(
+    seq: &mut A,
+) -> Result<Option<String>, A::Error> {
+    optional_value::<A, String>(seq)
+}
+
+/// Reads optional NIP-67 EOSE completeness hints: `Some` when the element is
+/// an all-string array (empty included), `None` when absent or mistyped.
+pub(crate) fn optional_hints<'de, A: SeqAccess<'de>>(
+    seq: &mut A,
+) -> Result<Option<Vec<String>>, A::Error> {
+    optional_value::<A, Vec<String>>(seq)
 }
 
 #[cfg(test)]
@@ -323,7 +351,7 @@ mod tests {
             "[\"REQ\",\"sub\",42]",
             "[\"REQ\",\"s\",{\"kinds\":[65536]}]",
             "[\"NEG-OPEN\",\"s\",{\"kinds\":[1]}]",
-            "[\"NEG-OPEN\",\"s\",{\"kinds\":[1]},\"aabb\",\"extra\"]",
+            "[\"NEG-OPEN\",\"s\",{\"kinds\":[1]},32,\"aabb\"]",
             "[\"NEG-OPEN\",\"s\",{\"kinds\":[1]},\"abc\"]",
             "[\"NEG-OPEN\",\"s\",{\"kinds\":[1]},\"zz\"]",
             "[\"NEG-MSG\",\"s\",\"\"]",
@@ -376,6 +404,187 @@ mod tests {
     }
 
     #[test]
+    fn relay_optional_and_trailing_elements() {
+        let ok_hex = "a".repeat(64);
+        let ok_parts = |raw: &str| -> (bool, Option<String>) {
+            let RelayMessage::Ok {
+                accepted, params, ..
+            } = RelayMessage::from_json(raw).unwrap_or_else(|e| panic!("{raw}: {e}"))
+            else {
+                panic!("expected Ok: {raw}");
+            };
+            (accepted, params.map(Cow::into_owned))
+        };
+        let closed_params = |raw: &str| -> Option<String> {
+            let RelayMessage::Closed { params, .. } =
+                RelayMessage::from_json(raw).unwrap_or_else(|e| panic!("{raw}: {e}"))
+            else {
+                panic!("expected Closed: {raw}");
+            };
+            params.map(Cow::into_owned)
+        };
+        let eose_hints = |raw: &str| -> Option<Vec<String>> {
+            let RelayMessage::Eose { hints, .. } =
+                RelayMessage::from_json(raw).unwrap_or_else(|e| panic!("{raw}: {e}"))
+            else {
+                panic!("expected Eose: {raw}");
+            };
+            hints
+        };
+        // NIP-01 `<params>`: a string element surfaces; mistyped or
+        // missing is treated as absent, extra elements are ignored.
+        assert_eq!(
+            ok_parts(&alloc::format!(
+                "[\"OK\",\"{ok_hex}\",false,\"rate-limited: slow down\",\"1000\"]"
+            )),
+            (false, Some(String::from("1000")))
+        );
+        assert_eq!(
+            ok_parts(&alloc::format!("[\"OK\",\"{ok_hex}\",true,\"\",1000]")),
+            (true, None)
+        );
+        // A mistyped `<params>` reads as absent even when the element is a
+        // number serde_json cannot represent (`1e400` overflows f64); a
+        // trailing `1e400` after valid params is ignored entirely.
+        assert_eq!(
+            ok_parts(&alloc::format!("[\"OK\",\"{ok_hex}\",true,\"\",1e400]")),
+            (true, None)
+        );
+        assert_eq!(
+            ok_parts(&alloc::format!(
+                "[\"OK\",\"{ok_hex}\",true,\"\",\"p\",1e400]"
+            )),
+            (true, Some(String::from("p")))
+        );
+        assert_eq!(
+            ok_parts(&alloc::format!(
+                "[\"OK\",\"{ok_hex}\",true,\"\",\"p\",\"x\"]"
+            )),
+            (true, Some(String::from("p")))
+        );
+        // A lone-surrogate escape can't deserialize as a `String`, so like a
+        // mistyped element it reads as absent (required strings reject the
+        // whole frame instead — serde_json's string path validates escapes).
+        assert_eq!(
+            ok_parts(&alloc::format!(
+                "[\"OK\",\"{ok_hex}\",true,\"\",\"\\ud800\"]"
+            )),
+            (true, None)
+        );
+        // NIP-67 EOSE hints: an all-string array is kept (empty
+        // included); anything else drops.
+        assert_eq!(
+            eose_hints("[\"EOSE\",\"s\",[\"auth\",\"finish\"]]"),
+            Some(alloc::vec![String::from("auth"), String::from("finish")])
+        );
+        assert_eq!(eose_hints("[\"EOSE\",\"s\",[]]"), Some(Vec::new()));
+        for raw in [
+            "[\"EOSE\",\"s\",\"x\"]",
+            "[\"EOSE\",\"s\",[\"more\",1]]",
+            "[\"EOSE\",\"s\",1e400]",
+            "[\"EOSE\",\"s\",[\"more\",1e400]]",
+            "[\"EOSE\",\"s\",[\"finish\",\"\\ud800\"]]",
+        ] {
+            assert_eq!(eose_hints(raw), None, "{raw}");
+        }
+        // NIP-01 CLOSED `<params>`: same rule as OK.
+        assert_eq!(
+            closed_params("[\"CLOSED\",\"s\",\"bye\",\"2500\"]"),
+            Some(String::from("2500"))
+        );
+        assert_eq!(closed_params("[\"CLOSED\",\"s\",\"bye\",5]"), None);
+        // Every relay type tolerates trailing elements; the optional
+        // NEG-ERR 4th element is dropped, not surfaced.
+        let event = signed_event();
+        let event_json = serde_json::to_string(&event).expect("ser");
+        for (raw, encoded) in [
+            (
+                alloc::format!("[\"EVENT\",\"s\",{event_json},\"x\"]"),
+                alloc::format!("[\"EVENT\",\"s\",{event_json}]"),
+            ),
+            (
+                String::from("[\"NOTICE\",\"a\",\"b\"]"),
+                String::from("[\"NOTICE\",\"a\"]"),
+            ),
+            (
+                String::from("[\"AUTH\",\"c\",true]"),
+                String::from("[\"AUTH\",\"c\"]"),
+            ),
+            (
+                String::from("[\"COUNT\",\"s\",{\"count\":3},\"x\"]"),
+                String::from("[\"COUNT\",\"s\",{\"count\":3}]"),
+            ),
+            (
+                String::from("[\"NEG-MSG\",\"s\",\"aabb\",7]"),
+                String::from("[\"NEG-MSG\",\"s\",\"aabb\"]"),
+            ),
+            (
+                String::from("[\"NEG-ERR\",\"s\",\"blocked: too big\",100000]"),
+                String::from("[\"NEG-ERR\",\"s\",\"blocked: too big\"]"),
+            ),
+        ] {
+            let msg = RelayMessage::from_json(&raw).unwrap_or_else(|e| panic!("{raw}: {e}"));
+            assert_eq!(msg.to_json(), encoded, "{raw}");
+        }
+    }
+
+    #[test]
+    fn relay_malformed_required_elements_reject() {
+        let ok_hex = "a".repeat(64);
+        for bad in [
+            alloc::format!("[\"OK\",\"{ok_hex}\",\"true\",\"\"]"),
+            alloc::format!("[\"OK\",\"{ok_hex}\",true]"),
+            alloc::format!("[\"OK\",\"{ok_hex}\",\"true\",\"\",\"1000\"]"),
+            String::from("[\"EOSE\",42,[\"finish\"]]"),
+            String::from("[\"CLOSED\",\"s\",5,\"1000\"]"),
+            String::from("[\"EVENT\",\"s\"]"),
+            String::from("[\"UNKNOWN\",\"s\"]"),
+        ] {
+            assert!(RelayMessage::from_json(&bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn client_trailing_elements() {
+        let event = signed_event();
+        let event_json = serde_json::to_string(&event).expect("ser");
+        for (raw, encoded) in [
+            (
+                alloc::format!("[\"EVENT\",{event_json},{{}}]"),
+                alloc::format!("[\"EVENT\",{event_json}]"),
+            ),
+            (
+                alloc::format!("[\"AUTH\",{event_json},\"x\"]"),
+                alloc::format!("[\"AUTH\",{event_json}]"),
+            ),
+            (
+                String::from("[\"CLOSE\",\"a\",\"b\"]"),
+                String::from("[\"CLOSE\",\"a\"]"),
+            ),
+            (
+                String::from("[\"NEG-OPEN\",\"s\",{\"kinds\":[1]},\"aabb\",\"extra\"]"),
+                String::from("[\"NEG-OPEN\",\"s\",{\"kinds\":[1]},\"aabb\"]"),
+            ),
+            (
+                String::from("[\"NEG-MSG\",\"s\",\"aabb\",7]"),
+                String::from("[\"NEG-MSG\",\"s\",\"aabb\"]"),
+            ),
+            (
+                String::from("[\"NEG-CLOSE\",\"s\",\"x\"]"),
+                String::from("[\"NEG-CLOSE\",\"s\"]"),
+            ),
+        ] {
+            let msg = ClientMessage::from_json(&raw).unwrap_or_else(|e| panic!("{raw}: {e}"));
+            assert_eq!(msg.to_json(), encoded, "{raw}");
+        }
+        // The legacy 5-element NEG-OPEN stays rejected: element 3 is
+        // not the hex message.
+        assert!(
+            ClientMessage::from_json("[\"NEG-OPEN\",\"s\",{\"kinds\":[1]},32,\"61\"]").is_err()
+        );
+    }
+
+    #[test]
     fn relay_count_result_parsing() {
         // approximate/hll wrong types are ignored, not errors; an
         // uppercase hll is invalid protocol text — the field drops.
@@ -420,13 +629,46 @@ mod tests {
                 event_id: event.id(),
                 accepted: true,
                 message: Cow::Borrowed(""),
+                params: None,
             }
             .to_json(),
             alloc::format!("[\"OK\",\"{}\",true,\"\"]", event.id().to_hex())
         );
+        // NIP-01 `<params>` and NIP-67 EOSE hints serialize when `Some`.
         assert_eq!(
-            RelayMessage::Eose(Cow::Borrowed(&id)).to_json(),
+            RelayMessage::Ok {
+                event_id: event.id(),
+                accepted: true,
+                message: Cow::Borrowed(""),
+                params: Some(Cow::Borrowed("1000")),
+            }
+            .to_json(),
+            alloc::format!("[\"OK\",\"{}\",true,\"\",\"1000\"]", event.id().to_hex())
+        );
+        assert_eq!(
+            RelayMessage::Eose {
+                subscription_id: Cow::Borrowed(&id),
+                hints: None,
+            }
+            .to_json(),
             "[\"EOSE\",\"sub\"]"
+        );
+        assert_eq!(
+            RelayMessage::Eose {
+                subscription_id: Cow::Borrowed(&id),
+                hints: Some(alloc::vec![String::from("finish")]),
+            }
+            .to_json(),
+            "[\"EOSE\",\"sub\",[\"finish\"]]"
+        );
+        assert_eq!(
+            RelayMessage::Closed {
+                subscription_id: Cow::Borrowed(&id),
+                message: Cow::Borrowed("m"),
+                params: Some(Cow::Borrowed("2500")),
+            }
+            .to_json(),
+            "[\"CLOSED\",\"sub\",\"m\",\"2500\"]"
         );
         assert_eq!(
             RelayMessage::Count {
@@ -451,9 +693,12 @@ mod tests {
         let msg = ClientMessage::Close(Cow::Borrowed(&id));
         let owned_msg: ClientMessage<'static> = msg.into_owned();
         assert_eq!(owned_msg, ClientMessage::Close(Cow::Owned(id.clone())));
-        let relay = RelayMessage::Eose(Cow::Owned(id));
+        let relay = RelayMessage::Eose {
+            subscription_id: Cow::Owned(id),
+            hints: Some(alloc::vec![String::from("finish")]),
+        };
         let owned_relay: RelayMessage<'static> = relay.into_owned();
-        assert!(matches!(owned_relay, RelayMessage::Eose(_)));
+        assert!(matches!(owned_relay, RelayMessage::Eose { .. }));
     }
 
     #[test]
@@ -525,11 +770,16 @@ mod tests {
                 event_id,
                 accepted: true,
                 message: Cow::Borrowed("m"),
+                params: Some(Cow::Borrowed("1000")),
             },
-            RelayMessage::Eose(Cow::Borrowed(&id)),
+            RelayMessage::Eose {
+                subscription_id: Cow::Borrowed(&id),
+                hints: Some(alloc::vec![String::from("finish")]),
+            },
             RelayMessage::Closed {
                 subscription_id: Cow::Borrowed(&id),
                 message: Cow::Borrowed("m"),
+                params: None,
             },
             RelayMessage::Notice(Cow::Borrowed("n")),
             RelayMessage::Auth {

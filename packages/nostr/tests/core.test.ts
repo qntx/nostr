@@ -19,6 +19,7 @@ import {
   eventAddress,
   formatEventAddress,
   encodeClientMessage,
+  encodeRelayMessage,
   finalizeEvent,
   getEventHash,
   getPublicKey,
@@ -44,7 +45,7 @@ import {
   validateSignedEvent,
   verifyEvent,
 } from "../src/index.ts";
-import type { ClientMessage, Event, Filter } from "../src/index.ts";
+import type { ClientMessage, Event, Filter, RelayMessage } from "../src/index.ts";
 
 const SK_HEX = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
@@ -665,6 +666,105 @@ describe("messages", () => {
     expect(() => assertSubscriptionId("\u{1F600}".repeat(SUBSCRIPTION_ID_MAX_CHARS + 1))).toThrow(
       MessageError,
     );
+  });
+
+  test("parseRelayMessage surfaces spec optional elements and ignores trailing", () => {
+    const id = "ab".repeat(32);
+    // NIP-01 `<params>`: a string items[4] surfaces; mistyped or missing is treated as absent.
+    expect(
+      parseRelayMessage(`["OK","${id}",false,"rate-limited: slow down","1000"]`),
+    ).toStrictEqual(["OK", id, false, "rate-limited: slow down", "1000"]);
+    expect(parseRelayMessage(`["OK","${id}",true,"",1000]`)).toStrictEqual(["OK", id, true, ""]);
+    expect(parseRelayMessage(`["OK","${id}",true,"","p","x"]`)).toStrictEqual([
+      "OK",
+      id,
+      true,
+      "",
+      "p",
+    ]);
+    // NIP-67 EOSE hints: an all-string array is kept (empty included); anything else drops.
+    expect(parseRelayMessage(`["EOSE","s",["finish"]]`)).toStrictEqual(["EOSE", "s", ["finish"]]);
+    expect(parseRelayMessage(`["EOSE","s",["auth","finish"]]`)).toStrictEqual([
+      "EOSE",
+      "s",
+      ["auth", "finish"],
+    ]);
+    expect(parseRelayMessage(`["EOSE","s",[]]`)).toStrictEqual(["EOSE", "s", []]);
+    expect(parseRelayMessage(`["EOSE","s","x"]`)).toStrictEqual(["EOSE", "s"]);
+    expect(parseRelayMessage(`["EOSE","s",["more",1]]`)).toStrictEqual(["EOSE", "s"]);
+    // NIP-01 CLOSED `<params>`: same rule as OK.
+    expect(parseRelayMessage(`["CLOSED","s","rate-limited: slow down","2500"]`)).toStrictEqual([
+      "CLOSED",
+      "s",
+      "rate-limited: slow down",
+      "2500",
+    ]);
+    expect(parseRelayMessage(`["CLOSED","s","bye",5]`)).toStrictEqual(["CLOSED", "s", "bye"]);
+    // Every other relay type tolerates trailing elements.
+    const event = finalizeEvent({ kind: 1, tags: [], content: "hi", created_at: 1 }, SK_HEX);
+    expect(parseRelayMessage(JSON.stringify(["EVENT", "s", event, "x"]))).toStrictEqual([
+      "EVENT",
+      "s",
+      event,
+    ]);
+    expect(parseRelayMessage(`["NOTICE","a","b"]`)).toStrictEqual(["NOTICE", "a"]);
+    expect(parseRelayMessage(`["AUTH","c",true]`)).toStrictEqual(["AUTH", "c"]);
+    expect(parseRelayMessage(`["COUNT","s",{"count":3},"x"]`)).toStrictEqual([
+      "COUNT",
+      "s",
+      { count: 3 },
+    ]);
+    expect(parseRelayMessage(`["NEG-MSG","s","aabb",7]`)).toStrictEqual(["NEG-MSG", "s", "aabb"]);
+    // NIP-77 NEG-ERR tolerates an optional 4th element, not surfaced.
+    expect(parseRelayMessage(`["NEG-ERR","s","blocked: too big",100000]`)).toStrictEqual([
+      "NEG-ERR",
+      "s",
+      "blocked: too big",
+    ]);
+  });
+
+  test("parseRelayMessage still rejects malformed required elements", () => {
+    const id = "ab".repeat(32);
+    expect(() => parseRelayMessage(`["OK","${id}","true",""]`)).toThrow(MessageError);
+    expect(() => parseRelayMessage(`["OK","${id}",true]`)).toThrow(MessageError);
+    expect(() => parseRelayMessage(`["OK","${id}","true","","1000"]`)).toThrow(MessageError);
+    expect(() => parseRelayMessage(`["EOSE",42,["finish"]]`)).toThrow(MessageError);
+    expect(() => parseRelayMessage(`["CLOSED","s",5,"1000"]`)).toThrow(MessageError);
+    expect(() => parseRelayMessage(`["EVENT","s"]`)).toThrow(MessageError);
+    expect(() => parseRelayMessage(`["UNKNOWN","s"]`)).toThrow(MessageError);
+  });
+
+  test("parseClientMessage tolerates trailing elements on fixed-arity types", () => {
+    const event = finalizeEvent({ kind: 1, tags: [], content: "hi", created_at: 1 }, SK_HEX);
+    const eventJson = JSON.stringify(event);
+    expect(parseClientMessage(`["EVENT",${eventJson},{}]`)).toStrictEqual(["EVENT", event]);
+    expect(parseClientMessage(`["AUTH",${eventJson},"x"]`)).toStrictEqual(["AUTH", event]);
+    expect(parseClientMessage(`["CLOSE","a","b"]`)).toStrictEqual(["CLOSE", "a"]);
+    expect(parseClientMessage(`["NEG-OPEN","s",{"kinds":[1]},"aabb","extra"]`)).toStrictEqual([
+      "NEG-OPEN",
+      "s",
+      { kinds: [1] },
+      "aabb",
+    ]);
+    expect(parseClientMessage(`["NEG-MSG","s","aabb",7]`)).toStrictEqual(["NEG-MSG", "s", "aabb"]);
+    expect(parseClientMessage(`["NEG-CLOSE","s","x"]`)).toStrictEqual(["NEG-CLOSE", "s"]);
+    // The legacy 5-element NEG-OPEN stays rejected: element 3 is not the hex message.
+    expect(() => parseClientMessage(`["NEG-OPEN","s",{"kinds":[1]},32,"61"]`)).toThrow(
+      MessageError,
+    );
+    // Malformed required elements still throw.
+    expect(() => parseClientMessage(`["CLOSE"]`)).toThrow(MessageError);
+    expect(() => parseClientMessage(`["NEG-MSG","s"]`)).toThrow(MessageError);
+  });
+
+  test("encodeRelayMessage round-trips OK params, EOSE hints, CLOSED params", () => {
+    const id = "ab".repeat(32);
+    const ok5: RelayMessage = ["OK", id, false, "rate-limited: x", "1000"];
+    expect(JSON.parse(encodeRelayMessage(ok5))).toStrictEqual(ok5);
+    const eose3: RelayMessage = ["EOSE", "s", ["finish"]];
+    expect(JSON.parse(encodeRelayMessage(eose3))).toStrictEqual(eose3);
+    const closed4: RelayMessage = ["CLOSED", "s", "bye", "2500"];
+    expect(JSON.parse(encodeRelayMessage(closed4))).toStrictEqual(closed4);
   });
 
   test("createSubscriptionId validates or generates 8-byte hex", () => {

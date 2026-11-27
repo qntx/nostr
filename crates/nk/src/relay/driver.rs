@@ -384,8 +384,12 @@ impl Driver {
         match frame {
             Ok(Some(Inbound::Text(text))) => {
                 self.conn.saw_inbound();
-                let Ok(msg) = nk_core::RelayMessage::from_json(&text) else {
-                    return;
+                let msg = match nk_core::RelayMessage::from_json(&text) {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        debug!("dropped malformed relay message: {e}");
+                        return;
+                    }
                 };
                 self.session.handle(msg);
                 self.flush().await;

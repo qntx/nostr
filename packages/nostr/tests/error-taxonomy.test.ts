@@ -235,6 +235,13 @@ describe("subscriptionToAsyncIterable close reasons", () => {
     ctrl.abort(new Error("stop"));
     await expect(pending).resolves.toStrictEqual({ value: undefined, done: true });
   });
+
+  test("RelayClosedError options carry cause and params", () => {
+    const cause = new Error("root");
+    const err = new RelayClosedError("x", "wss://r", { cause, params: "1" });
+    expect(err.cause).toBe(cause);
+    expect(err.params).toBe("1");
+  });
 });
 
 describe("Pool.publishAny rejected OK", () => {

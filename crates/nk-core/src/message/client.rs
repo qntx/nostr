@@ -10,7 +10,7 @@ use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::{
-    Error, Result, SubscriptionId, end, event_item, filter_item, parse_neg_hex, read_type,
+    Error, Result, SubscriptionId, drain, event_item, filter_item, parse_neg_hex, read_type,
     string_item, sub_id,
 };
 use crate::event::{Event, canonical};
@@ -150,16 +150,20 @@ impl ClientMessage<'_> {
 
     /// Parses a client → relay JSON message.
     ///
+    /// Every type requires its minimum arity and its required elements'
+    /// types; any further trailing elements are ignored (REQ/COUNT keep
+    /// reading every trailing element as a filter).
+    ///
     /// # Errors
     ///
     /// [`Error::InvalidJson`] when the text is not JSON,
     /// [`Error::NotAMessageArray`] when it is not a non-empty array starting
     /// with the type string, [`Error::UnknownType`] for an unrecognized
-    /// type, [`Error::InvalidMessage`] for wrong arity or field types,
-    /// [`Error::InvalidPayload`] when an embedded event or filter fails
-    /// wire validation, [`Error::InvalidSubscriptionId`] for a bad
-    /// subscription id, [`Error::ObsoleteNegOpen`] for the 5-element
-    /// `NEG-OPEN`, and [`Error::InvalidNegMessage`] for malformed NEG hex.
+    /// type, [`Error::InvalidMessage`] for missing or wrongly typed
+    /// required elements, [`Error::InvalidPayload`] when an embedded event
+    /// or filter fails wire validation, [`Error::InvalidSubscriptionId`]
+    /// for a bad subscription id, and [`Error::InvalidNegMessage`] for
+    /// malformed NEG hex.
     pub fn from_json(raw: &str) -> Result<ClientMessage<'static>> {
         serde_json::from_str(raw).map_err(|e| Error::InvalidJson {
             source: crate::json::JsonError::from(e),
@@ -308,7 +312,7 @@ impl<'de> Deserialize<'de> for ClientMessage<'static> {
                 match ty {
                     "EVENT" => {
                         let event = event_item(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(ClientMessage::Event(Cow::Owned(event)))
                     }
                     "REQ" | "COUNT" => {
@@ -335,12 +339,12 @@ impl<'de> Deserialize<'de> for ClientMessage<'static> {
                     }
                     "CLOSE" => {
                         let id = sub_id(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(ClientMessage::Close(Cow::Owned(id)))
                     }
                     "AUTH" => {
                         let event = event_item(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(ClientMessage::Auth(Cow::Owned(event)))
                     }
                     "NEG-OPEN" => {
@@ -348,9 +352,7 @@ impl<'de> Deserialize<'de> for ClientMessage<'static> {
                         let filter = filter_item(&mut seq, ty)?;
                         let message =
                             parse_neg_hex(&string_item(&mut seq, ty)?).map_err(DeError::custom)?;
-                        if seq.next_element::<serde::de::IgnoredAny>()?.is_some() {
-                            return Err(DeError::custom(Error::ObsoleteNegOpen));
-                        }
+                        drain(&mut seq)?;
                         Ok(ClientMessage::NegOpen {
                             subscription_id: Cow::Owned(subscription_id),
                             filter: Cow::Owned(filter),
@@ -361,7 +363,7 @@ impl<'de> Deserialize<'de> for ClientMessage<'static> {
                         let subscription_id = sub_id(&mut seq, ty)?;
                         let message =
                             parse_neg_hex(&string_item(&mut seq, ty)?).map_err(DeError::custom)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(ClientMessage::NegMsg {
                             subscription_id: Cow::Owned(subscription_id),
                             message: Cow::Owned(message),
@@ -369,7 +371,7 @@ impl<'de> Deserialize<'de> for ClientMessage<'static> {
                     }
                     "NEG-CLOSE" => {
                         let id = sub_id(&mut seq, ty)?;
-                        end(&mut seq, ty)?;
+                        drain(&mut seq)?;
                         Ok(ClientMessage::NegClose(Cow::Owned(id)))
                     }
                     _ => Err(DeError::custom(Error::InvalidMessage { ty })),

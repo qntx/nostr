@@ -5,7 +5,7 @@ import { canonicalizeFilter, canonicalizeFilters } from "./filter.ts";
 import type { Filter } from "./filter.ts";
 import { SUBSCRIPTION_ID_MAX_CHARS } from "./limits.ts";
 import type { Mutable } from "./util.ts";
-import { bytesToHex, hexToBytes, isRecord } from "./util.ts";
+import { bytesToHex, hasLoneSurrogate, hexToBytes, isRecord } from "./util.ts";
 
 /** NIP-01 subscription id: 1..64 chars. */
 export type SubscriptionId = string;
@@ -44,12 +44,15 @@ export type ClientMessage =
   | ["NEG-MSG", SubscriptionId, string]
   | ["NEG-CLOSE", SubscriptionId];
 
-/** Relay → client messages. */
+/**
+ * Relay → client messages. `OK`/`CLOSED` may carry the NIP-01 `<params>` string and `EOSE` the
+ * NIP-67 completeness hint array; both appear only when the relay sent a well-typed element.
+ */
 export type RelayMessage =
   | ["EVENT", SubscriptionId, Event]
-  | ["OK", string, boolean, string]
-  | ["EOSE", SubscriptionId]
-  | ["CLOSED", SubscriptionId, string]
+  | ["OK", string, boolean, string, string?]
+  | ["EOSE", SubscriptionId, string[]?]
+  | ["CLOSED", SubscriptionId, string, string?]
   | ["NOTICE", string]
   | ["AUTH", string]
   | ["COUNT", SubscriptionId, CountResult]
@@ -114,7 +117,11 @@ export function encodeRelayMessage(message: RelayMessage): string {
   return JSON.stringify(message);
 }
 
-/** Parse a client->relay JSON message; throws {@link MessageError} on malformed input. */
+/**
+ * Parse a client->relay JSON message; throws {@link MessageError} on malformed input. Fixed-arity
+ * types (EVENT, CLOSE, AUTH, NEG-OPEN, NEG-MSG, NEG-CLOSE) require their minimum arity and ignore
+ * trailing elements; REQ/COUNT treat every trailing element as a filter.
+ */
 export function parseClientMessage(raw: string): ClientMessage {
   let parsed: unknown;
   try {
@@ -129,7 +136,7 @@ export function parseClientMessage(raw: string): ClientMessage {
   const [type] = items;
   switch (type) {
     case "EVENT":
-      if (items.length !== 2 || !validateSignedEvent(items[1])) {
+      if (items.length < 2 || !validateSignedEvent(items[1])) {
         throw new MessageError("invalid EVENT client message");
       }
       return ["EVENT", items[1]];
@@ -141,13 +148,13 @@ export function parseClientMessage(raw: string): ClientMessage {
       return ["REQ", assertSubscriptionId(items[1]), ...parseWireFilters(items.slice(2), "REQ")];
 
     case "CLOSE":
-      if (items.length !== 2 || typeof items[1] !== "string") {
+      if (items.length < 2 || typeof items[1] !== "string") {
         throw new MessageError("invalid CLOSE client message");
       }
       return ["CLOSE", assertSubscriptionId(items[1])];
 
     case "AUTH":
-      if (items.length !== 2 || !validateSignedEvent(items[1])) {
+      if (items.length < 2 || !validateSignedEvent(items[1])) {
         throw new MessageError("invalid AUTH client message");
       }
       return ["AUTH", items[1]];
@@ -163,11 +170,8 @@ export function parseClientMessage(raw: string): ClientMessage {
       ];
 
     case "NEG-OPEN":
-      if (items.length === 5) {
-        throw new MessageError("obsolete 5-element NEG-OPEN; expected [NEG-OPEN, id, filter, hex]");
-      }
       if (
-        items.length !== 4 ||
+        items.length < 4 ||
         typeof items[1] !== "string" ||
         !isRecord(items[2]) ||
         !isNegHex(items[3])
@@ -182,13 +186,13 @@ export function parseClientMessage(raw: string): ClientMessage {
       ];
 
     case "NEG-MSG":
-      if (items.length !== 3 || typeof items[1] !== "string" || !isNegHex(items[2])) {
+      if (items.length < 3 || typeof items[1] !== "string" || !isNegHex(items[2])) {
         throw new MessageError("invalid NEG-MSG client message");
       }
       return ["NEG-MSG", assertSubscriptionId(items[1]), items[2]];
 
     case "NEG-CLOSE":
-      if (items.length !== 2 || typeof items[1] !== "string") {
+      if (items.length < 2 || typeof items[1] !== "string") {
         throw new MessageError("invalid NEG-CLOSE client message");
       }
       return ["NEG-CLOSE", assertSubscriptionId(items[1])];
@@ -198,7 +202,13 @@ export function parseClientMessage(raw: string): ClientMessage {
   }
 }
 
-/** Parse a relay->client JSON message; throws {@link MessageError} on malformed input. */
+/**
+ * Parse a relay->client JSON message; throws {@link MessageError} on malformed input. Every type
+ * requires its minimum arity and its required elements' types; spec-defined optional elements
+ * (NIP-01 `<params>` on OK/CLOSED, NIP-67 hints on EOSE) are surfaced when well-typed and treated
+ * as absent when mistyped — the same policy COUNT uses for a bad `approximate`/`hll`. Any further
+ * trailing elements are ignored.
+ */
 export function parseRelayMessage(raw: string): RelayMessage {
   let parsed: unknown;
   try {
@@ -213,14 +223,14 @@ export function parseRelayMessage(raw: string): RelayMessage {
   const [type] = items;
   switch (type) {
     case "EVENT":
-      if (items.length !== 3 || typeof items[1] !== "string" || !validateSignedEvent(items[2])) {
+      if (items.length < 3 || typeof items[1] !== "string" || !validateSignedEvent(items[2])) {
         throw new MessageError("invalid EVENT relay message");
       }
       return ["EVENT", assertSubscriptionId(items[1]), items[2]];
 
     case "OK":
       if (
-        items.length !== 4 ||
+        items.length < 4 ||
         typeof items[1] !== "string" ||
         !HEX64_LOWER_RE.test(items[1]) ||
         typeof items[2] !== "boolean" ||
@@ -228,28 +238,45 @@ export function parseRelayMessage(raw: string): RelayMessage {
       ) {
         throw new MessageError("invalid OK relay message");
       }
-      return ["OK", items[1], items[2], items[3]];
+      // NIP-01 `<params>` (e.g. `rate-limited:` retry-after ms) surfaces only as a strict-JSON
+      // string — a lone-surrogate escape can't decode to String, so it reads as absent too.
+      return typeof items[4] === "string" && !hasLoneSurrogate(items[4])
+        ? ["OK", items[1], items[2], items[3], items[4]]
+        : ["OK", items[1], items[2], items[3]];
 
-    case "EOSE":
-      if (items.length !== 2 || typeof items[1] !== "string") {
+    case "EOSE": {
+      if (items.length < 2 || typeof items[1] !== "string") {
         throw new MessageError("invalid EOSE relay message");
       }
-      return ["EOSE", assertSubscriptionId(items[1])];
+      const id = assertSubscriptionId(items[1]);
+      // NIP-67 completeness hints: kept only as an all-string array of strict-JSON
+      // strings (empty included; a lone-surrogate entry reads as absent).
+      const hints =
+        Array.isArray(items[2]) &&
+        items[2].every((h) => typeof h === "string" && !hasLoneSurrogate(h))
+          ? items[2]
+          : undefined;
+      return hints === undefined ? ["EOSE", id] : ["EOSE", id, hints];
+    }
 
     case "CLOSED":
-      if (items.length !== 3 || typeof items[1] !== "string" || typeof items[2] !== "string") {
+      if (items.length < 3 || typeof items[1] !== "string" || typeof items[2] !== "string") {
         throw new MessageError("invalid CLOSED relay message");
       }
-      return ["CLOSED", assertSubscriptionId(items[1]), items[2]];
+      // NIP-01 `<params>` (e.g. `rate-limited:` retry-after ms) surfaces only as a strict-JSON
+      // string — a lone-surrogate escape can't decode to String, so it reads as absent too.
+      return typeof items[3] === "string" && !hasLoneSurrogate(items[3])
+        ? ["CLOSED", assertSubscriptionId(items[1]), items[2], items[3]]
+        : ["CLOSED", assertSubscriptionId(items[1]), items[2]];
 
     case "NOTICE":
-      if (items.length !== 2 || typeof items[1] !== "string") {
+      if (items.length < 2 || typeof items[1] !== "string") {
         throw new MessageError("invalid NOTICE relay message");
       }
       return ["NOTICE", items[1]];
 
     case "AUTH":
-      if (items.length !== 2 || typeof items[1] !== "string") {
+      if (items.length < 2 || typeof items[1] !== "string") {
         throw new MessageError("invalid AUTH relay message");
       }
       return ["AUTH", items[1]];
@@ -258,7 +285,7 @@ export function parseRelayMessage(raw: string): RelayMessage {
       const payload = items.at(2);
       const count = isRecord(payload) ? payload["count"] : undefined;
       if (
-        items.length !== 3 ||
+        items.length < 3 ||
         typeof items[1] !== "string" ||
         !isRecord(payload) ||
         typeof count !== "number" ||
@@ -278,13 +305,14 @@ export function parseRelayMessage(raw: string): RelayMessage {
       return ["COUNT", assertSubscriptionId(items[1]), result];
     }
     case "NEG-MSG":
-      if (items.length !== 3 || typeof items[1] !== "string" || !isNegHex(items[2])) {
+      if (items.length < 3 || typeof items[1] !== "string" || !isNegHex(items[2])) {
         throw new MessageError("invalid NEG-MSG relay message");
       }
       return ["NEG-MSG", assertSubscriptionId(items[1]), items[2]];
 
     case "NEG-ERR":
-      if (items.length !== 3 || typeof items[1] !== "string" || typeof items[2] !== "string") {
+      // NIP-77 allows an optional 4th element; tolerated, not surfaced.
+      if (items.length < 3 || typeof items[1] !== "string" || typeof items[2] !== "string") {
         throw new MessageError("invalid NEG-ERR relay message");
       }
       return ["NEG-ERR", assertSubscriptionId(items[1]), items[2]];
