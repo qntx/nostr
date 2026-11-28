@@ -16,21 +16,8 @@ feature-depth = 1
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-yanked = "deny"
-ignore = [
-  # url <= 2.5.8: `Url::origin()` recurses once per nested `blob:` prefix
-  # and can overflow the stack. url 2.5.8 arrives via nk and nk-core
-  # (direct deps) plus yawc. Across the workspace and every registry
-  # crate in Cargo.lock the only caller of `Url::origin()` (nothing calls
-  # `url::quirks::origin()`) is nk-core's `Server::from_str`
-  # (crates/nk-core/src/nips/blossom.rs), which returns
-  # `Error::InvalidServer` for any non-http(s) scheme before reaching
-  # `origin()` — the recursion needs a `blob:` scheme, so it cannot fire.
-  # Fixed in 2.5.9, published 2026-11-20T23:03Z.
-  # Revisit: from 2026-11-28 (7-day rule) run `cargo update -p url` to
-  # 2.5.9 and remove this entry.
-  { id = "RUSTSEC-2026-0592", reason = "Url::origin() blob: recursion; sole caller Server::from_str rejects non-http(s) schemes before .origin(), so blob: never reaches it; bump url to 2.5.9 and remove from 2026-11-28" },
-]
+yanked  = "deny"
+ignore  = []
 
 [licenses]
 allow                = ["MIT", "Apache-2.0", "BSD-3-Clause", "CDLA-Permissive-2.0", "ISC", "MPL-2.0", "Unicode-3.0", "CC0-1.0", "Zlib"]
