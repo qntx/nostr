@@ -9,6 +9,39 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+### Added
+
+- NIP-47 Nostr Wallet Connect (nostr-protocol/nips `47.md` @ `c53877571f`; NWC-02 notifications,
+  NWC-05 transaction history, and NWC-13 budgets from nostr-wallet-connect/nwc @ `2e2070d129`).
+  `@qntx/nostr/nips/nip47` exports the sans-I/O codecs (`parseNwcUri`, `parseInfoEvent`,
+  `negotiateEncryption`, `encodeRequestPayload`/`encodeRequest`, `isResponseTo`,
+  `parseResponsePayload`/`decodeResponse`, and `parseNotificationPayload`/`decodeNotification`)
+  plus `NwcClient`, a structural-transport client session with per-call timeouts, abort cleanup,
+  authentic-response matching, wallet-error typing, NIP-04/NIP-44 negotiation, and async NWC-02
+  notification subscriptions that resolve once installed and expose setup failures.
+- `createFakeNwcWallet` in `@qntx/nostr/testing`: a relay-backed regtest wallet harness with real
+  parseable BOLT11 invoices, balance/budget enforcement, method overrides and silence controls,
+  incoming-payment simulation, notifications, and secret zeroization on close.
+- nk-core `nips::nip47` now covers the same codec surface: connection URIs, wallet info events,
+  exact request JSON, typed responses and wallet errors, transaction lists/budgets, notifications,
+  and response-envelope matching. Shared vectors live in `vectors/nip47/codec.json` and run in
+  both languages as capability `nip47.codec`.
+
+### Changed
+
+- **BREAKING:** the `@qntx/nostr/nips/nip47` API is replaced by the codec/client surface above;
+  the former client-side connection/info/response helpers and `NwcCrypto` type are removed without
+  compatibility aliases.
+- **BREAKING (nk-core):** `nips::nip47` is reshaped around `NwcUri`, `Info`, `Request`,
+  `NwcResult`, `WalletError`, `Notification`, and the typed parameter/transaction/budget types;
+  `parse_info_event`, `decode_response_payload`, and `NwcOutcome` are removed without compatibility
+  aliases.
+
+### Fixed
+
+- `@qntx/nostr/nips/nip47` is now present in the package exports and bundle entries; the subpath
+  previously existed in source but was never exported to consumers.
+
 ## [0.17.0] - 2026-11-27
 
 ### Fixed

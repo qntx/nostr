@@ -15,6 +15,7 @@ import {
 import { Nip46Signer } from "../src/signer/nip46.ts";
 import {
   createFakeNip46Signer,
+  createFakeNwcWallet,
   createFakeRelayNetwork,
   serveFakeRelay,
 } from "../src/testing/index.ts";
@@ -504,6 +505,12 @@ describe("createFakeNip46Signer", () => {
     } finally {
       net.close();
     }
+  });
+});
+
+describe("createFakeNwcWallet export", () => {
+  test("is exported from the testing entrypoint", () => {
+    expect(createFakeNwcWallet).toBeTypeOf("function");
   });
 });
 

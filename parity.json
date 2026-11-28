@@ -517,12 +517,12 @@
     "rustNote": "the wasm ABI is C now: packages/nostr-wasm/c/nostr_wasm.c over the shared nostr_core.c in packages/nostr-native/cpp; no rust-nostr counterpart to compare"
   },
   {
-    "id": "nip47",
+    "id": "nip47.codec",
     "ts": {
       "module": "packages/nostr/src/nips/nip47.ts",
-      "tests": ["packages/nostr/tests/nip47.test.ts"]
+      "tests": ["packages/nostr/tests/nip47.test.ts", "packages/nostr/tests/vectors/nip47.test.ts"]
     },
-    "vectors": ["vectors/nip47.json"],
+    "vectors": ["vectors/nip47/codec.json"],
     "rust": {
       "tests": ["crates/nk-core/tests/it/nip47.rs"]
     }
