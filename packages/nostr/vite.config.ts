@@ -44,6 +44,7 @@ const config: UserConfig = defineConfig({
       "nips/nip42": "src/nips/nip42.ts",
       "nips/nip44": "src/nips/nip44.ts",
       "nips/nip46": "src/nips/nip46.ts",
+      "nips/nip47": "src/nips/nip47.ts",
       "nips/nip49": "src/nips/nip49.ts",
       "nips/nip51": "src/nips/nip51.ts",
       "nips/nip57": "src/nips/nip57.ts",

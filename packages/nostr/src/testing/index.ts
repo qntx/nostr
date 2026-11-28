@@ -8,3 +8,4 @@ export {
   type FakeNip46Signer,
   type FakeNip46SignerOptions,
 } from "./nip46.ts";
+export { createFakeNwcWallet, type FakeNwcWallet, type FakeNwcWalletOptions } from "./nwc.ts";
