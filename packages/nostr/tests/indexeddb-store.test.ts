@@ -20,6 +20,15 @@ import type { IdbMock } from "./helpers/idb-mock.ts";
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 const EID = "aa".repeat(32);
 
+async function captureError(p: Promise<unknown>): Promise<unknown> {
+  try {
+    await p;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected reject");
+}
+
 async function tickUntil(pred: () => boolean): Promise<void> {
   for (let i = 0; i < 50; i++) {
     if (pred()) {
@@ -91,12 +100,7 @@ describe("IndexedDbEventStore", () => {
     delete g.indexedDB;
     try {
       expect(IndexedDbEventStore.isAvailable()).toBe(false);
-      const err = await new IndexedDbEventStore({ dbName: "no-idb" }).open().then(
-        () => {
-          throw new Error("expected reject");
-        },
-        (error: unknown) => error,
-      );
+      const err = await captureError(new IndexedDbEventStore({ dbName: "no-idb" }).open());
       expect(err).toBeInstanceOf(StorageError);
       expect(err).not.toBeInstanceOf(CryptoError);
       expect((err as StorageError).message).toBe("IndexedDB is not available in this environment");
@@ -1002,12 +1006,7 @@ describe("IndexedDbEventStore", () => {
   test("open with null req.error throws StorageError fallback", async () => {
     mock.failOpen(null);
     const store = new IndexedDbEventStore({ dbName: "open-null-err" });
-    const err = await store.open().then(
-      () => {
-        throw new Error("expected reject");
-      },
-      (error: unknown) => error,
-    );
+    const err = await captureError(store.open());
     expect(err).toBeInstanceOf(StorageError);
     expect((err as StorageError).message).toBe("IndexedDB open failed");
     expect((err as StorageError).cause).toBeUndefined();
@@ -1017,12 +1016,7 @@ describe("IndexedDbEventStore", () => {
     const store = new IndexedDbEventStore({ dbName: "get-null-err" });
     await store.open();
     mock.failGetOnCall(1, null);
-    const err = await store.get(EID).then(
-      () => {
-        throw new Error("expected reject");
-      },
-      (error: unknown) => error,
-    );
+    const err = await captureError(store.get(EID));
     expect(err).toBeInstanceOf(StorageError);
     expect((err as StorageError).message).toBe("IndexedDB request failed");
     expect((err as StorageError).cause).toBeUndefined();
@@ -1036,12 +1030,7 @@ describe("IndexedDbEventStore", () => {
     const note = EventBuilder.textNote("n").tag(["e", EID]).createdAt(1).signWithKeys(keys);
     await expect(store.put(note)).resolves.toBe("accepted");
     mock.failGetOnCall(1, null);
-    const err = await store.query([{ "#e": [EID] }]).then(
-      () => {
-        throw new Error("expected reject");
-      },
-      (error: unknown) => error,
-    );
+    const err = await captureError(store.query([{ "#e": [EID] }]));
     expect(err).toBeInstanceOf(StorageError);
     expect((err as StorageError).message).toBe("IndexedDB get failed");
     expect((err as StorageError).cause).toBeUndefined();
@@ -1052,12 +1041,7 @@ describe("IndexedDbEventStore", () => {
     const store = new IndexedDbEventStore({ dbName: "cursor-null-err" });
     await store.open();
     mock.failCursor(null);
-    const err = await store.query([{ kinds: [Kind.TextNote] }]).then(
-      () => {
-        throw new Error("expected reject");
-      },
-      (error: unknown) => error,
-    );
+    const err = await captureError(store.query([{ kinds: [Kind.TextNote] }]));
     expect(err).toBeInstanceOf(StorageError);
     expect((err as StorageError).message).toBe("IndexedDB cursor failed");
     expect((err as StorageError).cause).toBeUndefined();
@@ -1070,12 +1054,7 @@ describe("IndexedDbEventStore", () => {
     await store.open();
     const note = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
     mock.failNextTxComplete("abort", null);
-    const err = await store.putMany([note]).then(
-      () => {
-        throw new Error("expected reject");
-      },
-      (error: unknown) => error,
-    );
+    const err = await captureError(store.putMany([note]));
     expect(err).toBeInstanceOf(StorageError);
     expect((err as StorageError).message).toBe("IndexedDB transaction aborted");
     expect((err as StorageError).cause).toBeUndefined();
@@ -1089,12 +1068,7 @@ describe("IndexedDbEventStore", () => {
     await store.open();
     const note = EventBuilder.textNote("a").createdAt(1).signWithKeys(keys);
     mock.failNextTxComplete("error", null);
-    const err = await store.putMany([note]).then(
-      () => {
-        throw new Error("expected reject");
-      },
-      (error: unknown) => error,
-    );
+    const err = await captureError(store.putMany([note]));
     expect(err).toBeInstanceOf(StorageError);
     expect((err as StorageError).message).toBe("IndexedDB transaction failed");
     expect((err as StorageError).cause).toBeUndefined();
@@ -1116,10 +1090,10 @@ describe("IndexedDbEventStore", () => {
 
     mock.failNextTxComplete("abort", null);
     const outcome = await Promise.race([
-      store.remove([note.id]).then(
-        () => "resolved" as const,
-        (error: unknown) => error,
-      ),
+      store
+        .remove([note.id])
+        .then(() => "resolved" as const)
+        .catch((error: unknown) => error),
       new Promise<"hung">((resolve) => {
         setTimeout(() => resolve("hung"), 500);
       }),
@@ -1164,10 +1138,10 @@ describe("IndexedDbEventStore", () => {
 
     mock.failNextTxComplete("abort", null);
     const outcome = await Promise.race([
-      store.clear().then(
-        () => "resolved" as const,
-        (error: unknown) => error,
-      ),
+      store
+        .clear()
+        .then(() => "resolved" as const)
+        .catch((error: unknown) => error),
       new Promise<"hung">((resolve) => {
         setTimeout(() => resolve("hung"), 500);
       }),
@@ -1228,12 +1202,7 @@ describe("IndexedDbEventStore version contention", () => {
 
   test("open rejects with StorageError when an older connection stays open", async () => {
     const raw = await rawOpen("blocked-db", 1);
-    const err = await new IndexedDbEventStore({ dbName: "blocked-db" }).open().then(
-      () => {
-        throw new Error("expected reject");
-      },
-      (error: unknown) => error,
-    );
+    const err = await captureError(new IndexedDbEventStore({ dbName: "blocked-db" }).open());
     expect(err).toBeInstanceOf(StorageError);
     expect((err as StorageError).message).toBe("IndexedDB open blocked by another connection");
     raw.close();
@@ -1252,12 +1221,7 @@ describe("IndexedDbEventStore version contention", () => {
     const store = new IndexedDbEventStore({ dbName: "yield-ops" });
     await store.open();
     const newer = await rawOpen("yield-ops", IDB_VERSION + 1);
-    const err = await store.get(EID).then(
-      () => {
-        throw new Error("expected reject");
-      },
-      (error: unknown) => error,
-    );
+    const err = await captureError(store.get(EID));
     expect(err).toBeInstanceOf(StorageError);
     expect((err as StorageError).message).toBe("IndexedDB connection closed by a newer version");
     newer.close();

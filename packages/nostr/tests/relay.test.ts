@@ -39,12 +39,12 @@ async function sleep(ms: number): Promise<void> {
 }
 
 async function captureError(p: Promise<unknown>): Promise<unknown> {
-  return p.then(
-    () => {
-      throw new Error("expected reject");
-    },
-    (error: unknown) => error,
-  );
+  try {
+    await p;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected reject");
 }
 
 function syncThrow(fn: () => unknown): unknown {
@@ -377,16 +377,15 @@ describe("Relay", () => {
     const note = EventBuilder.textNote("slow-auth").createdAt(2).signWithKeys(keys);
     const publishP = relay.publish(note, { timeoutMs: 40 });
     let settled = false;
-    void publishP.then(
-      () => {
+    void publishP
+      .then(() => {
         settled = true;
         return undefined;
-      },
-      () => {
+      })
+      .catch(() => {
         settled = true;
         return undefined;
-      },
-    );
+      });
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["AUTH", "slow-challenge"]));
     ws.receive(JSON.stringify(["OK", note.id, false, "auth-required: login"]));
@@ -411,16 +410,15 @@ describe("Relay", () => {
     const note = EventBuilder.textNote("post-auth-timeout").createdAt(2).signWithKeys(keys);
     const publishP = relay.publish(note, { timeoutMs: 40 });
     let settled = false;
-    void publishP.then(
-      () => {
+    void publishP
+      .then(() => {
         settled = true;
         return undefined;
-      },
-      () => {
+      })
+      .catch(() => {
         settled = true;
         return undefined;
-      },
-    );
+      });
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["AUTH", "post-timeout-challenge"]));
     ws.receive(JSON.stringify(["OK", note.id, false, "auth-required: login"]));
@@ -445,16 +443,15 @@ describe("Relay", () => {
     const note = EventBuilder.textNote("auth-fail").createdAt(2).signWithKeys(keys);
     const publishP = relay.publish(note, { timeoutMs: 40 });
     let settled = false;
-    void publishP.then(
-      () => {
+    void publishP
+      .then(() => {
         settled = true;
         return undefined;
-      },
-      () => {
+      })
+      .catch(() => {
         settled = true;
         return undefined;
-      },
-    );
+      });
     const ws = MockWebSocket.last();
     ws.receive(JSON.stringify(["AUTH", "fail-challenge"]));
     ws.receive(JSON.stringify(["OK", note.id, false, "auth-required: login"]));
@@ -692,16 +689,15 @@ describe("Relay", () => {
     ws.receive(JSON.stringify(["AUTH", "ch2"]));
     const second = relay.auth(sign);
     let secondSettled = false;
-    void second.then(
-      () => {
+    void second
+      .then(() => {
         secondSettled = true;
         return undefined;
-      },
-      () => {
+      })
+      .catch(() => {
         secondSettled = true;
         return undefined;
-      },
-    );
+      });
     await waitUntil(() => sentAuthEvents(ws).length >= 2);
     const fresh = sentAuthEvents(ws)[1]!;
     expect(challengeTag(fresh)).toBe("ch2");
@@ -3519,12 +3515,7 @@ describe("subscriptionToAsyncIterable close semantics (issue #134)", () => {
     expect(nextA.value?.id).toBe(a.id);
     const nextB = await it.next();
     expect(nextB.value?.id).toBe(b.id);
-    const err = await it.next().then(
-      () => {
-        throw new Error("expected throw");
-      },
-      (error: unknown) => error,
-    );
+    const err = await captureError(it.next());
     expect(err).toBeInstanceOf(RelayClosedError);
     expect((err as RelayClosedError).message).toBe("relay went away");
   });

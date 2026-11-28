@@ -993,18 +993,20 @@ describe("Nip46Signer.fromNostrConnectURI hardening", () => {
     const controller = new AbortController();
     controller.abort();
     let poolCreated = false;
-    const reason = await Nip46Signer.fromNostrConnectURI(connectURI(), {
-      clientSigner: clientSigner(),
-      signal: controller.signal,
-      handshakeTimeoutMs: 300,
-      createPool: () => {
-        poolCreated = true;
-        return mockNostrConnectTransport().transport;
-      },
-    }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    let reason: unknown;
+    try {
+      await Nip46Signer.fromNostrConnectURI(connectURI(), {
+        clientSigner: clientSigner(),
+        signal: controller.signal,
+        handshakeTimeoutMs: 300,
+        createPool: () => {
+          poolCreated = true;
+          return mockNostrConnectTransport().transport;
+        },
+      });
+    } catch (error) {
+      reason = error;
+    }
     expect(reason).toBe(controller.signal.reason);
     expect(poolCreated).toBe(false);
   });

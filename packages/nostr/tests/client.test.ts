@@ -323,10 +323,7 @@ describe("Client", () => {
       await waitUntil(() => MockWebSocket.instances.length === 1);
       expect(MockWebSocket.last().readyState).toBe(MockWebSocket.CONNECTING);
       const status = await Promise.race([
-        pending.then(
-          () => "resolved" as const,
-          () => "rejected" as const,
-        ),
+        pending.then(() => "resolved" as const).catch(() => "rejected" as const),
         sleep(3500).then(() => "pending" as const),
       ]);
       expect(status).toBe("pending");

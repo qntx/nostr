@@ -37,12 +37,12 @@ import {
 const SK = "d217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf";
 
 async function captureError(p: Promise<unknown>): Promise<unknown> {
-  return p.then(
-    () => {
-      throw new Error("expected reject");
-    },
-    (error: unknown) => error,
-  );
+  try {
+    await p;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected reject");
 }
 
 function syncThrow(fn: () => unknown): unknown {

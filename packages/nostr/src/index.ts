@@ -1,17 +1,15 @@
 /**
  * @qntx/nostr — public facade.
  *
- * Prefer layer subpaths for tree-shaking:
- * `@qntx/nostr/core`, `/signer`, `/relay`, `/client`, `/storage`, `/store`, `/loaders`,
- * `/gossip`, `/nips/*`, `/testing`.
+ * Prefer layer subpaths for tree-shaking: `@qntx/nostr/core`, `/signer`, `/relay`, `/client`,
+ * `/storage`, `/store`, `/loaders`, `/gossip`, `/nips/*`, `/testing`.
  *
  * Heavy NIPs are `@qntx/nostr/nips/<id>` only. There is no `@qntx/nostr/nips` barrel.
  *
- * Runtime requirements: the host must provide `crypto.getRandomValues`,
- * `TextEncoder`, a UTF-8 `TextDecoder`, WHATWG `URL`/`URLSearchParams`,
- * `queueMicrotask`, `setTimeout`, and `AbortController`, plus `fetch` and
- * `WebSocket` for network features. Node, browsers, and Expo/React Native
- * (via `expo-crypto`/`react-native-quick-crypto` and Expo's `whatwg-url` fork)
+ * Runtime requirements: the host must provide `crypto.getRandomValues`, `TextEncoder`, a UTF-8
+ * `TextDecoder`, WHATWG `URL`/`URLSearchParams`, `queueMicrotask`, `setTimeout`, and
+ * `AbortController`, plus `fetch` and `WebSocket` for network features. Node, browsers, and
+ * Expo/React Native (via `expo-crypto`/`react-native-quick-crypto` and Expo's `whatwg-url` fork)
  * satisfy these; the library ships no polyfills.
  */
 

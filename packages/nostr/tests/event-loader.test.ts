@@ -12,12 +12,12 @@ const RELAY = "wss://idx.example";
 const FETCH_TIMEOUT_MS = 1500;
 
 async function captureError(p: Promise<unknown>): Promise<unknown> {
-  return p.then(
-    () => {
-      throw new Error("expected reject");
-    },
-    (error: unknown) => error,
-  );
+  try {
+    await p;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected reject");
 }
 
 async function sleep(ms: number): Promise<void> {
