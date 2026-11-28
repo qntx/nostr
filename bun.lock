@@ -19,7 +19,7 @@
     },
     "packages/nostr": {
       "name": "@qntx/nostr",
-      "version": "0.17.0",
+      "version": "0.18.0",
       "dependencies": {
         "@noble/ciphers": "^2.4.0",
         "@noble/curves": "^2.4.0",
@@ -47,7 +47,7 @@
     },
     "packages/nostr-native": {
       "name": "@qntx/nostr-native",
-      "version": "0.17.0",
+      "version": "0.18.0",
       "devDependencies": {
         "@arethetypeswrong/cli": "0.18.5",
         "@noble/curves": "2.4.0",
@@ -69,7 +69,7 @@
     },
     "packages/nostr-wasm": {
       "name": "@qntx/nostr-wasm",
-      "version": "0.17.0",
+      "version": "0.18.0",
       "devDependencies": {
         "@arethetypeswrong/cli": "0.18.5",
         "@noble/curves": "2.4.0",
