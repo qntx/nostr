@@ -9,6 +9,8 @@ A `vX.Y.Z` tag runs `publish-npm.yml` (publishing `packages/nostr`, `packages/no
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-28
+
 ### Added
 
 - NIP-47 Nostr Wallet Connect (nostr-protocol/nips `47.md` @ `c53877571f`; NWC-02 notifications,
@@ -632,7 +634,8 @@ host and port needs one entry.
 - An extra live REQ while disconnected no longer resets reconnect backoff.
 - `subscribePrivateMessages` close/abort skips later persist and `onevent`; junk wraps are not stored.
 
-[Unreleased]: https://github.com/qntx/nostr/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/qntx/nostr/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/qntx/nostr/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/qntx/nostr/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/qntx/nostr/compare/v0.15.4...v0.16.0
 [0.15.4]: https://github.com/qntx/nostr/compare/v0.15.3...v0.15.4
